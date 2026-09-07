@@ -1114,9 +1114,9 @@ struct ConversationDetailView: View {
 
   private func canSeekCaptureMoment(_ segment: TranscriptSegment) -> Bool {
     guard Self.showsCapturePlayback(for: displayConversation.source, in: .transcript),
-      case .readyAggregate(let artifact) = capturePlayback.resolution
+      let resolution = capturePlayback.resolution
     else { return false }
-    return artifact.artifactOffset(forWallOffset: segment.start) != nil
+    return resolution.playbackOffset(forWallOffset: segment.start) != nil
   }
 
   /// The highlighted bubble is the transport's current position, so it also
@@ -1664,10 +1664,15 @@ private struct ConversationCapturePlaybackSection: View {
         if playback.duration > 0 {
           HStack(spacing: OmiSpacing.sm) {
             CapturePlaybackScrubber(playback: playback)
-            Text("\(Self.playbackTimestamp(playback.currentTime)) / \(Self.playbackTimestamp(playback.duration))")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundStyle(Ink.secondary)
-              .monospacedDigit()
+            // Counted on the capture's clock, the same one the transcript
+            // timestamps use, so the transport and the bubbles agree.
+            Text(
+              "\(Self.playbackTimestamp(Self.wallPosition(playback, resolution))) / \(Self.playbackTimestamp(Self.wallEnd(playback, resolution)))"
+            )
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundStyle(Ink.secondary)
+            .monospacedDigit()
+            .accessibilityLabel("Capture position \(Self.playbackTimestamp(Self.wallPosition(playback, resolution)))")
           }
         }
 
@@ -1697,6 +1702,25 @@ private struct ConversationCapturePlaybackSection: View {
         .accessibilityLabel("Prepare capture audio")
         .accessibilityIdentifier("chat-first-capture-prepare-audio")
     }
+  }
+
+  private static func wallPosition(
+    _ playback: CapturePlaybackController, _ resolution: CapturePlaybackResolution
+  ) -> TimeInterval {
+    if let wall = CaptureTranscriptFollowPolicy.wallOffset(
+      forPlaybackOffset: playback.currentTime, resolution: resolution)
+    {
+      return wall
+    }
+    // Spans are half-open, so the exact end of the media maps to nothing; the
+    // counter should rest on the capture's end rather than jump clocks.
+    return playback.currentTime >= playback.duration - 0.01 ? wallEnd(playback, resolution) : playback.currentTime
+  }
+
+  private static func wallEnd(
+    _ playback: CapturePlaybackController, _ resolution: CapturePlaybackResolution
+  ) -> TimeInterval {
+    CaptureTranscriptFollowPolicy.wallDuration(resolution: resolution) ?? playback.duration
   }
 
   private static func playbackTimestamp(_ offset: TimeInterval) -> String {

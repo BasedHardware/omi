@@ -426,6 +426,62 @@ final class CaptureArchiveTests: XCTestCase {
       ))
   }
 
+  func testSoleCachedPartWithKnownTimingResolvesAsAnExactSingleSpanArtifact() throws {
+    func response(fileCount: Int) -> CaptureAudioURLsResponse {
+      CaptureAudioURLsResponse(
+        audioFiles: (0..<fileCount).map { index in
+          CaptureAudioURLFile(
+            id: "part-\(index)", status: "cached", signedURL: URL(string: "https://example.test/part-\(index).mp3"),
+            contentType: "audio/mpeg", duration: 954)
+        },
+        conversationAudio: nil, pollAfterMs: nil)
+    }
+    // The device started uploading 33.3s after the conversation began, as
+    // observed on a real capture: media 0s is wall 33.3s.
+    let timing = CaptureSolePartTiming(fileID: "part-0", wallOffset: 33.3)
+
+    guard
+      case .readyAggregate(let artifact) = LiveCapturePlaybackProvider.resolution(
+        from: response(fileCount: 1), solePart: timing)
+    else { return XCTFail("The only cached part with known timing is an exact single-span artifact") }
+    XCTAssertEqual(artifact.spans.count, 1)
+    XCTAssertEqual(try XCTUnwrap(artifact.artifactOffset(forWallOffset: 151.86)), 118.56, accuracy: 0.001)
+    XCTAssertEqual(try XCTUnwrap(artifact.wallOffset(forArtifactOffset: 118.56)), 151.86, accuracy: 0.001)
+    XCTAssertNil(artifact.artifactOffset(forWallOffset: 10), "Speech before the part's first chunk has no audio")
+    XCTAssertNil(artifact.artifactOffset(forWallOffset: 33.3 + 954))
+    XCTAssertEqual(
+      try XCTUnwrap(CaptureTranscriptFollowPolicy.wallDuration(resolution: .readyAggregate(artifact))), 987.3,
+      accuracy: 0.001, "The transport counts to the capture's end on the capture's clock")
+
+    guard case .fileFallback = LiveCapturePlaybackProvider.resolution(from: response(fileCount: 1), solePart: nil)
+    else { return XCTFail("Without timing the part stays play-only") }
+    guard case .fileFallback = LiveCapturePlaybackProvider.resolution(from: response(fileCount: 2), solePart: timing)
+    else { return XCTFail("One part among several stays play-only") }
+    guard
+      case .fileFallback = LiveCapturePlaybackProvider.resolution(
+        from: response(fileCount: 1), solePart: CaptureSolePartTiming(fileID: "other", wallOffset: 33.3))
+    else { return XCTFail("Timing for a different part must not be applied") }
+  }
+
+  func testSolePartTimingComesFromTheFirstChunkRelativeToConversationStart() {
+    let startedAt = Date(timeIntervalSince1970: 1_788_580_677.5)
+    let stamped = CaptureAudioFile(id: "part-a", duration: 954, firstChunkTimestamp: 1_788_580_710.8)
+    let unstamped = CaptureAudioFile(id: "part-b", duration: 10, firstChunkTimestamp: nil)
+
+    let timing = CaptureSolePartTiming.from(
+      capture: archiveCapture(id: "omi-1", startedAt: startedAt, audioFiles: [stamped]))
+    XCTAssertEqual(timing?.fileID, "part-a")
+    XCTAssertEqual(try XCTUnwrap(timing?.wallOffset), 33.3, accuracy: 0.001)
+
+    XCTAssertNil(
+      CaptureSolePartTiming.from(capture: archiveCapture(id: "omi-2", startedAt: startedAt, audioFiles: [unstamped])))
+    XCTAssertNil(
+      CaptureSolePartTiming.from(
+        capture: archiveCapture(id: "omi-3", startedAt: startedAt, audioFiles: [stamped, stamped])))
+    XCTAssertNil(
+      CaptureSolePartTiming.from(capture: archiveCapture(id: "omi-4", startedAt: .some(nil), audioFiles: [stamped])))
+  }
+
   func testScrubPolicyMapsTrackGeometryToClampedMediaTime() {
     XCTAssertEqual(
       CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 200, duration: 40), 10, accuracy: 0.001)
@@ -611,13 +667,15 @@ private func archiveCapture(
   source: ConversationSource = .omi,
   status: ConversationStatus = .completed,
   createdAt: Date = Date(timeIntervalSince1970: 100),
+  startedAt: Date?? = nil,
+  audioFiles: [CaptureAudioFile] = [],
   title: String? = nil
 ) -> ServerConversation {
   ServerConversation(
     id: id,
     createdAt: createdAt,
     updatedAt: createdAt,
-    startedAt: createdAt,
+    startedAt: startedAt ?? createdAt,
     finishedAt: createdAt.addingTimeInterval(60),
     structured: Structured(
       title: title ?? "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
@@ -628,6 +686,7 @@ private func archiveCapture(
     appsResults: [],
     source: source,
     language: "en",
+    audioFiles: audioFiles,
     status: status,
     discarded: false,
     deleted: false,

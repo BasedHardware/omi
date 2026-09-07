@@ -93,12 +93,24 @@ struct SpeakerBubbleView: View {
           // The whole sentence is the seek target, not only the small
           // timestamp under it: a listener re-reading a line wants to hear it.
           Button(action: onMomentTapped) {
-            messageBubble
-              .overlay(
-                RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                  .stroke(Ink.accent.opacity(isBubbleHovered ? 0.55 : 0), lineWidth: 1)
-              )
-              .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+            HStack(alignment: .center, spacing: OmiSpacing.xs) {
+              if isUser {
+                hoverPlayGlyph
+              }
+              messageBubble
+                .overlay(
+                  RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+                    .fill(Ink.accent.opacity(isBubbleHovered ? 0.16 : 0))
+                )
+                .overlay(
+                  RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+                    .stroke(Ink.accent.opacity(isBubbleHovered ? 0.8 : 0), lineWidth: 1.5)
+                )
+              if !isUser {
+                hoverPlayGlyph
+              }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
           }
           .buttonStyle(.plain)
           .help("Play from \(formatTime(segment.start))")
@@ -161,6 +173,16 @@ struct SpeakerBubbleView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+  }
+
+  /// Appears beside the bubble under the pointer so the affordance is
+  /// unmistakable without cluttering the transcript at rest.
+  private var hoverPlayGlyph: some View {
+    Image(systemName: "play.circle.fill")
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(Ink.accent)
+      .opacity(isBubbleHovered ? 1 : 0)
+      .accessibilityHidden(true)
   }
 
   private var messageBubble: some View {

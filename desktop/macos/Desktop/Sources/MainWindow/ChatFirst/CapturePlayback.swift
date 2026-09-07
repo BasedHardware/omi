@@ -34,6 +34,25 @@ struct CapturePlaybackFile: Equatable, Sendable {
   let duration: TimeInterval
 }
 
+/// Where a capture's only audio part sits on the capture's wall clock, taken
+/// from the conversation document exactly the way the server's merge job
+/// stamps a span: the part's first chunk timestamp minus `started_at`. Each
+/// part is silence-filled between chunks, so from that anchor its media time
+/// is wall time. With this, one cached part is as exact as the aggregate.
+struct CaptureSolePartTiming: Equatable, Sendable {
+  let fileID: String
+  let wallOffset: TimeInterval
+
+  /// Nil unless the capture has exactly one audio part with chunk timestamps
+  /// and a known start; anything less cannot place the part honestly.
+  static func from(capture: ServerConversation) -> CaptureSolePartTiming? {
+    guard capture.audioFiles.count == 1, let part = capture.audioFiles.first,
+      let firstChunk = part.firstChunkTimestamp, let startedAt = capture.startedAt
+    else { return nil }
+    return CaptureSolePartTiming(fileID: part.id, wallOffset: firstChunk - startedAt.timeIntervalSince1970)
+  }
+}
+
 struct CapturePlaybackArtifact: Equatable, Sendable {
   let signedURL: URL
   let duration: TimeInterval
@@ -70,6 +89,20 @@ struct CapturePlaybackArtifact: Equatable, Sendable {
   }
 }
 
+extension CapturePlaybackResolution {
+  /// Media offset for a transcript moment, or nil when this resolution cannot
+  /// place the moment exactly. Mirrors `CaptureTranscriptFollowPolicy`, which
+  /// already treats a sole-part fallback's media time as capture time.
+  func playbackOffset(forWallOffset wallOffset: TimeInterval) -> TimeInterval? {
+    switch self {
+    case .readyAggregate(let artifact):
+      return artifact.artifactOffset(forWallOffset: wallOffset)
+    case .fileFallback, .pending, .locked, .unavailable, .noAudio:
+      return nil
+    }
+  }
+}
+
 enum CaptureTranscriptFollowPolicy {
   static func wallOffset(
     forPlaybackOffset playbackOffset: TimeInterval,
@@ -82,6 +115,20 @@ enum CaptureTranscriptFollowPolicy {
       // The fallback is exposed only as a single capture part, whose media
       // timeline begins at the capture's first transcript timestamp.
       return max(0, playbackOffset)
+    case .pending, .locked, .unavailable, .noAudio:
+      return nil
+    }
+  }
+
+  /// Where the capture's audio ends on its own clock, so the transport can
+  /// count in the same time the transcript bubbles show. Collapsed gaps make
+  /// this longer than the media, which is exactly what the transcript reads.
+  static func wallDuration(resolution: CapturePlaybackResolution) -> TimeInterval? {
+    switch resolution {
+    case .readyAggregate(let artifact):
+      return artifact.spans.map { $0.wallOffset + $0.length }.max() ?? artifact.duration
+    case .fileFallback(let file):
+      return file.duration
     case .pending, .locked, .unavailable, .noAudio:
       return nil
     }
@@ -139,7 +186,7 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
       let precache = try await APIClient.shared.precacheCaptureAudio(conversationID: capture.id)
       if precache.status == "no_audio" { return .noAudio }
       let response = try await APIClient.shared.captureAudioURLs(conversationID: capture.id)
-      return Self.resolution(from: response)
+      return Self.resolution(from: response, solePart: CaptureSolePartTiming.from(capture: capture))
     } catch let APIError.httpError(statusCode, _) where statusCode == 402 {
       return .locked
     } catch {
@@ -150,7 +197,10 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
     }
   }
 
-  static func resolution(from response: CaptureAudioURLsResponse) -> CapturePlaybackResolution {
+  static func resolution(
+    from response: CaptureAudioURLsResponse,
+    solePart: CaptureSolePartTiming? = nil
+  ) -> CapturePlaybackResolution {
     if let artifact = response.conversationAudio {
       switch artifact.status {
       case "cached":
@@ -176,6 +226,21 @@ struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
     if let file = response.audioFiles.first(where: { $0.status == "cached" && $0.signedURL != nil }),
       let signedURL = file.signedURL
     {
+      // The only part, placed on the wall clock: the same single-span artifact
+      // the server's merge job would build, so moments seek exactly. Device
+      // captures often stamp their opening segment a few milliseconds before
+      // zero; the span starts at max(0, …) so that moment still resolves.
+      if response.audioFiles.count == 1, let solePart, solePart.fileID == file.id {
+        return .readyAggregate(
+          CapturePlaybackArtifact(
+            signedURL: signedURL,
+            duration: file.duration,
+            spans: [
+              CaptureAudioURLSpan(
+                fileID: file.id, wallOffset: solePart.wallOffset, artifactOffset: 0, length: file.duration)
+            ]
+          ))
+      }
       return .fileFallback(CapturePlaybackFile(id: file.id, signedURL: signedURL, duration: file.duration))
     }
 
@@ -290,13 +355,11 @@ final class CapturePlaybackController: ObservableObject {
     return true
   }
 
-  /// Returns true only when an aggregate artifact translated the requested
-  /// wall offset and AVFoundation confirmed the exact seek completed.
+  /// Returns true only when the resolution placed the requested wall offset
+  /// exactly (aggregate artifact, or a sole-part fallback) and AVFoundation
+  /// confirmed the seek completed.
   func seekToMoment(wallOffset: TimeInterval) async -> Bool {
-    guard case .readyAggregate(let artifact) = resolution,
-      let target = artifact.artifactOffset(forWallOffset: wallOffset),
-      player != nil
-    else { return false }
+    guard let target = resolution?.playbackOffset(forWallOffset: wallOffset), player != nil else { return false }
     return await seek(toPlaybackOffset: target)
   }
 
