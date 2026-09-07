@@ -4,6 +4,7 @@ import {
   prepareConversationsRead,
   readConversationsPage,
 } from "../../apps/service/composition/conversations-read";
+import { composeConversationUnionPage } from "../../apps/service/composition/chat-conversation-sessions";
 
 const row = (values: Record<string, unknown> = {}) => ({
   session_id: "11111111-2222-4333-8444-555555555555",
@@ -153,4 +154,82 @@ test("device capture provenance survives the canonical page without replacing se
       ],
     })
   ).toThrow();
+});
+
+test("union composition keeps numeric updatedAt so a listen cursor position can be saved", () => {
+  const newer = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const snapshot = parseConversationReadSnapshot({
+    revision: 2,
+    records: [
+      row(),
+      row({
+        sequence: 2,
+        session_id: newer,
+        updated_at: "2026-09-01T10:03:00Z",
+      }),
+    ],
+  });
+  const prepared = prepareConversationsRead({
+    store: {
+      listOrderedRecords: () => snapshot.records,
+      readStateRevision: () => snapshot.revision,
+    },
+    authorityBinding: { kind: "local_qa" },
+    resolveAuthorization: () => ({
+      owner_account_id: "owner",
+      app_id: "app",
+      key_id: "key",
+    }),
+    codecRootSecret: new Uint8Array(32).fill(1),
+    cursorSigningKeyset: {
+      active_key_id: "test",
+      keys: [{ key_id: "test", secret: new Uint8Array(32).fill(2) }],
+    },
+    readTimestampEpochSeconds: 100,
+    appliedFrontierState: "caught_up",
+    cursorPolicyVersion: "conversations-read-union-cursor-v1",
+  });
+  const projected = JSON.parse(
+    readConversationsPage({ limit: snapshot.records.length, cursor: null }, prepared)
+      .canonical_json
+  ) as { items: Record<string, unknown>[] };
+  const composed = composeConversationUnionPage(
+    projected.items,
+    [
+      {
+        id: "chat:chat-main",
+        title: "saved prompt",
+        overview: "saved prompt",
+        createdAt: 1000,
+        updatedAt: 1000,
+        startedAt: 1000,
+        finishedAt: null,
+        source: "chat",
+        status: "in_progress",
+        discarded: false,
+        starred: false,
+        visibility: "private",
+        isLocked: false,
+        folderId: null,
+        revision: null,
+      },
+    ],
+    1,
+    null
+  );
+  expect(composed).not.toBeNull();
+  expect(composed?.items).toHaveLength(1);
+  expect(composed?.hasMore).toBe(true);
+  const last = composed!.items[0]!;
+  expect(last.id).toBe(`recording:${newer}`);
+  expect(typeof last.updatedAt).toBe("number");
+  expect(
+    snapshot.records.find((row) => row.record.id === last.id)?.record.updated_at
+  ).toBe("2026-09-01T10:03:00.000Z");
+  expect(() =>
+    prepared.ports.issueCursor(
+      String(last.id),
+      prepared.ports.bindingsFor(prepared.ports.resolveAttempt())
+    )
+  ).not.toThrow();
 });

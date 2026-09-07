@@ -452,16 +452,40 @@ realTest(
         "INSERT INTO omi_memory.postgres_restore_admission_heads(database_generation_digest,release_revision) VALUES($1,1)",
         [generation]
       );
+      const failures: string[] = [];
+      const describeError = (error: unknown): string => {
+        const code =
+          error !== null && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "";
+        const message = error instanceof Error ? error.message.slice(0, 80) : "";
+        return [code, message].filter((part) => part.length > 0).join(":");
+      };
       const appPool: PostgresTransactionPool = {
         withTransaction: (options, callback) =>
-          pool.withTransaction(options, async (connection) => {
-            await connection.query({
-              name: "conversation_chat_test.role",
-              text: "SET LOCAL ROLE omi_platform_application",
-              values: [],
-            });
-            return callback(connection);
-          }),
+          pool
+            .withTransaction(options, async (connection) => {
+              await connection.query({
+                name: "conversation_chat_test.role",
+                text: "SET LOCAL ROLE omi_platform_application",
+                values: [],
+              });
+              return callback({
+                ...connection,
+                async query(statement) {
+                  try {
+                    return await connection.query(statement);
+                  } catch (error) {
+                    failures.push(`${statement.name}:${describeError(error)}`);
+                    throw error;
+                  }
+                },
+              });
+            })
+            .catch((error) => {
+              failures.push(`tx:${describeError(error)}`);
+              throw error;
+            }),
       };
       const runtime = createPostgresFirebaseConversationReadRuntime({
         authorization: {
@@ -552,7 +576,7 @@ realTest(
         );
       }
       const firstResponse = await call("?limit=1");
-      expect(firstResponse.status).toBe(200);
+      expect(firstResponse.status, failures.join(" | ")).toBe(200);
       const firstPage = (await firstResponse.json()) as {
         items: Array<{ id: string }>;
         window: { nextCursor: string | null; hasMore: boolean };
