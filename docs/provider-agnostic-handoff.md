@@ -18,6 +18,8 @@ Cloud Linux after 80341ef838: Apple capture-path matching now strips `?`/`#` the
 
 Cloud Linux after dc0ca0524f: Android now stores and honors the same Old backend / New backend plane Apple already did, so a stamped New origin no longer ignores the Settings toggle. JS capture-path matching includes `POST /v1/tasks/ops`, and New without a valid stamp stays unconfigured instead of silently reading `api.omi.me`. Mobile Settings exposes the same backend switch. Root `bun run check` passed: 498 React Native tests, Worker/PWA/ratified/native gates, and 274 deployed-backend tests. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+GitHub `Validate backend worker` has been red since ff4738ee63: the PostgreSQL Listen-capture qualification still expected a completed client transcript without `errorCode`, while `parseRecordingTranscript` and `deviceTranscriptionProjection` already require `errorCode` (`null` on success) so the app can refresh failed work without restarting paid transcription. Docker is unavailable in this Cloud VM, so the real PostgreSQL 18.4 suite cannot be rerun here; the assertion now matches the existing client contract. Native Rewind reader fixtures already use `/Users/Shared` plus symlink-resolved containment.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), and current trusted chat context packets (01bdb648bb). Chat persistence and deployed gateway identity composition remain missing.
