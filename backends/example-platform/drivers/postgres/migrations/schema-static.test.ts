@@ -155,6 +155,8 @@ const expectedTables = [
   "listen_capture_audio_uploads",
   "listen_conversation_read_revisions",
   "listen_conversation_cursor_positions",
+  "chat_generation_events",
+  "chat_messages",
   "memory_render_responses",
   "task_records",
   "task_sequences",
