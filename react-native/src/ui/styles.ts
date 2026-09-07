@@ -54,7 +54,7 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
   },
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
-  navTextCollapsed: {opacity: 0, width: 0},
+  navIcon: {width: 20, height: 20, flexShrink: 0},
   navTextActive: {color: '#141414'},
   bottomNav: {
     borderTopColor: '#2a2a2a',
