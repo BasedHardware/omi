@@ -668,6 +668,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get conversationTimeoutConfig => 'Постави кога разговорите автоматски завршуваат';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'Увези податоци';
 
   @override

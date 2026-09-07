@@ -664,6 +664,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get conversationTimeoutConfig => 'Defina quando terminar conversas automaticamente';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'Importar dados';
 
   @override

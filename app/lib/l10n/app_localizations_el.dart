@@ -670,6 +670,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get conversationTimeoutConfig => 'Ορίστε πότε τελειώνουν αυτόματα οι συνομιλίες';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'Εισαγωγή Δεδομένων';
 
   @override

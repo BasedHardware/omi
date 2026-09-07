@@ -667,6 +667,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get conversationTimeoutConfig => 'Установите, когда разговоры автоматически завершаются';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'Импорт данных';
 
   @override

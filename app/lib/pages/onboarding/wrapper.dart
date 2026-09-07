@@ -79,10 +79,10 @@ class OnboardingWrapper extends StatefulWidget {
 
   final bool forceAuthPage;
 
-  // Debug-only: skips the sign-in/onboarding-progress auto-routing below so
-  // a fresh instance always lands on the splash page, even if Firebase still
-  // has a signed-in session from earlier testing. Used by the debug "restart
-  // onboarding" button, which would otherwise remount straight past splash.
+  // Skips the sign-in/onboarding-progress auto-routing below so a fresh
+  // instance always lands on the splash page, even if Firebase still has a
+  // signed-in session. Used by "Redo Onboarding" in Developer settings, which
+  // would otherwise remount straight past splash.
   final bool forceStartAtSplash;
 
   @override
@@ -307,9 +307,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
-          // session and we don't want to re-run it. Debug restart
+          // session and we don't want to re-run it. Redo Onboarding
           // (forceStartAtSplash) bypasses this so the whole flow can be
-          // walked end to end for testing.
+          // walked end to end again.
           if (!widget.forceStartAtSplash && SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {

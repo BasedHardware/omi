@@ -666,6 +666,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get conversationTimeoutConfig => 'یہ مقرر کریں کہ بات چیتیں کب خود بند ہوں';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'ڈیٹا درآمد کریں';
 
   @override

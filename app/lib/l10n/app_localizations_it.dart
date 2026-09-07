@@ -669,6 +669,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get conversationTimeoutConfig => 'Imposta quando le conversazioni terminano automaticamente';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'Importa Dati';
 
   @override

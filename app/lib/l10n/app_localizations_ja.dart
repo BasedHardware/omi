@@ -654,6 +654,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationTimeoutConfig => '会話の自動終了時間を設定';
 
   @override
+  String get redoOnboarding => 'Redo Onboarding';
+
+  @override
+  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+
+  @override
   String get importData => 'データのインポート';
 
   @override

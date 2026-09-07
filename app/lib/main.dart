@@ -29,7 +29,6 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
-import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -486,43 +485,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               final tracked = PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)
                   : guidedContent;
-              if (!kDebugMode) return tracked;
-              // Debug-only: restarts the whole onboarding flow from the
-              // splash, from anywhere in the app. Lives in MaterialApp's
-              // builder (outside the Navigator's route stack) because
-              // completing onboarding for real replaces every route
-              // (including MobileApp itself) via pushAndRemoveUntil, so a
-              // button living inside MobileApp becomes unreachable once
-              // that happens. Compiled out of release builds.
-              return Stack(
-                children: [
-                  tracked,
-                  Positioned(
-                    left: 16,
-                    bottom: 16,
-                    child: SafeArea(
-                      child: GestureDetector(
-                        onTap: () {
-                          globalNavigatorKey.currentState?.pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const MobileApp(forceOnboardingRestart: true)),
-                            (route) => false,
-                          );
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.15),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-                          ),
-                          child: const Icon(Icons.replay, size: 16, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
+              return tracked;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

@@ -14,13 +14,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 class MobileApp extends StatefulWidget {
   const MobileApp({super.key, this.forceOnboardingRestart = false});
 
-  // Debug-only: makes this instance show the onboarding flow from splash
-  // regardless of sign-in / consent / completion state. Set by the debug
-  // "restart onboarding" overlay in main.dart, which pushes a fresh
-  // MobileApp — a full restart is required because completing onboarding
-  // for real replaces every route (this one included) via
-  // pushAndRemoveUntil, so there's no existing MobileApp instance left to
-  // signal otherwise.
+  // Makes this instance show the onboarding flow from splash regardless of
+  // sign-in / consent / completion state. Set by "Redo Onboarding" in
+  // Developer settings, which pushes a fresh MobileApp — a full restart is
+  // required because completing onboarding for real replaces every route
+  // (this one included) via pushAndRemoveUntil, so there's no existing
+  // MobileApp instance left to signal otherwise.
   final bool forceOnboardingRestart;
 
   @override

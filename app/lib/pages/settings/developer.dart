@@ -16,6 +16,7 @@ import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
@@ -597,6 +598,65 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 const SizedBox(height: 2),
                                 Text(
                                   context.l10n.setWhenConversationsAutoEnd,
+                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Redo Onboarding Section
+                  GestureDetector(
+                    key: const Key('redoOnboarding'),
+                    onTap: () {
+                      // Completing onboarding for real replaces every route via
+                      // pushAndRemoveUntil, so a fresh MobileApp is pushed the same
+                      // way to walk the flow again from the splash.
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const MobileApp(forceOnboardingRestart: true)),
+                        (route) => false,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(FontAwesomeIcons.rotateLeft, color: Colors.grey.shade400, size: 16),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.l10n.redoOnboarding,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  context.l10n.redoOnboardingDescription,
                                   style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                                 ),
                               ],
