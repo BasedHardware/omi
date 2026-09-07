@@ -324,7 +324,7 @@ export function DesktopHome({
               onPress={onLoadMoreMemories}
               style={styles.pageAction}>
               <Text style={styles.bannerAction}>
-                {memoriesLoadingMore ? 'Loading…' : 'Load more'}
+                {memoriesLoadingMore ? 'Loading…' : 'Load more memories'}
               </Text>
             </FocusPressable>
           ) : null}

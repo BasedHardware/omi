@@ -1654,7 +1654,22 @@ function pagedMemoryOutcomes() {
   };
 }
 
-test('actual desktop Home exposes Load more when more memories exist', () => {
+function visibleButtonCopy(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  accessibilityLabel: string,
+): string[] {
+  return renderer.root
+    .find(node => node.props.accessibilityLabel === accessibilityLabel)
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter((value): value is string => typeof value === 'string');
+}
+
+test('actual desktop Home exposes Load more memories when more memories exist', () => {
   const onLoadMoreMemories = jest.fn();
   const renderer = renderDesktop({
     onLoadMoreMemories,
@@ -1662,6 +1677,38 @@ test('actual desktop Home exposes Load more when more memories exist', () => {
     reads: [...outcomes.conversations.value.items, homeMemory],
   });
   expect(renderedText(renderer)).toContain('More memories are available.');
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more memories')
+      .props.onPress(),
+  );
+  expect(onLoadMoreMemories).toHaveBeenCalledTimes(1);
+});
+
+test('actual desktop Home Load more memories stays memories-only when conversations also have more', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreMemories,
+    outcomes: {
+      ...pagedConversationOutcomes(),
+      memories: pagedMemoryOutcomes().memories,
+    },
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('More conversations are available.');
+  expect(tree).toContain('More memories are available.');
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    ),
+  ).toHaveLength(0);
   act(() =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load more memories')
@@ -1697,11 +1744,9 @@ test('generic later-page memory failures keep Load more', () => {
   expect(renderedText(renderer)).toContain(
     'More memories could not be loaded.',
   );
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Load more memories',
-    ),
-  ).toBeTruthy();
+  expect(visibleButtonCopy(renderer, 'Load more memories')).toEqual([
+    'Load more memories',
+  ]);
 });
 
 test('Settings does not inherit unrelated chat and history failures', async () => {
