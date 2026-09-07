@@ -1141,7 +1141,8 @@ test('loadAccountSettings nested non-retryable 503s keep slices independent with
   });
   const snapshot = await loadAccountSettings(backend);
   expect(snapshot.profile).toBeNull();
-  expect(snapshot.profileError).toBe(desktopBackendUnavailableCopy);
+  expect(snapshot.profileError).toBe(desktopAccountSettingUnavailableCopy);
+  expect(snapshot.profileError).not.toBe(desktopBackendUnavailableCopy);
   expect(snapshot.subscription).toEqual(
     expect.objectContaining({plan: 'plus', status: 'active'}),
   );

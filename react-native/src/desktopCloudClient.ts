@@ -146,7 +146,7 @@ async function cloudRequest(
     const unavailable = new Error(
       path.startsWith('/v1/apps')
         ? desktopAppsUnavailableCopy
-        : method === 'POST' && path.startsWith('/v1/users/')
+        : path.startsWith('/v1/users/')
         ? desktopAccountSettingUnavailableCopy
         : desktopBackendUnavailableCopy,
     ) as Error & {retryable: boolean};
