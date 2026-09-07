@@ -97,7 +97,8 @@ test('untitled processing conversations stay visible instead of a blank row', ()
     id: 'listen:processing-one',
     title: '',
     summary: '',
-    searchableText: 'Processing conversation…\n',
+    searchableText:
+      'Processing conversation…\nConversation summary is not ready yet.',
     createdAt: '2026-09-07T00:00:00.000Z',
     updatedAt: '2026-09-07T00:01:00.000Z',
     startedAt: '2026-09-07T00:00:00.000Z',
@@ -134,4 +135,72 @@ test('untitled processing conversations stay visible instead of a blank row', ()
   expect(textOf(renderer)).toContain('Processing conversation…');
   expect(textOf(renderer)).toContain('Conversation summary is not ready yet.');
   expect(textOf(renderer)).not.toContain('No conversations yet.');
+});
+
+test('listen conversations do not present a blank detail as a transcript', async () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:completed-one',
+    title: 'Walked to the market',
+    summary: 'A short overview of the walk.',
+    searchableText: 'Walked to the market\nA short overview of the walk.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          outcome={{
+            status: 'success',
+            value: {
+              items: [item],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+          loading={false}
+        />,
+      );
+    });
+    await act(async () =>
+      renderer.root
+        .findAll(
+          node =>
+            node.props.accessibilityLabel ===
+            'Open conversation Walked to the market',
+        )[0]!
+        .props.onPress(),
+    );
+    expect(textOf(renderer)).toContain(
+      'A full transcript is not available for this conversation yet.',
+    );
+    expect(textOf(renderer)).toContain('A short overview of the walk.');
+    expect(textOf(renderer)).not.toContain('Transcript');
+    expect(textOf(renderer)).not.toContain('Messages');
+  } finally {
+    dimensions.mockRestore();
+  }
 });

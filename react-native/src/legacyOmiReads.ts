@@ -1,4 +1,5 @@
 import {
+  conversationDisplaySummary,
   conversationDisplayTitle,
   type ConversationProjection,
   type DomainRead,
@@ -131,7 +132,10 @@ export async function loadOmiConversations(
       id: id(row.id),
       title,
       summary,
-      searchableText: `${conversationDisplayTitle({title, status})}\n${summary}`,
+      searchableText: `${conversationDisplayTitle({
+        title,
+        status,
+      })}\n${conversationDisplaySummary({summary, status})}`,
       createdAt,
       updatedAt: date(row.updated_at),
       startedAt: date(row.started_at),

@@ -639,7 +639,7 @@ export async function loadConversations(
       searchableText: `${conversationDisplayTitle({
         title,
         status,
-      })}\n${summary}`,
+      })}\n${conversationDisplaySummary({summary, status})}`,
       createdAt,
       updatedAt,
       startedAt,

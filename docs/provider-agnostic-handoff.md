@@ -36,6 +36,8 @@ Cloud Linux after the native example-platform allowlist slice: Android and Apple
 
 Cloud Linux after the empty-summary polish slice: untitled processing Listen/recording rows already showed a visible title; empty summaries still rendered as blank list subtitles and detail copy. They now use the same class of fallback as titles instead of a blank gap. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after the Listen transcript honesty slice: conversation detail only mounts a recording transcript for `source === "omi"` and `recording:` ids, and chat history for `chat:` ids. Listen/microphone rows were leaving the rest of the detail blank after the overview, which looked like missing content rather than a missing door. Those rows now say a full transcript is not available yet instead of inventing a Listen transcript producer. Search indexes the same visible title/summary fallbacks. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

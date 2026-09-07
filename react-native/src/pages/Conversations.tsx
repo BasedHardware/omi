@@ -417,6 +417,17 @@ export function ConversationsPage({
                       Chat history for this conversation is not available here.
                     </Text>
                   )}
+                {selected.source !== 'chat' &&
+                  !(
+                    selected.source === 'omi' &&
+                    selected.id.startsWith('recording:') &&
+                    selected.id.length > 'recording:'.length
+                  ) && (
+                    <Text style={styles.conversationDetailSummary}>
+                      A full transcript is not available for this conversation
+                      yet.
+                    </Text>
+                  )}
               </>
             )}
           </ScrollView>

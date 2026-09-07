@@ -489,7 +489,8 @@ test('keeps processing conversations whose title and overview are not ready yet'
           title: '',
           summary: '',
           status: 'processing',
-          searchableText: 'Processing conversation…\n',
+          searchableText:
+            'Processing conversation…\nConversation summary is not ready yet.',
         }),
       ],
     }),
