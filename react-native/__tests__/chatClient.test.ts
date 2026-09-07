@@ -386,7 +386,12 @@ test('maps ratified public recovery without automatically retrying', () => {
   ).toBe('Omi is temporarily unavailable. Try again.');
   expect(
     chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
-  ).toBe('This request cannot be completed.');
+  ).toBe('Sending messages is not available on this backend yet.');
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(404, 'not_found', false, 'none', null),
+    ),
+  ).toBe('Chat history is not available on this backend yet.');
   expect(
     chatErrorCopy(new ChatBackendError(403, 'forbidden', false, 'none', null)),
   ).toBe('Chat is not available for this account.');
@@ -406,6 +411,31 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(chatHistoryErrorCopy(new Error('socket hang up'))).toBe(
     'Chat history could not be loaded. Check your connection and try again.',
   );
+});
+
+test('classifies string and nested chat 404 without retrying send', async () => {
+  for (const body of [
+    '{"error":"not_found"}',
+    '{"error":{"code":"not_found","retryable":false,"action":"none"}}',
+  ]) {
+    const request = jest.fn(async (input: NativeHttpRequest) => ({
+      id: input.id,
+      status: 404,
+      body,
+    }));
+    const backend = {
+      request,
+      generationEvents: jest.fn(),
+      cancelGenerationEvents: async () => {},
+    } satisfies OmiBackend;
+    await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+      status: 404,
+      backendCode: 'not_found',
+      retryable: false,
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(backend.generationEvents).not.toHaveBeenCalled();
+  }
 });
 
 test('loads opaque older cursors and preserves exact page metadata', async () => {

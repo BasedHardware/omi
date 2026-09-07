@@ -214,10 +214,13 @@ test('web Settings hides request details and offers a real retry after failure',
   try {
     const renderer = await renderPage(SettingsPage);
     expect(textOf(renderer)).toContain(
-      'Settings could not be loaded. Try again.',
+      'Account profile and usage are not available from this service yet.',
     );
     expect(textOf(renderer)).not.toContain('service-settings-read');
     expect(textOf(renderer)).not.toContain('503');
+    expect(textOf(renderer)).not.toContain(
+      'Settings could not be loaded. Try again.',
+    );
     await act(async () =>
       renderer.root
         .findAll(node => node.props.accessibilityLabel === 'Retry settings')[0]
@@ -225,6 +228,28 @@ test('web Settings hides request details and offers a real retry after failure',
     );
     expect(textOf(renderer)).toContain('1 requests used');
     expect(textOf(renderer)).not.toContain('Settings could not be loaded');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test('web Settings maps unauthorized credentials without inventing a signed-in profile', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 401,
+    body: JSON.stringify({error: 'unauthorized'}),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain('Omi cloud needs a signed-in session.');
+    expect(textOf(renderer)).not.toContain('Identity unavailable');
+    expect(textOf(renderer)).not.toContain('service-settings-read');
+    expect(labelsOf(renderer)).toContain('Retry settings');
   } finally {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,

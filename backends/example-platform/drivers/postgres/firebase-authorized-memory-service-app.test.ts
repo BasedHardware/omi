@@ -166,9 +166,18 @@ test("deployed chat history shares Firebase admission and does not mount writes"
   expect(await response.json()).toEqual({
     error: { code: "unauthorized", retryable: false, action: "reauthenticate" },
   });
+  const nestedNotFound = JSON.stringify({
+    error: { code: "not_found", retryable: false, action: "none" },
+  });
   expect((await app.request("/v1/chat-messages", { method: "POST", body: "{}" })).status).toBe(404);
   expect(await (await app.request("/v1/chat-messages", { method: "POST", body: "{}" })).text())
-    .toBe('{"error":"not_found"}');
+    .toBe(nestedNotFound);
+  expect(await (await app.request("/v1/chat-generations/generation-1/events")).text())
+    .toBe(nestedNotFound);
+  expect(await (await app.request("/v1/chat-generations/generation-1", { method: "DELETE" })).text())
+    .toBe(nestedNotFound);
+  expect(await (await app.request("/v1/chat-attachments", { method: "POST", body: "{}" })).text())
+    .toBe(nestedNotFound);
 });
 
 test("deployed settings verify identity without inventing a signed-in profile", async () => {

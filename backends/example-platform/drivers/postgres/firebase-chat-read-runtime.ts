@@ -80,7 +80,7 @@ export function createPostgresFirebaseChatReadRuntime(
   return Object.freeze({
     async executeRequest(request: Request): Promise<Response> {
       if (request.method !== "GET" || new URL(request.url).pathname !== "/v1/chat-messages") {
-        return json({ error: "not_found" }, 404);
+        return errorResponse(404, "not_found", "none");
       }
       try {
         request.signal.throwIfAborted();

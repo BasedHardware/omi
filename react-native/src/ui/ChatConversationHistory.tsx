@@ -5,7 +5,8 @@ import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
 export function ChatConversationHistory() {
-  const {result, reload} = useChatConversationHistory(true);
+  const {result, reload, loadingOlder, loadOlder} =
+    useChatConversationHistory(true);
   return (
     <View style={styles.conversationDetailFields}>
       <Text accessibilityRole="header" style={styles.resultTitle}>
@@ -36,14 +37,30 @@ export function ChatConversationHistory() {
           No messages in this chat yet.
         </Text>
       ) : (
-        result.messages.map(message => (
-          <Text
-            key={message.id}
-            selectable
-            style={styles.conversationTranscriptText}>
-            {`${message.sender === 'human' ? 'You' : 'Omi'} · ${message.text}`}
-          </Text>
-        ))
+        <>
+          {result.hasOlder && result.olderCursor !== null && (
+            <FocusPressable
+              accessibilityLabel="Load older messages"
+              accessibilityRole="button"
+              disabled={loadingOlder}
+              onPress={() => {
+                void loadOlder();
+              }}
+              style={styles.conversationTranscriptAction}>
+              <Text style={styles.conversationDetailField}>
+                {loadingOlder ? 'Loading older…' : 'Load older'}
+              </Text>
+            </FocusPressable>
+          )}
+          {result.messages.map(message => (
+            <Text
+              key={message.id}
+              selectable
+              style={styles.conversationTranscriptText}>
+              {`${message.sender === 'human' ? 'You' : 'Omi'} · ${message.text}`}
+            </Text>
+          ))}
+        </>
       )}
     </View>
   );

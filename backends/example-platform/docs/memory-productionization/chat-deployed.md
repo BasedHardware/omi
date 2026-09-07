@@ -16,9 +16,11 @@ attachment capability advertisement. Assistant rows require a unique terminal
 generation event; an orphan or mismatched terminal is 503 rather than a completed
 answer. Human rows keep `generationOutcome: null`.
 
-`POST /v1/chat-messages` and generation SSE are not mounted. Unmounted writes stay
-404 `{error:"not_found"}`. Do not invent chat quotas or mount admission until a
-real entitlement producer exists.
+`POST /v1/chat-messages`, generation SSE, cancellation, and attachments are
+explicit unmounted write doors. They return nested 404
+`{error:{code:"not_found",retryable:false,action:"none"}}` without admission,
+grants, or storage. Do not invent chat quotas or mount admission until a real
+entitlement producer exists.
 
 Verification uses `bun run check:deployed` for grant denial, empty-page shape,
 projection fail-closed behavior, string generation frames, route pairing and the

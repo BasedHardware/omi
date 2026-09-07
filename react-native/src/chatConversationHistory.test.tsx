@@ -25,6 +25,10 @@ const {MAIN_CHAT_CONVERSATION_ID} = require('./chatConversationHistory');
 
 function historyResponse(
   messages: Array<{id: string; text: string; sender: 'human' | 'ai'}>,
+  page: {olderCursor: string | null; hasOlder: boolean} = {
+    olderCursor: null,
+    hasOlder: false,
+  },
 ): NativeHttpResponse {
   return {
     id: 'chat-history',
@@ -46,7 +50,7 @@ function historyResponse(
         revision: '1',
         attachments: [],
       })),
-      page: {olderCursor: null, hasOlder: false},
+      page,
       capabilities: {
         maxAttachmentsPerMessage: 4,
         maxAttachmentBytes: 52_428_800,
@@ -216,4 +220,51 @@ test('keeps an honest empty chat page instead of inventing a completed answer', 
   expect(textOf(renderer)).toContain('No messages in this chat yet.');
   expect(textOf(renderer)).not.toContain('You ·');
   expect(textOf(renderer)).not.toContain('Omi ·');
+});
+
+test('loads older main-chat pages instead of dropping persisted history', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse([{id: 'human-2', text: 'newer prompt', sender: 'human'}], {
+        olderCursor: 'older-1',
+        hasOlder: true,
+      }),
+    )
+    .mockResolvedValueOnce(
+      historyResponse(
+        [{id: 'human-1', text: 'older prompt', sender: 'human'}],
+        {olderCursor: null, hasOlder: false},
+      ),
+    );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(textOf(renderer)).not.toContain('You · older prompt');
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(mockRequest).toHaveBeenNthCalledWith(2, {
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages?limit=50&olderCursor=older-1',
+  });
+  expect(textOf(renderer)).toContain('You · older prompt');
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
 });

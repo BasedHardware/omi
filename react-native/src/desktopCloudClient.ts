@@ -1,6 +1,7 @@
 import type {OmiBackend} from './omiNative';
 import {
   desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
 } from './desktopReadClient';
@@ -519,6 +520,29 @@ export function cloudSessionUnavailableCopy(
     : desktopBackendUnauthorizedCopy;
 }
 
+export const serviceSettingsUnavailableCopy =
+  'Account profile and usage are not available from this service yet.';
+const serviceSettingsLoadFailureCopy =
+  'Settings could not be loaded. Try again.';
+
+export function serviceSettingsErrorCopy(error: unknown): string {
+  if (
+    error instanceof Error &&
+    error.message === serviceSettingsUnavailableCopy
+  ) {
+    return serviceSettingsUnavailableCopy;
+  }
+  const mapped = desktopReadErrorCopy(error);
+  if (
+    mapped === desktopBackendUnauthorizedCopy ||
+    mapped === desktopBackendConfigurationCopy ||
+    mapped === desktopBackendServiceCopy
+  ) {
+    return mapped;
+  }
+  return serviceSettingsLoadFailureCopy;
+}
+
 export function exploreApps(snapshot: ConnectorsSnapshot): CloudApp[] {
   return snapshot.apps;
 }
@@ -551,13 +575,28 @@ export type ServiceSettingsSnapshot = {
 export async function loadServiceSettings(
   backend: OmiBackend,
 ): Promise<ServiceSettingsSnapshot> {
-  const response = await cloudRequest(
-    backend,
-    'service-settings-read',
-    'GET',
-    '/v1/settings',
+  const response = await backend.request({
+    id: 'service-settings-read',
+    method: 'GET',
+    path: '/v1/settings',
+  });
+  if (response.status === 401) {
+    const unauthorized = new Error(desktopBackendUnauthorizedCopy) as Error & {
+      code: string;
+    };
+    unauthorized.code = 'unauthorized';
+    throw unauthorized;
+  }
+  if (response.status === 503) {
+    throw new Error(serviceSettingsUnavailableCopy);
+  }
+  if (response.status !== 200) {
+    throw new Error(serviceSettingsLoadFailureCopy);
+  }
+  const body = object(
+    parseJson(response.body, 'service-settings-read'),
+    'Settings response',
   );
-  const body = object(response.body, 'Settings response');
   let identity: ServiceSettingsSnapshot['identity'] = null;
   if (body.identity !== null) {
     const value = object(body.identity, 'Connection identity');

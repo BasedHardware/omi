@@ -13,6 +13,7 @@ import {
   loadAccountSettings,
   loadServiceSettings,
   optInTrainingData,
+  serviceSettingsErrorCopy,
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
@@ -197,12 +198,12 @@ export function SettingsPage({
         setServiceSettings(settings);
         setError(null);
         setPhase('ready');
-      } catch {
+      } catch (reason) {
         if (!current()) {
           return;
         }
         setServiceSettings(null);
-        setError('Settings could not be loaded. Try again.');
+        setError(serviceSettingsErrorCopy(reason));
         setPhase('error');
       }
       return;

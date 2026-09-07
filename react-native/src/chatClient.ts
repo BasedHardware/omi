@@ -60,6 +60,9 @@ export function chatErrorCopy(error: unknown): string {
   if (error.status === 403 || error.backendCode === 'forbidden') {
     return 'Chat is not available for this account.';
   }
+  if (error.status === 404 || error.backendCode === 'not_found') {
+    return 'Sending messages is not available on this backend yet.';
+  }
   if (error.status === 429) {
     return error.retryAfterSeconds === null
       ? 'Too many requests. Try again shortly.'
@@ -101,6 +104,9 @@ export function chatSessionLost(error: unknown): boolean {
 
 export function chatHistoryErrorCopy(error: unknown): string {
   if (error instanceof ChatBackendError) {
+    if (error.status === 404 || error.backendCode === 'not_found') {
+      return 'Chat history is not available on this backend yet.';
+    }
     return chatErrorCopy(error);
   }
   const code = nativeErrorCode(error);
@@ -424,16 +430,20 @@ function throwBackendError(response: NativeHttpResponse): never {
   if (response.body !== null) {
     try {
       const parsed = JSON.parse(response.body) as {
-        error?: {code?: unknown; retryable?: unknown; action?: unknown};
+        error?: {code?: unknown; retryable?: unknown; action?: unknown} | string;
       };
-      if (typeof parsed.error?.code === 'string') {
-        code = parsed.error.code;
-      }
-      if (typeof parsed.error?.retryable === 'boolean') {
-        retryable = parsed.error.retryable;
-      }
-      if (typeof parsed.error?.action === 'string') {
-        action = parsed.error.action;
+      if (typeof parsed.error === 'string') {
+        code = parsed.error;
+      } else if (parsed.error !== null && typeof parsed.error === 'object') {
+        if (typeof parsed.error.code === 'string') {
+          code = parsed.error.code;
+        }
+        if (typeof parsed.error.retryable === 'boolean') {
+          retryable = parsed.error.retryable;
+        }
+        if (typeof parsed.error.action === 'string') {
+          action = parsed.error.action;
+        }
       }
     } catch {}
   }

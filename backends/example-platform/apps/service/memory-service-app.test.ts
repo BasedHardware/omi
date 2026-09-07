@@ -151,3 +151,28 @@ test("device upload routes preserve original body and cancellation through the c
   expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe", { method: "POST" })).status).toBe(403);
   expect((await app.request("/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/download")).status).toBe(404);
 });
+
+test("chat write doors forward to the chat runtime instead of a generic shell 404", async () => {
+  const seen: string[] = [];
+  const app = createMemoryServiceApp(() => new Response(null, { status: 503 }), {
+    readPort: defineMemoryRouteReadPort(async () => false, async () => ({ kind: "unavailable" })),
+    nowEpochSeconds: () => 100, counter: createServedCounter(),
+  }, {}, undefined, undefined, undefined, {
+    async executeRequest(request) {
+      seen.push(`${request.method} ${new URL(request.url).pathname}`);
+      return Response.json({ error: { code: "not_found", retryable: false, action: "none" } }, { status: 404 });
+    },
+  });
+  expect((await app.request("/v1/chat-messages", { method: "POST", body: "{}" })).status).toBe(404);
+  expect((await app.request("/v1/chat-generations/generation-1/events")).status).toBe(404);
+  expect((await app.request("/v1/chat-generations/generation-1", { method: "DELETE" })).status).toBe(404);
+  expect((await app.request("/v1/chat-attachments", { method: "POST", body: "{}" })).status).toBe(404);
+  expect((await app.request("/v1/chat-attachments/att-1/complete", { method: "POST", body: "{}" })).status).toBe(404);
+  expect(seen).toEqual([
+    "POST /v1/chat-messages",
+    "GET /v1/chat-generations/generation-1/events",
+    "DELETE /v1/chat-generations/generation-1",
+    "POST /v1/chat-attachments",
+    "POST /v1/chat-attachments/att-1/complete",
+  ]);
+});
