@@ -352,6 +352,14 @@ async def extract_speaker_samples(
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
 
+        # Sample extraction runs live, while the conversation is still processing, so
+        # conversation['language'] (only resolved at finalization) is normally empty here.
+        # Fall back to the user's app-level language preference, same as chat/memories/
+        # process_conversation, instead of silently defaulting to English downstream.
+        sample_language = conversation.get('language') or await run_blocking(
+            db_executor, users_db.get_user_language_preference, uid
+        )
+
         started_at = conversation.get('started_at')
         if not started_at:
             logger.info(f"Conversation {conversation_id} has no started_at {uid}")
@@ -501,7 +509,7 @@ async def extract_speaker_samples(
 
             # Verify sample quality and get transcript using centralized function
             transcript, is_valid, reason = await verify_and_transcribe_sample(
-                wav_bytes, sample_rate, expected_text, language=conversation.get('language')
+                wav_bytes, sample_rate, expected_text, language=sample_language
             )
             if not is_valid:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
