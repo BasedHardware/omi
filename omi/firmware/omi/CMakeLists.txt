@@ -28,6 +28,7 @@ file(GLOB core_sources
     src/lib/core/codec.c
     src/lib/core/transport.c
     src/lib/core/button.c
+    src/lib/core/button_input.c
     src/lib/core/monitor.c
 )
 

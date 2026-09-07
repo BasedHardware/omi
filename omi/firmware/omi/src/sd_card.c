@@ -13,6 +13,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
 
+#include "lib/core/sd_worker_wait.h"
 #include "rtc.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
@@ -149,6 +150,12 @@ static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard
 
 K_MSGQ_DEFINE(sd_msgq, sizeof(sd_req_t), SD_REQ_QUEUE_MSGS, 4);
 K_MSGQ_DEFINE(sd_prio_msgq, sizeof(sd_req_t), SD_PRIO_QUEUE_MSGS, 4);
+K_SEM_DEFINE(sd_worker_wake, 0, 1);
+
+static int enqueue_sd_request(struct k_msgq *queue, const sd_req_t *request, k_timeout_t timeout)
+{
+    return sd_worker_enqueue(queue, request, timeout, &sd_worker_wake);
+}
 
 #define SD_WORKER_STACK_SIZE 8192
 #define SD_WORKER_PRIORITY 7
@@ -911,6 +918,7 @@ static int get_packet_name_for_seq(uint64_t seq, char *buf, size_t buf_size)
 void sd_worker_thread(void)
 {
     sd_req_t req;
+    int64_t flush_retry_at = 0;
 
     int res = sd_mount();
     if (res != 0) {
@@ -924,27 +932,23 @@ void sd_worker_thread(void)
     sd_set_io_low_power(true);
 
     while (1) {
-        if (atomic_cas(&pending_flush_on_ble_connect, 1, 0)) {
+        int64_t flush_at = sd_worker_flush_deadline(
+            is_mounted, current_batch_dirty, last_batch_activity_ms, flush_retry_at, RAW_FLUSH_INTERVAL_MS);
+        enum sd_worker_event event =
+            sd_worker_next(&sd_prio_msgq, &sd_msgq, &sd_worker_wake, &pending_flush_on_ble_connect, &req, flush_at);
+        if (event == SD_WORKER_CONNECT_FLUSH) {
             req.type = REQ_FLUSH;
             req.u.status.resp = NULL;
-            goto handle_req;
-        }
-
-        if (k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0) {
-            goto handle_req;
-        }
-
-        k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(250);
-        if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) {
-            if (current_batch_dirty && (k_uptime_get() - last_batch_activity_ms) >= RAW_FLUSH_INTERVAL_MS) {
-                sd_set_io_low_power(false);
-                (void) flush_current_batch(false);
-                sd_set_io_low_power(true);
-            }
+        } else if (event == SD_WORKER_FLUSH_DUE) {
+            sd_set_io_low_power(false);
+            int ret = flush_current_batch(false);
+            sd_set_io_low_power(true);
+            /* A failed flush leaves the batch dirty. Retry after an interval,
+             * rather than spinning on an already-expired deadline. */
+            flush_retry_at = ret < 0 ? k_uptime_get() + RAW_FLUSH_INTERVAL_MS : 0;
             continue;
         }
 
-    handle_req:
         if (req.type != REQ_WRITE_DATA) {
             sd_set_io_low_power(false);
         }
@@ -1120,7 +1124,7 @@ int app_sd_off(void)
         req.type = REQ_UNMOUNT;
         req.u.status.resp = &resp;
 
-        int qret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(2000));
+        int qret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(2000));
         if (qret == 0) {
             if (k_sem_take(&resp.sem, K_MSEC(45000)) == 0 && resp.res >= 0) {
                 unmount_completed = true;
@@ -1179,7 +1183,7 @@ void sd_request_power(bool on)
     /* Queue with a timeout and check the result (like the other prio-queue
      * callers). A silently dropped REQ_POWER_ON would leave sd_enabled=true with
      * no remount -> subsequent writes lost. */
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         LOG_ERR("sd_request_power(%s) failed to queue: %d", on ? "on" : "off", ret);
         return;
@@ -1206,9 +1210,10 @@ void sd_notify_ble_state(bool connected)
         sd_req_t req = {0};
         req.type = REQ_FLUSH;
         req.u.status.resp = NULL;
-        int ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
+        int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_NO_WAIT);
         if (ret != 0) {
             atomic_set(&pending_flush_on_ble_connect, 1);
+            k_sem_give(&sd_worker_wake);
         }
     }
 
@@ -1257,9 +1262,9 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
 
-    int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
+    int ret = enqueue_sd_request(&sd_msgq, &req, K_NO_WAIT);
     if (ret != 0) {
-        ret = k_msgq_put(&sd_msgq, &req, ble_connected ? K_MSEC(1) : K_MSEC(5));
+        ret = enqueue_sd_request(&sd_msgq, &req, ble_connected ? K_MSEC(1) : K_MSEC(5));
     }
 
     if (ret != 0) {
@@ -1299,7 +1304,7 @@ int sd_ring_get_info(sd_ring_info_t *info)
     req.type = REQ_GET_RING_INFO;
     req.u.info.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         resp.busy_flag = NULL;
         atomic_clear(&info_in_flight);
@@ -1340,7 +1345,7 @@ int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t 
     req.u.read.out_buf = buf;
     req.u.read.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         resp.busy_flag = NULL;
         atomic_clear(&read_in_flight);
@@ -1374,7 +1379,7 @@ int sd_ring_advance(uint64_t new_read_seq)
     req.u.advance.new_read_seq = new_read_seq;
     req.u.advance.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         resp.busy_flag = NULL;
         atomic_clear(&advance_in_flight);
@@ -1399,7 +1404,7 @@ int sd_ring_advance_async(uint64_t new_read_seq)
     req.type = REQ_ADVANCE_READ;
     req.u.advance.new_read_seq = new_read_seq;
     req.u.advance.resp = NULL;
-    return k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
+    return enqueue_sd_request(&sd_prio_msgq, &req, K_NO_WAIT);
 }
 
 int sd_ring_clear(void)
@@ -1418,7 +1423,7 @@ int sd_ring_clear(void)
     req.type = REQ_CLEAR_RING;
     req.u.status.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         resp.busy_flag = NULL;
         atomic_clear(&clear_in_flight);
@@ -1449,7 +1454,7 @@ int sd_flush_current_file(void)
     req.type = REQ_FLUSH;
     req.u.status.resp = &resp;
 
-    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    int ret = enqueue_sd_request(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
         resp.busy_flag = NULL;
         atomic_clear(&flush_in_flight);
