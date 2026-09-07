@@ -55,10 +55,20 @@ function control(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
 }
 
 test('task page remains read-only without write authority', () => {
-  const renderer = render({onTaskToggle: jest.fn(), onTaskEdit: jest.fn()});
+  const renderer = render({
+    writesAvailable: false,
+    onTaskToggle: jest.fn(),
+    onTaskEdit: jest.fn(),
+  });
   expect(control(renderer, 'Open Prepare demo').props.disabled).toBe(true);
   act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
   expect(control(renderer, 'Task description')).toBeUndefined();
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task editing is unavailable for this connection.');
 });
 
 test('task page edits and toggles only through handlers with pending and error recovery', () => {
@@ -201,6 +211,25 @@ test('task grant denial shows the typed error instead of an empty library', () =
   expect(copy).toContain('This saved data is not available for this account.');
   expect(copy).not.toContain('No tasks yet.');
   expect(copy).not.toContain('Saved tasks could not be loaded.');
+  expect(copy).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('loading tasks do not claim editing is unavailable', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<TasksPage outcome={null} loading />);
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Loading tasks…');
+  expect(copy).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
 });
 
 test('incomplete empty tasks do not claim a complete library', () => {

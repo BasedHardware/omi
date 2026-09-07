@@ -9,18 +9,18 @@ export type TaskMutationProps = {
   taskMutationError?: string | null;
   onRetryTaskMutation?: () => void;
   onDismissTaskMutation?: () => void;
-  writesAvailable?: boolean;
+  writesAvailable?: boolean | null;
 };
 
 export function TaskMutationStatus({
-  writesAvailable = false,
+  writesAvailable,
   taskMutationError,
   onRetryTaskMutation,
   onDismissTaskMutation,
 }: TaskMutationProps) {
   return (
     <View>
-      {!writesAvailable && (
+      {writesAvailable === false && (
         <Text
           style={[styles.copy, Platform.OS === 'macos' && styles.lightText]}>
           Task editing is unavailable for this connection.

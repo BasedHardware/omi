@@ -97,7 +97,7 @@ export function TasksPage({
   onTaskToggle,
   onTaskEdit,
   busyTaskId = null,
-  writesAvailable = false,
+  writesAvailable,
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,

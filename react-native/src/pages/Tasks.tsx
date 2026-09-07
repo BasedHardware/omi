@@ -48,7 +48,7 @@ export function TasksPage({
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
-  writesAvailable = false,
+  writesAvailable,
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;

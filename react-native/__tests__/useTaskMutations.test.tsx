@@ -65,7 +65,7 @@ function Harness(
 }
 
 async function mount(
-  outcome: TaskReadOutcome = {status: 'success', value: read},
+  outcome: TaskReadOutcome | null = {status: 'success', value: read},
 ) {
   let state!: ReturnType<typeof useTaskMutations>;
   const refreshTasks = jest.fn(async (): Promise<TaskRead | null> => read);
@@ -161,6 +161,19 @@ test('legacy reads without an epoch stay read-only', async () => {
   expect(prepare).not.toHaveBeenCalled();
   await ReactTestRenderer.act(async () => app.renderer.unmount());
 });
+
+test.each([null, {status: 'error' as const, error: 'unavailable'}])(
+  'unsettled task reads do not claim a closed write door',
+  async outcome => {
+    const app = await mount(outcome);
+    expect(app.state.writesAvailable).toBeNull();
+    await ReactTestRenderer.act(async () => {
+      app.state.onTaskToggle('task');
+    });
+    expect(prepare).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () => app.renderer.unmount());
+  },
+);
 
 test.each([false, true])(
   'sign-out during preparation retires the write before transport (old=%s)',

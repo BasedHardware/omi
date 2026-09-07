@@ -27,14 +27,15 @@ export function useTaskMutations({
   const generation = useRef(0);
   const retryAfter = useRef(0);
   const acknowledged = useRef(false);
-  const writesAvailable =
-    enabled &&
-    omiBackend != null &&
-    outcome?.status === 'success' &&
-    (outcome.value.apiContract === 'omi' ||
-      (omiBackend.createWriteId !== undefined &&
-        Number.isSafeInteger(outcome.value.accountEpoch) &&
-        outcome.value.accountEpoch !== null));
+  const writesAvailable: boolean | null =
+    outcome?.status !== 'success'
+      ? null
+      : enabled &&
+        omiBackend != null &&
+        (outcome.value.apiContract === 'omi' ||
+          (omiBackend.createWriteId !== undefined &&
+            Number.isSafeInteger(outcome.value.accountEpoch) &&
+            outcome.value.accountEpoch !== null));
 
   const reset = useCallback(() => {
     ++generation.current;

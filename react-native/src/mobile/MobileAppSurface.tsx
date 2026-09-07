@@ -274,7 +274,7 @@ export function MobileAppSurface({
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
-  writesAvailable = false,
+  writesAvailable,
   onViewRecaps,
   onViewTasks,
   recaps,

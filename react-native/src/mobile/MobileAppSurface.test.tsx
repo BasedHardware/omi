@@ -269,6 +269,23 @@ test('nested non-retryable Home task errors use unavailable copy instead of a lo
     'This saved data is not available from the selected Omi service yet.',
   );
   expect(renderedText(renderer)).not.toContain('Couldn’t load tasks');
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('Home does not claim task editing unavailable while tasks are loading', () => {
+  const renderer = render({tasks: [], taskStatus: 'loading'});
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('Home reports a closed task-write door after tasks load', () => {
+  const renderer = render({writesAvailable: false});
+  expect(renderedText(renderer)).toContain(
+    'Task editing is unavailable for this connection.',
+  );
 });
 
 test('nested non-retryable mind map errors use unavailable copy instead of a load blip', () => {

@@ -1785,6 +1785,36 @@ test('Settings keeps an honest empty developer webhook catalogue', async () => {
   );
 });
 
+test('desktop Tasks does not claim editing unavailable over a failed task read', () => {
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {status: 'error', error: desktopBackendUnavailableCopy},
+    },
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
+test('desktop Tasks reports a closed write door after tasks load', () => {
+  const renderer = renderDesktop({writesAvailable: false});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Task editing is unavailable for this connection.',
+  );
+});
+
 test('actual desktop Tasks controls toggle and edit through shared mutation callbacks', () => {
   const onTaskToggle = jest.fn();
   const onTaskEdit = jest.fn();
