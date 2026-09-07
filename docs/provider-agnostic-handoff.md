@@ -182,7 +182,9 @@ Cloud Linux after `97c85dc5be`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `1cb3a58fba`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Wide Home search no longer keeps a footer "More conversations/memories are available" after a nested non-retryable later page omitted Load more. First-page Home more-available without a closed door is unchanged. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact Home loaded-coverage slice: compact Home recaps and tasks, and the compact Tasks tab, no longer look complete when the loaded page is incomplete or has more items. Nested non-retryable later pages omit that more-available copy. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `0e507e9392`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home recaps and tasks, and the compact Tasks tab, no longer look complete when the loaded page is incomplete or has more items. Nested non-retryable later pages omit that more-available copy. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the wide Home search task OutcomeStatus slice: wide Home search no longer hides task completeness, more-available copy, or mapped task errors behind conversation and memory footer status. Nested non-retryable later task pages omit that more-available copy. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

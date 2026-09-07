@@ -4,6 +4,7 @@ import type {
   DesktopReadProjection,
   DomainReadOutcome,
   ReadPageState,
+  TaskReadOutcome,
 } from '../desktopReadClient';
 import {styles} from './styles';
 
@@ -163,7 +164,7 @@ export function OutcomeStatus({
 }: {
   continueUnavailable?: boolean;
   label: string;
-  outcome: DomainReadOutcome<DesktopReadProjection>;
+  outcome: DomainReadOutcome<DesktopReadProjection> | TaskReadOutcome;
   mac?: boolean;
 }) {
   return outcome.status === 'error' ? (
