@@ -310,6 +310,8 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
         const next = await fetchConversation()
         if (cancelled) return
         setConv(next)
+        // A regenerated summary replaces the snapshot used by list-row exports.
+        if (!isEnriching(next)) invalidateConversationsCache()
         if (shouldStopPolling(next.status, attempt)) return
       } catch {
         if (cancelled) return

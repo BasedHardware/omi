@@ -11,12 +11,14 @@ import { MemoryRouter } from 'react-router-dom'
 // 422s on anything else — every checkbox click failed and the optimistic UI reverted.
 
 const patchMock = vi.fn().mockResolvedValue({ data: { status: 'Ok' } })
+const postMock = vi.fn().mockResolvedValue({ data: { status: 'Ok' } })
 const getMock = vi.fn()
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
     get: (...args: unknown[]) => getMock(...args),
-    patch: (...args: unknown[]) => patchMock(...args)
+    patch: (...args: unknown[]) => patchMock(...args),
+    post: (...args: unknown[]) => postMock(...args)
   }
 }))
 
@@ -55,6 +57,7 @@ const CONVERSATION_WITH_ID = {
 
 beforeEach(() => {
   patchMock.mockClear()
+  postMock.mockClear()
   vi.mocked(invalidateConversationsCache).mockClear()
   getMock.mockReset()
   getMock.mockResolvedValue({ data: CONVERSATION })
@@ -106,6 +109,45 @@ describe('ConversationDetail — copy Markdown', () => {
     expect(toast).not.toHaveBeenCalledWith('Summary copied', expect.anything())
   })
 
+  it('expires the list snapshot after reprocessing and copies the regenerated summary', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    getMock.mockImplementation(async (url: string) => ({
+      data:
+        url === '/v1/conversations/conv1'
+          ? {
+              ...CONVERSATION,
+              apps_results: [{ app_id: 'test-app', content: 'Existing insight' }],
+              structured: postMock.mock.calls.length
+                ? {
+                    ...CONVERSATION.structured,
+                    overview: 'Regenerated overview.',
+                    action_items: [{ description: 'New follow-up', completed: true }]
+                  }
+                : CONVERSATION.structured
+            }
+          : []
+    }))
+    const { findByRole, findByText } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    fireEvent.click(await findByRole('button', { name: 'Reprocess' }))
+    fireEvent.click(await findByRole('button', { name: 'Default summary' }))
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1))
+    expect(invalidateConversationsCache).not.toHaveBeenCalled()
+
+    await findByText('Regenerated overview.', {}, { timeout: 4000 })
+    expect(invalidateConversationsCache).toHaveBeenCalledTimes(1)
+    const requests = getMock.mock.calls.length
+    fireEvent.click(await findByRole('button', { name: 'Copy as Markdown' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0][0]).toContain('Regenerated overview.')
+    expect(writeText.mock.calls[0][0]).toContain('- [x] New follow-up')
+    expect(writeText.mock.calls[0][0]).not.toContain('Buy milk')
+    expect(getMock).toHaveBeenCalledTimes(requests)
+  })
 })
 
 describe('ConversationDetail — action item toggle (C3)', () => {
