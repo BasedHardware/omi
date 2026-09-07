@@ -20,7 +20,7 @@ jest.mock('./omiNative', () => ({
 }));
 
 const {RecordingTranscript} = require('./ui/RecordingTranscript');
-const {parseRecordingTranscript} = require('./recordingTranscript');
+const {parseRecordingTranscript} = require('./recordingTranscriptContract');
 
 function response(
   sessionId: string,
