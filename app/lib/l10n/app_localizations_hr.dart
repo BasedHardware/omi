@@ -2040,7 +2040,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryDeleted => 'Uspomena Obrisana.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Dio povijesti sjećanja nije dostupan. Prikazuje se dosad primljena povijest.';
 
   @override
   String get undo => 'Vrati Unazad';
@@ -9948,32 +9948,32 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Glasovni profil: $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Reproduciraj';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Snimi ponovno';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Odgovorite glasom:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Gdje živite?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Čime se bavite?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Koji je vaš dugoročni cilj?';
 
   @override
   String get transcriptionNoAudio => 'Transkripcija ne prima zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Dodirnite + za početak snimanja';
 
   @override
   String get chatBlockTask => 'Zadatak';
@@ -10013,5 +10013,5 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Pretvaranje govora u tekst trenutačno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju pa pokušajte ponovno.';
 }

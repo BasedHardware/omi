@@ -2048,7 +2048,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryDeleted => 'జ్ఞాపకం తొలగించబడింది.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
 
   @override
   String get undo => 'మరలుచేయండి';
@@ -9961,32 +9962,32 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name వాయిస్ ప్రొఫైల్';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'ప్లే చేయండి';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'మళ్లీ రికార్డ్ చేయండి';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'మీ స్వరంతో సమాధానం ఇవ్వండి:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'మీరు ఎక్కడ నివసిస్తున్నారు?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'మీరు ఏ పని చేస్తారు?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'మీ దీర్ఘకాలిక లక్ష్యం ఏమిటి?';
 
   @override
   String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి';
 
   @override
   String get chatBlockTask => 'పని';
@@ -10026,5 +10027,5 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
 }

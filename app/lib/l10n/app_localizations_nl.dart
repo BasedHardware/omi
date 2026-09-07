@@ -2044,7 +2044,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryDeleted => 'Herinnering verwijderd.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.';
 
   @override
   String get undo => 'Ongedaan maken';
@@ -9939,32 +9940,32 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Stemprofiel van $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Afspelen';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Opnieuw opnemen';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Antwoord met je stem:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Waar woon je?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Wat doe je voor werk?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Wat is je langetermijndoel?';
 
   @override
   String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tik op + om de opname te starten';
 
   @override
   String get chatBlockTask => 'Taak';
@@ -10004,5 +10005,5 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
 }

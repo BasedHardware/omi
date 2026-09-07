@@ -2014,7 +2014,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryDeleted => 'याद हटा दी गई।';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'यादों के इतिहास का कुछ हिस्सा उपलब्ध नहीं है। अब तक प्राप्त इतिहास दिखाया जा रहा है।';
 
   @override
   String get undo => 'पूर्ववत करें';
@@ -9891,32 +9892,32 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name की वॉइस प्रोफ़ाइल';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'चलाएँ';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'फिर से रिकॉर्ड करें';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'बोलकर जवाब दें:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'आप कहाँ रहते हैं?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'आप क्या काम करते हैं?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'आपका दीर्घकालिक लक्ष्य क्या है?';
 
   @override
   String get transcriptionNoAudio => 'ट्रांसक्रिप्शन ऑडियो प्राप्त नहीं कर रहा है';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'रिकॉर्डिंग शुरू करने के लिए + टैप करें';
 
   @override
   String get chatBlockTask => 'कार्य';
@@ -9956,5 +9957,5 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
 }

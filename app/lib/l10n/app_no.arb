@@ -3246,5 +3246,15 @@
     "chatBlockUnavailable": "Ikke lenger tilgjengelig",
     "chatBlockRecommendedNextSteps": "Anbefalte neste trinn",
     "couldNotLoadMemories": "Kunne ikke laste minner",
-    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen",
+    "speechProfileOwnerTitle": "Stemmeprofil for {name}",
+    "play": "Spill av",
+    "redo": "Ta opp på nytt",
+    "answerWithYourVoice": "Svar med stemmen din:",
+    "speechProfileTopicLocation": "Hvor bor du?",
+    "speechProfileTopicWork": "Hva jobber du med?",
+    "speechProfileTopicGoal": "Hva er ditt langsiktige mål?",
+    "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.",
+    "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
+    "tapPlusToStartRecording": "Trykk på + for å starte opptaket"
 }

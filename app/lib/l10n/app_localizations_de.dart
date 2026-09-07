@@ -2056,7 +2056,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get memoryDeleted => 'Erinnerung gelöscht.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.';
 
   @override
   String get undo => 'Rückgängig';
@@ -9995,32 +9996,32 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Stimmprofil von $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Abspielen';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Neu aufnehmen';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Antworte mit deiner Stimme:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Wo wohnst du?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Was machst du beruflich?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Was ist dein langfristiges Ziel?';
 
   @override
   String get transcriptionNoAudio => 'Transkription empfängt kein Audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tippe auf +, um die Aufnahme zu starten';
 
   @override
   String get chatBlockTask => 'Aufgabe';
@@ -10060,5 +10061,5 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.';
 }

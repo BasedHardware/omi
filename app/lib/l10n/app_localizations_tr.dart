@@ -2044,7 +2044,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryDeleted => 'Anı Silindi.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
 
   @override
   String get undo => 'Geri Al';
@@ -9924,32 +9925,32 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name adlı kişinin ses profili';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Oynat';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Yeniden kaydet';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Sesinizle yanıtlayın:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Nerede yaşıyorsunuz?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Ne iş yapıyorsunuz?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Uzun vadeli hedefiniz nedir?';
 
   @override
   String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Kaydı başlatmak için + simgesine dokunun';
 
   @override
   String get chatBlockTask => 'Görev';
@@ -9989,5 +9990,5 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
 }

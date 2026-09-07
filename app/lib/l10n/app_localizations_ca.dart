@@ -2052,7 +2052,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryDeleted => 'Record eliminat.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Una part de l\'historial de records no està disponible. Es mostra l\'historial rebut fins ara.';
 
   @override
   String get undo => 'Desfer';
@@ -9969,32 +9970,32 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Perfil de veu de $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Reprodueix';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Torna a gravar';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Respon amb la veu:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'On vius?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'A què et dediques?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Quin és el teu objectiu a llarg termini?';
 
   @override
   String get transcriptionNoAudio => 'La transcripció no rep àudio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Toca + per començar a gravar';
 
   @override
   String get chatBlockTask => 'Tasca';
@@ -10034,5 +10035,5 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.';
 }

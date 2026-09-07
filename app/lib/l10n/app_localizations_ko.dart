@@ -2001,7 +2001,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryDeleted => '기억이 삭제되었습니다.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
 
   @override
   String get undo => '실행 취소';
@@ -9746,32 +9746,32 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return '$name님의 음성 프로필';
   }
 
   @override
-  String get play => 'Play';
+  String get play => '재생';
 
   @override
-  String get redo => 'Redo';
+  String get redo => '다시 녹음';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => '목소리로 답해주세요:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => '어디에 사시나요?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => '어떤 일을 하시나요?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => '장기적인 목표는 무엇인가요?';
 
   @override
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => '+를 눌러 녹음 시작';
 
   @override
   String get chatBlockTask => '작업';
@@ -9810,6 +9810,5 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
 
   @override
-  String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+  String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
 }

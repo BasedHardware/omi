@@ -2042,7 +2042,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get memoryDeleted => 'Споменът е изтрит.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Част от историята на спомените не е налична. Показва се получената досега история.';
 
   @override
   String get undo => 'Отмени';
@@ -9949,32 +9950,32 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Гласов профил на $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Възпроизвеждане';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Запис отново';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Отговорете с гласа си:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Къде живеете?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Какво работите?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Каква е дългосрочната ви цел?';
 
   @override
   String get transcriptionNoAudio => 'Транскрипцията не получава аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Докоснете +, за да започнете запис';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10014,5 +10015,5 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.';
 }

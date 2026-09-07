@@ -2046,7 +2046,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get memoryDeleted => 'Воспоминание удалено.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.';
 
   @override
   String get undo => 'Отменить';
@@ -9949,32 +9950,32 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Голосовой профиль: $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Воспроизвести';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Записать заново';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Ответьте голосом:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Где вы живёте?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Кем вы работаете?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Какова ваша долгосрочная цель?';
 
   @override
   String get transcriptionNoAudio => 'Транскрипция не получает аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Нажмите +, чтобы начать запись';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10014,5 +10015,5 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
 }

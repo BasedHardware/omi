@@ -2057,7 +2057,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.';
 
   @override
   String get undo => 'Annuler';
@@ -9999,32 +10000,32 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Profil vocal de $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Lire';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Réenregistrer';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Répondez à voix haute :';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Où habitez-vous ?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Que faites-vous dans la vie ?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Quel est votre objectif à long terme ?';
 
   @override
   String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Appuyez sur + pour commencer l’enregistrement';
 
   @override
   String get chatBlockTask => 'Tâche';
@@ -10064,5 +10065,5 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 }

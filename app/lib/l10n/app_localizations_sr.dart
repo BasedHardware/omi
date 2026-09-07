@@ -2038,7 +2038,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryDeleted => 'Сећање је избрисано.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Део историје сећања није доступан. Приказује се до сада примљена историја.';
 
   @override
   String get undo => 'Врати';
@@ -9928,32 +9928,32 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Гласовни профил: $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Пусти';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Сними поново';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Одговорите гласом:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Где живите?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Чиме се бавите?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Који је ваш дугорочни циљ?';
 
   @override
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Додирните + да започнете снимање';
 
   @override
   String get chatBlockTask => 'Задатак';
@@ -9993,5 +9993,5 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
 }

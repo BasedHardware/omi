@@ -18576,7 +18576,7 @@ abstract class AppLocalizations {
   /// Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording
   ///
   /// In en, this message translates to:
-  /// **'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.'**
+  /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
 }
 

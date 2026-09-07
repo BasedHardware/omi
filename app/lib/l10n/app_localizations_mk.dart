@@ -2046,7 +2046,8 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryDeleted => 'Успоменa е избришана.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.';
 
   @override
   String get undo => 'Врати';
@@ -9965,32 +9966,32 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Гласовен профил на $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Пушти';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Сними повторно';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Одговорете со глас:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Каде живеете?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Што работите?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Која е вашата долгорочна цел?';
 
   @override
   String get transcriptionNoAudio => 'Транскрипцијата не прима аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Допрете + за да започнете со снимање';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10030,5 +10031,5 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
 }

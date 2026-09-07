@@ -10812,5 +10812,15 @@
     "chatBlockUnavailable": "आता उपलब्ध नाही",
     "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले",
     "couldNotLoadMemories": "आठवणी लोड करता आल्या नाहीत",
-    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही"
+    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही",
+    "speechProfileOwnerTitle": "{name} यांची व्हॉइस प्रोफाइल",
+    "play": "प्ले करा",
+    "redo": "पुन्हा रेकॉर्ड करा",
+    "answerWithYourVoice": "बोलून उत्तर द्या:",
+    "speechProfileTopicLocation": "तुम्ही कुठे राहता?",
+    "speechProfileTopicWork": "तुम्ही काय काम करता?",
+    "speechProfileTopicGoal": "तुमचे दीर्घकालीन ध्येय काय आहे?",
+    "speechToTextUnavailableDesc": "सध्या बोलण्याचे मजकुरात रूपांतर उपलब्ध नाही. तुमचे इंटरनेट कनेक्शन आणि डिव्हाइसवरील वाणी ओळख सेटिंग्ज तपासा, नंतर पुन्हा प्रयत्न करा.",
+    "memoryHistoryPartial": "आठवणींच्या इतिहासाचा काही भाग उपलब्ध नाही. आतापर्यंत मिळालेला इतिहास दाखवला जात आहे.",
+    "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा"
 }

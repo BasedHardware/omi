@@ -2039,7 +2039,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryDeleted => 'Spomin je izbrisan.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.';
 
   @override
   String get undo => 'Razveljavi';
@@ -9943,32 +9943,32 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '$name\'s Speech Profile';
+    return 'Glasovni profil: $name';
   }
 
   @override
-  String get play => 'Play';
+  String get play => 'Predvajaj';
 
   @override
-  String get redo => 'Redo';
+  String get redo => 'Posnemi znova';
 
   @override
-  String get answerWithYourVoice => 'Answer with your voice:';
+  String get answerWithYourVoice => 'Odgovorite z glasom:';
 
   @override
-  String get speechProfileTopicLocation => 'Where do you live?';
+  String get speechProfileTopicLocation => 'Kje živite?';
 
   @override
-  String get speechProfileTopicWork => 'What do you do for work?';
+  String get speechProfileTopicWork => 'Kaj delate?';
 
   @override
-  String get speechProfileTopicGoal => 'What is your long-term goal?';
+  String get speechProfileTopicGoal => 'Kaj je vaš dolgoročni cilj?';
 
   @override
   String get transcriptionNoAudio => 'Transkripcija ne prejema zvoka';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tapnite + za začetek snemanja';
 
   @override
   String get chatBlockTask => 'Opravilo';
@@ -10008,5 +10008,5 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc =>
-      'Speech-to-text isn\'t available right now. Check your internet connection, or turn on Dictation in Settings > General > Keyboard to transcribe on this device.';
+      'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
 }
