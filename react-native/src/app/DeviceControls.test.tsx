@@ -6,7 +6,11 @@ import {FocusPressable} from '../ui/Pressable';
 import {DeviceControls} from './DeviceControls';
 
 jest.mock('../omiNative', () => ({
-  omiNative: {setDeviceSetting: jest.fn(), findDevice: jest.fn()},
+  omiNative: {
+    setDeviceSetting: jest.fn(),
+    findDevice: jest.fn(),
+    readStorageStatus: jest.fn(),
+  },
 }));
 const write = omiNative!.setDeviceSetting as jest.Mock;
 const device: Device = {
@@ -23,6 +27,7 @@ afterEach(async () => {
   await act(async () => renderer?.unmount());
   write.mockReset();
   (omiNative!.findDevice as jest.Mock).mockReset();
+  (omiNative!.readStorageStatus as jest.Mock).mockReset();
 });
 const button = (label: string) =>
   renderer.root
@@ -154,4 +159,55 @@ test('find failure remains retryable without claiming physical vibration', async
     'Could not send all find device commands',
   );
   expect(button('Find device').props.disabled).toBe(false);
+});
+
+test('storage read is capability gated and shows only acknowledged values', async () => {
+  await render(device);
+  expect(button('Read storage status')).toBeUndefined();
+  const read = omiNative!.readStorageStatus as jest.Mock;
+  let resolve!: (value: unknown) => void;
+  read.mockReturnValue(
+    new Promise(done => {
+      resolve = done;
+    }),
+  );
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, storageStatusSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  await act(async () => {
+    button('Read storage status').props.onPress();
+    button('Read storage status').props.onPress();
+  });
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledWith(device.id);
+  expect(button('Increase led brightness').props.disabled).toBe(true);
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Stored audio:');
+  await act(async () =>
+    resolve({
+      usedBytes: 4096,
+      unreadPackets: 256,
+      freeBytes: 8192,
+      clockValid: false,
+    }),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('4,096');
+  expect(JSON.stringify(renderer.toJSON())).toContain('Not set');
+});
+
+test('storage read failure remains unknown and can be retried', async () => {
+  (omiNative!.readStorageStatus as jest.Mock).mockRejectedValue(
+    new Error('legacy format'),
+  );
+  await render({...device, storageStatusSupported: true});
+  await act(async () => button('Read storage status').props.onPress());
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Storage status could not be read',
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Stored audio:');
+  expect(button('Read storage status').props.disabled).toBe(false);
 });

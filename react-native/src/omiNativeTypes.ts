@@ -50,6 +50,13 @@ export type OmiAuth = {
   markOnboardingComplete(): Promise<void>;
 };
 
+export type DeviceStorageStatus = {
+  usedBytes: number;
+  unreadPackets: number;
+  freeBytes: number;
+  clockValid: boolean;
+};
+
 export type Device = {
   id: string;
   name: string;
@@ -60,6 +67,7 @@ export type Device = {
   ledBrightness?: number;
   microphoneGain?: number;
   findDeviceSupported?: boolean;
+  storageStatusSupported?: boolean;
   charging?: boolean;
   information?: Partial<
     Record<
@@ -105,6 +113,7 @@ export type OmiNative = {
   connectDevice(id: string): Promise<void>;
   disconnectDevice(id: string): Promise<void>;
   findDevice?(id: string): Promise<void>;
+  readStorageStatus?(id: string): Promise<DeviceStorageStatus>;
   setDeviceSetting?(
     id: string,
     setting: 'ledBrightness' | 'microphoneGain',

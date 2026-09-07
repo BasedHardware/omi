@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {omiNative} from '../omiNative';
-import type {Device} from '../omiNativeTypes';
+import type {Device, DeviceStorageStatus} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 
@@ -32,8 +32,11 @@ export function DeviceControls({
   device: Device;
   busy: boolean;
 }) {
-  const [pending, setPending] = useState<Setting | 'findDevice' | null>(null);
+  const [pending, setPending] = useState<
+    Setting | 'findDevice' | 'storage' | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [storage, setStorage] = useState<DeviceStorageStatus | null>(null);
   const active = useRef(true);
   const inFlight = useRef(false);
   useEffect(() => {
@@ -108,6 +111,39 @@ export function DeviceControls({
     }
   };
 
+  const readStorage = async () => {
+    if (
+      inFlight.current ||
+      busy ||
+      !device.connected ||
+      !device.storageStatusSupported ||
+      !omiNative?.readStorageStatus
+    ) {
+      return;
+    }
+    inFlight.current = true;
+    setPending('storage');
+    setStorage(null);
+    setMessage(null);
+    try {
+      const result = await omiNative.readStorageStatus(device.id);
+      if (active.current) {
+        setStorage(result);
+      }
+    } catch {
+      if (active.current) {
+        setMessage(
+          'Storage status could not be read. The device may not support this format.',
+        );
+      }
+    } finally {
+      inFlight.current = false;
+      if (active.current) {
+        setPending(null);
+      }
+    }
+  };
+
   return (
     <View accessibilityLabel="Device controls" style={local.container}>
       <Text style={styles.deviceMeta}>
@@ -131,6 +167,37 @@ export function DeviceControls({
         </FocusPressable>
       ) : (
         <Text style={styles.deviceMeta}>Find device unavailable</Text>
+      )}
+      {device.connected &&
+      device.storageStatusSupported &&
+      omiNative?.readStorageStatus ? (
+        <FocusPressable
+          accessibilityLabel="Read storage status"
+          accessibilityRole="button"
+          disabled={busy || pending !== null}
+          onPress={readStorage}
+          style={styles.scanButton}>
+          <Text style={styles.scanButtonText}>Read storage status</Text>
+        </FocusPressable>
+      ) : (
+        <Text style={styles.deviceMeta}>Storage status unavailable</Text>
+      )}
+      {storage !== null && device.connected && (
+        <View accessibilityLabel="Last reported storage status">
+          <Text style={styles.deviceMeta}>Last reported storage</Text>
+          <Text style={styles.deviceMeta}>
+            Stored audio: {storage.usedBytes.toLocaleString()} bytes
+          </Text>
+          <Text style={styles.deviceMeta}>
+            Unread packets: {storage.unreadPackets.toLocaleString()}
+          </Text>
+          <Text style={styles.deviceMeta}>
+            Free space: {storage.freeBytes.toLocaleString()} bytes
+          </Text>
+          <Text style={styles.deviceMeta}>
+            Device clock: {storage.clockValid ? 'Set' : 'Not set'}
+          </Text>
+        </View>
       )}
       {controls.map(control => {
         const value = device[control.setting];
@@ -194,7 +261,9 @@ export function DeviceControls({
       })}
       {pending !== null && (
         <Text accessibilityRole="alert" style={styles.deviceMeta}>
-          {pending === 'findDevice'
+          {pending === 'storage'
+            ? 'Reading storage status…'
+            : pending === 'findDevice'
             ? 'Sending find device commands…'
             : 'Confirming on device…'}
         </Text>

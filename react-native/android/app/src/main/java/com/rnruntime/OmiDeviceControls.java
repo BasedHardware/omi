@@ -20,6 +20,14 @@ final class OmiDeviceControls {
     }
     boolean complete() { return active && sent == 3 && !awaiting; }
   }
+  static long[] storage(byte[] bytes) {
+    if (bytes.length != 16) return null;
+    long[] values = new long[4];
+    for (int field = 0; field < 4; field++) for (int index = 0; index < 4; index++)
+      values[field] |= (long) (bytes[field * 4 + index] & 255) << (index * 8);
+    return values[3] <= 1 && values[0] + values[2] > 0 ? values : null;
+  }
+  static boolean storageSupported(Long features) { return features != null && (features & (1L << 6)) != 0; }
   static Long features(byte[] bytes) {
     if (bytes.length != 4) return null;
     long value = 0;
