@@ -11,6 +11,10 @@ import { DEVICE_UPLOAD_MAX_BODY, DEVICE_UPLOAD_MAX_BATCH_BODY, DEVICE_UPLOAD_SES
 const error = (status: number, code: string) => Response.json({ error: { code } }, {
   status, headers: { "cache-control": "no-store", ...(status === 503 ? { "retry-after": "1" } : {}) },
 });
+const ownershipUnavailable = () => Response.json(
+  { error: { code: "capture_ownership_unavailable", retryable: false, action: "none" } },
+  { status: 503, headers: { "cache-control": "no-store" } },
+);
 async function body(request: Request, maximumBytes = DEVICE_UPLOAD_MAX_BODY): Promise<unknown> {
   if (request.body === null) throw new TypeError("invalid_device_request");
   const reader = request.body.getReader();
@@ -74,7 +78,7 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
           authorized.outcome === "authentication" ? "unauthorized" : authorized.outcome === "unavailable" ? "unavailable" : "forbidden");
         request.signal.throwIfAborted();
         const readingSession = request.method === "GET" && !readingOwnership;
-        if (!readingSession && ownership === undefined) return error(503, "capture_ownership_unavailable");
+        if (!readingSession && ownership === undefined) return ownershipUnavailable();
         if (readingOwnership) return Response.json({ ownership: ownership!.issue(authorized.context) }, { headers: { "cache-control": "no-store" } });
         const receipt = request.headers.get("x-omi-capture-ownership");
         if (!readingSession) ownership!.verify(authorized.context, receipt);

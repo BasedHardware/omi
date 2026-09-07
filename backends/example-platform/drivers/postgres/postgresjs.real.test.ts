@@ -1723,11 +1723,21 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
           expect((await readWithoutReceipt(`/v1/device-sessions/${httpSession.id}${tail}`, runtime)).status).toBe(200);
         }
       }
-      expect((await readWithoutReceipt("/v1/device-sessions/ownership", keylessIngress)).status).toBe(503);
+      const missingOwnership = await readWithoutReceipt("/v1/device-sessions/ownership", keylessIngress);
+      expect(missingOwnership.status).toBe(503);
+      expect(missingOwnership.headers.get("retry-after")).toBeNull();
+      expect(await missingOwnership.json()).toEqual({
+        error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+      });
       for (const path of ["/v1/device-sessions", ...["audio", "complete", "transcribe"].map(tail => `/v1/device-sessions/${httpSession.id}/${tail}`)]) {
         const request = () => new Request(`https://service.example${path}`, { method: "POST", headers: { authorization: "Bearer device.qa.valid" }, body: JSON.stringify(httpCreate) });
         expect((await ingress.fetch(request())).status).toBe(400);
-        expect((await keylessIngress.fetch(request())).status).toBe(503);
+        const keyless = await keylessIngress.fetch(request());
+        expect(keyless.status).toBe(503);
+        expect(keyless.headers.get("retry-after")).toBeNull();
+        expect(await keyless.json()).toEqual({
+          error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+        });
       }
       const replayedResponse = await deviceRequest("/v1/device-sessions", "POST", httpCreate);
       expect(replayedResponse.status).toBe(201);

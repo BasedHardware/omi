@@ -161,15 +161,17 @@ test("device ownership GET forwards through the canonical shell", async () => {
   }, {}, undefined, {
     async fetch(request) {
       seen.push(`${request.method} ${new URL(request.url).pathname}`);
-      return Response.json({ error: { code: "capture_ownership_unavailable" } }, {
-        status: 503,
-        headers: { "retry-after": "1" },
-      });
+      return Response.json({
+        error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+      }, { status: 503 });
     },
   });
   const response = await app.request("/v1/device-sessions/ownership");
   expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({ error: { code: "capture_ownership_unavailable" } });
+  expect(response.headers.get("retry-after")).toBeNull();
+  expect(await response.json()).toEqual({
+    error: { code: "capture_ownership_unavailable", retryable: false, action: "none" },
+  });
   expect(seen).toEqual(["GET /v1/device-sessions/ownership"]);
 });
 

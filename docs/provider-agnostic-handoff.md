@@ -80,6 +80,8 @@ Cloud Linux after the Settings producer-missing retryability slice: production `
 
 Cloud Linux after the Worker ownership retryability slice: Worker `GET /v1/device-sessions/ownership` still does not invent a receipt. The 503 is nested `{error:{code:"capture_ownership_unavailable",retryable:false,action:"none"}}` instead of advertising `retryable: true`. Native still treats that code as a capability response, not a cached-owner fallback.
 
+Cloud Linux after the production ownership signing-key slice: production `GET /v1/device-sessions/ownership` and capture mutations without a configured signing key still do not invent a receipt or account epoch. That 503 is nested `{error:{code:"capture_ownership_unavailable",retryable:false,action:"none"}}` without `retry-after`. Firebase identity-verification and authorization-source 503s stay `{error:{code:"unavailable"}}` with `retry-after: 1`. Historical session and transcript GETs still do not require a signing key.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
