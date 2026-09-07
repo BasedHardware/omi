@@ -58,7 +58,13 @@ test('resumes transcription through bodyless native transport and validates acco
   });
   await expect(
     transcribeDeviceSession(client, 'recording-one'),
-  ).resolves.toMatchObject({state: 'running'});
+  ).resolves.toEqual({
+    sessionId: 'recording-one',
+    state: 'running',
+    text: null,
+    errorCode: null,
+    discardedLeadingPackets: 0,
+  });
   expect(requests[0]).toEqual({
     id: 'device-session-transcribe-recording-one',
     method: 'POST',
