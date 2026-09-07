@@ -31,11 +31,11 @@ import {
   type SignedUploadEnv,
 } from "./attachments";
 import {
-  appendDeviceSessionAudio,
+  appendDeviceSessionAudioBatch,
   completeDeviceSession,
   listDeviceSessions,
   openDeviceSession,
-  parseDeviceSessionAudio,
+  parseDeviceSessionAudioBatch,
   parseDeviceSessionCreate,
 } from "./device-sessions";
 import { type RetrievalEnv } from "./retrieval";
@@ -670,20 +670,19 @@ export async function handleDeviceSessionAudio(
   const db = context.env.DB;
   if (r2 === undefined || db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
-  const parsed = await readBoundedJson(context.req.raw, 1_572_864);
+  const parsed = await readBoundedJson(context.req.raw, 2_097_152);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
   if (parsed.kind === "invalid")
     return backendError("bad_request", "edit_request", 400);
-  const request = parseDeviceSessionAudio(parsed.value);
+  const request = parseDeviceSessionAudioBatch(parsed.value);
   if (request === null) return backendError("validation", "edit_request", 422);
-  const outcome = await appendDeviceSessionAudio(
+  const outcome = await appendDeviceSessionAudioBatch(
     db,
     r2,
     context.get("accountId"),
     context.req.param("id"),
-    request.bytes,
-    request.chunkIndex,
+    request,
     Date.now()
   );
   switch (outcome.kind) {

@@ -139,7 +139,7 @@ test("device upload routes preserve original body and cancellation through the c
     seenBody = await request.text(); seenSignal = request.signal;
     return Response.json({ error: { code: "forbidden" } }, { status: 403 });
   } });
-  const raw = ' { "chunkIndex":0, "bytesBase64":"AQ==" } ';
+  const raw = ' { "chunks": [ { "chunkIndex":0, "bytesBase64":"AQ==" } ] } ';
   const response = await app.fetch(new Request("https://service.example/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/audio", {
     method: "POST", body: raw, signal: controller.signal,
   }));

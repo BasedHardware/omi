@@ -137,7 +137,7 @@ function sessionResponse(
 
 function audioCounters(request: {body?: string}) {
   const chunkIndex = request.body
-    ? JSON.parse(request.body).chunkIndex
+    ? JSON.parse(request.body).chunks?.at(-1)?.chunkIndex
     : undefined;
   return typeof chunkIndex === 'number'
     ? {chunkCount: chunkIndex + 1, byteCount: (chunkIndex + 1) * 3}
@@ -339,8 +339,12 @@ test('retired upload failure cannot clear or complete the next session', async (
     request.path.endsWith('/audio'),
   );
   expect(
-    appends.map(([request]) => JSON.parse(request.body!).bytesBase64),
-  ).toEqual(['AQID', 'BAUG', 'BwgJ']);
+    appends.flatMap(([request]) =>
+      JSON.parse(request.body!).chunks.map(
+        (chunk: {bytesBase64: string}) => chunk.bytesBase64,
+      ),
+    ),
+  ).toEqual(['AQID', 'AQID', 'BAUG', 'BwgJ']);
   expect(
     mockBackend.request.mock.calls.some(([request]) =>
       request.path.endsWith('/complete'),
@@ -515,6 +519,14 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
   expect(appendGates).toHaveLength(1);
 
   await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'BwgJ',
+    });
+  });
+  await ReactTestRenderer.act(async () => {
     appendGates.shift()?.();
     await waitFor(() => appendGates.length === 1);
     appendGates.shift()?.();
@@ -576,6 +588,14 @@ test('drains queued audio before completing a session', async () => {
     await waitFor(() => appendGates.length === 1);
   });
 
+  await ReactTestRenderer.act(async () => {
+    emitNative({
+      type: 'audio',
+      deviceId: 'omi-1',
+      codec: 21,
+      payloadBase64: 'BwgJ',
+    });
+  });
   let disconnectDone = false;
   await ReactTestRenderer.act(async () => {
     hook
@@ -866,7 +886,7 @@ test.each(['open', 'audio', 'complete'] as const)(
     expect(
       appends.map(([request]) => [
         request.path.split('/')[3],
-        JSON.parse(request.body!).bytesBase64,
+        JSON.parse(request.body!).chunks[0].bytesBase64,
       ]),
     ).toEqual(
       stage === 'open'
@@ -947,7 +967,7 @@ test.each([false, true])(
   },
 );
 
-test('retries the same indexed packet before sending the next or completing', async () => {
+test('retries the same indexed batch before sending later packets or completing', async () => {
   jest.useFakeTimers();
   mockNative.getSnapshot.mockResolvedValue(snapshot({capture: 'recording'}));
   let appends = 0;
@@ -983,6 +1003,12 @@ test('retries the same indexed packet before sending the next or completing', as
       });
     });
     await ReactTestRenderer.act(async () => {
+      emitNative({
+        type: 'audio',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64: 'BwgJ',
+      });
       emitNative({type: 'snapshot', snapshot: snapshot()});
     });
     expect(appends).toBe(1);
@@ -997,11 +1023,14 @@ test('retries the same indexed packet before sending the next or completing', as
     expect(
       mockBackend.request.mock.calls
         .filter(([request]) => request.path.endsWith('/audio'))
-        .map(([request]) => JSON.parse(request.body!)),
+        .map(([request]) => JSON.parse(request.body!).chunks)
+        .flat(),
     ).toEqual([
       {chunkIndex: 0, bytesBase64: 'AQID'},
+      {chunkIndex: 1, bytesBase64: 'BAUG'},
       {chunkIndex: 0, bytesBase64: 'AQID'},
       {chunkIndex: 1, bytesBase64: 'BAUG'},
+      {chunkIndex: 2, bytesBase64: 'BwgJ'},
     ]);
     expect(mockBackend.request.mock.calls.at(-1)?.[0].path).toMatch(
       /\/transcribe$/,
@@ -1095,7 +1124,8 @@ test('auth retirement cancels delayed retries and starts the next account at ind
     expect(
       mockBackend.request.mock.calls
         .filter(([request]) => request.path.endsWith('/audio'))
-        .map(([request]) => JSON.parse(request.body!)),
+        .map(([request]) => JSON.parse(request.body!).chunks)
+        .flat(),
     ).toEqual([
       {chunkIndex: 0, bytesBase64: 'AQID'},
       {chunkIndex: 0, bytesBase64: 'BAUG'},

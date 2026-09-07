@@ -39,6 +39,7 @@ private data class BackendPolicy(
 class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private val executor = Executors.newCachedThreadPool()
   private val listeners = AtomicInteger()
+  private val recordingJournals = OmiRecordingJournals(context) { OmiCloudSession.journalLogin(context) }
   private data class ActiveGeneration(val stream: OmiGenerationStream, val promise: Promise,
     val finished: AtomicBoolean = AtomicBoolean())
   private val generations = ConcurrentHashMap<String, ActiveGeneration>()
@@ -57,6 +58,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
 
   private fun emitSessionInvalidated() {
     cancelAllGenerations()
+    recordingJournals.close()
     if (listeners.get() > 0) reactApplicationContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit("omiBackendSessionInvalidated", Arguments.createMap())
@@ -78,11 +80,96 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     promise.resolve(java.util.UUID.randomUUID().toString())
   }
 
+  private fun recordingOwner(allowCached: Boolean = false): OmiRecordingOwner {
+    val configured = resolvedPolicy(false) ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording ownership is unavailable")
+    val login = OmiCloudSession.journalLogin(reactApplicationContext)
+      ?: throw TransportException("OMI_RECORDING_OWNERSHIP", "A persistent native login is required for recording")
+    val origin = requestBaseURL(configured, "/v1/device-sessions/ownership")?.toString()
+      ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording ownership is unavailable")
+    try {
+      val policy = resolvedPolicy() ?: throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording login is unavailable")
+      val response = performRequest(Arguments.createMap().apply {
+        putString("id", "recording-ownership"); putString("method", "GET"); putString("path", "/v1/device-sessions/ownership")
+      }, policy)
+      if (response.getInt("status") == 503 && JSONObject(response.getString("body").orEmpty()).optJSONObject("error")?.optString("code") == "capture_ownership_unavailable")
+        throw TransportException("OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", "Recording ownership is unavailable from this backend")
+      if (response.getInt("status") != 200) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership is unavailable from this backend")
+      val ownership = JSONObject(response.getString("body").orEmpty()).getJSONObject("ownership")
+      if (login != OmiCloudSession.journalLogin(reactApplicationContext)) throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording login changed")
+      val owner = OmiRecordingOwner(ownership.getString("ownerKey"), ownership.getString("receipt"), origin, login)
+      require(Regex("capture-owner-v1:[0-9a-f]{64}").matches(owner.ownerKey) && Regex("capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}").matches(owner.receipt))
+      OmiCloudSession.storeRecordingOwner(reactApplicationContext, owner)
+      return owner
+    } catch (failure: java.io.IOException) {
+      if (allowCached && OmiRecordingPolicy.offline(failure) && OmiRecordingPolicy.sameContext(login,
+          OmiCloudSession.journalLogin(reactApplicationContext), origin,
+          resolvedPolicy(false)?.let { requestBaseURL(it, "/v1/device-sessions/ownership")?.toString() }))
+        OmiCloudSession.recordingOwner(reactApplicationContext, origin)?.takeIf { it.login == login }?.let { return it }
+      throw TransportException("OMI_HTTP_TRANSPORT", "Recording ownership could not be refreshed")
+    }
+  }
+
+  private fun journalOperation(promise: Promise, operation: () -> Any?) {
+    executor.execute {
+      try { promise.resolve(operation()) }
+      catch (error: TransportException) { promise.reject(error.code, error.message) }
+      catch (_: Exception) { promise.reject("OMI_RECORDING_JOURNAL", "Recording journal operation failed; saved audio was retained") }
+    }
+  }
+
+  @ReactMethod fun createRecordingJournal(input: ReadableMap, promise: Promise) = journalOperation(promise) {
+    recordingJournals.create(recordingOwner(true), input)
+  }
+  @ReactMethod fun listRecordingJournals(promise: Promise) = journalOperation(promise) {
+    recordingJournals.list(recordingOwner(true))
+  }
+  @ReactMethod fun readRecordingJournal(handle: String, promise: Promise) = journalOperation(promise) {
+    recordingJournals.read(handle)
+  }
+  @ReactMethod fun appendRecordingJournal(handle: String, entry: String, promise: Promise) = journalOperation(promise) {
+    recordingJournals.append(handle, entry)
+  }
+  @ReactMethod fun removeRecordingJournal(handle: String, promise: Promise) = journalOperation(promise) {
+    recordingJournals.remove(handle); null
+  }
+  @ReactMethod fun requestRecordingJournal(handle: String, request: ReadableMap, promise: Promise) = journalOperation(promise) {
+    val boundOwner = recordingJournals.ownerForRequest(handle, request)
+    val owner = recordingOwner()
+    if (owner.ownerKey != boundOwner.ownerKey || owner.login != boundOwner.login || owner.origin != boundOwner.origin) {
+      recordingJournals.close()
+      throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership changed; saved audio was retained")
+    }
+    val policy = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording transport is unavailable")
+    if (owner.login != OmiCloudSession.journalLogin(reactApplicationContext)
+      || owner.origin != requestBaseURL(policy, request.getString("path").orEmpty())?.toString())
+      throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership changed")
+    val response = performRequest(request, policy, owner.receipt)
+    if (response.getInt("status") == 409 && JSONObject(response.getString("body").orEmpty()).optJSONObject("error")?.optString("code") == "capture_ownership_changed") {
+      recordingJournals.close()
+      throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership changed; saved audio was retained")
+    }
+    recordingJournals.acknowledgeOpen(handle, request, response)
+    response
+  }
+
   @ReactMethod
   fun request(value: ReadableMap, promise: Promise) {
     executor.execute {
       try {
-        promise.resolve(performRequest(value))
+        val path = value.getString("path").orEmpty()
+        val method = value.getString("method").orEmpty()
+        val transcribe = method == "POST" && Regex("^/v1/device-sessions/[0-9a-f-]{36}/transcribe$").matches(path)
+        if (transcribe) {
+          val owner = try { recordingOwner() } catch (failure: TransportException) {
+            if (failure.code != "OMI_CAPTURE_OWNERSHIP_UNAVAILABLE") throw failure
+            promise.resolve(performRequest(value))
+            return@execute
+          }
+          val policy = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording backend is unavailable")
+          if (owner.login != OmiCloudSession.journalLogin(reactApplicationContext) || owner.origin != requestBaseURL(policy, path)?.toString())
+            throw TransportException("OMI_RECORDING_OWNERSHIP", "Recording ownership changed")
+          promise.resolve(performRequest(value, policy, owner.receipt))
+        } else promise.resolve(performRequest(value))
       } catch (error: TransportException) {
         promise.reject(error.code, error.message)
       } catch (_: Exception) {
@@ -190,12 +277,13 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   override fun invalidate() {
+    recordingJournals.close()
     cancelAllGenerations()
     super.invalidate()
   }
 
-  private fun performRequest(value: ReadableMap): com.facebook.react.bridge.WritableMap {
-    val policy = resolvedPolicy() ?: throw TransportException(
+  private fun performRequest(value: ReadableMap, resolved: BackendPolicy? = null, receipt: String? = null): com.facebook.react.bridge.WritableMap {
+    val policy = resolved ?: resolvedPolicy() ?: throw TransportException(
       "OMI_HTTP_UNCONFIGURED",
       "Native HTTP configuration is unavailable",
     )
@@ -228,6 +316,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       doInput = true
       setRequestProperty("authorization", "Bearer ${policy.token}")
       setRequestProperty("x-omi-contract-version", CONTRACT_VERSION)
+      if (receipt != null) setRequestProperty("x-omi-capture-ownership", receipt)
       if (policy.kind != CredentialKind.Cloud || !isCloudHost(url.host)) {
         setRequestProperty("x-omi-client-id", policy.clientId)
       }
@@ -259,7 +348,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     }
   }
 
-  private fun resolvedPolicy(): BackendPolicy? {
+  private fun resolvedPolicy(refresh: Boolean = true): BackendPolicy? {
     val environment = System.getenv()
     val developmentBackend = environment["OMI_DEV_BACKEND"].orEmpty()
     val localURL = environment["OMI_LOCAL_BACKEND_URL"].orEmpty()
@@ -277,7 +366,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
         kind = if (developmentBackend.isNotEmpty()) CredentialKind.ExamplePlatform else CredentialKind.Local,
       )
     }
-    val cloud = OmiCloudSession.token(reactApplicationContext).orEmpty()
+    val cloud = (if (refresh) OmiCloudSession.token(reactApplicationContext) else OmiCloudSession.cachedToken(reactApplicationContext)).orEmpty()
     if (cloud.isEmpty()) {
       emitSessionInvalidated()
       return null
