@@ -43,8 +43,8 @@ import {
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
 import {
-  coverageStatusCopy,
   emptyLibraryCopy,
+  savedDataEmptyTitle,
   OutcomeStatus,
 } from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
@@ -346,15 +346,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }, [reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
-  const homeSearchEmptyTitle =
-    coverageStatusCopy(
-      readOutcomes !== null && readOutcomes.conversations.status === 'success'
-        ? readOutcomes.conversations.value.page
-        : null,
-      readOutcomes !== null && readOutcomes.memories.status === 'success'
-        ? readOutcomes.memories.value.page
-        : null,
-    ) ?? (homeSearching ? 'No results' : 'Nothing saved yet');
+  const homeSearchEmptyTitle = savedDataEmptyTitle(
+    readOutcomes !== null && readOutcomes.conversations.status === 'success'
+      ? readOutcomes.conversations.value.page
+      : null,
+    readOutcomes !== null && readOutcomes.memories.status === 'success'
+      ? readOutcomes.memories.value.page
+      : null,
+    readOutcomes !== null && readOutcomes.tasks.status === 'success'
+      ? readOutcomes.tasks.value.page
+      : null,
+    homeSearching,
+  );
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
   // turning an error into a window-filling modal.

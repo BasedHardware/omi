@@ -77,7 +77,12 @@ jest.mock('../app/useReduceMotion', () => ({
 
 import {Animated} from 'react-native';
 import {Button} from './Button';
-import {ReadStatus, coverageStatusCopy, emptyLibraryCopy} from './ReadStatus';
+import {
+  ReadStatus,
+  coverageStatusCopy,
+  emptyLibraryCopy,
+  savedDataEmptyTitle,
+} from './ReadStatus';
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
@@ -634,8 +639,12 @@ test('coverage copy wins over a complete Home search miss', () => {
     'Memories are incomplete.',
   );
   expect(coverageStatusCopy(complete, complete)).toBeNull();
+  expect(coverageStatusCopy(complete, complete, incomplete)).toBe(
+    'Tasks are incomplete.',
+  );
   expect(coverageStatusCopy(null, null)).toBeNull();
   expect(coverageStatusCopy(null, incomplete)).toBe('Memories are incomplete.');
+  expect(coverageStatusCopy(complete, complete, null)).toBeNull();
   expect(
     coverageStatusCopy(complete, {
       ...incomplete,
@@ -643,11 +652,20 @@ test('coverage copy wins over a complete Home search miss', () => {
       reasons: ['projection_unavailable'],
     }),
   ).toBe('Memories may be temporarily incomplete.');
+  expect(savedDataEmptyTitle(complete, complete, incomplete, true)).toBe(
+    'Tasks are incomplete.',
+  );
+  expect(savedDataEmptyTitle(complete, complete, complete, true)).toBe(
+    'No results',
+  );
+  expect(savedDataEmptyTitle(complete, complete, complete, false)).toBe(
+    'Nothing saved yet',
+  );
   const orchestrator = readFileSync(
     resolve(__dirname, '../app/AppOrchestrator.tsx'),
     'utf8',
   );
   expect(orchestrator).toContain('homeSearchEmptyTitle');
-  expect(orchestrator).toContain('coverageStatusCopy(');
-  expect(orchestrator).toContain("?? (homeSearching ? 'No results'");
+  expect(orchestrator).toContain('savedDataEmptyTitle(');
+  expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
 });

@@ -53,12 +53,26 @@ export function emptyLibraryCopy(
 export function coverageStatusCopy(
   conversationsPage: ReadPageState | null,
   memoriesPage: ReadPageState | null,
+  tasksPage: ReadPageState | null = null,
 ): string | null {
   return (
     (conversationsPage === null
       ? null
       : readStatusCopy('Conversations', conversationsPage)) ??
-    (memoriesPage === null ? null : readStatusCopy('Memories', memoriesPage))
+    (memoriesPage === null ? null : readStatusCopy('Memories', memoriesPage)) ??
+    (tasksPage === null ? null : readStatusCopy('Tasks', tasksPage))
+  );
+}
+
+export function savedDataEmptyTitle(
+  conversationsPage: ReadPageState | null,
+  memoriesPage: ReadPageState | null,
+  tasksPage: ReadPageState | null,
+  searching: boolean,
+): string {
+  return (
+    coverageStatusCopy(conversationsPage, memoriesPage, tasksPage) ??
+    (searching ? 'No results' : 'Nothing saved yet')
   );
 }
 
