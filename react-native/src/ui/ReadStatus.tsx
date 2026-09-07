@@ -38,13 +38,16 @@ export function emptyLibraryCopy(
   filteredCopy: string,
   emptyCopy: string,
 ): string {
+  if (page !== null) {
+    const coverage = readStatusCopy(label, page);
+    if (coverage !== null) {
+      return coverage;
+    }
+  }
   if (filtering) {
     return filteredCopy;
   }
-  if (page === null) {
-    return emptyCopy;
-  }
-  return readStatusCopy(label, page) ?? emptyCopy;
+  return emptyCopy;
 }
 
 export function coverageStatusCopy(

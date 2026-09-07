@@ -65,6 +65,30 @@ test('incomplete empty conversations do not claim a complete library', () => {
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
+test('an incomplete empty conversation search does not claim a complete miss', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('nomatch');
+  });
+  expect(textOf(renderer)).toContain('Conversations are incomplete.');
+  expect(textOf(renderer)).not.toContain('No loaded conversations match.');
+});
+
 test('complete empty conversations may claim emptiness', () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {

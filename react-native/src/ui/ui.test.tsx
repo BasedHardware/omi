@@ -568,6 +568,15 @@ test('empty library copy keeps completeness instead of claiming emptiness', () =
       'No loaded memories match.',
       'No memories yet.',
     ),
+  ).toBe('Memories are incomplete.');
+  expect(
+    emptyLibraryCopy(
+      'Memories',
+      complete,
+      true,
+      'No loaded memories match.',
+      'No memories yet.',
+    ),
   ).toBe('No loaded memories match.');
   expect(
     emptyLibraryCopy(
