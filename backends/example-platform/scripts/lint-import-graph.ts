@@ -614,6 +614,7 @@ for (const file of files(root, new Set(["frontend"]))) {
       && shown !== "drivers/postgres/product-projection-repository.ts"
       && shown !== "drivers/postgres/tasks-repository.ts"
       && shown !== "drivers/postgres/conversation-read-repository.ts"
+      && shown !== "drivers/postgres/chat-read-repository.ts"
       && shown !== "drivers/postgres/legacy-proposition-migration-repository.ts"
       && shown !== "drivers/postgres/memory-experiment-repository.ts"
       && shown !== "drivers/postgres/memory-query-evaluation-source.ts"

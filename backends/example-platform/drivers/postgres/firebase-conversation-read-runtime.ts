@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { prepareConversationsRead } from "../../apps/service/composition/conversations-read";
+import { composeChatSessionsIntoConversationPage } from "../../apps/service/composition/chat-conversation-sessions";
 import {
   parseConversationReadWindow,
   registerConversationReadRoutes,
@@ -12,6 +13,7 @@ import {
   type PostgresFirebaseAuthorizationRuntimeOptions,
 } from "./firebase-authorized-runtime-support";
 import { withAuthorizedConversationRead } from "./conversation-read-repository";
+import { withAuthorizedChatRead } from "./chat-read-repository";
 
 export interface PostgresFirebaseConversationReadOptions {
   readonly authorization: PostgresFirebaseAuthorizationRuntimeOptions;
@@ -29,6 +31,10 @@ export function createPostgresFirebaseConversationReadRuntime(
   const runtime = createPostgresFirebaseAuthorizationRuntime(
     options.authorization,
     "conversations.read"
+  );
+  const chatRuntime = createPostgresFirebaseAuthorizationRuntime(
+    options.authorization,
+    "chat.read"
   );
   const secret = new Uint8Array(options.codecRootSecret);
   const keys = {
@@ -65,7 +71,7 @@ export function createPostgresFirebaseConversationReadRuntime(
         const authority = authorization.context;
         const window = parseConversationReadWindow(request);
         if (window === null) return failed(400, "bad_request");
-        return await withAuthorizedConversationRead(
+        const listen = await withAuthorizedConversationRead(
           runtime.pool,
           authority,
           request.signal,
@@ -174,6 +180,38 @@ export function createPostgresFirebaseConversationReadRuntime(
             return response;
           }
         );
+        if (listen.status !== 200 || window.legacy || window.cursor !== null) {
+          return listen;
+        }
+        const chatAuthorization = await chatRuntime.authorizer.authorize(
+          token,
+          Math.floor(Date.now() / 1000)
+        );
+        if (!chatAuthorization.authorized) {
+          return chatAuthorization.outcome === "authorization"
+            ? listen
+            : failed(503, "unavailable");
+        }
+        const sessions = await withAuthorizedChatRead(
+          chatRuntime.pool,
+          chatAuthorization.context,
+          request.signal,
+          (storage) => storage.listConversationSessions()
+        );
+        if (sessions.length === 0) return listen;
+        const composed = composeChatSessionsIntoConversationPage(
+          await listen.json(),
+          sessions
+        );
+        if (composed === null) return failed(503, "unavailable");
+        return new Response(JSON.stringify(composed), {
+          status: 200,
+          headers: {
+            "cache-control": "no-store",
+            "content-type":
+              listen.headers.get("content-type") ?? "application/json",
+          },
+        });
       } catch {
         return failed(503, "unavailable");
       }
