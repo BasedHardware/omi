@@ -426,13 +426,11 @@ export function DesktopSettings({
         copy={
           session !== 'ready'
             ? 'Sign in to load conversations and memories.'
-            : account?.profile?.email ??
-              account?.profileError ??
-              (account?.profile != null
-                ? 'Signed in to Omi'
-                : account === null
-                ? 'Loading account…'
-                : 'Account profile is unavailable.')
+            : account === null
+            ? 'Loading account…'
+            : account.profile != null
+            ? account.profile.email ?? 'Email not set on this account.'
+            : account.profileError ?? 'Account profile is unavailable.'
         }
         title="Account"
         action={

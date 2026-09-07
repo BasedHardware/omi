@@ -1583,6 +1583,49 @@ test('Settings reports a nested non-retryable profile read as unavailable', asyn
   expect(renderedText(renderer)).not.toContain('Signed in to Omi');
 });
 
+test('Settings does not claim Signed in to Omi when a loaded profile has no email', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: null,
+      company: null,
+      job: null,
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Email not set on this account.');
+  expect(renderedText(renderer)).toContain('Ada');
+  expect(renderedText(renderer)).not.toContain('Signed in to Omi');
+});
+
 test('Settings Alerts does not claim privacy slices unavailable while account is loading', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;
