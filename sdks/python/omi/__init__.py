@@ -17,6 +17,8 @@ from .constants import (
     PACKET_HEADER_BYTES,
     PCM_SAMPLE_RATE_HZ,
 )
+# Bind explicitly so loading the same-named submodule cannot replace the API.
+from .transcribe import transcribe
 
 __all__ = [
     "constants",
@@ -52,8 +54,4 @@ def __getattr__(name: str):
         from .decoder import OmiOpusDecoder
 
         return OmiOpusDecoder
-    if name == "transcribe":
-        from .transcribe import transcribe
-
-        return transcribe
     raise AttributeError(name)
