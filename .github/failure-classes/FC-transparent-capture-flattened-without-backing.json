@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-transparent-capture-flattened-without-backing",
+  "violated_contract": "Pixels produced by a capture API with transparency must not cross into an opaque persistence format without an explicit backing policy. Otherwise window shadows and translucent margins are silently flattened into black stored content, so every downstream Rewind surface faithfully renders corruption that no display-side layout can remove.",
+  "canonical_prevention": "Configure single-window capture at the shared ScreenCaptureKit boundary to exclude shadow framing and request opaque backing before frames reach JPEG or HEVC sinks. Keep a behavioral contract test against SCStreamConfiguration so both one-shot and persistent capture engines inherit the same pixel-integrity policy.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/ScreenCaptureService.swift",
+    "desktop/macos/Desktop/Tests/ScreenCaptureDimensionsTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ScreenCaptureService.swift",
+    "desktop/macos/Desktop/Sources/WindowCaptureStreamEngine.swift",
+    "desktop/macos/Desktop/Sources/VideoChunkEncoder.swift"
+  ],
+  "status": "open"
+}
