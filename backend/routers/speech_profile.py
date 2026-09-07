@@ -102,7 +102,7 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 # ******************************************
 
 # Consist of bytes (for initiating deepgram)
-# and audio itself, which we use on post-processing to use speechbrain model
+# and audio itself, which post-processing embeds for speaker identification
 
 
 @router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)

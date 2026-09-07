@@ -101,7 +101,6 @@ class ListenLimits:
     image_chunk_cleanup_min_size: int = 5
     ring_buffer_duration: float = 60.0
     speaker_id_min_audio: float = 2.0
-    speaker_id_target_audio: float = 4.0
     credits_refresh_seconds: int = 900
     ws_receive_timeout: float = 300.0
     bg_drain_timeout: float = 30.0

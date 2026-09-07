@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from typing import Any, Dict, Optional, cast
+from collections import deque
+from typing import Any, Deque, Dict, Optional, Tuple, cast
 
 import av
 import numpy as np
@@ -16,7 +17,13 @@ from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_match import (
+    SPEAKER_MATCH_MAX_CLIPS,
+    SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
+    mean_embedding,
+    select_speaker_match,
+)
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import user_db
 
@@ -38,6 +45,10 @@ class SpeakerMatcher:
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
         self.segment_identity_status: Dict[str, SpeakerIdentityStatus] = {}
+        # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
+        # the centroid once enough audio has accumulated, instead of letting the first
+        # clip that happens to land under the threshold stick for the whole session.
+        self.speaker_evidence: Dict[int, Deque[Tuple[Any, float]]] = {}
         self.tasks: set[asyncio.Task[Any]] = set()
 
     async def load_and_run(self) -> None:
@@ -179,14 +190,38 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            best_id: Optional[str] = None
-            best_name: Optional[str] = None
-            best_distance = float('inf')
-            for person_id, value in self.person_embeddings.items():
-                distance = compare_embeddings(query, value['embedding'])
-                if distance < best_distance:
-                    best_id, best_name, best_distance = person_id, value['name'], distance
-            if best_id and best_name and best_distance < SPEAKER_MATCH_THRESHOLD:
+            clip_seconds = extract_end - extract_start
+            evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
+            evidence.append((query, clip_seconds))
+            evidence_seconds = sum(seconds for _, seconds in evidence)
+            if evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and len(evidence) < SPEAKER_MATCH_MAX_CLIPS:
+                logger.info(
+                    'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending',
+                    speaker_id,
+                    len(evidence),
+                    evidence_seconds,
+                )
+                return
+            centroid = mean_embedding([embedding for embedding, _ in evidence]) if len(evidence) > 1 else query
+            distances = {
+                person_id: compare_embeddings(centroid, value['embedding'])
+                for person_id, value in self.person_embeddings.items()
+            }
+            decision = select_speaker_match(distances)
+            logger.info(
+                'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                speaker_id,
+                len(evidence),
+                evidence_seconds,
+                decision.best_id,
+                decision.best_distance,
+                decision.runner_up_distance,
+                decision.accepted,
+            )
+            if decision.person_id is not None:
+                best_id = decision.person_id
+                best_name = self.person_embeddings[best_id]['name']
                 self.speaker_to_person[speaker_id] = (best_id, best_name)
                 self.segment_assignments[segment['id']] = best_id
                 self.segment_identity_status[segment['id']] = (
@@ -197,7 +232,6 @@ class SpeakerMatcher:
             else:
                 self.segment_identity_status[segment['id']] = SpeakerIdentityStatus.no_match
                 self.host.state.speaker_map_dirty = True
-                logger.info('Speaker ID no match speaker=%s best_distance=%.3f', speaker_id, best_distance)
         except Exception as error:
             logger.error('Speaker ID match failed speaker=%s type=%s', speaker_id, type(error).__name__)
 
@@ -208,5 +242,6 @@ class SpeakerMatcher:
     def clear(self) -> None:
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
+        self.speaker_evidence.clear()
         self.segment_assignments.clear()
         self.segment_identity_status.clear()

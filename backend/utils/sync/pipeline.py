@@ -118,11 +118,8 @@ from utils.stt.outcomes import (
     bounded_provider,
     failure_from_exception,
 )
-from utils.stt.speaker_embedding import (
-    SPEAKER_MATCH_THRESHOLD,
-    compare_embeddings,
-    extract_embedding_from_bytes,
-)
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_match import select_speaker_match
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
@@ -955,25 +952,28 @@ def identify_speakers_for_segments(
                 continue
 
             # Compare only against unmatched candidates (each person can be one speaker)
-            best_match = None
-            best_distance = float('inf')
-            for person_id, data in person_embeddings_cache.items():
-                if person_id in matched_person_ids:
-                    continue
-                distance = compare_embeddings(query_embedding, data['embedding'])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = (person_id, data['name'])
-
-            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
-                person_id, person_name = best_match
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
+            distances = {
+                person_id: compare_embeddings(query_embedding, data['embedding'])
+                for person_id, data in person_embeddings_cache.items()
+                if person_id not in matched_person_ids
+            }
+            decision = select_speaker_match(distances)
+            logger.info(
+                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
+                uid,
+                speaker_id,
+                seg_duration,
+                decision.best_id,
+                decision.best_distance,
+                decision.runner_up_distance,
+                decision.accepted,
+            )
+            if decision.person_id is not None:
+                person_id = decision.person_id
+                speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
-                logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
-                )
 
     # Text-based detection runs independently for all unmatched speakers.
     # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.

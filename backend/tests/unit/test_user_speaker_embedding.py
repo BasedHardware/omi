@@ -613,47 +613,18 @@ class TestDimensionMismatchGuard:
         distance = compare_embeddings(emb, emb)
         assert distance < 0.001
 
-    def test_is_same_speaker_dimension_mismatch_returns_false(self):
-        """is_same_speaker should return (False, 2.0) on dimension mismatch."""
-        from utils.stt.speaker_embedding import is_same_speaker
-
-        emb_256 = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        emb_512 = np.random.RandomState(2).randn(1, 512).astype(np.float32)
-
-        is_match, distance = is_same_speaker(emb_256, emb_512)
-        assert is_match is False
-        assert distance == 2.0
-
-    def test_find_best_match_skips_dimension_mismatch(self):
-        """find_best_match should not crash on mixed-dimension candidates."""
-        from utils.stt.speaker_embedding import find_best_match
+    def test_select_speaker_match_skips_dimension_mismatch(self):
+        """A stale 512-dim candidate scores 2.0 and can never win against a 256-dim match."""
+        from utils.stt.speaker_embedding import compare_embeddings
+        from utils.stt.speaker_match import select_speaker_match
 
         query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        # Mix of 256-dim (matching) and 512-dim (stale) candidates
-        candidates = [
-            np.random.RandomState(2).randn(1, 512).astype(np.float32),  # stale 512-dim
-            query.copy(),  # exact match, 256-dim
-            np.random.RandomState(3).randn(1, 512).astype(np.float32),  # stale 512-dim
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is not None
-        best_idx, best_distance = result
-        assert best_idx == 1  # should match the 256-dim copy
-        assert best_distance < 0.001
-
-    def test_find_best_match_all_mismatched_returns_none(self):
-        """find_best_match returns None when all candidates have wrong dimension."""
-        from utils.stt.speaker_embedding import find_best_match
-
-        query = np.random.RandomState(1).randn(1, 256).astype(np.float32)
-        candidates = [
-            np.random.RandomState(2).randn(1, 512).astype(np.float32),
-            np.random.RandomState(3).randn(1, 512).astype(np.float32),
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is None  # all return 2.0, above threshold
+        stale = np.random.RandomState(2).randn(1, 512).astype(np.float32)
+        decision = select_speaker_match(
+            {'stale': compare_embeddings(query, stale), 'match': compare_embeddings(query, query.copy())}
+        )
+        assert decision.person_id == 'match'
+        assert select_speaker_match({'stale': compare_embeddings(query, stale)}).person_id is None
 
     def test_mixed_dim_cache_loads_all_relies_on_compare_guard(self):
         """Cache loads ALL embeddings regardless of dimension; compare_embeddings handles mismatches.
