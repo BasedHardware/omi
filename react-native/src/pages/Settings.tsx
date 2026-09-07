@@ -16,6 +16,7 @@ import {
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
+  type ServiceSettingsSnapshot,
 } from '../desktopCloudClient';
 import {
   desktopBackendConfigurationCopy,
@@ -79,10 +80,8 @@ export function SettingsPage({
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
-  const [serviceSettings, setServiceSettings] = useState<{
-    chatUsed: number;
-    chatLimit: number | null;
-  } | null>(null);
+  const [serviceSettings, setServiceSettings] =
+    useState<ServiceSettingsSnapshot | null>(null);
   const [section, setSection] = useState<SettingsSection>('Account');
   const [phase, setPhase] = useState<
     'loading' | 'signed-out' | 'ready' | 'error'
@@ -460,14 +459,48 @@ export function SettingsPage({
           </>
         ) : browser ? (
           section === 'Account' && serviceSettings ? (
-            <SettingRow
-              title="Chat usage"
-              copy={
-                serviceSettings.chatLimit === null
-                  ? `${serviceSettings.chatUsed} requests used`
-                  : `${serviceSettings.chatUsed} of ${serviceSettings.chatLimit} requests used`
-              }
-            />
+            <>
+              <SettingRow
+                title="Connection identity"
+                copy={
+                  serviceSettings.identity === null
+                    ? 'Identity unavailable for this connection.'
+                    : [
+                        serviceSettings.identity.displayName,
+                        serviceSettings.identity.email,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') ||
+                      'Identity unavailable for this connection.'
+                }
+              />
+              {serviceSettings.entitlement !== null &&
+              ['chat', 'transcription_seconds'].includes(
+                serviceSettings.entitlement.limitKey,
+              ) ? (
+                <SettingRow
+                  title={
+                    serviceSettings.entitlement.limitKey === 'chat'
+                      ? 'Chat usage'
+                      : 'Transcription usage'
+                  }
+                  copy={`${serviceSettings.entitlement.used}${
+                    serviceSettings.entitlement.limit === null
+                      ? ''
+                      : ` of ${serviceSettings.entitlement.limit}`
+                  } ${
+                    serviceSettings.entitlement.limitKey === 'chat'
+                      ? 'requests'
+                      : 'seconds'
+                  } used`}
+                />
+              ) : (
+                <SettingRow
+                  title="Usage"
+                  copy="Usage allowance is unavailable for this connection."
+                />
+              )}
+            </>
           ) : (
             <Text style={styles.projectionEmptyCopy}>
               Privacy preferences are unavailable for this connection.

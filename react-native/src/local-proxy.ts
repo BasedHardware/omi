@@ -98,7 +98,8 @@ export function isExamplePlatformRequestSupported(
   const backendUrl = new URL(backendPath, 'http://127.0.0.1');
   return (
     (method === 'GET' &&
-      (backendUrl.pathname === '/v1/conversations' ||
+      (backendUrl.pathname === '/v1/settings' ||
+        backendUrl.pathname === '/v1/conversations' ||
         backendUrl.pathname === '/v1/memories' ||
         backendUrl.pathname === '/v1/tasks')) ||
     (method === 'POST' && backendUrl.pathname === '/v1/tasks/ops')

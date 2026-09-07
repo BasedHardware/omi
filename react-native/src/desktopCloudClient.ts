@@ -543,33 +543,59 @@ export function serviceApps(snapshot: ConnectorsSnapshot): CloudApp[] {
   );
 }
 
+export type ServiceSettingsSnapshot = {
+  identity: {displayName: string; email: string} | null;
+  entitlement: {limitKey: string; used: number; limit: number | null} | null;
+};
+
 export async function loadServiceSettings(
   backend: OmiBackend,
-): Promise<{chatUsed: number; chatLimit: number | null}> {
+): Promise<ServiceSettingsSnapshot> {
   const response = await cloudRequest(
     backend,
     'service-settings-read',
     'GET',
     '/v1/settings',
   );
-  const entitlement = object(
-    object(response.body, 'Settings response').entitlement,
-    'Chat allowance',
-  );
+  const body = object(response.body, 'Settings response');
+  let identity: ServiceSettingsSnapshot['identity'] = null;
+  if (body.identity !== null) {
+    const value = object(body.identity, 'Connection identity');
+    if (
+      typeof value.displayName !== 'string' ||
+      typeof value.email !== 'string'
+    ) {
+      throw new Error('Connection identity is malformed');
+    }
+    identity = {displayName: value.displayName, email: value.email};
+  }
+  if (body.entitlement === null) {
+    return {identity, entitlement: null};
+  }
+  const entitlement = object(body.entitlement, 'Usage allowance');
   if (
-    entitlement.limitKey !== 'chat' ||
+    typeof entitlement.limitKey !== 'string' ||
+    entitlement.limitKey.length === 0 ||
     typeof entitlement.used !== 'number' ||
-    !Number.isSafeInteger(entitlement.used) ||
+    !Number.isFinite(entitlement.used) ||
+    (entitlement.limitKey === 'chat' &&
+      !Number.isSafeInteger(entitlement.used)) ||
     entitlement.used < 0 ||
     (entitlement.limit !== null &&
       (typeof entitlement.limit !== 'number' ||
-        !Number.isSafeInteger(entitlement.limit) ||
+        !Number.isFinite(entitlement.limit) ||
+        (entitlement.limitKey === 'chat' &&
+          !Number.isSafeInteger(entitlement.limit)) ||
         entitlement.limit < 0))
   ) {
-    throw new Error('Chat allowance response is malformed');
+    throw new Error('Usage allowance response is malformed');
   }
   return {
-    chatUsed: entitlement.used,
-    chatLimit: entitlement.limit as number | null,
+    identity,
+    entitlement: {
+      limitKey: entitlement.limitKey,
+      used: entitlement.used,
+      limit: entitlement.limit as number | null,
+    },
   };
 }
