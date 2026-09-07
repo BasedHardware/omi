@@ -2,8 +2,10 @@
 const Duration conversationProcessingTimeout = Duration(minutes: 2);
 
 /// True once [processingStartedAt] is at least [conversationProcessingTimeout]
-/// before [now]. Local placeholder rows (`id == '0'`) are never timed out —
-/// they have no server conversation to retry yet.
+/// before [now]. Pass capture-end / processing-start time — not recording
+/// `createdAt` — so long captures are not flagged the moment processing begins.
+/// Local placeholder rows (`id == '0'`) are never timed out — they have no
+/// server conversation to retry yet.
 bool isConversationProcessingTimedOut({
   required String conversationId,
   required DateTime processingStartedAt,

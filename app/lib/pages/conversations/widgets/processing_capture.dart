@@ -898,11 +898,21 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   bool _timedOut = false;
   bool _retrying = false;
 
+  /// Wall-clock when processing is treated as having started for the timeout.
+  /// Prefer [ServerConversation.finishedAt] (capture end ≈ processing start);
+  /// fall back to first paint / retry so long recordings are not instantly flagged.
+  late DateTime _processingStartedAt;
+
   DateTime get _now => widget.now?.call() ?? DateTime.now();
+
+  DateTime _resolveProcessingStartedAt() {
+    return widget.conversation.finishedAt ?? _now;
+  }
 
   @override
   void initState() {
     super.initState();
+    _processingStartedAt = _resolveProcessingStartedAt();
     _refreshTimeout();
     _timeoutTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -913,8 +923,14 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   @override
   void didUpdateWidget(ProcessingConversationWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversation.id != widget.conversation.id ||
-        oldWidget.conversation.createdAt != widget.conversation.createdAt) {
+    if (oldWidget.conversation.id != widget.conversation.id) {
+      _processingStartedAt = _resolveProcessingStartedAt();
+      _refreshTimeout();
+      return;
+    }
+    final nextFinishedAt = widget.conversation.finishedAt;
+    if (nextFinishedAt != null && nextFinishedAt != oldWidget.conversation.finishedAt) {
+      _processingStartedAt = nextFinishedAt;
       _refreshTimeout();
     }
   }
@@ -928,7 +944,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   void _refreshTimeout() {
     final timedOut = isConversationProcessingTimedOut(
       conversationId: widget.conversation.id,
-      processingStartedAt: widget.conversation.createdAt,
+      processingStartedAt: _processingStartedAt,
       now: _now,
     );
     if (timedOut != _timedOut) {
@@ -949,11 +965,17 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         return;
       }
       if (updated.status == ConversationStatus.processing || updated.status == ConversationStatus.merging) {
+        // Fresh attempt — give the new processing pass another full timeout window.
+        _processingStartedAt = _now;
+        _timedOut = false;
         provider.addProcessingConversation(updated);
       } else {
         provider.removeProcessingConversation(widget.conversation.id);
         provider.upsertConversation(updated);
       }
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     } finally {
       if (mounted) setState(() => _retrying = false);
     }
