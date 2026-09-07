@@ -667,12 +667,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get conversationTimeoutConfig => 'Đặt thời gian tự động kết thúc cuộc trò chuyện';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Nhập dữ liệu';
 
   @override

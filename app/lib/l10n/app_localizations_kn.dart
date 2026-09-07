@@ -667,12 +667,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get conversationTimeoutConfig => 'ಸಂವಾದ ಯುಜರಾಗಿ ಸೆಟ್ ಮಾಡಿ';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'ಡೇಟಾ ಆಮದಾತಿ';
 
   @override

@@ -653,12 +653,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationTimeoutConfig => '设置对话自动结束的时间';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => '导入数据';
 
   @override

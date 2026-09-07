@@ -1461,18 +1461,6 @@ abstract class AppLocalizations {
   /// **'Set when conversations auto-end'**
   String get conversationTimeoutConfig;
 
-  /// Developer settings row that restarts the onboarding flow from the splash screen
-  ///
-  /// In en, this message translates to:
-  /// **'Redo Onboarding'**
-  String get redoOnboarding;
-
-  /// Subtitle under the Redo Onboarding row in Developer settings
-  ///
-  /// In en, this message translates to:
-  /// **'Start over from the splash screen'**
-  String get redoOnboardingDescription;
-
   /// Import data feature name
   ///
   /// In en, this message translates to:

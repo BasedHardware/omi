@@ -12,15 +12,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MobileApp extends StatefulWidget {
-  const MobileApp({super.key, this.forceOnboardingRestart = false});
-
-  // Makes this instance show the onboarding flow from splash regardless of
-  // sign-in / consent / completion state. Set by "Redo Onboarding" in
-  // Developer settings, which pushes a fresh MobileApp — a full restart is
-  // required because completing onboarding for real replaces every route
-  // (this one included) via pushAndRemoveUntil, so there's no existing
-  // MobileApp instance left to signal otherwise.
-  final bool forceOnboardingRestart;
+  const MobileApp({super.key});
 
   @override
   State<MobileApp> createState() => _MobileAppState();
@@ -43,9 +35,7 @@ class _MobileAppState extends State<MobileApp> {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         Widget content;
-        if (widget.forceOnboardingRestart) {
-          content = const OnboardingWrapper(forceStartAtSplash: true);
-        } else if (authProvider.requiresReauthentication) {
+        if (authProvider.requiresReauthentication) {
           _presentSessionExpiration(authProvider.sessionExpirationGeneration);
           content = const OnboardingWrapper(forceAuthPage: true);
         } else if (authProvider.isSignedIn()) {

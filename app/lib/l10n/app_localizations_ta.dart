@@ -669,12 +669,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get conversationTimeoutConfig => 'உரையாடல்கள் தன்னாக முடிவுக்கு போகும் போது அமைக்கவும்';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'தரவு இறக்குமதி';
 
   @override

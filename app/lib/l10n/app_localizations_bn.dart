@@ -665,12 +665,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get conversationTimeoutConfig => 'কথোপকথন কখন স্বয়ংক্রিয়ভাবে শেষ হয় তা নির্ধারণ করুন';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'ডেটা আমদানি করুন';
 
   @override

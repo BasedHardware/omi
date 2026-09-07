@@ -666,12 +666,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get conversationTimeoutConfig => 'Tetapkan bila perbualan tamat secara automatik';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Import Data';
 
   @override

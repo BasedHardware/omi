@@ -666,12 +666,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get conversationTimeoutConfig => 'Устанавіць, калі размовы аўтаматычна завяршаюцца';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Імпартаваць дадзеныя';
 
   @override

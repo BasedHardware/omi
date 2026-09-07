@@ -653,12 +653,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationTimeoutConfig => '대화 자동 종료 시간 설정';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => '데이터 가져오기';
 
   @override

@@ -669,12 +669,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get conversationTimeoutConfig => 'Beszélgetések automatikus befejezésének beállítása';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Adatok importálása';
 
   @override

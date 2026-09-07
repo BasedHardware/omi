@@ -666,12 +666,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get conversationTimeoutConfig => 'Indstil hvornår samtaler automatisk afsluttes';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importer data';
 
   @override

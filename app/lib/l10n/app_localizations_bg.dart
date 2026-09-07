@@ -668,12 +668,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get conversationTimeoutConfig => 'Задайте кога разговорите приключват автоматично';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Импортирай данни';
 
   @override

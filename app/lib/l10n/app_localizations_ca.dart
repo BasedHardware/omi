@@ -669,12 +669,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get conversationTimeoutConfig => 'Establir quan finalitzen automàticament les converses';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importar dades';
 
   @override

@@ -667,12 +667,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get conversationTimeoutConfig => 'Konuşmaların ne zaman otomatik sonlandırılacağını ayarlayın';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Veri İçe Aktar';
 
   @override

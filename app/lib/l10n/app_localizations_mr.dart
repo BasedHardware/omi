@@ -667,12 +667,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get conversationTimeoutConfig => 'संभाषण कधी स्वयंचलितपणे समाप्त होतात हे सेट करा';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'डेटा आयात करा';
 
   @override

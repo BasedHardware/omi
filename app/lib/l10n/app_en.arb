@@ -871,14 +871,6 @@
     "@conversationTimeoutConfig": {
         "description": "Conversation timeout configuration subtitle"
     },
-    "redoOnboarding": "Redo Onboarding",
-    "@redoOnboarding": {
-        "description": "Developer settings row that restarts the onboarding flow from the splash screen"
-    },
-    "redoOnboardingDescription": "Start over from the splash screen",
-    "@redoOnboardingDescription": {
-        "description": "Subtitle under the Redo Onboarding row in Developer settings"
-    },
     "importData": "Import Data",
     "@importData": {
         "description": "Import data feature name"

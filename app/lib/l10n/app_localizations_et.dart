@@ -667,12 +667,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get conversationTimeoutConfig => 'Määrake, millal vestlused automaatselt lõpevad';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Impordi andmed';
 
   @override

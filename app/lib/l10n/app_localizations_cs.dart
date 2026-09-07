@@ -666,12 +666,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get conversationTimeoutConfig => 'Nastavit, kdy konverzace automaticky skončí';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importovat data';
 
   @override

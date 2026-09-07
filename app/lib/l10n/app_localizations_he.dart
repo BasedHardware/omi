@@ -662,12 +662,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get conversationTimeoutConfig => 'הגדר מתי שיחות מסתיימות באופן אוטומטי';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'ייבוא נתונים';
 
   @override

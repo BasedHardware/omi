@@ -670,12 +670,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get conversationTimeoutConfig => 'Définir quand les conversations se terminent automatiquement';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importer des données';
 
   @override

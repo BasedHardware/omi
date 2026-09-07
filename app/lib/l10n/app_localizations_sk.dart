@@ -668,12 +668,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get conversationTimeoutConfig => 'Nastaviť, kedy sa konverzácie automaticky ukončia';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importovať údaje';
 
   @override

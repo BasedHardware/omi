@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
@@ -38,11 +37,7 @@ Future<void> _debugSkip(WidgetTester tester) async {
 // SpeechProfileWidget reads SpeechProfileProvider from an ancestor (the
 // app-root instance in main.dart) instead of owning one itself, so tests
 // that pump OnboardingWrapper directly need to provide one too.
-Widget _wrapOnboarding(
-  AuthenticationProvider authProvider,
-  SpeechProfileProvider speechProfileProvider, {
-  bool forceStartAtSplash = false,
-}) {
+Widget _wrapOnboarding(AuthenticationProvider authProvider, SpeechProfileProvider speechProfileProvider) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<AuthenticationProvider>.value(value: authProvider),
@@ -56,7 +51,7 @@ Widget _wrapOnboarding(
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      home: OnboardingWrapper(forceStartAtSplash: forceStartAtSplash),
+      home: const OnboardingWrapper(),
     ),
   );
 }
@@ -137,34 +132,5 @@ void main() {
     await _debugSkip(tester);
     expect(find.text('How did you find us?'), findsOneWidget);
     expect(find.text("What's your primary language?"), findsNothing);
-  });
-
-  // Regression: a fully-onboarded returning user's "Agree & Continue" on
-  // data & privacy jumps straight to home (deliberately, so they don't
-  // re-run onboarding). Debug restart (forceStartAtSplash) exists so a dev
-  // can walk the whole flow regardless of persisted state — it must bypass
-  // this shortcut too, or the flow still gets cut short right after consent.
-  testWidgets('forced debug restart walks past data & privacy instead of jumping to home', (tester) async {
-    SharedPreferences.setMockInitialValues({'onboardingCompleted': true});
-    final authProvider = _RecordingAuthProvider();
-    addTearDown(authProvider.dispose);
-    final speechProfileProvider = SpeechProfileProvider();
-    addTearDown(speechProfileProvider.dispose);
-
-    await tester.pumpWidget(
-      _wrapOnboarding(authProvider, speechProfileProvider, forceStartAtSplash: true),
-    );
-    await tester.pump();
-
-    await tester.tap(find.text('Get Started'));
-    await tester.pump(const Duration(milliseconds: 450));
-    await _debugSkip(tester);
-    expect(find.text('Data & Privacy'), findsOneWidget);
-
-    // Real tap on the actual consent button, not the debug skip — this is
-    // what runs AiConsentWidget's onAgree and its onboardingCompleted check.
-    await tester.tap(find.text('Agree & Continue'));
-    await tester.pump(const Duration(milliseconds: 450));
-    expect(find.text("What's your name?"), findsOneWidget);
   });
 }

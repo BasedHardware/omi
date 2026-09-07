@@ -55,15 +55,9 @@ Duration onboardingPageEntryDelay(int pageIndex, {Duration spinnerFade = const D
 }
 
 class OnboardingWrapper extends StatefulWidget {
-  const OnboardingWrapper({super.key, this.forceAuthPage = false, this.forceStartAtSplash = false});
+  const OnboardingWrapper({super.key, this.forceAuthPage = false});
 
   final bool forceAuthPage;
-
-  // Skips the sign-in/onboarding-progress auto-routing below so a fresh
-  // instance always lands on the splash page, even if Firebase still has a
-  // signed-in session. Used by "Redo Onboarding" in Developer settings, which
-  // would otherwise remount straight past splash.
-  final bool forceStartAtSplash;
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -144,8 +138,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _deviceGlowAnimation = CurvedAnimation(parent: _deviceGlowController, curve: Curves.easeIn);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (widget.forceStartAtSplash) return;
-
       // Let's not update permissions here because of Apple's review process
       // if (mounted) {
       //   context.read<OnboardingProvider>().updatePermissions();
@@ -248,7 +240,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
             _controller!.animateTo(kAiConsentPage);
-          } else if (!widget.forceStartAtSplash && SharedPreferencesUtil().onboardingCompleted) {
+          } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
             _controller!.animateTo(kNamePage);
@@ -262,10 +254,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
-          // session and we don't want to re-run it. Redo Onboarding
-          // (forceStartAtSplash) bypasses this so the whole flow can be
-          // walked end to end again.
-          if (!widget.forceStartAtSplash && SharedPreferencesUtil().onboardingCompleted) {
+          // session and we don't want to re-run it. Signing out and back in
+          // is how the flow is walked again.
+          if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
             _controller!.animateTo(kNamePage);

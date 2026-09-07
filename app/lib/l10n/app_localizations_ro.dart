@@ -669,12 +669,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get conversationTimeoutConfig => 'Setează când se încheie automat conversațiile';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importă date';
 
   @override

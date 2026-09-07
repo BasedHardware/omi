@@ -663,12 +663,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get conversationTimeoutConfig => 'स्वचालित रूप से बातचीत समाप्त होने का समय सेट करें';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'डेटा आयात करें';
 
   @override

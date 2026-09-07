@@ -666,12 +666,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get conversationTimeoutConfig => 'Ustaw, kiedy rozmowy kończą się automatycznie';
 
   @override
-  String get redoOnboarding => 'Redo Onboarding';
-
-  @override
-  String get redoOnboardingDescription => 'Start over from the splash screen';
-
-  @override
   String get importData => 'Importuj dane';
 
   @override
