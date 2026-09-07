@@ -19,6 +19,7 @@ import {
   cancelChatGeneration,
   ChatBackendError,
   chatErrorCopy,
+  chatHistoryCanReload,
   chatHistoryErrorCopy,
   chatSessionLost,
   createLocalChatMessage,
@@ -155,6 +156,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     tasksLoadingMore,
     taskNotice,
     loadMoreTasks,
+    tasksPageRetryable,
     readOutcomes,
     reads,
     readsPhase,
@@ -164,6 +166,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     conversationsLoadingMore,
     conversationNotice,
     loadMoreConversations,
+    conversationsPageRetryable,
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
@@ -177,7 +180,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     <TaskPagination
       hasMore={
         readOutcomes?.tasks.status === 'success' &&
-        readOutcomes.tasks.value.page.hasMore
+        readOutcomes.tasks.value.page.hasMore &&
+        tasksPageRetryable
       }
       busy={
         tasksLoadingMore ||
@@ -644,7 +648,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       }
       if (chatSessionEpochRef.current === session) {
-        setChatError('Older messages could not be loaded.');
+        setChatError(chatHistoryErrorCopy(error));
+        if (!chatHistoryCanReload(error)) {
+          setHasOlderChat(false);
+        }
         if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
@@ -1006,9 +1013,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             onRefresh={() => {
               void refreshReads(false);
             }}
-            onLoadMore={() => {
-              void loadMoreConversations();
-            }}
+            onLoadMore={
+              conversationsPageRetryable
+                ? () => {
+                    void loadMoreConversations();
+                  }
+                : undefined
+            }
             loadingMore={conversationsLoadingMore}
             notice={conversationNotice}
             outcome={readOutcomes?.conversations ?? null}
@@ -1467,9 +1478,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     onRefresh={() => {
                       void refreshReads(false);
                     }}
-                    onLoadMore={() => {
-                      void loadMoreConversations();
-                    }}
+                    onLoadMore={
+                      conversationsPageRetryable
+                        ? () => {
+                            void loadMoreConversations();
+                          }
+                        : undefined
+                    }
                     loadingMore={conversationsLoadingMore}
                     notice={conversationNotice}
                     loading={readsPhase === 'initial-loading'}

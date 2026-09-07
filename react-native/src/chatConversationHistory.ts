@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {
   ChatBackendError,
+  chatHistoryCanReload,
   chatHistoryErrorCopy,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -21,16 +22,6 @@ type ChatHistoryRead =
       olderCursor: string | null;
       hasOlder: boolean;
     };
-
-function chatHistoryCanReload(error: unknown): boolean {
-  if (!(error instanceof ChatBackendError)) {
-    return true;
-  }
-  if (error.status === 403 || error.backendCode === 'forbidden') {
-    return true;
-  }
-  return error.retryable;
-}
 
 export function useChatConversationHistory(active: boolean) {
   const [result, setResult] = useState<ChatHistoryRead>({status: 'idle'});

@@ -525,6 +525,14 @@ export const serviceSettingsUnavailableCopy =
 const serviceSettingsLoadFailureCopy =
   'Settings could not be loaded. Try again.';
 
+export function serviceSettingsCanRetry(error: unknown): boolean {
+  return !(
+    error instanceof Error &&
+    'retryable' in error &&
+    (error as {retryable?: unknown}).retryable === false
+  );
+}
+
 export function serviceSettingsErrorCopy(error: unknown): string {
   if (
     error instanceof Error &&
@@ -572,6 +580,23 @@ export type ServiceSettingsSnapshot = {
   entitlement: {limitKey: string; used: number; limit: number | null} | null;
 };
 
+function nestedSettingsRetryable(body: string | null): boolean | null {
+  if (body === null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: {retryable?: unknown} | string;
+    };
+    if (parsed.error !== null && typeof parsed.error === 'object') {
+      return typeof parsed.error.retryable === 'boolean'
+        ? parsed.error.retryable
+        : null;
+    }
+  } catch {}
+  return null;
+}
+
 export async function loadServiceSettings(
   backend: OmiBackend,
 ): Promise<ServiceSettingsSnapshot> {
@@ -588,7 +613,11 @@ export async function loadServiceSettings(
     throw unauthorized;
   }
   if (response.status === 503) {
-    throw new Error(serviceSettingsUnavailableCopy);
+    const unavailable = new Error(serviceSettingsUnavailableCopy) as Error & {
+      retryable: boolean;
+    };
+    unavailable.retryable = nestedSettingsRetryable(response.body) !== false;
+    throw unavailable;
   }
   if (response.status !== 200) {
     throw new Error(serviceSettingsLoadFailureCopy);

@@ -136,6 +136,16 @@ export function chatHistoryErrorCopy(error: unknown): string {
   return 'Chat history could not be loaded. Check your connection and try again.';
 }
 
+export function chatHistoryCanReload(error: unknown): boolean {
+  if (!(error instanceof ChatBackendError)) {
+    return true;
+  }
+  if (error.status === 403 || error.backendCode === 'forbidden') {
+    return true;
+  }
+  return error.retryable;
+}
+
 let messageSequence = 0;
 
 export function createLocalChatMessage(

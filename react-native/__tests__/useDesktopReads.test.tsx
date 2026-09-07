@@ -21,6 +21,7 @@ import {useDesktopReads} from '../src/app/useDesktopReads';
 import {
   desktopBackendServiceCopy,
   desktopProjectionUnavailableCopy,
+  desktopBackendUnavailableCopy,
   loadDesktopReads,
   loadTasks,
   loadConversations,
@@ -616,6 +617,26 @@ test('failed cursor recovery retains loaded rows and allows explicit retry', asy
   });
   expect(loadConversations).toHaveBeenCalledTimes(2);
   expect(reads.latest().conversationNotice).toContain('Try again');
+  expect(reads.latest().readOutcomes?.conversations).toMatchObject({
+    value: {items: [{title: 'Old page'}]},
+  });
+  reads.unmount();
+});
+
+test('nested non-retryable conversation pages omit Load more Try again', async () => {
+  readsMock.mockResolvedValue(pagedOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadConversations as jest.Mock).mockRejectedValue(
+    new Error(desktopBackendUnavailableCopy),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreConversations();
+  });
+  expect(reads.latest().conversationNotice).toBe(
+    desktopBackendUnavailableCopy,
+  );
+  expect(reads.latest().conversationNotice).not.toContain('Try again');
+  expect(reads.latest().conversationsPageRetryable).toBe(false);
   expect(reads.latest().readOutcomes?.conversations).toMatchObject({
     value: {items: [{title: 'Old page'}]},
   });

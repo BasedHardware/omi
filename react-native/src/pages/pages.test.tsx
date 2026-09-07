@@ -236,6 +236,34 @@ test('web Settings hides request details and offers a real retry after failure',
   }
 });
 
+test('web Settings nested non-retryable 503s do not offer Retry', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 503,
+    body: JSON.stringify({
+      error: {
+        code: 'development_backend_unsupported',
+        retryable: false,
+        action: 'none',
+      },
+    }),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    expect(textOf(renderer)).toContain(
+      'Account profile and usage are not available from this service yet.',
+    );
+    expect(labelsOf(renderer)).not.toContain('Retry settings');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
 test('web Settings maps unauthorized credentials without inventing a signed-in profile', async () => {
   const originalPlatform = Platform.OS;
   Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});

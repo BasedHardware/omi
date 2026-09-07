@@ -10,6 +10,7 @@ import {
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
   desktopLocalBackendServiceCopy,
+  desktopBackendUnavailableCopy,
   type DomainReadOutcome,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -52,10 +53,13 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [conversationNotice, setConversationNotice] = useState<string | null>(
     null,
   );
+  const [conversationsPageRetryable, setConversationsPageRetryable] =
+    useState(true);
   const conversationPagePendingRef = useRef(false);
   const taskPagePendingRef = useRef(false);
   const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  const [tasksPageRetryable, setTasksPageRetryable] = useState(true);
   const refreshPendingRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
@@ -76,8 +80,10 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     taskPagePendingRef.current = false;
     setTasksLoadingMore(false);
     setTaskNotice(null);
+    setTasksPageRetryable(true);
     setConversationsLoadingMore(false);
     setConversationNotice(null);
+    setConversationsPageRetryable(true);
     readOutcomesRef.current = null;
     homeReadsLoadedRef.current = false;
     setReadOutcomes(null);
@@ -124,6 +130,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       setTaskNotice(null);
       setConversationsLoadingMore(false);
       setConversationNotice(null);
+      setConversationsPageRetryable(true);
+      setTasksPageRetryable(true);
       refreshPendingRef.current = true;
       setReadsPhase(
         initial && readOutcomesRef.current === null
@@ -270,10 +278,17 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           'Conversations changed. The list has been refreshed.',
         );
       }
-    } catch {
+      setConversationsPageRetryable(true);
+    } catch (error) {
       if (sequence === refreshSeqRef.current) {
+        const unavailable =
+          error instanceof Error &&
+          error.message === desktopBackendUnavailableCopy;
+        setConversationsPageRetryable(!unavailable);
         setConversationNotice(
-          'More conversations could not be loaded. Try again.',
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More conversations could not be loaded. Try again.',
         );
       }
     } finally {
@@ -347,9 +362,18 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       if (replace) {
         setTaskNotice('Tasks changed. The list has been refreshed.');
       }
-    } catch {
+      setTasksPageRetryable(true);
+    } catch (error) {
       if (sequence === refreshSeqRef.current) {
-        setTaskNotice('More tasks could not be loaded. Try again.');
+        const unavailable =
+          error instanceof Error &&
+          error.message === desktopBackendUnavailableCopy;
+        setTasksPageRetryable(!unavailable);
+        setTaskNotice(
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More tasks could not be loaded. Try again.',
+        );
       }
     } finally {
       if (sequence === refreshSeqRef.current) {
@@ -368,6 +392,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     taskPagePendingRef.current = false;
     setTasksLoadingMore(false);
     setTaskNotice(null);
+    setTasksPageRetryable(true);
     refreshPendingRef.current = true;
     setConversationsLoadingMore(false);
     try {
@@ -455,9 +480,11 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     tasksLoadingMore,
     taskNotice,
     loadMoreTasks,
+    tasksPageRetryable,
     conversationsLoadingMore,
     conversationNotice,
     loadMoreConversations,
+    conversationsPageRetryable,
     allHomeReadsUnavailable,
     homeReadsLoadedRef,
     readOutcomes,

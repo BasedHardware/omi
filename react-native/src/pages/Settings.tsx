@@ -13,6 +13,7 @@ import {
   loadAccountSettings,
   loadServiceSettings,
   optInTrainingData,
+  serviceSettingsCanRetry,
   serviceSettingsErrorCopy,
   setPrivateCloudSync,
   setStoreRecordingPermission,
@@ -138,6 +139,7 @@ export function SettingsPage({
     'loading' | 'signed-out' | 'ready' | 'error'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [settingsCanRetry, setSettingsCanRetry] = useState(true);
   const [snapshot, setSnapshot] = useState<AccountSettingsSnapshot | null>(
     null,
   );
@@ -204,6 +206,7 @@ export function SettingsPage({
         }
         setServiceSettings(null);
         setError(serviceSettingsErrorCopy(reason));
+        setSettingsCanRetry(serviceSettingsCanRetry(reason));
         setPhase('error');
       }
       return;
@@ -223,6 +226,7 @@ export function SettingsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setError(desktopBackendServiceCopy);
+        setSettingsCanRetry(true);
         setPhase('error');
         return;
       }
@@ -247,6 +251,7 @@ export function SettingsPage({
       }
       setSnapshot(null);
       setError(desktopReadErrorCopy(reason));
+      setSettingsCanRetry(true);
       setPhase('error');
     }
   }, [browser]);
@@ -578,7 +583,9 @@ export function SettingsPage({
                 </Text>
               </FocusPressable>
             )}
-            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
+            {phase === 'error' &&
+              error !== desktopBackendConfigurationCopy &&
+              settingsCanRetry && (
               <FocusPressable
                 accessibilityLabel="Retry settings"
                 accessibilityRole="button"

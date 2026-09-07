@@ -2,6 +2,7 @@ import {
   ChatBackendError,
   cancelChatGeneration,
   chatErrorCopy,
+  chatHistoryCanReload,
   chatHistoryErrorCopy,
   loadChatHistory,
   loadNewestChatHistory,
@@ -414,6 +415,22 @@ test('maps ratified public recovery without automatically retrying', () => {
       ),
     ),
   ).toBe('Chat history is not available on this backend yet.');
+  expect(
+    chatHistoryCanReload(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe(false);
+  expect(
+    chatHistoryCanReload(
+      new ChatBackendError(403, 'forbidden', false, 'none', null),
+    ),
+  ).toBe(true);
   expect(
     chatErrorCopy(
       new ChatBackendError(503, 'service_unavailable', false, 'none', null),
