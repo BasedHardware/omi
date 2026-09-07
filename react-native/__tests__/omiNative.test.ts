@@ -53,6 +53,12 @@ test('android registers a credential-bearing OmiBackend transport', () => {
   expect(backend).toContain('x-omi-client-id');
   expect(backend).toContain('Bearer ');
   expect(backend).toContain('.workers.dev');
+  expect(backend).toContain('getSoftwarePlane');
+  expect(backend).toContain('setSoftwarePlane');
+  expect(backend).toContain('stampedV5BackendOrigin');
+  expect(backend).toContain('OmiBackendTransport.resolvedSoftwarePlane');
+  expect(backend).toContain('OmiBackendTransport.softwarePlaneIsNew(plane)');
+  expect(backend).toContain('SOFTWARE_PLANE_PREFERENCES');
   expect(pack).toContain('OmiBackendModule(reactContext)');
 });
 

@@ -43,6 +43,9 @@ export type RecordingJournal = {
 
 export type OmiBackend = {
   getApiContract?(): Promise<'omi' | 'canonical'>;
+  getSoftwarePlane?(): Promise<'old' | 'new'>;
+  setSoftwarePlane?(plane: 'old' | 'new'): Promise<'old' | 'new'>;
+  stampedV5BackendOrigin?(): Promise<string | null>;
   sendOmiChat?(requestId: string, text: string): Promise<NativeHttpResponse>;
   cancelOmiChat?(requestId: string): Promise<void>;
   createRecordingJournal?(

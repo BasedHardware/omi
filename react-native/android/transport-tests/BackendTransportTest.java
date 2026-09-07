@@ -27,6 +27,15 @@ public final class BackendTransportTest {
     }) {
       assert !OmiBackendTransport.isV5BackendPath(path) : path;
     }
+    assert OmiBackendTransport.isV5BackendPath("/v1/tasks/ops?op=complete");
+    assert "new".equals(OmiBackendTransport.resolvedSoftwarePlane(null, true));
+    assert "old".equals(OmiBackendTransport.resolvedSoftwarePlane(null, false));
+    assert "new".equals(OmiBackendTransport.resolvedSoftwarePlane("", true));
+    assert "new".equals(OmiBackendTransport.resolvedSoftwarePlane("new", false));
+    assert "old".equals(OmiBackendTransport.resolvedSoftwarePlane("old", true));
+    assert "old".equals(OmiBackendTransport.resolvedSoftwarePlane("unexpected", true));
+    assert OmiBackendTransport.softwarePlaneIsNew("new");
+    assert !OmiBackendTransport.softwarePlaneIsNew("old");
     assert OmiBackendTransport.examplePlatformSupported("GET", "/v1/tasks?limit=2");
     assert OmiBackendTransport.examplePlatformSupported("POST", "/v1/tasks/ops");
     assert !OmiBackendTransport.examplePlatformSupported("DELETE", "/v1/tasks/ops");

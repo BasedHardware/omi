@@ -20,6 +20,20 @@ public final class OmiBackendTransport {
     return connection;
   }
 
+  public static final String SOFTWARE_PLANE_PREFERENCES = "omi-backend";
+  public static final String SOFTWARE_PLANE_KEY = "softwarePlane";
+
+  public static String resolvedSoftwarePlane(String stored, boolean stampedValid) {
+    if (stored != null && !stored.isEmpty()) {
+      return "new".equals(stored) ? "new" : "old";
+    }
+    return stampedValid ? "new" : "old";
+  }
+
+  public static boolean softwarePlaneIsNew(String plane) {
+    return "new".equals(plane);
+  }
+
   public static boolean isV5BackendPath(String path) {
     final String route;
     try {
