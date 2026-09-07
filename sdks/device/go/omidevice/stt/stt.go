@@ -169,16 +169,7 @@ func (w *whisperBatch) AppendPCM(pcm []byte) error {
 	if len(w.buf) < w.batch {
 		return nil
 	}
-	chunk := w.buf
-	w.buf = nil
-	text, err := w.runner(chunk)
-	if err != nil {
-		return err
-	}
-	if text != "" && w.onTranscript != nil {
-		w.onTranscript(text)
-	}
-	return nil
+	return w.Stop()
 }
 
 func (w *whisperBatch) Stop() error {
@@ -186,10 +177,10 @@ func (w *whisperBatch) Stop() error {
 		return nil
 	}
 	text, err := w.runner(w.buf)
-	w.buf = nil
 	if err != nil {
 		return err
 	}
+	w.buf = nil
 	if text != "" && w.onTranscript != nil {
 		w.onTranscript(text)
 	}

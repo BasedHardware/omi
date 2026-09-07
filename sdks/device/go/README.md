@@ -33,3 +33,13 @@ Mirrors Python `print_devices` / `listen_to_omi` in `sdks/python/omi/bluetooth.p
 - Needs Bluetooth permission/adapter; CI and headless hosts stay on default build.
 - macOS device IDs are CoreBluetooth identifiers (not always classic MACs).
 - `ReadCodec` relies on GATT Read; may fail if characteristic is notify-only on some firmware.
+
+### Local Whisper retries
+
+`NewWhisper` accepts a runner and buffers PCM until a full batch or `Stop()`.
+If the runner returns an error, the buffered audio is retained. Retry with
+`Stop()` (or continue appending new PCM); do not append the failed audio again.
+A successful flush clears the buffer and emits the non-empty transcript once.
+
+The Go Device SDK pull-request workflow runs `go test -race ./...` for this
+module without BLE hardware or live transcription services.
