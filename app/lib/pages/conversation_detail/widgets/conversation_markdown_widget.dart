@@ -5,7 +5,7 @@ import 'package:markdown/markdown.dart' as md;
 
 /// Vertical space above conversation-summary headers (#5622).
 ///
-/// `flutter_markdown` defaults every `h*Padding` to zero, so ## / ### / ####
+/// `flutter_markdown` defaults every `h*Padding` to zero, so #–######
 /// sections sat flush against the previous block. Keep list / paragraph
 /// spacing unchanged — only headers get this breathing room.
 const EdgeInsets conversationMarkdownHeaderPadding = EdgeInsets.only(top: 20, bottom: 8);
@@ -21,6 +21,8 @@ MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
     h2Padding: conversationMarkdownHeaderPadding,
     h3Padding: conversationMarkdownHeaderPadding,
     h4Padding: conversationMarkdownHeaderPadding,
+    h5Padding: conversationMarkdownHeaderPadding,
+    h6Padding: conversationMarkdownHeaderPadding,
     blockquote: style.copyWith(backgroundColor: Colors.transparent, color: Colors.white),
     blockquoteDecoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
     code: style.copyWith(

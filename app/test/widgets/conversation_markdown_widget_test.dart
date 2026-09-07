@@ -69,6 +69,14 @@ Body under h3.
 #### Drones and mines
 
 Body under h4.
+
+##### Briefing notes
+
+Body under h5.
+
+###### Appendix
+
+Body under h6.
 ''';
 
     await tester.pumpWidget(
@@ -81,7 +89,7 @@ Body under h4.
     );
     await tester.pumpAndSettle();
 
-    for (final title in ['Iran conflict', 'Strait of Hormuz', 'Drones and mines']) {
+    for (final title in ['Iran conflict', 'Strait of Hormuz', 'Drones and mines', 'Briefing notes', 'Appendix']) {
       final padding = tester.widgetList<Padding>(find.ancestor(of: find.text(title), matching: find.byType(Padding)));
       expect(
         padding.any((widget) => widget.padding == conversationMarkdownHeaderPadding),
