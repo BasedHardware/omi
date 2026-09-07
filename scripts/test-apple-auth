@@ -28,3 +28,9 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security \
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiRecordingPolicyTest.mm" -o "$build_dir/recording-policy"
 "$build_dir/recording-policy"
+for platform_source in 0 1; do
+  xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework CoreBluetooth \
+    -I"$repo_root/react-native/apple/tests" -DOMI_TEST_IOS_SOURCE="$platform_source" \
+    "$repo_root/react-native/apple/tests/OmiNativeStorageReplacementTest.mm" -o "$build_dir/storage-replacement"
+  "$build_dir/storage-replacement"
+done
