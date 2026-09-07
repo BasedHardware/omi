@@ -6,6 +6,7 @@ import os
 import stat
 from pathlib import Path
 from typing import BinaryIO
+from unittest.mock import patch
 
 import pytest
 
@@ -132,8 +133,54 @@ def test_save_fails_closed_when_windows_dacl_verification_fails(monkeypatch, con
 
 
 def test_save_overwrites_stale_temp_file(config_path: Path) -> None:
-    """If a previous save() crashed mid-write, a stale .tmp may remain.
-    save() should detect this and recover instead of erroring on O_EXCL."""
+    """A stale temp file left by a crashed save() must not block a new save(),
+    and the new save must never delete a pre-existing file it does not own."""
+    tmp = config_path.with_suffix(config_path.suffix + ".tmp")
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_text("stale leftover")
+    stale_content = tmp.read_text()
+    assert tmp.exists()
+
+    config = cfg.load()
+    profile = config.get_profile()
+    profile.auth_method = "api_key"
+    profile.api_key = "omi_dev_recovered"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    # The stale file is left untouched (it may belong to another writer).
+    assert tmp.exists()
+    assert tmp.read_text() == stale_content
+    reloaded = cfg.load().get_profile()
+    assert reloaded.api_key == "omi_dev_recovered"
+
+
+def test_save_concurrent_writers_do_not_unlink_each_others_temp(config_path: Path) -> None:
+    """A second concurrent save() must not treat the first writer's temp file
+    as stale and unlink it (issue: first writer then fails at os.replace)."""
+    first = cfg.Config(path=config_path, active_profile="first")
+    second = cfg.Config(path=config_path, active_profile="second")
+    original_dump = cfg.tomli_w.dump
+
+    def interleaved_dump(payload, handle):
+        # While the first writer is serializing, a second writer runs a full
+        # save() — this collides on the shared fixed temp path.
+        if payload["active_profile"] == "first":
+            cfg.save(second)
+        original_dump(payload, handle)
+
+    with patch.object(cfg.tomli_w, "dump", interleaved_dump):
+        cfg.save(first)  # FileNotFoundError on the unfixed implementation
+
+    reloaded = cfg.load()
+    assert config_path.exists()
+    assert not config_path.with_suffix(config_path.suffix + ".tmp").exists()
+    # Both writes completed; the last one wins, but no writer crashed.
+    assert reloaded.active_profile in {"first", "second"}
+
+
+def test_save_stale_temp_file_is_still_recovered(config_path: Path) -> None:
+    """Recovery from a genuinely stale temp file (no live writer) still works."""
     tmp = config_path.with_suffix(config_path.suffix + ".tmp")
     config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text("stale leftover")
@@ -146,7 +193,8 @@ def test_save_overwrites_stale_temp_file(config_path: Path) -> None:
     config.set_profile(profile)
     cfg.save(config)
 
-    assert not tmp.exists()
+    # The stale file is left untouched (it may belong to another writer).
+    assert tmp.exists()
     reloaded = cfg.load().get_profile()
     assert reloaded.api_key == "omi_dev_recovered"
 
