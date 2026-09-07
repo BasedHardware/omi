@@ -161,7 +161,7 @@ realTest("real chat reads require chat.read and never invent empty success", asy
       attachments: [],
     };
     await owner.unsafe(
-      `INSERT INTO omi_memory.chat_generation_events(account_id,generation_id,sequence,event_id,created_at,frame_json) VALUES($1,$2,1,'evt-done',2000,$3::jsonb)`,
+      `INSERT INTO omi_memory.chat_generation_events(account_id,generation_id,sequence,event_id,created_at,frame_json) VALUES($1,$2,1,'evt-done',2000,$3::text::jsonb)`,
       [account, generationId, JSON.stringify({ kind: "done", message: assistant })],
     );
     const completed = await call();
