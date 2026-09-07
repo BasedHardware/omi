@@ -6,6 +6,7 @@ import {
   chatHistoryCanReload,
   chatHistoryErrorCopy,
   chatHistoryHasOlder,
+  chatComposerIsResting,
   chatWriteDoorUnavailable,
   loadChatHistory,
   loadNewestChatHistory,
@@ -463,6 +464,18 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(chatHistoryHasOlder(true, null)).toBe(false);
   expect(chatHistoryHasOlder(false, 'older-1')).toBe(false);
   expect(chatHistoryHasOlder(true, 'older-1')).toBe(true);
+  expect(chatComposerIsResting(0, false, false, null)).toBe(true);
+  expect(
+    chatComposerIsResting(
+      0,
+      false,
+      false,
+      'Chat history is not available on this backend yet.',
+    ),
+  ).toBe(false);
+  expect(chatComposerIsResting(0, false, true, null)).toBe(false);
+  expect(chatComposerIsResting(1, false, false, null)).toBe(false);
+  expect(chatComposerIsResting(0, true, false, null)).toBe(false);
   expect(
     chatHistoryErrorCopy(
       new ChatBackendError(404, 'not_found', false, 'none', null),

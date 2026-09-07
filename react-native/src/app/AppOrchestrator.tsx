@@ -23,6 +23,7 @@ import {
   chatHistoryErrorCopy,
   chatSessionLost,
   chatHistoryHasOlder,
+  chatComposerIsResting,
   chatCancelErrorCopy,
   chatWriteDoorUnavailable,
   createLocalChatMessage,
@@ -746,7 +747,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   };
 
   const olderChatAvailable = chatHistoryHasOlder(hasOlderChat, olderChatCursor);
-  const chatResting = messages.length === 0 && !chatBusy && !olderChatAvailable;
+  const chatResting = chatComposerIsResting(
+    messages.length,
+    chatBusy,
+    olderChatAvailable,
+    chatError,
+  );
 
   const composer = (
     <Composer

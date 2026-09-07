@@ -69,6 +69,17 @@ export function chatHistoryHasOlder(
   return hasOlder && olderCursor !== null;
 }
 
+export function chatComposerIsResting(
+  messageCount: number,
+  chatBusy: boolean,
+  olderAvailable: boolean,
+  chatError: string | null,
+): boolean {
+  return (
+    messageCount === 0 && !chatBusy && !olderAvailable && chatError === null
+  );
+}
+
 export function chatErrorCopy(error: unknown): string {
   if (!(error instanceof ChatBackendError)) {
     return 'Message not sent. Check your connection and try again.';
