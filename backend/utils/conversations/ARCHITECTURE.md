@@ -28,6 +28,13 @@ and background processing.
 - `meeting_receipt.py` is the sole writer of the final meeting verdict. It
   records reason and measured inputs on the finalization job, projects the
   verdict to the conversation, and attaches the deterministic Chat intent.
+- `typesense_index.py` owns the first-party Typesense projection of the
+  durable conversation store. It is called fail-open from the conversation
+  write/delete choke points (`database/conversations.py` durable mutations,
+  `lifecycle.delete_empty_recording_conversation`, and the account-deletion
+  purge), never from routers. Dual-writes on top of the still-installed
+  Firebase extension `firestore-typesense-conversations`; the extension is
+  removed only after this writer has baked (see the module runbook note).
 - The old orphaned WAV retranscription util (`postprocess_conversation.py`) was
   removed: the historical Flutter upload (`memoryPostProcessing`) and
   `POST /v1/memories/{id}/post-processing` router were removed and nothing
