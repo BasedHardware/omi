@@ -93,7 +93,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   onAskSubmit: () => void;
   onOpenSettings: () => void;
   onOpenDevice: () => void;
-  onOpenCalls: () => void;
+  onOpenCalls?: () => void;
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
   onViewRecaps: () => void;
@@ -691,13 +691,15 @@ export function MobileAppSurface({
                 {device.label}
               </Text>
             </Pressable>
-            <Pressable
-              accessibilityLabel="Open calls"
-              accessibilityRole="button"
-              onPress={onOpenCalls}
-              style={styles.roundButton}>
-              <Phone color={mobileColor.text} size={20} />
-            </Pressable>
+            {onOpenCalls ? (
+              <Pressable
+                accessibilityLabel="Open calls"
+                accessibilityRole="button"
+                onPress={onOpenCalls}
+                style={styles.roundButton}>
+                <Phone color={mobileColor.text} size={20} />
+              </Pressable>
+            ) : null}
           </View>
           <Pressable
             accessibilityLabel="Open settings"

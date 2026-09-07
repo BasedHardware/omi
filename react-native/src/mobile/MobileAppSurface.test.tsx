@@ -63,7 +63,6 @@ function buildProps(
     onAskChange: jest.fn(),
     onAskSubmit: jest.fn(),
     onExpandMindMap: jest.fn(),
-    onOpenCalls: jest.fn(),
     onOpenDevice: jest.fn(),
     onOpenSettings: jest.fn(),
     onRouteChange: jest.fn(),
@@ -283,6 +282,31 @@ test('Daily Recaps stay display-only without an open handler', () => {
     ),
   ).toHaveLength(0);
   expect(renderedText(renderer)).toContain('Omi gets simpler');
+});
+
+test('compact Home omits Open calls without a calls producer', () => {
+  const renderer = render();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open calls',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Conversations',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('compact Home keeps Open calls when a calls handler is mounted', () => {
+  const onOpenCalls = jest.fn();
+  const renderer = render({onOpenCalls});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open calls')
+      .props.onPress();
+  });
+  expect(onOpenCalls).toHaveBeenCalledTimes(1);
 });
 
 test('loaded Home tasks keep more-available coverage instead of looking complete', () => {

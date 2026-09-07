@@ -1170,7 +1170,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           send().catch(() => undefined);
         }}
         onExpandMindMap={() => setRoute('Memories')}
-        onOpenCalls={() => setRoute('Conversations')}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onOpenSettings={() => setRoute('Settings')}
         onRouteChange={destination => {
