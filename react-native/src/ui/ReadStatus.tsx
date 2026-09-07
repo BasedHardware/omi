@@ -47,6 +47,18 @@ export function emptyLibraryCopy(
   return readStatusCopy(label, page) ?? emptyCopy;
 }
 
+export function coverageStatusCopy(
+  conversationsPage: ReadPageState | null,
+  memoriesPage: ReadPageState | null,
+): string | null {
+  return (
+    (conversationsPage === null
+      ? null
+      : readStatusCopy('Conversations', conversationsPage)) ??
+    (memoriesPage === null ? null : readStatusCopy('Memories', memoriesPage))
+  );
+}
+
 export function ReadStatus({
   label,
   page,

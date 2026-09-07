@@ -40,7 +40,11 @@ import {
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
-import {emptyLibraryCopy, OutcomeStatus} from '../ui/ReadStatus';
+import {
+  coverageStatusCopy,
+  emptyLibraryCopy,
+  OutcomeStatus,
+} from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
 import {HomeSearchField} from '../ui/SearchField';
 import {Onboarding} from '../ui/Onboarding';
@@ -335,6 +339,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }, [reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
+  const homeSearchEmptyTitle =
+    coverageStatusCopy(
+      readOutcomes !== null && readOutcomes.conversations.status === 'success'
+        ? readOutcomes.conversations.value.page
+        : null,
+      readOutcomes !== null && readOutcomes.memories.status === 'success'
+        ? readOutcomes.memories.value.page
+        : null,
+    ) ?? (homeSearching ? 'No results' : 'Nothing saved yet');
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
   // turning an error into a window-filling modal.
@@ -1239,9 +1252,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                               ? 'Clear the search to see saved items.'
                               : 'Start typing to search what is saved.'
                           }
-                          emptyTitle={
-                            homeSearching ? 'No results' : 'Nothing saved yet'
-                          }
+                          emptyTitle={homeSearchEmptyTitle}
                           error={null}
                           footer={
                             <View style={styles.readStatuses}>
@@ -1282,25 +1293,25 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                   {(readsPhase === 'saved-but-refresh-failed' ||
                                     readsPhase === 'unavailable') &&
                                     desktopReadsCanRetry(readOutcomes) && (
-                                    <FocusPressable
-                                      accessibilityLabel="Retry saved data"
-                                      accessibilityRole="button"
-                                      onPress={() => refreshReads(false)}
-                                      style={({pressed}) => [
-                                        styles.retryButton,
-                                        macDesktop && styles.macRetryButton,
-                                        pressed && styles.pressed,
-                                      ]}>
-                                      <Text
-                                        style={[
-                                          styles.retryButtonText,
-                                          macDesktop &&
-                                            styles.macRetryButtonText,
+                                      <FocusPressable
+                                        accessibilityLabel="Retry saved data"
+                                        accessibilityRole="button"
+                                        onPress={() => refreshReads(false)}
+                                        style={({pressed}) => [
+                                          styles.retryButton,
+                                          macDesktop && styles.macRetryButton,
+                                          pressed && styles.pressed,
                                         ]}>
-                                        Retry
-                                      </Text>
-                                    </FocusPressable>
-                                  )}
+                                        <Text
+                                          style={[
+                                            styles.retryButtonText,
+                                            macDesktop &&
+                                              styles.macRetryButtonText,
+                                          ]}>
+                                          Retry
+                                        </Text>
+                                      </FocusPressable>
+                                    )}
                                 </View>
                               )}
                               {readOutcomes !== null &&

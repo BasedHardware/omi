@@ -77,7 +77,7 @@ jest.mock('../app/useReduceMotion', () => ({
 
 import {Animated} from 'react-native';
 import {Button} from './Button';
-import {ReadStatus, emptyLibraryCopy} from './ReadStatus';
+import {ReadStatus, coverageStatusCopy, emptyLibraryCopy} from './ReadStatus';
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
@@ -600,4 +600,45 @@ test('empty library copy keeps completeness instead of claiming emptiness', () =
       'No memories yet.',
     ),
   ).toBe('Memories may be temporarily incomplete.');
+});
+
+test('coverage copy wins over a complete Home search miss', () => {
+  const incomplete = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const complete = {
+    ...incomplete,
+    windowStatus: 'complete' as const,
+    complete: true,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(coverageStatusCopy(incomplete, complete)).toBe(
+    'Conversations are incomplete.',
+  );
+  expect(coverageStatusCopy(complete, incomplete)).toBe(
+    'Memories are incomplete.',
+  );
+  expect(coverageStatusCopy(complete, complete)).toBeNull();
+  expect(coverageStatusCopy(null, null)).toBeNull();
+  expect(coverageStatusCopy(null, incomplete)).toBe('Memories are incomplete.');
+  expect(
+    coverageStatusCopy(complete, {
+      ...incomplete,
+      completenessStatus: 'degraded',
+      reasons: ['projection_unavailable'],
+    }),
+  ).toBe('Memories may be temporarily incomplete.');
+  const orchestrator = readFileSync(
+    resolve(__dirname, '../app/AppOrchestrator.tsx'),
+    'utf8',
+  );
+  expect(orchestrator).toContain('homeSearchEmptyTitle');
+  expect(orchestrator).toContain('coverageStatusCopy(');
+  expect(orchestrator).toContain("?? (homeSearching ? 'No results'");
 });

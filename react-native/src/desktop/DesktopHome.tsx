@@ -16,7 +16,11 @@ import {
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {ReadStatus, emptyLibraryCopy, readStatusCopy} from '../ui/ReadStatus';
+import {
+  ReadStatus,
+  coverageStatusCopy,
+  emptyLibraryCopy,
+} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
@@ -202,15 +206,17 @@ export function DesktopHome({
       ? 'Conversations and memories will show here when your day is loaded.'
       : currentsError?.status === 'error'
       ? currentsError.error
-      : query !== ''
-      ? 'Nothing captured matches this search.'
-      : (conversationsOutcome.status === 'success'
-          ? readStatusCopy('Conversations', conversationsOutcome.value.page)
-          : null) ??
-        (memoriesOutcome.status === 'success'
-          ? readStatusCopy('Memories', memoriesOutcome.value.page)
-          : null) ??
-        'Nothing captured yet.';
+      : coverageStatusCopy(
+          conversationsOutcome.status === 'success'
+            ? conversationsOutcome.value.page
+            : null,
+          memoriesOutcome.status === 'success'
+            ? memoriesOutcome.value.page
+            : null,
+        ) ??
+        (query !== ''
+          ? 'Nothing captured matches this search.'
+          : 'Nothing captured yet.');
   return (
     <View style={styles.home}>
       <DesktopReadBanner

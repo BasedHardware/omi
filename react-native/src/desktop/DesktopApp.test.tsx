@@ -937,6 +937,76 @@ test('an incomplete empty read does not claim a complete library', async () => {
   expect(tree).not.toContain('No tasks yet');
 });
 
+test('an incomplete empty search does not claim a complete miss', async () => {
+  const incompletePage = {
+    windowStatus: 'incomplete' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'incomplete' as const,
+    reasons: ['accepted_work_pending'],
+  };
+  const incompleteOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: incompletePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: incompletePage},
+    },
+  };
+  const renderer = renderDesktop({
+    draft: 'product',
+    outcomes: incompleteOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('Nothing captured yet.');
+});
+
+test('a complete empty search may claim a search miss', async () => {
+  const completePage = {
+    windowStatus: 'complete' as const,
+    complete: true,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const emptyOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {items: [], page: completePage},
+    },
+    memories: {
+      status: 'success' as const,
+      value: {items: [], page: completePage},
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {accountEpoch: null, items: [], page: completePage},
+    },
+  };
+  const renderer = renderDesktop({
+    draft: 'product',
+    outcomes: emptyOutcomes,
+    reads: [],
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('Conversations are incomplete.');
+  expect(tree).not.toContain('Nothing captured yet.');
+});
+
 test('unavailable memory coverage does not claim a complete empty home', async () => {
   const completePage = {
     windowStatus: 'complete' as const,
