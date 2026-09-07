@@ -2479,7 +2479,27 @@ async function main(): Promise<void> {
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
             finalTextPersisted: result.finalTextPersisted,
+            journalMaterialized: result.journalMaterialized,
           });
+          for (const change of result.journalChanges) {
+            const range = listJournalTurns(store, {
+              ownerId: change.ownerId,
+              conversationId: change.conversationId,
+              afterTurnSeq: Math.max(0, change.turn.turnSeq - 1),
+              limit: 1,
+            });
+            send({
+              type: "journal_turn_changed",
+              ownerId: change.ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: change.surfaceKind,
+              externalRefKind: change.externalRefKind,
+              externalRefId: change.externalRefId,
+              turn: journalTurnProjection(change.turn),
+            });
+          }
+          if (result.journalChanges.length > 0) pumpJournalOutbox();
         } catch (error) {
           send({
             type: "external_surface_run_complete_result",

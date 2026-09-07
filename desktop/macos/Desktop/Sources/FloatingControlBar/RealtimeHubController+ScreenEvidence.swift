@@ -385,6 +385,7 @@ extension RealtimeHubController {
     }
 
     assistantText = presentedFailure
+    externalRunAuthorityState?.answer.replace(with: presentedFailure)
     _ = enqueueAuthoritativeScreenEvidenceFailurePersistence(
       ownerID: ownerID,
       assistantText: presentedFailure)
@@ -533,6 +534,7 @@ extension RealtimeHubController {
     guard !screenFailurePresented else { return }
     screenFailurePresented = true
     assistantText = failure.trimmingCharacters(in: .whitespacesAndNewlines)
+    externalRunAuthorityState?.answer.replace(with: assistantText)
     guard !assistantText.isEmpty else { return }
     // The moment the local string is actually spoken. Recording it here — not at the rejection —
     // makes the user-visible failure rate queryable without inferring it from fallback events

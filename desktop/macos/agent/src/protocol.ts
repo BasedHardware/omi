@@ -814,6 +814,8 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
    * trusting a silent no-op (#12731).
    */
   finalTextPersisted?: boolean;
+  /** Whether completion left a canonical assistant row for this voice turn. */
+  journalMaterialized?: boolean;
   error?: ExternalAuthorityError;
 }
 
