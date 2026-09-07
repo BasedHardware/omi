@@ -3,8 +3,8 @@
 This is the single surface every command goes through. It owns:
 
 * Bearer-token injection from the active :class:`omi_cli.config.Profile`.
-* Retry/backoff for ``429`` and ``5xx`` responses, honoring ``Retry-After`` when
-  the server provides one.
+* Retry/backoff for rate limits and safe-to-replay failures, honoring
+  ``Retry-After`` when the server provides one.
 * Translating non-2xx responses into the :mod:`omi_cli.errors` hierarchy so the
   call sites just see a clean exception.
 * Sniffing the rate-limit policy from the response body so the user gets a
@@ -25,7 +25,7 @@ import httpx
 from tenacity import (
     RetryCallState,
     Retrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential_jitter,
 )
@@ -137,7 +137,7 @@ class OmiClient:
             # Honor server-supplied Retry-After when present, otherwise fall
             # back to exponential jitter. See ``_retry_wait`` for the logic.
             wait=_retry_wait,
-            retry=retry_if_exception_type((httpx.TransportError, _RetryableHttp)),
+            retry=retry_if_exception(lambda exc: _may_retry(method, exc)),
         )
 
         try:
@@ -156,8 +156,16 @@ class OmiClient:
                         )
                     return self._handle_response(response)
         except _RetryableHttp as exc:
+            if method in {"POST", "PATCH"} and exc.response.status_code >= 500:
+                raise _unknown_write_outcome(method) from exc
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
+        except httpx.TransportError as exc:
+            if method in {"POST", "PATCH"} and not isinstance(
+                exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+            ):
+                raise _unknown_write_outcome(method) from exc
+            raise
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")
@@ -237,6 +245,27 @@ class _RetryableHttp(Exception):
         super().__init__(f"retryable HTTP {response.status_code}")
         self.response = response
         self.retry_after = retry_after
+
+
+def _may_retry(method: str, exc: BaseException) -> bool:
+    """Only replay writes when the failure establishes they were not applied."""
+    if isinstance(exc, _RetryableHttp):
+        return method not in {"POST", "PATCH"} or exc.response.status_code == 429
+    if isinstance(exc, httpx.TransportError):
+        return method not in {"POST", "PATCH"} or isinstance(
+            exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+        )
+    return False
+
+
+def _unknown_write_outcome(method: str) -> ServerError:
+    return ServerError(
+        message=f"{method} outcome unknown",
+        detail=(
+            "The server may have applied this write. It was not retried automatically; "
+            "check the resource before retrying."
+        ),
+    )
 
 
 # Module-level wait function so tenacity's introspection (and tests) can find it.

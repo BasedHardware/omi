@@ -283,6 +283,12 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+POST and PATCH requests are not automatically replayed after an ambiguous
+transport failure or a server error: the server may already have applied the
+write. These failures return exit code `3` with an `outcome unknown` message.
+Check the resource before trying again. Connection-establishment failures and
+rate-limit responses still retry; read retries are unchanged.
+
 ## Development
 
 ```bash
