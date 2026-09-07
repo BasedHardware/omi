@@ -1131,6 +1131,39 @@ test('loadConnectors nested non-retryable profile 503s do not claim the owner is
   expect(snapshot.ownerError).not.toBe(desktopBackendUnavailableCopy);
 });
 
+test('loadConnectors nested non-retryable enabled 503s do not claim catalogue apps are installed', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: true},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 503, body};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1'})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.enabledIds).toBeNull();
+  expect(snapshot.enabledError).toBe(desktopAppsUnavailableCopy);
+  expect(snapshot.enabledError).not.toBe(desktopBackendUnavailableCopy);
+  expect(installedApps(snapshot)).toEqual([]);
+  expect(exploreApps(snapshot).map(app => app.enabled)).toEqual([false]);
+});
+
 test('loadAccountSettings nested non-retryable 503s keep slices independent without retry copy', async () => {
   const body = JSON.stringify({
     error: {

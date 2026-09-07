@@ -347,7 +347,10 @@ export async function loadConnectors(
   );
   if (enabledResult.status === 'rejected') {
     return {
-      apps,
+      apps: apps.map(app => ({
+        ...app,
+        enabled: false,
+      })),
       enabledIds: null,
       enabledError: settledError(enabledResult.reason),
       ownerUid: owner.value?.uid ?? null,
@@ -597,6 +600,9 @@ export function exploreApps(snapshot: ConnectorsSnapshot): CloudApp[] {
 }
 
 export function installedApps(snapshot: ConnectorsSnapshot): CloudApp[] {
+  if (snapshot.enabledIds === null) {
+    return [];
+  }
   return snapshot.apps.filter(app => app.enabled);
 }
 
