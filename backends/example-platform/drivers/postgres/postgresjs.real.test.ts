@@ -1,3 +1,4 @@
+import type { OmiBackend } from "../../../../react-native/src/omiNativeTypes";
 import { normalizeChatGenerationContext } from "../../apps/service/chat/generation-context";
 import { createPostgresFirebaseDeviceSessionRuntime } from "./firebase-device-session-runtime";
 import { createPostgresDeviceSessionUploadRepository } from "./listen-finalization-repository";
@@ -1018,6 +1019,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
   });
 
   test("Listen capture persists an atomic finalization boundary with exact replay and rollback", async () => {
+    const deviceClient = await import("../../../../react-native/src/deviceSessionClient");
     const suffix = randomUUID();
     const accountId = `account:listen-qualification:${suffix}`;
     const principalId = `principal:listen-qualification:${suffix}`;
@@ -1790,6 +1792,62 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const fetchedUpload = await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET");
       expect(fetchedUpload.status).toBe(200);
       expect(await fetchedUpload.json()).toMatchObject({ session: { state: "complete", byteCount: audio.length * 2, chunkCount: 2 } });
+
+      let clientProviderCalls = 0;
+      const clientIngress = createPostgresFirebaseDeviceSessionRuntime(ingressOptions, { transcribe: async () => {
+        clientProviderCalls += 1;
+        return { durationSeconds: 1, segments: [{ text: "Actual client wire qualification", start: 0, end: 1 }] };
+      } }, ownershipKey);
+      let clientToken = "device.qa.valid";
+      let lostAcknowledgement: "open" | "audio" | null = "open";
+      const nativeTransport: OmiBackend = {
+        async request(request) {
+          const response = await clientIngress.fetch(new Request(`https://service.example${request.path}`, {
+            method: request.method,
+            headers: { authorization: `Bearer ${clientToken}`, "x-omi-capture-ownership": ownership.receipt, "content-type": "application/json" },
+            ...(request.body === undefined ? {} : { body: request.body }),
+          }));
+          const body = await response.text();
+          if (response.ok && ((lostAcknowledgement === "open" && request.path === "/v1/device-sessions")
+            || (lostAcknowledgement === "audio" && request.path.endsWith("/audio")))) {
+            lostAcknowledgement = null;
+            throw new TypeError("synthetic_lost_committed_acknowledgement");
+          }
+          return { id: request.id, status: response.status, body };
+        },
+        async generationEvents() { throw new Error("unexpected_generation_request"); },
+        async cancelGenerationEvents() { throw new Error("unexpected_generation_request"); },
+      };
+      const clientCapture = { captureId: crypto.randomUUID(), deviceId: "real-rn-client", deviceName: "Protocol fixture", codec: 1 };
+      await expect(deviceClient.openDeviceSession(nativeTransport, clientCapture)).rejects.toBeInstanceOf(TypeError);
+      const clientSession = await deviceClient.openDeviceSession(nativeTransport, clientCapture);
+      expect(await deviceClient.openDeviceSession(nativeTransport, clientCapture)).toEqual(clientSession);
+      const clientPackets = [0, 1].map(sequence => {
+        const packet = Uint8Array.from({ length: 8003 }, (_, index) => index % 256);
+        packet.set([sequence, 0, 0]);
+        return packet;
+      });
+      lostAcknowledgement = "audio";
+      await expect(deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, clientPackets, 0)).rejects.toBeInstanceOf(TypeError);
+      expect(await deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, clientPackets, 0))
+        .toMatchObject({ byteCount: 16006, chunkCount: 2 });
+      const persistedClientPackets = await ownerSql.unsafe<{ chunk_index: number; bytes: string }[]>(
+        "SELECT chunk_index,encode(bytes,'hex') AS bytes FROM omi_memory.listen_capture_audio_chunks WHERE account_id=$1 AND session_id=$2 ORDER BY chunk_index",
+        [accountId, clientSession.id]);
+      expect([...persistedClientPackets]).toEqual(clientPackets.map((packet, chunk_index) => ({ chunk_index, bytes: Buffer.from(packet).toString("hex") })));
+      const changedClientPacket = clientPackets[1]!.slice(); changedClientPacket[3] ^= 255;
+      await expect(deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, [clientPackets[0]!, changedClientPacket], 0))
+        .rejects.toMatchObject({ status: 409 });
+      expect(await deviceClient.completeDeviceSession(nativeTransport, clientSession.id)).toMatchObject({ state: "complete", byteCount: 16006, chunkCount: 2 });
+      expect(await deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, clientPackets, 0)).toMatchObject({ state: "complete", chunkCount: 2 });
+      clientToken = "other.qa.valid";
+      await expect(deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id)).rejects.toMatchObject({ status: 403 });
+      expect(clientProviderCalls).toBe(0);
+      clientToken = "device.qa.valid";
+      const clientTranscript = await deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id);
+      expect(clientTranscript).toEqual({ sessionId: clientSession.id, state: "completed", text: "Actual client wire qualification", discardedLeadingPackets: 0 });
+      expect(await deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id)).toEqual(clientTranscript);
+      expect(clientProviderCalls).toBe(1);
 
       const transcriptions = createPostgresDeviceTranscriptionRepository({ pool: appRolePool });
       const newRecording = async () => {

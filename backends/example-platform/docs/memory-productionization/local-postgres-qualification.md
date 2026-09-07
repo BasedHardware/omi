@@ -42,6 +42,14 @@ binds PostgreSQL to an OS-assigned `127.0.0.1` port, verifies the pinned amd64 i
 PostgreSQL 18 data path, labels, mount, and loopback binding, and prints no credential or
 connection URL.
 
+The real PostgreSQL suite runs from the full Omi v5 checkout: it imports the actual
+recording client and pure transcript parser from `react-native/src` to qualify the
+app wire against the authenticated runtime. Keep that sibling source directory
+when running this gate. Backend-only hermetic test images still skip the real
+database suite without loading the app dependency. The client qualification checks
+lost committed acknowledgements, exact stored audio bytes, conflicting replay,
+account isolation and once-only transcription using a synthetic provider.
+
 `test:postgres:preserve` reapplies checksummed migrations, exercises the real Postgres.js
 transaction adapter, and runs the same client corpus in pinned Bun 1.3.14 and Node
 24.19.0 amd64 containers. It refuses ambient `DATABASE_URL` and `PG*` selectors.

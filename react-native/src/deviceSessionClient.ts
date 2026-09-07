@@ -1,8 +1,8 @@
-import type {NativeHttpResponse, OmiBackend} from './omiNative';
+import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
 import {
   parseRecordingTranscript,
   type RecordingTranscript,
-} from './recordingTranscript';
+} from './recordingTranscriptContract';
 
 export type DeviceSessionRecord = {
   id: string;
