@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { prepareConversationsRead } from "../../apps/service/composition/conversations-read";
-import { registerConversationReadRoutes } from "../../apps/service/routes/conversations";
+import {
+  parseConversationReadWindow,
+  registerConversationReadRoutes,
+} from "../../apps/service/routes/conversations";
 import { createServedCounter } from "../../apps/service/observability/served-count";
 import type { McpCursorSigningKeyset } from "../../apps/mcp/cursor";
 import {
@@ -60,11 +63,14 @@ export function createPostgresFirebaseConversationReadRuntime(
             : failed(403, "forbidden");
         }
         const authority = authorization.context;
+        const window = parseConversationReadWindow(request);
+        if (window === null) return failed(400, "bad_request");
         return await withAuthorizedConversationRead(
           runtime.pool,
           authority,
           request.signal,
-          async (snapshot, now) => {
+          async (metadata, now, storage) => {
+            let snapshot = metadata;
             const owner = (account: string) => {
               if (account !== authority.account_id)
                 throw new TypeError("conversation_owner_mismatch");
@@ -109,6 +115,32 @@ export function createPostgresFirebaseConversationReadRuntime(
                 accountEpoch: authority.account_epoch,
               },
             });
+            const readAuthority = prepared.ports.resolveAttempt();
+            const bindings = prepared.ports.bindingsFor(readAuthority);
+            const digest = createHash("sha256")
+              .update(JSON.stringify(bindings))
+              .digest("hex");
+            const cursorHash = (cursor: string) =>
+              createHash("sha256").update(cursor).digest("hex");
+            try {
+              if (window.cursor !== null)
+                prepared.ports.verifyCursor(window.cursor, bindings);
+              snapshot = await storage.load(
+                window.readLimit,
+                window.cursor === null ? null : cursorHash(window.cursor),
+                digest,
+                metadata.revision
+              );
+            } catch (error) {
+              if (
+                error !== null &&
+                typeof error === "object" &&
+                "code" in error &&
+                error.code === "invalid_cursor"
+              )
+                return failed(400, "bad_request");
+              throw error;
+            }
             const app = new Hono();
             registerConversationReadRoutes(app, {
               store,
@@ -117,7 +149,29 @@ export function createPostgresFirebaseConversationReadRuntime(
               resolvePrincipal: (submitted) =>
                 submitted === token ? { uid: authority.account_id } : null,
             });
-            return app.fetch(request);
+            const response = await app.fetch(request);
+            if (response.status === 200 && !window.legacy) {
+              const page = (await response.clone().json()) as {
+                items: { id: string }[];
+                window: { nextCursor: string | null };
+              };
+              if (page.window.nextCursor !== null) {
+                const last = snapshot.records.find(
+                  (row) =>
+                    row.record.id === page.items[page.items.length - 1]?.id
+                );
+                if (last === undefined)
+                  throw new TypeError("conversation_cursor_position_missing");
+                await storage.save(
+                  cursorHash(page.window.nextCursor),
+                  digest,
+                  metadata.revision,
+                  last.sequence,
+                  now + 900
+                );
+              }
+            }
+            return response;
           }
         );
       } catch {

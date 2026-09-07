@@ -92,6 +92,8 @@ realTest("PostgreSQL deletion-receipt and cleanup-participant qualification", ()
       ]);
     });
 
+    await ownerSql.unsafe("INSERT INTO omi_memory.listen_conversation_cursor_positions(account_id,cursor_hash,binding_digest,revision,sequence,expires_at) VALUES($1,$2,$3,1,1,9999999999)",[accountId,"3".repeat(64),"4".repeat(64)]);
+
     const cleanup = createPostgresDeletionCleanupParticipant(pool);
     await expect(cleanup.withHeldDatabaseFence(
       { account_id: accountId, control_revision: 7, deletion_epoch: 11 },
@@ -131,6 +133,15 @@ realTest("PostgreSQL deletion-receipt and cleanup-participant qualification", ()
       (SELECT count(*)::int FROM omi_memory.account_deletion_surface_receipts WHERE account_id = $1) receipts`,
     [accountId]);
     expect([...counts]).toEqual([{ inputs: 0, receipts: 2 }]);
+    await cleanup.withHeldDatabaseFence(
+      {account_id:accountId,control_revision:7,deletion_epoch:11},
+      'opref1_'+'8'.repeat(64),eligibility,
+      async session => {
+        expect((await session.scanOwned()).find(row => row.surface === "product_projections")?.remaining_count).toBe(1);
+        await session.dispose(["product_projections"]);
+        expect((await session.scanOwned()).find(row => row.surface === "product_projections")?.remaining_count).toBe(0);
+      },
+    );
     const safety = await ownerSql.unsafe<{ controls: number; exports: number }[]>(`SELECT
       (SELECT count(*)::int FROM omi_memory.account_control_revisions WHERE account_id = $1) controls,
       (SELECT count(*)::int FROM omi_memory.account_terminal_deletion_exports WHERE account_id = $1) exports`,
