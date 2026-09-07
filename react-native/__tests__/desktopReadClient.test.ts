@@ -8,6 +8,7 @@ import {
   desktopCloudBaseURL,
   desktopLocalBackendServiceCopy,
   desktopProjectionUnavailableCopy,
+  desktopBackendUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
   desktopRecoveryCopy,
@@ -261,6 +262,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopReadErrorCopy(new Error(desktopBackendForbiddenCopy))).toBe(
     desktopBackendForbiddenCopy,
   );
+  expect(
+    desktopReadErrorCopy(new Error(desktopBackendUnavailableCopy)),
+  ).toBe(desktopBackendUnavailableCopy);
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -618,6 +622,21 @@ test('surfaces typed unavailable projections as truthful retryable copy', async 
     error: desktopProjectionUnavailableCopy,
   });
   expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
+});
+
+test('surfaces nested non-retryable 503s without connection-retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadConversations(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
+  expect(desktopBackendUnavailableCopy).not.toBe(desktopBackendServiceCopy);
 });
 
 test('rejects a malformed page envelope before projecting items', async () => {

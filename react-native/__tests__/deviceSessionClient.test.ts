@@ -4,6 +4,7 @@ import {
   DeviceSessionBackendError,
   openDeviceSession,
   transcribeDeviceSession,
+  isTransientDeviceSessionError,
 } from '../src/deviceSessionClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 
@@ -178,6 +179,54 @@ test('fail-closes when the worker is unavailable', async () => {
       },
     ),
   ).rejects.toBeInstanceOf(DeviceSessionBackendError);
+});
+
+test('does not treat nested non-retryable capture 503s as transient', async () => {
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      })),
+      {
+        captureId: '11111111-2222-4333-8444-555555555555',
+        deviceId: 'omi-1',
+        codec: 21,
+      },
+    ),
+  ).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'development_backend_unsupported',
+    retryable: false,
+  });
+  expect(
+    isTransientDeviceSessionError(
+      new DeviceSessionBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+      ),
+    ),
+  ).toBe(false);
+  expect(
+    isTransientDeviceSessionError(
+      new DeviceSessionBackendError(503, 'capture_ownership_unavailable', true),
+    ),
+  ).toBe(false);
+  expect(
+    isTransientDeviceSessionError(
+      new DeviceSessionBackendError(503, 'service_unavailable', true),
+    ),
+  ).toBe(true);
+  expect(
+    isTransientDeviceSessionError(new DeviceSessionBackendError(503, 'unknown')),
+  ).toBe(true);
 });
 
 test.each([

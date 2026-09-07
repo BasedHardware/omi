@@ -197,6 +197,8 @@ export const desktopLocalBackendServiceCopy =
   'The configured local Omi service is unavailable. Check its connection, then retry.';
 export const desktopProjectionUnavailableCopy =
   'This saved data is not available from the selected Omi service yet. Retry after its persisted projection is connected.';
+export const desktopBackendUnavailableCopy =
+  'This saved data is not available from the selected Omi service yet.';
 export const desktopBackendForbiddenCopy =
   'This saved data is not available for this account.';
 const desktopReadFailureCopy =
@@ -216,6 +218,7 @@ export function desktopRecoveryCopy(
         outcome.error === desktopBackendServiceCopy ||
         outcome.error === desktopLocalBackendServiceCopy ||
         outcome.error === desktopProjectionUnavailableCopy ||
+        outcome.error === desktopBackendUnavailableCopy ||
         outcome.error === desktopBackendForbiddenCopy)
     ) {
       return outcome.error;
@@ -225,6 +228,7 @@ export function desktopRecoveryCopy(
 }
 
 class DesktopProjectionUnavailableError extends Error {}
+class DesktopBackendUnavailableError extends Error {}
 export class ConversationCursorExpiredError extends Error {}
 export class TaskCursorExpiredError extends Error {}
 
@@ -262,6 +266,7 @@ export function desktopReadErrorCopy(error: unknown): string {
       desktopBackendServiceCopy,
       desktopLocalBackendServiceCopy,
       desktopProjectionUnavailableCopy,
+      desktopBackendUnavailableCopy,
       desktopBackendForbiddenCopy,
       desktopReadFailureCopy,
     ].includes(message)
@@ -396,8 +401,16 @@ async function read(
             desktopProjectionUnavailableCopy,
           );
         }
+        if (error.retryable === false) {
+          throw new DesktopBackendUnavailableError(
+            desktopBackendUnavailableCopy,
+          );
+        }
       } catch (error) {
-        if (error instanceof DesktopProjectionUnavailableError) {
+        if (
+          error instanceof DesktopProjectionUnavailableError ||
+          error instanceof DesktopBackendUnavailableError
+        ) {
           throw error;
         }
       }

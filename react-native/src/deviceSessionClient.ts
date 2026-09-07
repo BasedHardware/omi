@@ -19,8 +19,15 @@ export type DeviceSessionRecord = {
 };
 
 export class DeviceSessionBackendError extends Error {
-  constructor(readonly status: number, readonly backendCode: string) {
+  readonly retryable: boolean;
+
+  constructor(
+    readonly status: number,
+    readonly backendCode: string,
+    retryable?: boolean,
+  ) {
     super(`Device session backend failed (${status}:${backendCode})`);
+    this.retryable = retryable ?? status === 503;
   }
 }
 
@@ -86,21 +93,33 @@ function rejectIfUnusable(response: NativeHttpResponse): void {
     return;
   }
   let backendCode = 'unknown';
+  let retryable = response.status === 503;
   try {
     const body = parseObject(response.body);
     const error = body.error;
-    if (
+    if (typeof error === 'string') {
+      backendCode = error;
+    } else if (
       error !== null &&
       typeof error === 'object' &&
-      !Array.isArray(error) &&
-      typeof (error as {code?: unknown}).code === 'string'
+      !Array.isArray(error)
     ) {
-      backendCode = (error as {code: string}).code;
+      const nested = error as {code?: unknown; retryable?: unknown};
+      if (typeof nested.code === 'string') {
+        backendCode = nested.code;
+      }
+      if (typeof nested.retryable === 'boolean') {
+        retryable = nested.retryable;
+      }
     }
   } catch {
     backendCode = 'unknown';
   }
-  throw new DeviceSessionBackendError(response.status, backendCode);
+  throw new DeviceSessionBackendError(
+    response.status,
+    backendCode,
+    retryable,
+  );
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -221,6 +240,13 @@ export async function completeDeviceSession(
 
 export function isTransientDeviceSessionError(error: unknown): boolean {
   if (error instanceof DeviceSessionBackendError) {
+    if (
+      !error.retryable ||
+      error.backendCode === 'capture_ownership_unavailable' ||
+      error.backendCode === 'development_backend_unsupported'
+    ) {
+      return false;
+    }
     return [0, 408, 429, 500, 502, 503, 504].includes(error.status);
   }
   return (
