@@ -104,7 +104,9 @@ Cloud Linux after `8a6bc1b61e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `f167d65b01`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Conversations now exposes Load more through the same `loadMoreConversations` path as mobile, instead of ReadStatus "More conversations are available" with no pager. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load more. Generic later-page failures keep Load more.
 
-Cloud Linux after the desktop memories pager slice: macOS Home showed "More memories are available" with no Memories destination and no pager. Home now pages through `loadMoreMemories`. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load more. Generic later-page failures keep Load more. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `7cfd1cc9ed`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Home now exposes Load more through `loadMoreMemories`, instead of ReadStatus "More memories are available" with no Memories destination and no pager. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load more. Generic later-page failures keep Load more.
+
+Cloud Linux after the task-write door slice: nested `{error:{retryable:false}}` task-write 503s and `OMI_DEV_BACKEND_UNSUPPORTED` throws are permanent, so Retry is omitted. Write-ops `control_unavailable` 503s stay retryable on purpose. Transport throws without that door still retry. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
