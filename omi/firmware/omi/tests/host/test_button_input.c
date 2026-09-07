@@ -21,7 +21,7 @@ static void record_event(enum button_input_event event)
 
 static void reset(bool initially_pressed)
 {
-    gesture = (struct button_gesture) {0};
+    gesture = (struct button_gesture){0};
     input_work.due = INT64_MAX;
     work_at = NO_DEADLINE;
     edge_count = 0;

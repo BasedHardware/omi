@@ -103,7 +103,7 @@ static void advance(int64_t now)
 
 static void reset_gesture(bool pressed, int64_t now)
 {
-    gesture = (struct button_gesture) {.raw_pressed = pressed, .raw_since = now};
+    gesture = (struct button_gesture){.raw_pressed = pressed, .raw_since = now};
 }
 
 static void process_input(struct k_work *work);
@@ -171,7 +171,7 @@ void button_input_edge(bool pressed)
             --edge_count;
         }
         int64_t now = k_uptime_get();
-        edges[edge_count++] = (struct button_edge) {.at = now, .pressed = pressed};
+        edges[edge_count++] = (struct button_edge){.at = now, .pressed = pressed};
         /* Bring a distant hold deadline forward for a release, but preserve an
          * earlier deadline and bound wakeups during bouncing edges. */
         if (now + DEBOUNCE_MS < work_at) {

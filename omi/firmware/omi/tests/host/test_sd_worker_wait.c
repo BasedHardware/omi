@@ -34,8 +34,8 @@ int k_sem_take(struct k_sem *sem, k_timeout_t timeout)
 
 static void reset(void)
 {
-    priority = normal = (struct k_msgq) {0};
-    wake = (struct k_sem) {0};
+    priority = normal = (struct k_msgq){0};
+    wake = (struct k_sem){0};
     connect_flush = 0;
     fake_now = 0;
     waits = 0;
