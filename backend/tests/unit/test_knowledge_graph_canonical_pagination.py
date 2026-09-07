@@ -508,7 +508,7 @@ def test_both_graph_routes_use_canonical_assertions_with_compatible_response_sha
         "rebuild": None,
     }
     assert canonical_response.status_code == 200
-    assert canonical_response.json() == {**canonical_payload, "rebuild": None}
+    assert canonical_response.json() == {**canonical_payload, "rebuild": None, "shared_truncated": False}
 
 
 def test_first_graph_page_merges_the_shared_rebuilt_store_under_canonical(monkeypatch):
@@ -554,7 +554,9 @@ def test_first_graph_page_merges_the_shared_rebuilt_store_under_canonical(monkey
             {"id": "e2", "source_id": "stale", "target_id": "omi", "label": "relates to", "memory_ids": ["m1"]},
         ],
         "authoritative_memory_ids": {"m1"},
-        "truncated": False,
+        # The shared store was cut at its read bound: the first page must say so,
+        # because no later canonical page will carry what was cut.
+        "truncated": True,
     }
     monkeypatch.setattr(kg_db, "get_shared_knowledge_graph", lambda uid, **_kw: shared)
     finished = NOW.replace(minute=5)
@@ -583,8 +585,10 @@ def test_first_graph_page_merges_the_shared_rebuilt_store_under_canonical(monkey
         "started_at": NOW.isoformat(),
         "finished_at": finished.isoformat(),
     }
+    assert first_page["shared_truncated"] is True
     assert [node["id"] for node in later_page["nodes"]] == ["ada"]
     assert later_page["rebuild"] is None
+    assert later_page["shared_truncated"] is False
     assert {node["id"] for node in legacy_shape["nodes"]} == {"ada", "omi"}
     assert legacy_shape["rebuild"]["status"] == "complete"
 
@@ -707,3 +711,47 @@ def test_canonical_graph_fails_after_bounded_revision_retry_exhausted(monkeypatc
         kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
 
     assert revision_reads == 4
+
+
+def test_a_shared_edge_over_a_canonical_relationship_keeps_the_canonical_edge_id():
+    # The client already holds the canonical edge id (selection, inspector
+    # traversal); a rebuild that re-extracts the same relationship adds its
+    # citations under that id rather than renaming the edge to its own.
+    canonical = {
+        "nodes": [
+            {"id": "ada", "label": "Ada", "node_type": "person", "aliases": [], "memory_ids": ["m1"]},
+            {"id": "omi", "label": "Omi", "node_type": "organization", "aliases": [], "memory_ids": ["m1"]},
+        ],
+        "edges": [
+            {"id": "zzz-canonical", "source_id": "ada", "target_id": "omi", "label": "works at", "memory_ids": ["m1"]}
+        ],
+    }
+    shared = {
+        "nodes": [
+            {"id": "ada-2", "label": "ada", "node_type": "person", "aliases": [], "memory_ids": ["conversation:c1"]},
+            {
+                "id": "omi-2",
+                "label": "omi",
+                "node_type": "organization",
+                "aliases": [],
+                "memory_ids": ["conversation:c1"],
+            },
+        ],
+        "edges": [
+            {
+                "id": "aaa-shared",
+                "source_id": "ada-2",
+                "target_id": "omi-2",
+                "label": "works at",
+                "memory_ids": ["conversation:c1"],
+            }
+        ],
+        "authoritative_memory_ids": set(),
+        "truncated": False,
+    }
+
+    merged = kg_db.merge_shared_graph_records(canonical, shared)
+
+    assert [(edge["id"], sorted(edge["memory_ids"])) for edge in merged["edges"]] == [
+        ("zzz-canonical", ["conversation:c1", "m1"])
+    ]

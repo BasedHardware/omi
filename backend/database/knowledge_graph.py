@@ -712,8 +712,21 @@ def merge_shared_graph_records(
     return {'nodes': nodes, 'edges': edges}
 
 
-def write_knowledge_graph_rebuild_status(uid: str, status: Dict[str, Any], *, db_client: Any = None) -> None:
-    """Record where a Brain Map rebuild is, so a client can wait for the one it asked for."""
+def write_knowledge_graph_rebuild_status(
+    uid: str,
+    status: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    only_for_rebuild_id: Optional[str] = None,
+) -> bool:
+    """Record where a Brain Map rebuild is, so a client can wait for the one it asked for.
+
+    Every status carries the ``rebuild_id`` of the rebuild that wrote it. With
+    ``only_for_rebuild_id`` the write is skipped, and ``False`` returned, when
+    the document already belongs to a different rebuild: two rebuilds can run
+    at once (the limit is two an hour), and the earlier one finishing must not
+    overwrite the later one's ``running`` with its own ``complete``.
+    """
     client = _firestore_client(db_client)
     ref = (
         client.collection(users_collection)
@@ -721,7 +734,14 @@ def write_knowledge_graph_rebuild_status(uid: str, status: Dict[str, Any], *, db
         .collection(knowledge_graph_meta_collection)
         .document(KNOWLEDGE_GRAPH_REBUILD_STATUS_DOCUMENT)
     )
+    if only_for_rebuild_id is not None:
+        snapshot = ref.get()
+        current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        current_id = current.get('rebuild_id') if isinstance(current, dict) else None
+        if isinstance(current_id, str) and current_id and current_id != only_for_rebuild_id:
+            return False
     ref.set({**status, 'updated_at': datetime.now(timezone.utc)})
+    return True
 
 
 def read_knowledge_graph_rebuild_status(uid: str, *, db_client: Any = None) -> Optional[Dict[str, Any]]:
@@ -813,9 +833,12 @@ def _merge_edge(
     existing_id = merged.get('id')
     if canonical and isinstance(incoming_id, str) and incoming_id:
         merged['id'] = incoming_id
-    elif isinstance(incoming_id, str) and incoming_id:
-        ids = [item for item in (existing_id, incoming_id) if isinstance(item, str) and item]
-        merged['id'] = min(ids)
+    elif not (isinstance(existing_id, str) and existing_id) and isinstance(incoming_id, str) and incoming_id:
+        # The first edge on a key names it. Canonical edges come first, so a
+        # shared edge over the same relationship keeps the canonical id the
+        # client already knows; between shared edges the sorted iteration
+        # makes the first the lowest id.
+        merged['id'] = incoming_id
     merged['source_id'] = incoming['source_id']
     merged['target_id'] = incoming['target_id']
     merged['label'] = incoming['label']

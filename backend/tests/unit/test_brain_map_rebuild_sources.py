@@ -120,3 +120,71 @@ def test_collect_reads_every_store_through_its_seam():
 
     assert reads == ['memories', 'conversations', 'people', 'goals']
     assert built.counts == {'memories': 1, 'conversations': 1, 'people': 1, 'goals': 1}
+
+
+class _FakeQuery:
+    """The chain `get_conversations` builds, recording what it filters on."""
+
+    def __init__(self, docs, filters):
+        self.docs = docs
+        self.filters = filters
+
+    def where(self, filter):  # noqa: A002 - Firestore's keyword
+        self.filters.append(filter.field_path)
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, _limit):
+        return self
+
+    def offset(self, _offset):
+        return self
+
+    def stream(self):
+        return iter(self.docs)
+
+    # `db.collection('users').document(uid).collection('conversations')`
+    def collection(self, _name):
+        return self
+
+    def document(self, _name):
+        return self
+
+
+def test_the_default_conversation_reader_keeps_legacy_rows_and_names_them_by_document_id(monkeypatch):
+    # Two ways an old account loses its conversations: the store's own
+    # `discarded == False` filter drops every row written before the field
+    # existed, and a row without an `id` field cannot be cited. The default
+    # reader asks for discarded rows and filters them here, and every row is
+    # named by its document id.
+    from database import conversations as conversations_db
+
+    class _Doc:
+        update_time = None
+
+        def __init__(self, doc_id, data):
+            self.id = doc_id
+            self._data = data
+
+        def to_dict(self):
+            return dict(self._data)
+
+    docs = [
+        _Doc('legacy', {'structured': {'title': 'Before the flag'}}),
+        _Doc('kept', {'id': 'kept', 'discarded': False, 'structured': {'title': 'Kept'}}),
+        _Doc('binned', {'id': 'binned', 'discarded': True, 'structured': {'title': 'Binned'}}),
+    ]
+    filters = []
+    monkeypatch.setattr(conversations_db, 'db', _FakeQuery(docs, filters))
+
+    built = sources.collect_brain_map_sources(
+        'uid-1',
+        read_memories=lambda: [],
+        read_people=lambda: [],
+        read_goals=lambda: [],
+    )
+
+    assert 'discarded' not in filters
+    assert [payload['id'] for payload in built.payloads] == ['conversation:legacy', 'conversation:kept']

@@ -117,8 +117,11 @@ flowchart TD
   with entities extracted from the account's conversations, people, goals and
   memories (`utils/memory/brain_map_sources.py`), never touches assertions, and
   the first graph page merges the two with canonical winning. Progress lives at
-  `users/{uid}/knowledge_graph_meta/rebuild` and is returned as `rebuild` on
-  graph reads.
+  `users/{uid}/knowledge_graph_meta/rebuild`, stamped with the `rebuild_id` the
+  rebuild call returned (a finished rebuild never overwrites a later one's
+  status), and is returned as `rebuild` on graph reads; the first canonical
+  page also reports `shared_truncated` when the shared store was cut at its
+  read bound.
 - **Workflow** (`action_items`, `goals`) is extracted from the same seam as Memories but stored
   separately. Long-term may absorb a *fact about* a commitment; the task/goal row stays in workflow.
 - Conversation delete cascades to evidence tombstoning on linked Short-term items (`tombstone_source`).

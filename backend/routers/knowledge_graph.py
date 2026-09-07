@@ -1,6 +1,7 @@
 import importlib
 import logging
 import sys
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -137,12 +138,20 @@ class CanonicalKnowledgeGraphResponse(BaseModel):
     next_cursor: Optional[str] = None
     catalog_nodes: List[Dict[str, Any]] = []
     rebuild: Optional[Dict[str, Any]] = None
+    #: True when the shared rebuilt store merged under the first page was cut
+    #: at its read bound, so the page is missing rebuilt entities that no later
+    #: canonical page will carry.
+    shared_truncated: bool = False
 
 
 class RebuildResponse(BaseModel):
     status: str
     nodes_count: int
     edges_count: int
+    #: Names the rebuild this call started; the same id comes back in the
+    #: ``rebuild`` status on graph reads, so a client waits for its own rebuild
+    #: rather than for any rebuild that finished after it asked.
+    rebuild_id: Optional[str] = None
 
 
 class DeleteKnowledgeGraphResponse(BaseModel):
@@ -193,7 +202,12 @@ def _merged_with_shared_graph(
 
 
 def _rebuild_status_payload(uid: str) -> Optional[Payload]:
-    status = kg_db.read_knowledge_graph_rebuild_status(uid)
+    """The last rebuild's status, or nothing: a graph read never fails on its meta document."""
+    try:
+        status = kg_db.read_knowledge_graph_rebuild_status(uid)
+    except Exception:
+        logger.warning("Brain Map rebuild status unreadable; serving the graph without it", exc_info=True)
+        return None
     if not status:
         return None
     return {
@@ -279,8 +293,9 @@ def get_canonical_knowledge_graph(
     except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
         raise HTTPException(status_code=503, detail='canonical_graph_unavailable') from exc
     nodes, edges = page.nodes, page.edges
+    shared_truncated = False
     if cursor is None:
-        nodes, edges, _shared_truncated = _merged_with_shared_graph(uid, page)
+        nodes, edges, shared_truncated = _merged_with_shared_graph(uid, page)
     return CanonicalKnowledgeGraphResponse(
         nodes=nodes,
         edges=edges,
@@ -288,10 +303,24 @@ def get_canonical_knowledge_graph(
         next_cursor=page.next_cursor,
         catalog_nodes=getattr(page, 'catalog_nodes', []),
         rebuild=_rebuild_status_payload(uid) if cursor is None else None,
+        shared_truncated=shared_truncated,
     )
 
 
-def _rebuild_graph_task(uid: str, user_name: str) -> None:
+def _write_rebuild_status(uid: str, rebuild_id: str, status: Payload, *, db_client: Any) -> None:
+    """Best effort: the status is how a client waits, never a reason for the rebuild to fail."""
+    try:
+        written = kg_db.write_knowledge_graph_rebuild_status(
+            uid, {**status, 'rebuild_id': rebuild_id}, db_client=db_client, only_for_rebuild_id=rebuild_id
+        )
+    except Exception:
+        logger.warning("Brain Map rebuild status could not be written", exc_info=True)
+        return
+    if not written:
+        logger.info("Brain Map rebuild %s finished after a later rebuild took over the status", rebuild_id)
+
+
+def _rebuild_graph_task(uid: str, user_name: str, rebuild_id: Optional[str] = None) -> None:
     """Rebuild the shared graph from everything the account knows.
 
     Only the shared store (``knowledge_nodes``/``knowledge_edges``) is replaced.
@@ -300,22 +329,25 @@ def _rebuild_graph_task(uid: str, user_name: str) -> None:
     two with canonical winning, so a rebuild can only add to what an
     assertion-backed account sees.
     """
+    rebuild_id = rebuild_id or uuid.uuid4().hex
     started_at = datetime.now(timezone.utc)
     client = get_firestore_client()
-    kg_db.write_knowledge_graph_rebuild_status(uid, {'status': 'running', 'started_at': started_at}, db_client=client)
+    _write_rebuild_status(uid, rebuild_id, {'status': 'running', 'started_at': started_at}, db_client=client)
     try:
         sources = collect_brain_map_sources(uid, db_client=client)
         graph = _run_rebuild_knowledge_graph(uid, sources.payloads, user_name)
     except Exception:
         logger.exception("Brain Map rebuild failed")
-        kg_db.write_knowledge_graph_rebuild_status(
+        _write_rebuild_status(
             uid,
+            rebuild_id,
             {'status': 'failed', 'started_at': started_at, 'finished_at': datetime.now(timezone.utc)},
             db_client=client,
         )
         return
-    kg_db.write_knowledge_graph_rebuild_status(
+    _write_rebuild_status(
         uid,
+        rebuild_id,
         {
             'status': 'complete',
             'started_at': started_at,
@@ -337,8 +369,9 @@ def rebuild_graph(
     # No eager delete here: `rebuild_knowledge_graph` clears the shared graph itself
     # once the replacement is fully extracted, so deleting before scheduling only
     # widens the window where the user has no graph and nothing is rebuilding one.
-    background_tasks.add_task(_rebuild_graph_task, uid, user_name)
-    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
+    rebuild_id = uuid.uuid4().hex
+    background_tasks.add_task(_rebuild_graph_task, uid, user_name, rebuild_id)
+    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0, rebuild_id=rebuild_id)
 
 
 @router.post(

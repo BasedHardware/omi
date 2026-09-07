@@ -681,8 +681,15 @@ def get_conversations(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
-    conversations = [conversation for conversation in conversations if conversation is not None]
+    conversations = []
+    for doc in conversations_ref.stream():
+        conversation = _document_data_with_revision(doc)
+        if conversation is None:
+            continue
+        # The document id is the conversation id; a document written without
+        # the field (or with it stripped) is still addressable by every reader.
+        conversation.setdefault('id', doc.id)
+        conversations.append(conversation)
     return conversations
 
 

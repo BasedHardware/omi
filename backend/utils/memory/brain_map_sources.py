@@ -111,7 +111,8 @@ def _conversation_id(conversation: Mapping[str, Any]) -> str:
 
 def _conversation_is_readable(conversation: Mapping[str, Any]) -> bool:
     # Locked and discarded conversations are not the user's picture of
-    # themselves; a deleted one is a tombstone that still has a document.
+    # themselves; a deleted one is a tombstone that still has a document. A
+    # conversation without the flag at all predates it and is readable.
     return not any(conversation.get(flag) for flag in ('discarded', 'deleted', 'is_locked'))
 
 
@@ -203,9 +204,13 @@ def collect_brain_map_sources(
     if read_conversations is None:
         from database import conversations as conversations_db
 
-        # Over-read by a little so locked and tombstoned rows do not eat the budget.
+        # Discarded conversations are filtered here, in `_conversation_is_readable`,
+        # not by the store: its `discarded == False` filter also drops every
+        # conversation written before the field existed, which on an old account
+        # is most of them. Over-read so the discarded, locked and tombstoned rows
+        # do not eat the budget.
         read_conversations = lambda: conversations_db.get_conversations(  # noqa: E731
-            uid, limit=conversation_limit + conversation_limit // 4
+            uid, limit=conversation_limit * 2, include_discarded=True
         )
     if read_people is None:
         from database import users as users_db
