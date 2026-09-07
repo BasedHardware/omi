@@ -157,3 +157,20 @@ async function connectToDevice(deviceId) {
     View source code and contribute
   </Card>
 </CardGroup>
+
+## Running SDK tests
+
+From `sdks/react-native`, install the locked dependencies and run Jest:
+
+```sh
+npm ci --ignore-scripts --no-audit --no-fund
+npm test -- --runInBand
+```
+
+The shared repository check manifest runs the same suite through
+`bash scripts/run-react-native-sdk-tests.sh` from the repository root.
+
+The characteristic regression tests call the SDK's connection and read methods
+with a mocked Bluetooth device. They cover zero and nonzero codec/battery bytes
+and missing payloads without hardware or network access. These tests do not
+replace device validation.
