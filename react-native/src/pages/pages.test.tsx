@@ -119,7 +119,7 @@ test('web Settings loads real service usage without offering a fake sign-in', as
     id: 'service-settings-read',
     status: 200,
     body: JSON.stringify({
-      identity: {displayName: 'Staging name'},
+      identity: {displayName: 'Local QA identity', email: ''},
       entitlement: {limitKey: 'chat', used: 7, limit: 100},
     }),
   });
@@ -132,7 +132,7 @@ test('web Settings loads real service usage without offering a fake sign-in', as
       path: '/v1/settings',
     });
     expect(textOf(renderer)).toContain('7 of 100 requests used');
-    expect(textOf(renderer)).not.toContain('Staging name');
+    expect(textOf(renderer)).toContain('Local QA identity');
     expect(labelsOf(renderer)).not.toContain('Sign in');
     expect(labelsOf(renderer)).not.toContain('Open app permissions');
   } finally {
@@ -174,6 +174,7 @@ test('web Settings hides request details and offers a real retry after failure',
       id: 'service-settings-read',
       status: 200,
       body: JSON.stringify({
+        identity: null,
         entitlement: {limitKey: 'chat', used: 1, limit: null},
       }),
     });
@@ -198,3 +199,77 @@ test('web Settings hides request details and offers a real retry after failure',
     });
   }
 });
+
+test.each([
+  [null, null, 'Usage allowance is unavailable'],
+  [
+    null,
+    {limitKey: 'transcription_seconds', used: 1.5, limit: 3600.5},
+    '1.5 of 3600.5 seconds used',
+  ],
+  [{displayName: 'Local identity', email: ''}, null, 'Local identity'],
+  [
+    null,
+    {limitKey: 'transcription_seconds', used: 90, limit: 3600},
+    '90 of 3600 seconds used',
+  ],
+  [
+    null,
+    {limitKey: 'transcription_seconds', used: 90, limit: null},
+    '90 seconds used',
+  ],
+  [
+    null,
+    {limitKey: 'future_unit', used: 7, limit: 100},
+    'Usage allowance is unavailable',
+  ],
+])(
+  'web Settings preserves nullable projections and allowance units (%s, %s)',
+  async (identity, entitlement, expected) => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+    mockBackend.request.mockResolvedValue({
+      id: 'service-settings-read',
+      status: 200,
+      body: JSON.stringify({identity, entitlement}),
+    });
+    try {
+      const renderer = await renderPage(SettingsPage);
+      expect(textOf(renderer)).toContain(expected as string);
+      expect(textOf(renderer)).not.toContain('Settings could not be loaded');
+      expect(textOf(renderer)).not.toContain('requests used');
+      expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
+  },
+);
+
+test.each([-1, 1.5])(
+  'web Settings rejects malformed chat allowance without inventing zero usage (%s)',
+  async used => {
+    const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+    mockBackend.request.mockResolvedValue({
+      id: 'service-settings-read',
+      status: 200,
+      body: JSON.stringify({
+        identity: null,
+        entitlement: {limitKey: 'chat', used, limit: 100},
+      }),
+    });
+    try {
+      const renderer = await renderPage(SettingsPage);
+      expect(textOf(renderer)).toContain('Settings could not be loaded');
+      expect(textOf(renderer)).not.toContain('0 of 100');
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: originalPlatform,
+      });
+    }
+  },
+);
