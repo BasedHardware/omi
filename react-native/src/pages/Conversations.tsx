@@ -18,6 +18,8 @@ import {
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {RecordingTranscript} from '../ui/RecordingTranscript';
+import {ChatConversationHistory} from '../ui/ChatConversationHistory';
+import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
@@ -385,6 +387,16 @@ export function ConversationsPage({
                       sessionId={selected.id.slice('recording:'.length)}
                       revision={selected.updatedAt ?? undefined}
                     />
+                  )}
+                {selected.source === 'chat' &&
+                  selected.id === MAIN_CHAT_CONVERSATION_ID && (
+                    <ChatConversationHistory key={selected.id} />
+                  )}
+                {selected.source === 'chat' &&
+                  selected.id !== MAIN_CHAT_CONVERSATION_ID && (
+                    <Text style={styles.conversationDetailSummary}>
+                      Chat history for this conversation is not available here.
+                    </Text>
                   )}
               </>
             )}
