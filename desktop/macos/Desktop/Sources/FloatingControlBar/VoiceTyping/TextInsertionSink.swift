@@ -117,7 +117,13 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
       return true
     }
     guard access.readFocusedText()?.target == target else { return false }
-    return clipboardPaste?(text, target) ?? pasteViaClipboard(text, into: target)
+    let pasted = clipboardPaste?(text, target) ?? pasteViaClipboard(text, into: target)
+    if pasted {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "voice_typing", from: "ax_selected_text", to: "clipboard_paste",
+        reason: "policy", outcome: .degraded)
+    }
+    return pasted
   }
 
   var canUndoInsertion: Bool {
@@ -320,7 +326,9 @@ final class AccessibilityDictationTextAccess: DictationTextAccess {
 
   func replaceSelection(_ text: String, in target: TextInsertionTarget) -> Bool {
     guard readFocusedText()?.target == target else { return false }
-    let element = target.elementID.base as! AXUIElement
+    let object = target.elementID.base as AnyObject
+    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return false }
+    let element = unsafeDowncast(object, to: AXUIElement.self)
     return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
   }
 
@@ -328,7 +336,9 @@ final class AccessibilityDictationTextAccess: DictationTextAccess {
     guard readFocusedText()?.target == target else { return false }
     var selection = CFRange(location: range.location, length: range.length)
     guard let value = AXValueCreate(.cfRange, &selection) else { return false }
-    let element = target.elementID.base as! AXUIElement
+    let object = target.elementID.base as AnyObject
+    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return false }
+    let element = unsafeDowncast(object, to: AXUIElement.self)
     return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
   }
 
