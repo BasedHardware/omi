@@ -48,6 +48,7 @@ echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
 echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
 echo "- bash setup.sh android beta   # explicit production-data dogfood build"
+echo "- OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # AOT build that opens from the Home Screen without flutter run"
 echo ""
 
 LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
@@ -55,6 +56,37 @@ LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${LOCAL_DEV_HOST}:8000/}"
 ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
 ANDROID_LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${ANDROID_DEV_HOST}:8000/}"
 BETA_API_BASE_URL="${OMI_BETA_API_BASE_URL:-https://api.omiapi.com/}"
+
+# Maps OMI_MOBILE_BUILD_MODE (debug|profile|release, default debug) to the
+# `flutter run` flag. Debug builds are JIT, and iOS 14+ only lets Flutter
+# tooling start a JIT Dart VM on a physical device: FlutterEngine init returns
+# nil, the storyboard FlutterViewController has no engine, and the first Swift
+# plugin crashes on a nil registrar the moment the app is opened from the Home
+# Screen with `flutter run` gone. profile/release builds are AOT and open on
+# their own, at the cost of hot reload.
+function mobile_build_mode_flag() {
+  local mode="${OMI_MOBILE_BUILD_MODE:-debug}"
+  case "$mode" in
+    debug) ;;
+    profile) echo "--profile" ;;
+    release) echo "--release" ;;
+    *)
+      echo "ERROR: OMI_MOBILE_BUILD_MODE must be debug, profile, or release (got '${mode}')." >&2
+      return 1
+      ;;
+  esac
+}
+
+# Printed when a debug build is about to land on a physical iPhone, so the
+# "works under flutter run, crashes from the Home Screen" symptom is explained
+# before the developer walks away from the Mac with it.
+function warn_ios_debug_build_untethered() {
+  echo "⚠️  Installing a DEBUG build on a physical iPhone. iOS only lets Flutter tooling" >&2
+  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached" >&2
+  echo "   and crashes on launch as soon as you open it from the Home Screen without it." >&2
+  echo "   For a build that opens on its own (no hot reload):" >&2
+  echo "     OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios" >&2
+}
 
 ######################################
 # Generate device suffix from hostname
@@ -275,6 +307,8 @@ function run_build_android() {
       ;;
   esac
   prepare_mobile_build_env "$flavor" "$api_base_url"
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
   local flutter_args=(
     --flavor "$flavor"
     "--dart-define=OMI_APP_PROFILE=$profile"
@@ -282,6 +316,9 @@ function run_build_android() {
   )
   if [[ -n "$emulator_host" ]]; then
     flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$emulator_host")
+  fi
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
   fi
   flutter pub get \
     && dart run build_runner build \
@@ -450,14 +487,26 @@ function run_build_ios() {
     flutter_args+=("$arg")
   done
   check_ios_prerequisites || return 1
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
   local device_id
   device_id=$(select_ios_device) || return 1
-  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" ]] && _ios_device_is_physical "$device_id"; then
+  local physical_device=0
+  if _ios_device_is_physical "$device_id"; then
+    physical_device=1
+  fi
+  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" && "$physical_device" == 1 ]]; then
     echo "⚠️  Building for a physical device with OMI_DEV_HOST unset — the dev backend" >&2
     echo "   will default to 127.0.0.1, which on the device is itself, not this Mac." >&2
     echo "   Set OMI_DEV_HOST to this Mac's LAN or Tailscale address before running" >&2
     echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
     echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
+  fi
+  if [[ -z "$mode_flag" && "$physical_device" == 1 ]]; then
+    warn_ios_debug_build_untethered
   fi
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
