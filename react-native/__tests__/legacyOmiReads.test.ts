@@ -55,6 +55,47 @@ test('old bare conversation array preserves nullable metadata and offset paginat
   );
 });
 
+test('old memories strip namespaced entity prefixes without inventing provenance digests', async () => {
+  const {api} = backend([
+    {
+      id: 'fact',
+      content:
+        'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    title: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    summary: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    searchableText: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    provenance: {
+      label: 'entity:qa:000008',
+      inputDigest: null,
+      outputDigest: null,
+      synthesisVersion: null,
+    },
+  });
+});
+
+test('old empty memory content stays searchable instead of a blank row', async () => {
+  const {api} = backend([
+    {
+      id: 'blank',
+      content: '',
+      created_at: '2026-09-07T00:00:00Z',
+      conversation_id: null,
+    },
+  ]);
+  const result = await loadMemories(api);
+  expect(result.items[0]).toMatchObject({
+    title: '',
+    summary: '',
+    searchableText: 'Memory text unavailable',
+  });
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend([
     {

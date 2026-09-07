@@ -196,7 +196,9 @@ Cloud Linux after `9a64d9027f`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `6ef4dcb9e4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Wide Home search no longer renders untitled processing Listen/recording rows or empty summaries as blank gaps. Those rows use the same visible title and summary fallbacks as Conversations, compact Daily Recaps, and macOS Home. Search still indexes those fallbacks. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact Daily Recaps open slice: compact Home Daily Recaps no longer stay display-only over conversations the Conversations tab already opens. Tapping a recap opens that conversation detail. View All still opens the conversation list. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `b90ec9df4e`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home Daily Recaps no longer stay display-only over conversations the Conversations tab already opens. Tapping a recap opens that conversation detail. View All still opens the conversation list. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the memory visible-text slice: Memories page, macOS memory rows, and wide Home search no longer render empty memory bodies as blank gaps, and old `/v3/memories` namespaced `entity:` prefixes stay out of visible copy. Search indexes that visible text. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

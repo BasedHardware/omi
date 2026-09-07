@@ -984,3 +984,55 @@ test('wide Home search rows keep supplied conversation title and summary', () =>
   expect(tree).not.toContain('Processing conversation…');
   expect(tree).not.toContain('Conversation title unavailable');
 });
+
+test('wide Home search rows keep empty memory text visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-blank-home-search',
+        title: '',
+        summary: '',
+        searchableText: 'Memory text unavailable',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Memory text unavailable');
+  expect(tree).toContain('Synthesized memory with source citations');
+});
+
+test('wide Home search rows strip namespaced memory prefixes', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-entity-home-search',
+        title:
+          'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        summary:
+          'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        searchableText: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: 'entity:qa:000008',
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('qa_memory (observed 2026-07-30T12:00:00.000Z).');
+  expect(tree).not.toContain('entity:qa:000008');
+});

@@ -50,6 +50,16 @@ export function conversationDisplaySummary(item: {
     : 'Conversation summary unavailable';
 }
 
+export function memoryDisplayText(item: {
+  title: string;
+  summary: string;
+}): string {
+  const parsed = parseMemoryText(
+    item.summary !== '' ? item.summary : item.title,
+  );
+  return parsed.body !== '' ? parsed.body : 'Memory text unavailable';
+}
+
 export function conversationGroupLabel(
   value: string,
   nowEpochMilliseconds: number,
@@ -700,10 +710,31 @@ export async function loadMemories(
   cursor: string | null = null,
 ): Promise<DomainRead<MemoryProjection>> {
   if ((await backend.getApiContract?.()) === 'omi') {
-    return loadOmiMemories(
+    const result = await loadOmiMemories(
       path => read(backend, 'desktop-omi-read', path, 'omi'),
       cursor,
     );
+    return {
+      page: result.page,
+      items: result.items.map(item => {
+        const parsed = parseMemoryText(
+          item.summary !== '' ? item.summary : item.title,
+        );
+        return {
+          ...item,
+          title: parsed.body,
+          summary: parsed.body,
+          searchableText: memoryDisplayText({
+            title: parsed.body,
+            summary: parsed.body,
+          }),
+          provenance: {
+            ...item.provenance,
+            label: parsed.provenanceLabel ?? item.provenance.label,
+          },
+        };
+      }),
+    };
   }
   if (cursor !== null && cursor.length === 0) {
     throw new Error('Memory cursor is malformed');
@@ -740,7 +771,10 @@ export async function loadMemories(
       id,
       title: parsedText.body,
       summary: parsedText.body,
-      searchableText: `${parsedText.body}\n${citations.join('\n')}`,
+      searchableText: `${memoryDisplayText({
+        title: parsedText.body,
+        summary: parsedText.body,
+      })}\n${citations.join('\n')}`,
       citations,
       timestamp: optionalTimestamp(item, `Memory ${index} timestamp`),
       provenance: {

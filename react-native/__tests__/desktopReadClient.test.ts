@@ -22,6 +22,7 @@ import {
   loadDesktopReads,
   loadMemories,
   loadTasks,
+  memoryDisplayText,
   parseMemoryText,
   projectionTimestamp,
   taskGroup,
@@ -581,6 +582,22 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
   ).toBe('Morning walk');
+});
+
+test('empty memory text stays visible instead of a blank row', () => {
+  expect(memoryDisplayText({title: '', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(
+    memoryDisplayText({
+      title: 'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+      summary:
+        'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    }),
+  ).toBe('qa_memory (observed 2026-07-30T12:00:00.000Z).');
+  expect(memoryDisplayText({title: 'A walk.', summary: 'A walk.'})).toBe(
+    'A walk.',
+  );
 });
 
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {

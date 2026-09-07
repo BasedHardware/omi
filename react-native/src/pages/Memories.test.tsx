@@ -382,3 +382,48 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
     await act(async () => view.unmount());
   }
 });
+
+test('empty memory bodies stay visible instead of a blank card', async () => {
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('blank'),
+                title: '',
+                summary: '',
+                searchableText: '',
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('Memory text unavailable');
+    expect(
+      view.root.find(
+        node =>
+          node.props.accessibilityLabel === 'Memory: Memory text unavailable',
+      ),
+    ).toBeDefined();
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('unavailable');
+    });
+    expect(textOf(view)).toContain('Memory text unavailable');
+    expect(textOf(view)).not.toContain('No loaded memories match.');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});

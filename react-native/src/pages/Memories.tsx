@@ -11,6 +11,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
   loadMemories,
+  memoryDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type MemoryProjection,
@@ -78,7 +79,9 @@ export function MemoriesPage({
     return normalized === ''
       ? items
       : items.filter(item =>
-          item.searchableText.toLocaleLowerCase().includes(normalized),
+          `${item.searchableText}\n${memoryDisplayText(item)}`
+            .toLocaleLowerCase()
+            .includes(normalized),
         );
   }, [items, query]);
   const loadMore = async () => {
@@ -129,7 +132,7 @@ export function MemoriesPage({
   const renderItem = useCallback(
     ({item}: {item: MemoryProjection}) => (
       <View
-        accessibilityLabel={`Memory: ${item.title}`}
+        accessibilityLabel={`Memory: ${memoryDisplayText(item)}`}
         style={styles.memoryCard}>
         <View style={styles.memoryMetaRow}>
           <Text style={styles.memoryTimestamp}>
@@ -141,7 +144,7 @@ export function MemoriesPage({
               : `${item.citations.length} citations`}
           </Text>
         </View>
-        <Text style={styles.memoryBody}>{item.summary}</Text>
+        <Text style={styles.memoryBody}>{memoryDisplayText(item)}</Text>
         <Text style={styles.memoryProvenance}>Synthesized memory</Text>
       </View>
     ),
