@@ -451,8 +451,14 @@ export function DesktopSettings({
             : 'Sign in'
         }
       />
-      {account?.profile?.name != null ? (
-        <Row copy={account.profile.name} title="Name" />
+      {account?.profile != null ? (
+        <Row
+          copy={account.profile.name ?? 'Name not set on this account.'}
+          title="Name"
+        />
+      ) : null}
+      {account?.profile != null ? (
+        <Row copy={account.profile.uid} title="Account id" />
       ) : null}
       {account?.profile?.company != null ? (
         <Row copy={account.profile.company} title="Company" />
