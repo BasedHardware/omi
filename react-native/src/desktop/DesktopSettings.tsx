@@ -66,16 +66,20 @@ const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 12;
 const PANE_PILL_RADIUS = 14;
 
+type PrivacyWriteKind = 'recording' | 'training' | 'sync';
+
 function Row({
   action,
   actionLabel,
   copy,
+  disabled = false,
   title,
   trailing,
 }: {
   action?: () => void;
   actionLabel?: string;
   copy: string;
+  disabled?: boolean;
   title: string;
   trailing?: React.ReactNode;
 }) {
@@ -90,6 +94,8 @@ function Row({
         <FocusPressable
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
+          accessibilityState={{disabled}}
+          disabled={disabled}
           onPress={action}
           style={({pressed}) => [styles.action, pressed && styles.pressed]}>
           <Text style={styles.actionText}>{actionLabel}</Text>
@@ -209,6 +215,9 @@ export function DesktopSettings({
   >({microphone: 'unknown', notifications: 'unknown', screen: 'unknown'});
   const [account, setAccount] = useState<AccountSettingsSnapshot | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
+    Record<PrivacyWriteKind, boolean>
+  >({recording: true, training: true, sync: true});
   const actionSeqRef = useRef(0);
   const reloadSeqRef = useRef(0);
   const backend = omiBackend;
@@ -267,6 +276,7 @@ export function DesktopSettings({
   const runAction = (
     action: () => Promise<void>,
     failure = 'Settings change could not be saved. Try again.',
+    writeKind?: PrivacyWriteKind,
   ) => {
     const seq = ++actionSeqRef.current;
     setActionStatus('Saving settings…');
@@ -281,6 +291,12 @@ export function DesktopSettings({
           setActionStatus(
             cloudErrorCanRetry(reason) ? failure : desktopReadErrorCopy(reason),
           );
+          if (writeKind !== undefined && !cloudErrorCanRetry(reason)) {
+            setPrivacyWritesAvailable(current => ({
+              ...current,
+              [writeKind]: false,
+            }));
+          }
         }
       },
     );
@@ -579,17 +595,22 @@ export function DesktopSettings({
           backend != null &&
           typeof account?.storeRecordingPermission === 'boolean'
             ? () => {
-                runAction(async () => {
-                  await setStoreRecordingPermission(
-                    backend,
-                    !(account?.storeRecordingPermission ?? false),
-                  );
-                  await reload();
-                });
+                runAction(
+                  async () => {
+                    await setStoreRecordingPermission(
+                      backend,
+                      !(account?.storeRecordingPermission ?? false),
+                    );
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'recording',
+                );
               }
             : undefined
         }
         actionLabel="Update"
+        disabled={!privacyWritesAvailable.recording}
       />
       <Row
         copy={
@@ -610,17 +631,22 @@ export function DesktopSettings({
           backend != null &&
           typeof account?.privateCloudSync === 'boolean'
             ? () => {
-                runAction(async () => {
-                  await setPrivateCloudSync(
-                    backend,
-                    !(account?.privateCloudSync ?? false),
-                  );
-                  await reload();
-                });
+                runAction(
+                  async () => {
+                    await setPrivateCloudSync(
+                      backend,
+                      !(account?.privateCloudSync ?? false),
+                    );
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'sync',
+                );
               }
             : undefined
         }
         actionLabel="Update"
+        disabled={!privacyWritesAvailable.sync}
       />
       <Row
         copy={
@@ -640,14 +666,19 @@ export function DesktopSettings({
           backend != null &&
           account?.trainingOptedIn === false
             ? () => {
-                runAction(async () => {
-                  await optInTrainingData(backend);
-                  await reload();
-                });
+                runAction(
+                  async () => {
+                    await optInTrainingData(backend);
+                    await reload();
+                  },
+                  'Settings change could not be saved. Try again.',
+                  'training',
+                );
               }
             : undefined
         }
         actionLabel="Opt in"
+        disabled={!privacyWritesAvailable.training}
       />
     </>
   );

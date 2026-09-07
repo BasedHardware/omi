@@ -642,6 +642,92 @@ test('nested non-retryable Apps enable writes latch Install', async () => {
   ).toBe(true);
 });
 
+test('nested non-retryable training opt-in writes latch Opt in', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/training-data-opt-in') {
+      if (request.method === 'POST') {
+        return {
+          id: request.id,
+          status: 503,
+          body: JSON.stringify({
+            error: {
+              code: 'development_backend_unsupported',
+              retryable: false,
+              action: 'none',
+            },
+          }),
+        };
+      }
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({opted_in: false}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Privacy settings')
+      .props.onPress();
+  });
+  expect(labelsOf(renderer)).toContain('Opt in');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain(
+    'This account setting is not available from the selected Omi service yet.',
+  );
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(true);
+});
+
+test('omitted training opt-in 503 still keeps Opt in live', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/training-data-opt-in') {
+      if (request.method === 'POST') {
+        return {
+          id: request.id,
+          status: 503,
+          body: '{"error":"service_unavailable"}',
+        };
+      }
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({opted_in: false}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Privacy settings')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Opt in')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(false);
+});
+
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
   const previous = Platform.OS;
   Object.defineProperty(Platform, 'OS', {value: 'web', configurable: true});

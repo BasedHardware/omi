@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import {
+  cloudErrorCanRetry,
   cloudSessionUnavailableCopy,
   loadAccountSettings,
   loadServiceSettings,
@@ -34,17 +35,25 @@ import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
 
+type PrivacyWriteKind = 'recording' | 'training' | 'sync';
+
+function isPrivacyWriteKind(id: string): id is PrivacyWriteKind {
+  return id === 'recording' || id === 'training' || id === 'sync';
+}
+
 function SettingRow({
   action,
   actionLabel,
   busy = false,
   copy,
+  disabled = false,
   title,
 }: {
   action?: () => void;
   actionLabel?: string;
   busy?: boolean;
   copy: string;
+  disabled?: boolean;
   title: string;
 }) {
   return (
@@ -57,7 +66,8 @@ function SettingRow({
         <FocusPressable
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
-          disabled={busy}
+          accessibilityState={{disabled: busy || disabled}}
+          disabled={busy || disabled}
           onPress={action}
           style={({pressed}) => [
             styles.cloudAction,
@@ -147,6 +157,9 @@ export function SettingsPage({
   );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [privacyWritesAvailable, setPrivacyWritesAvailable] = useState<
+    Record<PrivacyWriteKind, boolean>
+  >({recording: true, training: true, sync: true});
   const [softwarePlane, setSoftwarePlane] = useState<SoftwarePlane | null>(
     null,
   );
@@ -297,6 +310,9 @@ export function SettingsPage({
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
+      if (isPrivacyWriteKind(id) && !cloudErrorCanRetry(reason)) {
+        setPrivacyWritesAvailable(current => ({...current, [id]: false}));
+      }
     } finally {
       setPending(null);
     }
@@ -419,6 +435,7 @@ export function SettingsPage({
                 : 'Turn on recording storage'
             }
             busy={pending === 'recording'}
+            disabled={!privacyWritesAvailable.recording}
             copy={
               snapshot.storeRecordingPermission
                 ? 'Cloud recording storage is on.'
@@ -448,6 +465,7 @@ export function SettingsPage({
             }
             actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
             busy={pending === 'training'}
+            disabled={!privacyWritesAvailable.training}
             copy={
               snapshot.trainingOptedIn
                 ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
@@ -478,6 +496,7 @@ export function SettingsPage({
                 : 'Turn on private cloud sync'
             }
             busy={pending === 'sync'}
+            disabled={!privacyWritesAvailable.sync}
             copy={
               snapshot.privateCloudSync
                 ? 'Private cloud sync is on.'

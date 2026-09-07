@@ -1811,7 +1811,7 @@ test('nested non-retryable account setting writes omit Try again', async () => {
     subscriptionError: null,
     storeRecordingPermission: false,
     storeRecordingError: null,
-    trainingOptedIn: null,
+    trainingOptedIn: false,
     trainingError: null,
     privateCloudSync: false,
     privateCloudSyncError: null,
@@ -1849,6 +1849,15 @@ test('nested non-retryable account setting writes omit Try again', async () => {
   expect(renderedText(renderer)).not.toContain(
     'Settings change could not be saved. Try again.',
   );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Update',
+    )[0]!.props.disabled,
+  ).toBe(true);
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(false);
 });
 
 test('nested non-retryable training opt-in writes omit Try again', async () => {
@@ -1903,6 +1912,10 @@ test('nested non-retryable training opt-in writes omit Try again', async () => {
   expect(renderedText(renderer)).not.toContain(
     'Settings change could not be saved. Try again.',
   );
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
+      .disabled,
+  ).toBe(true);
 });
 
 test('Settings AI does not claim developer webhooks unavailable while account is loading', async () => {
