@@ -76,8 +76,8 @@ class Renderer:
         elif isinstance(data, Mapping):
             self._emit_mapping(data, title=title)
         else:
-            # Scalars or anything else — just print.
-            self._stdout.print(data)
+            # Scalars or anything else — print as literal text, not markup.
+            self._stdout.print(escape(_stringify(data)))
 
     def _emit_json(self, data: Any) -> None:
         # Use sys.stdout directly to avoid Rich coloring/wrapping the JSON.
@@ -103,7 +103,8 @@ class Renderer:
         for col in cols:
             table.add_column(col)
         for row in rows:
-            table.add_row(*[_stringify(row.get(c)) for c in cols])
+            # API data must render literally: escape Rich markup characters.
+            table.add_row(*[escape(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
@@ -111,7 +112,8 @@ class Renderer:
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
-            table.add_row(k, _stringify(v))
+            # API data must render literally: escape Rich markup characters.
+            table.add_row(escape(str(k)), escape(_stringify(v)))
         self._stdout.print(table)
 
     # ------------------------------------------------------------------

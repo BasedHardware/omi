@@ -89,3 +89,37 @@ def test_no_color_env_disables_color(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     # No ANSI codes when NO_COLOR is set.
     assert "\x1b[" not in captured.err
+
+
+# --- Regression tests for issue #12959: API data must render literally ---
+
+MARKUP_CONTENT = "Remember [bold]literal[/bold]"
+UNSAFE_CONTENT = "Remember [/bold]"
+
+
+def test_pretty_memory_content_preserves_literal_markup_tags(capsys) -> None:
+    renderer = Renderer(json_mode=False, no_color=True)
+    renderer.emit({"id": "m1", "content": MARKUP_CONTENT})
+    captured = capsys.readouterr()
+    assert MARKUP_CONTENT in captured.out
+
+
+def test_pretty_memory_content_with_invalid_markup_does_not_crash(capsys) -> None:
+    renderer = Renderer(json_mode=False, no_color=True)
+    renderer.emit({"id": "m1", "content": UNSAFE_CONTENT})
+    captured = capsys.readouterr()
+    assert UNSAFE_CONTENT in captured.out
+
+
+def test_pretty_table_cell_preserves_literal_markup_tags(capsys) -> None:
+    renderer = Renderer(json_mode=False, no_color=True)
+    renderer.emit([{"id": "m1", "content": MARKUP_CONTENT}], columns=["id", "content"], title="memories")
+    captured = capsys.readouterr()
+    assert MARKUP_CONTENT in captured.out
+
+
+def test_pretty_table_cell_with_invalid_markup_does_not_crash(capsys) -> None:
+    renderer = Renderer(json_mode=False, no_color=True)
+    renderer.emit([{"id": "m1", "content": UNSAFE_CONTENT}], columns=["id", "content"], title="memories")
+    captured = capsys.readouterr()
+    assert UNSAFE_CONTENT in captured.out
