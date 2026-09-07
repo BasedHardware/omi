@@ -396,3 +396,34 @@ test('retryable later task pages still claim more are available', () => {
   expect(onLoadMore).toHaveBeenCalledTimes(1);
   act(() => renderer.unmount());
 });
+
+test('nested non-retryable later task pages do not claim more are available in an empty search', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={pagedOutcome}
+        loading={false}
+        taskNotice={desktopBackendUnavailableCopy}
+        taskPagination={
+          <TaskPagination
+            hasMore={false}
+            busy={false}
+            notice={desktopBackendUnavailableCopy}
+            onLoadMore={jest.fn()}
+          />
+        }
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('nomatch');
+  });
+  const copy = taskPageText(renderer);
+  expect(copy).toContain('No loaded tasks match.');
+  expect(copy).toContain(desktopBackendUnavailableCopy);
+  expect(copy).not.toContain('More tasks are available.');
+  act(() => renderer.unmount());
+});

@@ -191,6 +191,7 @@ export function MemoriesPage({
                   filtering,
                   'No loaded memories match.',
                   'No memories yet.',
+                  loadMoreError === desktopBackendUnavailableCopy,
                 )}
               </Text>
               {filtering && (

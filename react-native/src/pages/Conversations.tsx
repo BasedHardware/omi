@@ -281,6 +281,7 @@ export function ConversationsPage({
                     filtering,
                     'No loaded conversations match.',
                     'No conversations yet.',
+                    notice === desktopBackendUnavailableCopy,
                   )}
                 </Text>
                 {filtering && (

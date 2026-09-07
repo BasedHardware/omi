@@ -41,9 +41,14 @@ export function emptyLibraryCopy(
   filtering: boolean,
   filteredCopy: string,
   emptyCopy: string,
+  continueUnavailable = false,
 ): string {
   if (page !== null) {
-    const coverage = readStatusCopy(label, page);
+    const coverage = readStatusCopy(
+      label,
+      page,
+      filtering && continueUnavailable,
+    );
     if (coverage !== null) {
       return coverage;
     }

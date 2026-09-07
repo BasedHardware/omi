@@ -133,6 +133,7 @@ export function TasksPage({
               filtering,
               'No loaded tasks match.',
               'No tasks yet.',
+              taskNotice === desktopBackendUnavailableCopy,
             )}
           </Text>
           {filtering && (

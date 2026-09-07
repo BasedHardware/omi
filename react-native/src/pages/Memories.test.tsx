@@ -325,6 +325,15 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
         node => node.props.accessibilityLabel === 'Load more memories',
       ),
     ).toHaveLength(0);
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('nomatch');
+    });
+    expect(textOf(view)).toContain('No loaded memories match.');
+    expect(textOf(view)).not.toContain('More memories are available.');
   } finally {
     await act(async () => view.unmount());
   }

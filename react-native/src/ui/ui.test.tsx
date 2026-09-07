@@ -664,6 +664,43 @@ test('empty library copy keeps completeness instead of claiming emptiness', () =
       'No memories yet.',
     ),
   ).toBe('Memories may be temporarily incomplete.');
+  const more = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      true,
+      'No loaded tasks match.',
+      'No tasks yet.',
+      true,
+    ),
+  ).toBe('No loaded tasks match.');
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      true,
+      'No loaded tasks match.',
+      'No tasks yet.',
+    ),
+  ).toBe('More tasks are available.');
+  expect(
+    emptyLibraryCopy(
+      'Tasks',
+      more,
+      false,
+      'No loaded tasks match.',
+      'No tasks yet.',
+      true,
+    ),
+  ).toBe('More tasks are available.');
 });
 
 test('coverage copy wins over a complete Home search miss', () => {

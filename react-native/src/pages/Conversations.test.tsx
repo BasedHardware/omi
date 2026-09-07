@@ -275,3 +275,58 @@ test('retryable conversation reads still offer Refresh', () => {
     ).length,
   ).toBeGreaterThan(0);
 });
+
+test('nested non-retryable later conversation pages do not claim more are available in an empty search', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:processing-one',
+    title: 'Processing conversation…',
+    summary: 'Conversation summary is not ready yet.',
+    searchableText:
+      'Processing conversation…\nConversation summary is not ready yet.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'processing',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              windowStatus: 'more',
+              complete: false,
+              hasMore: true,
+              nextCursor: 'conversations-next',
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+        notice={desktopBackendUnavailableCopy}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('nomatch');
+  });
+  expect(textOf(renderer)).toContain('No loaded conversations match.');
+  expect(textOf(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(textOf(renderer)).not.toContain('More conversations are available.');
+});
