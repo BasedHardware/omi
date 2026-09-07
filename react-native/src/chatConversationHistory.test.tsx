@@ -129,11 +129,7 @@ async function renderPage(items: ConversationProjection[]) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = ReactTestRenderer.create(
-      <ConversationsPage
-        outcome={outcome(items)}
-        loading={false}
-        embedded
-      />,
+      <ConversationsPage outcome={outcome(items)} loading={false} embedded />,
     );
   });
   renderers.push(renderer);
@@ -168,6 +164,11 @@ test('opens chat:chat-main into persisted messages instead of a title-only detai
 });
 
 test('does not load main chat history for another chat session id', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {id: 'human-alpha', text: 'other session', sender: 'human'},
+    ]),
+  );
   const renderer = await renderPage([
     conversation({id: 'chat:session-alpha', title: 'Other session'}),
   ]);
@@ -179,11 +180,16 @@ test('does not load main chat history for another chat session id', async () => 
       )[0]!
       .props.onPress(),
   );
-  expect(mockRequest).not.toHaveBeenCalled();
-  expect(textOf(renderer)).toContain(
+  expect(mockRequest).toHaveBeenCalledWith({
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages?limit=50&chatSessionId=session-alpha',
+  });
+  expect(textOf(renderer)).toContain('You · other session');
+  expect(textOf(renderer)).not.toContain(
     'Chat history for this conversation is not available here.',
   );
-  expect(textOf(renderer)).not.toContain('You ·');
 });
 
 test('shows typed chat grant denial instead of an empty message list', async () => {
@@ -199,9 +205,7 @@ test('shows typed chat grant denial instead of an empty message list', async () 
       )[0]!
       .props.onPress(),
   );
-  expect(textOf(renderer)).toContain(
-    'Chat is not available for this account.',
-  );
+  expect(textOf(renderer)).toContain('Chat is not available for this account.');
   expect(textOf(renderer)).toContain('Check again');
   expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
   expect(textOf(renderer)).not.toContain('You ·');
@@ -257,10 +261,13 @@ test('keeps an honest empty chat page instead of inventing a completed answer', 
 test('loads older main-chat pages instead of dropping persisted history', async () => {
   mockRequest
     .mockResolvedValueOnce(
-      historyResponse([{id: 'human-2', text: 'newer prompt', sender: 'human'}], {
-        olderCursor: 'older-1',
-        hasOlder: true,
-      }),
+      historyResponse(
+        [{id: 'human-2', text: 'newer prompt', sender: 'human'}],
+        {
+          olderCursor: 'older-1',
+          hasOlder: true,
+        },
+      ),
     )
     .mockResolvedValueOnce(
       historyResponse(
@@ -299,4 +306,46 @@ test('loads older main-chat pages instead of dropping persisted history', async 
       node => node.props.accessibilityLabel === 'Load older messages',
     ),
   ).toHaveLength(0);
+});
+
+test('loads older pages for a named chat session without mixing main history', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse([{id: 'human-2', text: 'newer named', sender: 'human'}], {
+        olderCursor: 'older-named',
+        hasOlder: true,
+      }),
+    )
+    .mockResolvedValueOnce(
+      historyResponse([{id: 'human-1', text: 'older named', sender: 'human'}], {
+        olderCursor: null,
+        hasOlder: false,
+      }),
+    );
+  const renderer = await renderPage([
+    conversation({id: 'chat:session-alpha', title: 'Other session'}),
+  ]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Other session',
+      )[0]!
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(mockRequest).toHaveBeenNthCalledWith(2, {
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages?limit=50&olderCursor=older-named&chatSessionId=session-alpha',
+  });
+  expect(textOf(renderer)).toContain('You · older named');
+  expect(textOf(renderer)).toContain('You · newer named');
 });

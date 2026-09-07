@@ -28,6 +28,7 @@ import {
   createSqliteLocalServiceStores,
   SqliteChatMessagesStore,
 } from "../../../drivers/sqlite/service-stores";
+import { parseHistoryQuery } from "./chat-messages";
 
 const ACCOUNT = "chat-account";
 const AUTHORIZATION = (token: string): HeadersInit => ({ authorization: `Bearer ${token}` });
@@ -119,6 +120,32 @@ describe("ratified /v1/chat-messages route", () => {
       },
       generation: { id: expect.any(String) },
     });
+    db.close();
+  });
+
+  test("history GET rejects chatSessionId instead of returning main history", async () => {
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+    ))).toBeNull();
+    const { db, local } = bootInMemory();
+    expect((await post(local, payload("main-only", 1))).status).toBe(201);
+    const response = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    const main = await local.app.request("/v1/chat-messages?limit=50", {
+      headers: AUTHORIZATION(local.devToken),
+    });
+    expect(main.status).toBe(200);
+    expect(
+      ((await main.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["main-only"]);
     db.close();
   });
 

@@ -19,7 +19,6 @@ import {
 import {FocusPressable} from '../ui/Pressable';
 import {RecordingTranscript} from '../ui/RecordingTranscript';
 import {ChatConversationHistory} from '../ui/ChatConversationHistory';
-import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
@@ -394,11 +393,18 @@ export function ConversationsPage({
                     />
                   )}
                 {selected.source === 'chat' &&
-                  selected.id === MAIN_CHAT_CONVERSATION_ID && (
-                    <ChatConversationHistory key={selected.id} />
+                  selected.id.startsWith('chat:') &&
+                  selected.id.length > 'chat:'.length && (
+                    <ChatConversationHistory
+                      key={selected.id}
+                      conversationId={selected.id}
+                    />
                   )}
                 {selected.source === 'chat' &&
-                  selected.id !== MAIN_CHAT_CONVERSATION_ID && (
+                  !(
+                    selected.id.startsWith('chat:') &&
+                    selected.id.length > 'chat:'.length
+                  ) && (
                     <Text style={styles.conversationDetailSummary}>
                       Chat history for this conversation is not available here.
                     </Text>

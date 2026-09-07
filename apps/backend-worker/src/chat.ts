@@ -182,20 +182,38 @@ export async function readHistory(
   db: D1Database,
   accountId: string,
   limit: number,
-  olderCursor?: string
+  olderCursor?: string,
+  chatSessionId?: string
 ): Promise<HistoryResult> {
   const boundary = olderCursor === undefined ? null : decodeCursor(olderCursor);
   if (olderCursor !== undefined && boundary === null) return "invalid_cursor";
+  const sessionFilter = chatSessionId ?? null;
 
   const result = await db
     .prepare(
       `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
-       FROM chat_messages
-       WHERE account_id = ? AND (? IS NULL OR position < ?)
+       FROM (
+         SELECT id, text, sender, created_at, generation_outcome, position, payload,
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END)
+            WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
+         FROM chat_messages WHERE account_id = ?
+       ) AS normalized
+       WHERE (? IS NULL OR position < ?)
+         AND CASE WHEN ? IS NULL
+           THEN NOT (typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0)
+           ELSE typeof(session_key) = 'text' AND length(CAST(session_key AS BLOB)) > 0 AND session_key = ?
+         END
        ORDER BY position DESC
        LIMIT ?`
     )
-    .bind(accountId, boundary, boundary, limit + 1)
+    .bind(
+      accountId,
+      boundary,
+      boundary,
+      sessionFilter,
+      sessionFilter,
+      limit + 1
+    )
     .all<StoredMessage>();
 
   const rows = result.results;

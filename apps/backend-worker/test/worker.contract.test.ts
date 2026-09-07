@@ -869,6 +869,36 @@ describe("worker request contract", () => {
     });
     expect(page.absence).toBeNull();
 
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-one", "main-two"]);
+
+    const sessionHistory = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(sessionHistory.status).toBe(200);
+    expect(
+      (
+        (await sessionHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["session-one"]);
+
+    const missingHistory = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-missing",
+      { headers: authenticatedHeaders }
+    );
+    expect(missingHistory.status).toBe(200);
+    expect(
+      ((await missingHistory.json()) as { messages: unknown[] }).messages
+    ).toEqual([]);
+
     const legacy = await fetchWorker("/v1/conversations?limit=50&offset=0", {
       headers: authenticatedHeaders,
     });
@@ -1018,9 +1048,13 @@ describe("worker request contract", () => {
         headers: authenticatedHeaders,
       }
     );
+    const emptySession = await fetchWorker("/v1/chat-messages?chatSessionId=", {
+      headers: authenticatedHeaders,
+    });
 
     expect(invalidLimit.status).toBe(400);
     expect(unsupportedCursor.status).toBe(400);
+    expect(emptySession.status).toBe(400);
     expect(accountCalls).toEqual([]);
   });
 
@@ -1076,9 +1110,19 @@ describe("worker request contract", () => {
     const unknown = await fetchWorker("/v1/chat-messages?extra=1", {
       headers: authenticatedHeaders,
     });
+    const repeatedSession = await fetchWorker(
+      "/v1/chat-messages?chatSessionId=a&chatSessionId=b",
+      { headers: authenticatedHeaders }
+    );
+    const overlongSession = await fetchWorker(
+      `/v1/chat-messages?chatSessionId=${"s".repeat(129)}`,
+      { headers: authenticatedHeaders }
+    );
 
     expect(repeated.status).toBe(400);
     expect(unknown.status).toBe(400);
+    expect(repeatedSession.status).toBe(400);
+    expect(overlongSession.status).toBe(400);
   });
 
   test("pagination cursor survives a strict atob implementation (WHATWG/V8)", async () => {

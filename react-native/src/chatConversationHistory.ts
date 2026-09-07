@@ -12,6 +12,19 @@ import {omiBackend, subscribeOmiBackendSessionInvalidated} from './omiNative';
 
 export const MAIN_CHAT_CONVERSATION_ID = 'chat:chat-main';
 
+export function chatHistorySessionId(
+  conversationId: string,
+): string | undefined {
+  if (
+    conversationId === MAIN_CHAT_CONVERSATION_ID ||
+    !conversationId.startsWith('chat:')
+  ) {
+    return undefined;
+  }
+  const sessionId = conversationId.slice('chat:'.length);
+  return sessionId.length === 0 ? undefined : sessionId;
+}
+
 type ChatHistoryRead =
   | {status: 'idle'}
   | {status: 'loading'}
@@ -23,7 +36,10 @@ type ChatHistoryRead =
       hasOlder: boolean;
     };
 
-export function useChatConversationHistory(active: boolean) {
+export function useChatConversationHistory(
+  active: boolean,
+  conversationId: string,
+) {
   const [result, setResult] = useState<ChatHistoryRead>({status: 'idle'});
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [reload, setReload] = useState(0);
@@ -64,7 +80,10 @@ export function useChatConversationHistory(active: boolean) {
         if (omiBackend == null) {
           throw new Error('Native transport unavailable');
         }
-        const page = await loadNewestChatHistory(omiBackend);
+        const page = await loadNewestChatHistory(
+          omiBackend,
+          chatHistorySessionId(conversationId),
+        );
         if (!alive || epoch.current !== current) {
           return;
         }
@@ -88,7 +107,7 @@ export function useChatConversationHistory(active: boolean) {
     return () => {
       alive = false;
     };
-  }, [active, reload]);
+  }, [active, reload, conversationId]);
   return {
     result,
     loadingOlder,
@@ -108,7 +127,11 @@ export function useChatConversationHistory(active: boolean) {
         if (omiBackend == null) {
           throw new Error('Native transport unavailable');
         }
-        const page = await loadOlderChatHistory(omiBackend, cursor);
+        const page = await loadOlderChatHistory(
+          omiBackend,
+          cursor,
+          chatHistorySessionId(conversationId),
+        );
         if (epoch.current !== current) {
           return;
         }

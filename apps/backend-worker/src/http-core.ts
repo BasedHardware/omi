@@ -452,15 +452,25 @@ export async function handleChatHistory(
 ): Promise<Response> {
   const query = new URL(context.req.url).searchParams;
   if (
-    [...query.keys()].some((key) => key !== "limit" && key !== "olderCursor") ||
+    [...query.keys()].some(
+      (key) =>
+        key !== "limit" && key !== "olderCursor" && key !== "chatSessionId"
+    ) ||
     query.getAll("limit").length > 1 ||
-    query.getAll("olderCursor").length > 1
+    query.getAll("olderCursor").length > 1 ||
+    query.getAll("chatSessionId").length > 1
   ) {
     return backendError("bad_request", "edit_request", 400);
   }
   const limit = parseLimit(query.get("limit") ?? undefined);
   const olderCursor = query.get("olderCursor") ?? undefined;
-  if (limit === null || olderCursor === "")
+  const chatSessionId = query.get("chatSessionId") ?? undefined;
+  if (
+    limit === null ||
+    olderCursor === "" ||
+    chatSessionId === "" ||
+    (chatSessionId !== undefined && chatSessionId.length > 128)
+  )
     return backendError("bad_request", "edit_request", 400);
   const db = context.env.DB;
   if (db === undefined)
@@ -469,7 +479,8 @@ export async function handleChatHistory(
     db,
     context.get("accountId"),
     limit,
-    olderCursor
+    olderCursor,
+    chatSessionId
   );
   return history === "invalid_cursor"
     ? backendError("bad_request", "edit_request", 400)

@@ -195,6 +195,43 @@ describe("D1-authoritative chat persistence", () => {
     expect(body.messages[0]!.sender).toBe("human");
   });
 
+  test("history GET stays on the main session unless chatSessionId is requested", async () => {
+    await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("d1-main-session", "main prompt")),
+    });
+    await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("d1-named-session", "named prompt"),
+        chatSessionId: "session-alpha",
+      }),
+    });
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    expect(
+      ((await main.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id
+      )
+    ).toEqual(["d1-main-session"]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    expect(
+      (
+        (await named.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["d1-named-session"]);
+  });
+
   test("idempotent replay returns the same message without duplicating D1 rows", async () => {
     const init = {
       method: "POST",

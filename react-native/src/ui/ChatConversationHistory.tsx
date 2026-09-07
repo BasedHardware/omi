@@ -4,9 +4,15 @@ import {useChatConversationHistory} from '../chatConversationHistory';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
-export function ChatConversationHistory() {
-  const {result, reload, loadingOlder, loadOlder} =
-    useChatConversationHistory(true);
+export function ChatConversationHistory({
+  conversationId,
+}: {
+  conversationId: string;
+}) {
+  const {result, reload, loadingOlder, loadOlder} = useChatConversationHistory(
+    true,
+    conversationId,
+  );
   return (
     <View style={styles.conversationDetailFields}>
       <Text accessibilityRole="header" style={styles.resultTitle}>
@@ -59,7 +65,9 @@ export function ChatConversationHistory() {
               key={message.id}
               selectable
               style={styles.conversationTranscriptText}>
-              {`${message.sender === 'human' ? 'You' : 'Omi'} · ${message.text}`}
+              {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
+                message.text
+              }`}
             </Text>
           ))}
         </>

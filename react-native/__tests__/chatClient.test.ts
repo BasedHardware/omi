@@ -78,6 +78,50 @@ test('loads main Chat history through the native boundary', async () => {
   expect(requests[0].path).toBe('/v1/chat-messages?limit=50');
 });
 
+test('loads named chat session history without mixing the main session', async () => {
+  const requests: NativeHttpRequest[] = [];
+  const backend = {
+    request: async (request: NativeHttpRequest) => {
+      requests.push(request);
+      return {
+        id: request.id,
+        status: 200,
+        body: historyBody([]),
+      };
+    },
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await loadNewestChatHistory(backend, 'session-alpha');
+  await loadOlderChatHistory(backend, 'opaque/+ cursor=', 'session-alpha');
+  expect(requests[0].path).toBe(
+    '/v1/chat-messages?limit=50&chatSessionId=session-alpha',
+  );
+  expect(requests[1].path).toBe(
+    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(
+      'opaque/+ cursor=',
+    )}&chatSessionId=session-alpha`,
+  );
+});
+
+test('does not send named chat sessions to the old chat history API', async () => {
+  const backend = {
+    getApiContract: async () => 'omi' as const,
+    request: async () => ({id: 'omi-chat-history', status: 200, body: '[]'}),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(
+    loadNewestChatHistory(backend, 'session-alpha'),
+  ).rejects.toMatchObject({
+    status: 404,
+    backendCode: 'not_found',
+    retryable: false,
+  });
+});
+
 test('admits one main-scope human message and accepts only a terminal SSE message', async () => {
   const requests: NativeHttpRequest[] = [];
   const human: ChatMessage = {

@@ -3,7 +3,10 @@
 The deployed service mounts `GET /v1/chat-messages` through the same admission,
 readiness and drain boundary as the other REST routes. It verifies the original
 Firebase identity and requires a registered active credential with the exact
-`chat.read` grant. A `memories.read`, `tasks.read` or `conversations.read` grant
+`chat.read` grant. History is main-session only (`chat_session_id IS NULL`).
+Extra query keys, including `chatSessionId`, remain 400 so a named Worker
+session cannot be served as this account's main history. A `memories.read`,
+`tasks.read` or `conversations.read` grant
 does not confer this read permission. Missing or revoked grants return 403; they
 never become an empty successful transcript. Deployment still needs the
 authoritative account, control, credential and grant records described in

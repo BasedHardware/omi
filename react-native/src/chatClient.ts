@@ -191,18 +191,29 @@ export async function loadChatHistory(
 
 export async function loadNewestChatHistory(
   backend: OmiBackend,
+  chatSessionId?: string,
 ): Promise<ChatHistoryPage> {
   if ((await backend.getApiContract?.()) === 'omi') {
+    if (chatSessionId !== undefined) {
+      throw new ChatBackendError(404, 'not_found', false, 'none', null);
+    }
     return loadOmiHistory(backend, 0);
   }
-  return loadChatHistoryPage(backend, '/v1/chat-messages?limit=50');
+  return loadChatHistoryPage(
+    backend,
+    canonicalChatHistoryPath({chatSessionId}),
+  );
 }
 
 export async function loadOlderChatHistory(
   backend: OmiBackend,
   olderCursor: string,
+  chatSessionId?: string,
 ): Promise<ChatHistoryPage> {
   if ((await backend.getApiContract?.()) === 'omi') {
+    if (chatSessionId !== undefined) {
+      throw new ChatBackendError(404, 'not_found', false, 'none', null);
+    }
     return loadOmiHistory(backend, omiHistoryOffset(olderCursor));
   }
   if (olderCursor.length === 0) {
@@ -210,8 +221,22 @@ export async function loadOlderChatHistory(
   }
   return loadChatHistoryPage(
     backend,
-    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+    canonicalChatHistoryPath({olderCursor, chatSessionId}),
   );
+}
+
+function canonicalChatHistoryPath(query: {
+  olderCursor?: string;
+  chatSessionId?: string;
+}): string {
+  let path = '/v1/chat-messages?limit=50';
+  if (query.olderCursor !== undefined) {
+    path += `&olderCursor=${encodeURIComponent(query.olderCursor)}`;
+  }
+  if (query.chatSessionId !== undefined) {
+    path += `&chatSessionId=${encodeURIComponent(query.chatSessionId)}`;
+  }
+  return path;
 }
 
 async function loadOmiHistory(
@@ -448,7 +473,9 @@ function throwBackendError(response: NativeHttpResponse): never {
   if (response.body !== null) {
     try {
       const parsed = JSON.parse(response.body) as {
-        error?: {code?: unknown; retryable?: unknown; action?: unknown} | string;
+        error?:
+          | {code?: unknown; retryable?: unknown; action?: unknown}
+          | string;
       };
       if (typeof parsed.error === 'string') {
         code = parsed.error;
