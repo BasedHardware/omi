@@ -174,7 +174,7 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
     ],
     'ja': [  # Japanese
         r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
-        r"(私は|わたしは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、，,]\s*(?:よろしく|どうぞ)|$)",
+        r"(私は|わたしは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
     ],
     'ko': [  # Korean
         r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
@@ -228,8 +228,11 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 
 # Check all (multi lang)
 patterns_to_check: List[str] = []
-for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
+PATTERN_TO_LANG: Dict[str, str] = {}
+for lang, lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.items():
     patterns_to_check.extend(lang_patterns)
+    for pat in lang_patterns:
+        PATTERN_TO_LANG[pat] = lang
 
 # CJK stopwords and grammatical elements to avoid false-positive speaker creation
 # from ordinary conversational sentences (#12900).
@@ -256,8 +259,29 @@ JA_NAME_STOPWORDS = frozenset(
         '日本人',
         '外国人',
         '学生',
+        '大学生',
+        '高校生',
+        '中学生',
+        '小学生',
+        '留学生',
+        '大学院生',
+        '生徒',
         '先生',
         '医者',
+        '医師',
+        '看護師',
+        '弁護士',
+        '会社員',
+        '公務員',
+        '研究員',
+        '店員',
+        '店長',
+        '社長',
+        '部長',
+        '課長',
+        '社員',
+        '主婦',
+        '無職',
         '友達',
         '人間',
         '大人',
@@ -302,6 +326,7 @@ JA_NAME_STOPWORDS = frozenset(
         '会社',
         '仕事',
         '学校',
+        'そう思う',
     }
 )
 
@@ -317,6 +342,7 @@ JA_PARTICLES_AND_VERB_ENDINGS = (
     'ます',
     'ました',
     'ません',
+    'でした',
     'たい',
     'たく',
     'ている',
@@ -324,6 +350,13 @@ JA_PARTICLES_AND_VERB_ENDINGS = (
     'てる',
     'すいた',
     'すいて',
+    '思う',
+    'おもう',
+    '思って',
+    '言う',
+    'いう',
+    '言って',
+    '疲れた',
 )
 
 ZH_NAME_STOPWORDS = frozenset(
@@ -529,7 +562,7 @@ SPEAKER_NAME_STOPWORDS = frozenset(
 )
 
 
-def _is_valid_cjk_speaker_name(name: str) -> bool:
+def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) -> bool:
     """Validate that candidate CJK name is plausible and not a full sentence or clause."""
     has_cjk = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name))
     if not has_cjk:
@@ -539,17 +572,22 @@ def _is_valid_cjk_speaker_name(name: str) -> bool:
     if len(name) > 6:
         return False
 
-    # Japanese kana/kanji validation
-    if re.search(r'[\u3040-\u309F\u30A0-\u30FF]', name):
+    is_all_kanji_or_han = bool(re.search(r'^[\u4E00-\u9FAF]+$', name))
+    has_kana = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF]', name))
+    has_hangul = bool(re.search(r'[\uAC00-\uD7A3]', name))
+
+    # Japanese validation: applied when matched by Japanese pattern, or contains kana,
+    # or is all-kanji without specific non-ja language hint
+    if pattern_lang == 'ja' or has_kana or (is_all_kanji_or_han and pattern_lang != 'zh'):
         for ending in JA_PARTICLES_AND_VERB_ENDINGS:
             if ending in name:
                 return False
-        for word in JA_NAME_STOPWORDS:
-            if name == word or name.startswith(word) or name.endswith(word):
-                return False
+        if name in JA_NAME_STOPWORDS:
+            return False
 
-    # Chinese Han characters validation
-    if re.search(r'^[\u4E00-\u9FAF]+$', name):
+    # Chinese Han characters validation: applied when matched by Chinese pattern,
+    # or is Han characters without specific non-zh language hint
+    if pattern_lang == 'zh' or (is_all_kanji_or_han and pattern_lang != 'ja'):
         if len(name) > 5:
             return False
         if name in ZH_NAME_STOPWORDS:
@@ -558,8 +596,8 @@ def _is_valid_cjk_speaker_name(name: str) -> bool:
             if char in name:
                 return False
 
-    # Korean Hangul validation
-    if re.search(r'[\uAC00-\uD7A3]', name):
+    # Korean Hangul validation: applied when matched by Korean pattern or contains Hangul
+    if pattern_lang == 'ko' or has_hangul:
         if len(name) > 5:
             return False
         if name in KO_NAME_STOPWORDS:
@@ -573,9 +611,21 @@ def _is_valid_cjk_speaker_name(name: str) -> bool:
 
 def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
     if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
-        patterns = list(SPEAKER_IDENTIFICATION_PATTERNS[language])
+        seen = set()
+        patterns = []
+        for p in SPEAKER_IDENTIFICATION_PATTERNS[language]:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
         if language != 'en' and 'en' in SPEAKER_IDENTIFICATION_PATTERNS:
-            patterns.extend(SPEAKER_IDENTIFICATION_PATTERNS['en'])
+            for p in SPEAKER_IDENTIFICATION_PATTERNS['en']:
+                if p not in seen:
+                    seen.add(p)
+                    patterns.append(p)
+        for p in patterns_to_check:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
     else:
         patterns = patterns_to_check
 
@@ -585,6 +635,8 @@ def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optio
             name = match.groups()[-1]
             if not name:
                 continue
+
+            matched_lang = PATTERN_TO_LANG.get(pattern)
 
             # Strip trailing Japanese copulas if captured
             if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', name):
@@ -601,7 +653,7 @@ def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optio
             if name.lower() in SPEAKER_NAME_STOPWORDS:
                 continue
 
-            if not _is_valid_cjk_speaker_name(name):
+            if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
                 continue
 
             return (
