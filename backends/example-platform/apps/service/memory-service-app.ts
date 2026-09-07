@@ -34,6 +34,7 @@ export const createMemoryServiceApp = (
     registerTasksOpsRoutes(app, tasks);
   }
   if (deviceSessions) {
+    app.get("/v1/device-sessions/ownership", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions", context => deviceSessions.fetch(context.req.raw));
     app.get("/v1/device-sessions/:id", context => deviceSessions.fetch(context.req.raw));
     app.post("/v1/device-sessions/:id/audio", context => deviceSessions.fetch(context.req.raw));

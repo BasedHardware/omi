@@ -180,6 +180,23 @@ test("deployed chat history shares Firebase admission and does not mount writes"
     .toBe(nestedNotFound);
 });
 
+test("deployed device sessions expose ownership GET instead of a UUID session 404", async () => {
+  const base = options();
+  const app = createPostgresFirebaseAuthorizedMemoryServiceApp({
+    ...base,
+    device_sessions: base.memory_read.authorization,
+    device_ownership_key: new Uint8Array(32).fill(9),
+  });
+  const denied = await app.request("/v1/device-sessions/ownership", {
+    headers: { authorization: "Bearer invalid.token" },
+  });
+  expect(denied.status).toBe(401);
+  expect(await denied.json()).toEqual({ error: { code: "unauthorized" } });
+  expect(await (await app.request("/v1/device-sessions/ownership")).text()).not.toBe(
+    '{"error":"not_found"}',
+  );
+});
+
 test("deployed settings verify identity without inventing a signed-in profile", async () => {
   const base = options();
   const app = createPostgresFirebaseAuthorizedMemoryServiceApp({
