@@ -321,16 +321,17 @@ final class ChatDailySummaryTests: XCTestCase {
       .openDailyRecap(DailyRecapRouteRef(recordID: "ds_1", date: "2026-09-01")))
   }
 
-  /// omi-test-quality: source-inspection -- static contract: `openNotificationAsChat`
-  /// early-returns without a live bar window, so a unit test cannot drive the tap
-  /// dispatch. The pinned branches are the wiring from the announcement's typed action
-  /// to the recap route, and the fail-open for any other presentation-only card that
-  /// arrives without one; the route's own behavior is covered by `DailyRecapPageTests`.
+  /// `openNotificationAsChat` early-returns without a live bar window, so a unit
+  /// test cannot drive the tap dispatch. The pinned branches are the wiring from
+  /// the announcement's typed action to the recap route, and the fail-open for
+  /// any other presentation-only card that arrives without one; the route's own
+  /// behavior is covered by `DailyRecapPageTests`.
   func testNotchCardTapDispatchesTheRecapRoute() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    // omi-test-quality: source-inspection -- static contract: pin the tap-dispatch wiring; see doc comment above.
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
     XCTAssertTrue(
       source.contains("case .openDailyRecap(let ref):"),

@@ -4630,7 +4630,7 @@ class FloatingControlBarManager {
           to: "open_main_chat",
           reason: "presentation_only_card_without_action",
           outcome: .degraded)
-        AppDelegate.openMainWindow?()
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
         return
       }
     }
