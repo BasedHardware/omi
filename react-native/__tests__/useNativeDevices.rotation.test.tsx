@@ -108,7 +108,10 @@ jest.mock('../src/omiNative', () => ({
     };
   },
 }));
-import {useNativeDevices} from '../src/app/useNativeDevices';
+import {
+  DEVICE_UPLOAD_LIMITS,
+  useNativeDevices,
+} from '../src/app/useNativeDevices';
 function Harness({enabled = true}: {enabled?: boolean}) {
   useNativeDevices({enabled});
   return null;
@@ -284,4 +287,94 @@ test('account retirement clears a pending rotation without completing or opening
   expect(mockRecords).toHaveLength(1);
   expect(mockRecords[0]!.complete).toBe(false);
   await ReactTestRenderer.act(async () => view.unmount());
+});
+
+test.each(['maxSessionBytes', 'maxChunks'] as const)(
+  'automatic rollover reserves a full frame at the %s boundary',
+  async limit => {
+    const original = DEVICE_UPLOAD_LIMITS[limit];
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, limit, {
+      value: limit === 'maxSessionBytes' ? 62_216 : 258,
+    });
+    const view = await render();
+    try {
+      await emit(audio(65534, 0));
+      await emit(audio(65535, 1));
+      expect(mockRecords).toHaveLength(1);
+      await emit(audio(0, 0));
+      expect(mockRecords).toHaveLength(2);
+      expect(mockRecords[0]!.complete).toBe(true);
+      expect(mockRecords[0]!.packets).toEqual([
+        audio(65534, 0).payloadBase64,
+        audio(65535, 1).payloadBase64,
+      ]);
+      expect(mockRecords[1]!.packets).toEqual([audio(0, 0).payloadBase64]);
+      expect(mockNative.disconnectDevice).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(DEVICE_UPLOAD_LIMITS, limit, {value: original});
+      await ReactTestRenderer.act(async () => view.unmount());
+    }
+  },
+);
+
+test('automatic rollover cannot conceal a boundary gap or bypass the global pending budget', async () => {
+  const original = DEVICE_UPLOAD_LIMITS.maxChunks;
+  const pending = DEVICE_UPLOAD_LIMITS.maxPendingBytes;
+  Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxChunks', {value: 257});
+  const view = await render();
+  try {
+    await emit(audio(10, 0));
+    await emit(audio(12, 0));
+    expect(mockRecords).toHaveLength(1);
+    expect(mockRecords[0]!.packets).toEqual([
+      audio(10, 0).payloadBase64,
+      audio(12, 0).payloadBase64,
+    ]);
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {value: 3});
+    await emit(audio(13, 0));
+    expect(mockRecords).toHaveLength(1);
+    expect(mockRecords[0]!.packets).toHaveLength(2);
+    expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxChunks', {value: original});
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {
+      value: pending,
+    });
+    await ReactTestRenderer.act(async () => view.unmount());
+  }
+});
+
+test('automatic rollover retains the global budget while the preceding upload drains', async () => {
+  const chunks = DEVICE_UPLOAD_LIMITS.maxChunks;
+  const pending = DEVICE_UPLOAD_LIMITS.maxPendingBytes;
+  Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxChunks', {value: 257});
+  Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {value: 6});
+  const request = mockBackend.requestRecordingJournal.getMockImplementation()!;
+  let release!: () => void;
+  mockBackend.requestRecordingJournal.mockImplementationOnce(request);
+  mockBackend.requestRecordingJournal.mockImplementationOnce(
+    async (handle, value) => {
+      await new Promise<void>(resolve => {
+        release = resolve;
+      });
+      return request(handle, value);
+    },
+  );
+  const view = await render();
+  try {
+    await emit(audio(10, 0));
+    await emit(audio(11, 0));
+    expect(mockRecords).toHaveLength(2);
+    expect(mockRecords[1]!.packets).toHaveLength(0);
+    expect(mockNative.disconnectDevice).toHaveBeenCalledTimes(1);
+    await flush(() => release());
+    expect(mockRecords[0]!.packets).toEqual([audio(10, 0).payloadBase64]);
+    expect(mockRecords[0]!.complete).toBe(true);
+  } finally {
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxChunks', {value: chunks});
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {
+      value: pending,
+    });
+    await ReactTestRenderer.act(async () => view.unmount());
+  }
 });

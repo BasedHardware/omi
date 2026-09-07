@@ -478,7 +478,12 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       let capture = captureRef.current;
       if (
         capture !== null &&
-        capture.rotationRequested &&
+        (capture.rotationRequested ||
+          (capture.frameStarted &&
+            (capture.totalBytes >=
+              DEVICE_UPLOAD_LIMITS.maxSessionBytes - 62_208 ||
+              capture.chunkIndex + capture.pending.length >=
+                DEVICE_UPLOAD_LIMITS.maxChunks - 256))) &&
         !capture.failed &&
         !capture.stopped &&
         !capture.completed &&
