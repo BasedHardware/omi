@@ -24,7 +24,7 @@ void main() {
     });
 
     test('identity override is the socket id without entering JSON', () {
-      final config = CustomSttConfig(
+      const config = CustomSttConfig(
         provider: SttProvider.onDeviceWhisper,
         identity: 'freemium:on-device',
       );

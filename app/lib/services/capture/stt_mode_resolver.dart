@@ -147,7 +147,7 @@ class SttModeResolver {
     // on_device, or any unknown mode — fail closed, never a billed socket.
     final onDeviceReason = effective.isOnDevice ? effective.reason : 'allowance_unrecognized';
     if (readiness != FreemiumReadiness.ready) {
-      return SttModeDecision(
+      return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'on_device_not_ready',
         allowanceOnDevice: true,
@@ -159,7 +159,7 @@ class SttModeResolver {
       null,
       allowanceOnDevice: true,
     )) {
-      return SttModeDecision(
+      return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'unsupported_codec_on_device',
         allowanceOnDevice: true,
