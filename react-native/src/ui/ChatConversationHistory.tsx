@@ -59,7 +59,7 @@ export function ChatConversationHistory({
                 }}
                 style={styles.conversationTranscriptAction}>
                 <Text style={styles.conversationDetailField}>
-                  {loadingOlder ? 'Loading older…' : 'Load older'}
+                  {loadingOlder ? 'Loading older…' : 'Load older messages'}
                 </Text>
               </FocusPressable>
             )}

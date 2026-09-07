@@ -317,6 +317,7 @@ test('an empty chat page with older history does not claim the chat is empty', a
       node => node.props.accessibilityLabel === 'Load older messages',
     ).length,
   ).toBeGreaterThan(0);
+  expect(textOf(renderer)).toContain('Load older messages');
   await act(async () =>
     renderer.root
       .findAll(

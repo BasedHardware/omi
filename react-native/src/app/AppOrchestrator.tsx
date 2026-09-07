@@ -1539,7 +1539,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 <Text style={styles.loadOlderText}>
                                   {loadingOlderChat
                                     ? 'Loading older…'
-                                    : 'Load older'}
+                                    : 'Load older messages'}
                                 </Text>
                               </FocusPressable>
                             )}
