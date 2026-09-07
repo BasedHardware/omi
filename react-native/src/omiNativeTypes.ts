@@ -9,6 +9,7 @@ export type NativeHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 export type NativeHttpRequest = {
   id: string;
+  expectedApiContract?: 'omi' | 'canonical';
   method: NativeHttpMethod;
   path: `/${string}`;
   headers?: Record<string, string>;
@@ -41,6 +42,9 @@ export type RecordingJournal = {
 };
 
 export type OmiBackend = {
+  getApiContract?(): Promise<'omi' | 'canonical'>;
+  sendOmiChat?(requestId: string, text: string): Promise<NativeHttpResponse>;
+  cancelOmiChat?(requestId: string): Promise<void>;
   createRecordingJournal?(
     input: RecordingJournalInput,
   ): Promise<RecordingJournal>;

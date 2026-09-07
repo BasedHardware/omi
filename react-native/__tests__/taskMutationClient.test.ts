@@ -1,5 +1,5 @@
 import {prepareTaskPatch, sendTaskPatch} from '../src/taskMutationClient';
-import type {OmiBackend} from '../src/omiNativeTypes';
+import type {NativeHttpRequest, OmiBackend} from '../src/omiNativeTypes';
 
 const writeId = 'a'.repeat(64);
 const revision = 'b'.repeat(64);
@@ -7,7 +7,7 @@ const nextRevision = 'c'.repeat(64);
 function client() {
   return {
     createWriteId: jest.fn(async () => writeId),
-    request: jest.fn(async () => ({
+    request: jest.fn(async (_request: NativeHttpRequest) => ({
       id: 'request',
       status: 200,
       body: JSON.stringify({
@@ -156,4 +156,130 @@ test('retains ambiguous malformed success for explicit retry', async () => {
     ok: false,
     failure: {kind: 'retryable'},
   });
+});
+
+function omiClient() {
+  return {
+    ...client(),
+    getApiContract: jest.fn(async (): Promise<'omi' | 'canonical'> => 'omi'),
+  };
+}
+const omiInput = {
+  apiContract: 'omi' as const,
+  recordId: 'old task',
+  baseRevision: null,
+  accountEpoch: null,
+  patch: {completed: true, description: 'Call Sam'},
+};
+function omiResponse(
+  completed = true,
+  description = 'Call Sam',
+  id = 'old task',
+) {
+  return {
+    id: 'response',
+    status: 200,
+    body: JSON.stringify({
+      id,
+      completed,
+      description,
+      completed_at: '2026-09-07T00:00:00Z',
+    }),
+  };
+}
+
+test('old task patch sends only supported fields and validates bare action item acknowledgement', async () => {
+  const backend = omiClient();
+  backend.request.mockResolvedValue(omiResponse());
+  const prepared = await prepareTaskPatch(backend, omiInput);
+  expect(backend.createWriteId).not.toHaveBeenCalled();
+  expect(prepared.body).toBe(JSON.stringify(omiInput.patch));
+  expect(await sendTaskPatch(backend, prepared)).toEqual({
+    ok: true,
+    revision: null,
+  });
+  expect(backend.request).toHaveBeenCalledWith({
+    id: expect.any(String),
+    method: 'PATCH',
+    expectedApiContract: 'omi',
+    path: '/v1/action-items/old%20task',
+    body: prepared.body,
+  });
+});
+
+test.each([true, false])(
+  'uncertain old PATCH reconciles GET only and never overwrites concurrent state (matches=%s)',
+  async matches => {
+    const backend = omiClient();
+    backend.request
+      .mockRejectedValueOnce(new TypeError('Lost acknowledgement'))
+      .mockResolvedValue(omiResponse(matches));
+    const prepared = await prepareTaskPatch(backend, omiInput);
+    expect((await sendTaskPatch(backend, prepared)).ok).toBe(false);
+    const result = await sendTaskPatch(backend, prepared);
+    expect(result).toMatchObject(
+      matches
+        ? {ok: true, revision: null}
+        : {ok: false, failure: {kind: 'permanent', reason: 'conflict'}},
+    );
+    await sendTaskPatch(backend, prepared);
+    expect(
+      backend.request.mock.calls.map(
+        call => (call[0] as unknown as {method: string}).method,
+      ),
+    ).toEqual(['PATCH', 'GET', 'GET']);
+    expect(backend.request.mock.calls[1]?.[0]).toEqual({
+      id: expect.any(String),
+      method: 'GET',
+      expectedApiContract: 'omi',
+      path: '/v1/action-items/old%20task',
+    });
+  },
+);
+
+test('wrong old task acknowledgement remains uncertain and changed backend refuses any subsequent request', async () => {
+  const backend = omiClient();
+  backend.request.mockResolvedValue(
+    omiResponse(true, 'Call Sam', 'another-task'),
+  );
+  const prepared = await prepareTaskPatch(backend, omiInput);
+  expect((await sendTaskPatch(backend, prepared)).ok).toBe(false);
+  backend.getApiContract.mockResolvedValue('canonical');
+  expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+    ok: false,
+    failure: {kind: 'permanent'},
+  });
+  expect(backend.request).toHaveBeenCalledTimes(1);
+});
+
+test('native plane-switch rejection is permanent for both contracts', async () => {
+  for (const old of [false, true]) {
+    const backend = omiClient();
+    backend.request.mockRejectedValue({code: 'OMI_HTTP_BACKEND_CHANGED'});
+    const prepared = await prepareTaskPatch(backend, old ? omiInput : input);
+    expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+      ok: false,
+      failure: {kind: 'permanent'},
+    });
+  }
+});
+
+test('old task rate limit retains Retry-After and subsequent check is read-only', async () => {
+  const backend = omiClient();
+  backend.request
+    .mockResolvedValueOnce({
+      ...omiResponse(),
+      status: 429,
+      retryAfterSeconds: 12,
+    } as ReturnType<typeof omiResponse>)
+    .mockResolvedValue(omiResponse());
+  const prepared = await prepareTaskPatch(backend, omiInput);
+  expect(await sendTaskPatch(backend, prepared)).toMatchObject({
+    ok: false,
+    failure: {kind: 'rate-limited', retryAfterMs: 12000},
+  });
+  expect((await sendTaskPatch(backend, prepared)).ok).toBe(true);
+  expect(backend.request.mock.calls.map(([request]) => request.method)).toEqual(
+    ['PATCH', 'GET'],
+  );
 });

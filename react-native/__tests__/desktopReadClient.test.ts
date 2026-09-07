@@ -254,9 +254,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopReadErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
     desktopBackendServiceCopy,
   );
-  expect(desktopReadErrorCopy(new Error('response rejected'))).toBe(
-    'response rejected',
-  );
+  expect(
+    desktopReadErrorCopy(new Error('Conversations response is malformed')),
+  ).toBe('This saved data could not be loaded. Retry without changing it.');
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -964,7 +964,7 @@ test('loadAccountSettings keeps failed slices independent', async () => {
   );
   expect(snapshot.subscription).toBeNull();
   expect(snapshot.subscriptionError).toBe(
-    'desktop-subscription-read failed (503)',
+    'This saved data could not be loaded. Retry without changing it.',
   );
   expect(snapshot.storeRecordingPermission).toBe(true);
   expect(snapshot.trainingOptedIn).toBe(false);

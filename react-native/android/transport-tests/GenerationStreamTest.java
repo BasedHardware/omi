@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class GenerationStreamTest {
   public static void main(String[] args) throws Exception {
+    legacy();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     AtomicInteger requests = new AtomicInteger();
     server.createContext("/events", exchange -> {
@@ -88,6 +89,41 @@ public final class GenerationStreamTest {
     } finally {
       server.stop(0);
     }
+  }
+
+  private static void legacy() throws Exception {
+    String done = "done: " + java.util.Base64.getEncoder().encodeToString("{\"id\":\"message\"}".getBytes(StandardCharsets.UTF_8)) + "\n\n";
+    for (String frame : new String[]{done, "done: invalid!\n\n", done.trim(), "data: " + "x".repeat(3_145_728) + "\n\n"}) {
+      AtomicInteger attempts = new AtomicInteger();
+      boolean accepted = false;
+      try {
+        OmiGenerationStream.Result result = new OmiGenerationStream(null, true).run(cursor -> {
+          attempts.incrementAndGet(); return fixture(frame);
+        }, value -> value.equals("{\"id\":\"message\"}"), status -> {});
+        assert result.body.equals(done); accepted = true;
+      } catch (java.io.IOException expected) {}
+      assert accepted == frame.equals(done);
+      assert attempts.get() == 1 : "Non-idempotent Omi POST retried";
+    }
+    OmiGenerationStream cancelled = new OmiGenerationStream(null, true);
+    AtomicInteger sends = new AtomicInteger();
+    try {
+      cancelled.run(cursor -> { cancelled.cancel(); return fixture(done); }, value -> true, status -> {}, connection -> sends.incrementAndGet());
+      throw new AssertionError("Cancelled request completed");
+    } catch (java.io.IOException expected) {}
+    assert sends.get() == 0;
+    System.out.println("Omi terminal, malformed, incomplete, size and cancellation protocol tests passed");
+  }
+
+  private static HttpURLConnection fixture(String body) throws Exception {
+    return new HttpURLConnection(new URL("http://127.0.0.1/fixture")) {
+      public void connect() {}
+      public void disconnect() {}
+      public boolean usingProxy() { return false; }
+      public int getResponseCode() { return 200; }
+      public String getHeaderField(String key) { return key.equals("Content-Type") ? "text/event-stream" : null; }
+      public java.io.InputStream getInputStream() { return new java.io.ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)); }
+    };
   }
 
   private static HttpURLConnection open(String value) throws Exception {

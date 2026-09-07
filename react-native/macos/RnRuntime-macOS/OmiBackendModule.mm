@@ -422,7 +422,7 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   policy.kind = OmiBackendCredentialKindCloud;
   NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
   NSURL *v5 = v5URL.length > 0 ? OmiValidatedV5URL(v5URL) : nil;
-  if (OmiSoftwarePlaneIsNew() && v5URL.length > 0 && v5 == nil) return nil;
+  if (OmiSoftwarePlaneIsNew() && v5 == nil) return nil;
   if (OmiSoftwarePlaneIsNew() && v5 != nil) {
     policy.captureOriginRequired = YES;
     policy.captureURL = v5;
@@ -481,6 +481,8 @@ static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestI
 @property(nonatomic, copy) RCTPromiseRejectBlock reject;
 @property(nonatomic, copy) dispatch_block_t cleanup;
 @property(nonatomic) BOOL settled;
+@property(nonatomic) BOOL omiChat;
+@property(nonatomic) NSUInteger receivedBytes;
 @property(nonatomic) NSUInteger reconnects;
 @property(nonatomic, copy) NSString *lastEventId;
 @property(nonatomic, copy) dispatch_block_t reconnectWork;
@@ -553,6 +555,11 @@ didReceiveResponse:(NSURLResponse *)response
   NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
       ? ((NSHTTPURLResponse *)response).statusCode : 0;
   self.responseStatus = status;
+  if (self.omiChat && status == 200 && ![[response MIMEType].lowercaseString isEqual:@"text/event-stream"]) {
+    completionHandler(NSURLSessionResponseCancel);
+    [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi chat response is not an event stream"];
+    return;
+  }
   if (self.unauthorizedResponse != nil) self.unauthorizedResponse(status);
   if ([response isKindOfClass:NSHTTPURLResponse.class]) {
     NSString *retryAfter = [(NSHTTPURLResponse *)response valueForHTTPHeaderField:@"Retry-After"];
@@ -565,11 +572,31 @@ didReceiveResponse:(NSURLResponse *)response
 - (void)URLSession:(NSURLSession *)session
           dataTask:(NSURLSessionDataTask *)dataTask
     didReceiveData:(NSData *)data {
+  @synchronized(self) { if (self.settled) return; }
+  if (self.omiChat && (self.receivedBytes += data.length) > 3 * 1024 * 1024) {
+    [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi chat response exceeds limit"]; return;
+  }
   [self.data appendData:data];
+  if (self.omiChat && self.responseStatus != 200) return;
   NSString *text = [[NSString alloc] initWithData:self.data encoding:NSUTF8StringEncoding];
   if (text == nil) return;
+  if (self.omiChat) text = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
   NSArray<NSString *> *blocks = [text componentsSeparatedByString:@"\n\n"];
   for (NSUInteger index = 0; index + 1 < blocks.count; index += 1) {
+    if (self.omiChat) {
+      for (NSString *line in [blocks[index] componentsSeparatedByString:@"\n"]) {
+        if (![line hasPrefix:@"done:"]) continue;
+        NSString *value = [line substringFromIndex:5];
+        if ([value hasPrefix:@" "]) value = [value substringFromIndex:1];
+        NSData *decoded = [[NSData alloc] initWithBase64EncodedString:value options:0];
+        id message = decoded == nil ? nil : [NSJSONSerialization JSONObjectWithData:decoded options:0 error:nil];
+        if (![message isKindOfClass:NSDictionary.class]) {
+          [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Omi terminal message is invalid"]; return;
+        }
+        [self finishWithValue:[blocks[index] stringByAppendingString:@"\n\n"] code:nil message:nil]; return;
+      }
+      continue;
+    }
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     NSString *eventId = nil;
     for (NSString *line in [blocks[index] componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
@@ -608,7 +635,7 @@ didCompleteWithError:(NSError *)error {
     [self finishWithValue:body ?: @"" code:nil message:nil];
     return;
   }
-  if (self.reconnects < 5) {
+  if (!self.omiChat && self.reconnects < 5) {
     NSTimeInterval delay = 0.25 * (1 << self.reconnects);
     self.reconnects += 1;
     [self.data setLength:0];
@@ -670,6 +697,9 @@ RCT_EXPORT_MODULE(OmiBackend)
 
 - (void)emitSessionInvalidated {
   if (self.disposed) return;
+  @synchronized(self.generations) {
+    for (OmiGenerationDelegate *delegate in self.generations.allValues.copy) [delegate cancel];
+  }
   if (self.journalQueue != nil) dispatch_async(self.journalQueue, ^{ [self.recordingJournals close]; });
   dispatch_async(dispatch_get_main_queue(), ^{
     if (!self.disposed && self.hasListeners) {
@@ -967,6 +997,12 @@ RCT_REMAP_METHOD(request,
   NSString *method = [value[@"method"] isKindOfClass:NSString.class] ? value[@"method"] : nil;
   NSString *path = [value[@"path"] isKindOfClass:NSString.class] ? value[@"path"] : nil;
   NSDictionary *headers = [value[@"headers"] isKindOfClass:NSDictionary.class] ? value[@"headers"] : @{};
+  id expectedContract = value[@"expectedApiContract"];
+  if (expectedContract != nil) {
+    if (![expectedContract isKindOfClass:NSString.class] || ![@[@"omi", @"canonical"] containsObject:expectedContract]) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Native API contract is invalid", nil); return; }
+    NSString *actual = policy.kind == OmiBackendCredentialKindCloud && !policy.captureOriginRequired ? @"omi" : @"canonical";
+    if (![expectedContract isEqual:actual]) { reject(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
+  }
   NSString *body = [value[@"body"] isKindOfClass:NSString.class] ? value[@"body"] : nil;
   NSSet<NSString *> *methods = [NSSet setWithArray:@[ @"GET", @"POST", @"PATCH", @"DELETE" ]];
   NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
@@ -1065,6 +1101,73 @@ RCT_REMAP_METHOD(request,
   }];
 }
 
+RCT_REMAP_METHOD(sendOmiChat,
+                 sendOmiChatWithId:(NSString *)requestId
+                 text:(NSString *)text
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (!OmiRecordingMatches(requestId, @"^[A-Za-z0-9._:-]{1,128}$") || ![text isKindOfClass:NSString.class] || [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length == 0 || [text lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 65536) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is invalid", nil); return;
+  }
+  NSString *key = [@"omi-chat:" stringByAppendingString:requestId];
+    __weak OmiBackendModule *weakSelf = self;
+    OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:resolve reject:reject cleanup:^{
+      OmiBackendModule *owner = weakSelf;
+      @synchronized(owner.generations) { [owner.generations removeObjectForKey:key]; }
+    }];
+  @synchronized(self.generations) {
+    if (self.disposed) { [delegate cancel]; return; }
+    if (self.generations[key] != nil) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is already active", nil); return; }
+    self.generations[key] = delegate;
+  }
+  RCTPromiseRejectBlock fail = ^(NSString *code, NSString *message, NSError *failure) { [delegate finishWithValue:nil code:code message:message]; };
+  [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *error) {
+    @synchronized(delegate) { if (delegate.settled) return; }
+    if (self.disposed) { fail(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+    if (error != nil || policy == nil) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    if (policy.kind != OmiBackendCredentialKindCloud || policy.captureOriginRequired) { fail(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
+    NSURL *base = OmiRequestBaseURL(policy, @"/v2/messages");
+    if (base == nil || !OmiBackendPolicyIsValid(policy)) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"/v2/messages" relativeToURL:base].absoluteURL];
+    request.HTTPMethod = @"POST";
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{@"text":text, @"file_ids":@[]} options:0 error:nil];
+    request.timeoutInterval = 150;
+    if (!OmiApplyAuthorization(request, policy)) { fail(@"OMI_HTTP_UNCONFIGURED", @"Omi chat is unavailable", nil); return; }
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:@"text/event-stream" forHTTPHeaderField:@"accept"];
+    delegate.omiChat = YES;
+    delegate.request = request;
+    delegate.requestId = requestId;
+    delegate.policy = policy;
+    delegate.unauthorizedResponse = ^(NSInteger status) {
+      OmiBackendModule *owner = weakSelf;
+      @synchronized(owner) { if (owner != nil && !owner.disposed && OmiClearUnauthorizedCloudSession(policy, status)) [owner emitSessionInvalidated]; }
+    };
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 150;
+    configuration.timeoutIntervalForResource = 150;
+    NSOperationQueue *queue = [[NSOperationQueue alloc] init]; queue.maxConcurrentOperationCount = 1;
+    delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
+    @synchronized(self.generations) {
+      if (self.disposed) { [delegate cancel]; return; }
+      @synchronized(delegate) {
+        if (delegate.settled) { [delegate.session invalidateAndCancel]; return; }
+        [delegate start];
+      }
+    }
+  }];
+}
+
+RCT_REMAP_METHOD(cancelOmiChat,
+                 cancelOmiChatWithId:(NSString *)requestId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (!OmiRecordingMatches(requestId, @"^[A-Za-z0-9._:-]{1,128}$")) { reject(@"OMI_HTTP_INVALID_REQUEST", @"Omi chat request is invalid", nil); return; }
+  NSString *key = [@"omi-chat:" stringByAppendingString:requestId];
+  @synchronized(self.generations) { [self.generations[key] cancel]; }
+  resolve(nil);
+}
+
 RCT_REMAP_METHOD(generationEvents,
                  generationEventsWithId:(NSString *)generationId
                  lastEventId:(NSString *)lastEventId
@@ -1105,7 +1208,7 @@ RCT_REMAP_METHOD(generationEvents,
   [request setValue:@"no-cache" forHTTPHeaderField:@"cache-control"];
   if (lastEventId != nil) [request setValue:lastEventId forHTTPHeaderField:@"last-event-id"];
   @synchronized(self.generations) {
-    if (self.generations[generationId] != nil) {
+    if (self.generations[[@"canonical:" stringByAppendingString:generationId]] != nil) {
       reject(@"OMI_HTTP_INVALID_REQUEST", @"Generation request is already active", nil);
       return;
     }
@@ -1116,7 +1219,7 @@ RCT_REMAP_METHOD(generationEvents,
         OmiBackendModule *strongSelf = weakSelf;
         if (strongSelf == nil) return;
         @synchronized(strongSelf.generations) {
-          [strongSelf.generations removeObjectForKey:generationId];
+          [strongSelf.generations removeObjectForKey:[@"canonical:" stringByAppendingString:generationId]];
         }
       }];
   NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
@@ -1139,7 +1242,7 @@ RCT_REMAP_METHOD(generationEvents,
   };
   @synchronized(self.generations) {
     if (self.disposed) { [delegate cancel]; return; }
-    self.generations[generationId] = delegate;
+    self.generations[[@"canonical:" stringByAppendingString:generationId]] = delegate;
     [delegate start];
   }
   }];
@@ -1161,7 +1264,7 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
   }
   OmiGenerationDelegate *delegate;
   @synchronized(self.generations) {
-    delegate = self.generations[generationId];
+    delegate = self.generations[[@"canonical:" stringByAppendingString:generationId]];
   }
   NSString *encoded = [generationId stringByAddingPercentEncodingWithAllowedCharacters:
       [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"]];
@@ -1204,6 +1307,15 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
   [task resume];
   }
   }];
+}
+
+RCT_REMAP_METHOD(getApiContract,
+                 getApiContractWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
+  OmiBackendPolicy *policy = OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment);
+  if (policy == nil) { reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil); return; }
+  resolve(policy.kind == OmiBackendCredentialKindCloud && !policy.captureOriginRequired ? @"omi" : @"canonical");
 }
 
 RCT_REMAP_METHOD(getSoftwarePlane,

@@ -10,6 +10,9 @@ const mockAuth = {
   signOut: jest.fn(),
 };
 const mockBackend = {
+  getApiContract: jest.fn(),
+  sendOmiChat: jest.fn(),
+  cancelOmiChat: jest.fn(async (_id: string) => undefined),
   request: jest.fn(async (_value: {id: string}) => ({
     id: 'probe',
     status: 501,
@@ -141,6 +144,9 @@ beforeEach(() => {
   mockAuth.signIn.mockReset();
   mockAuth.signOut.mockReset();
   mockBackend.request.mockClear();
+  mockBackend.getApiContract.mockReset();
+  mockBackend.sendOmiChat.mockReset();
+  mockBackend.cancelOmiChat.mockClear();
   mockNative.getSnapshot.mockClear();
   mockNative.startScan.mockClear();
   mockScanPermission.mockClear();
@@ -1058,3 +1064,86 @@ test('signed-in macOS Settings exposes device scanning only after an explicit ac
   expect(mockNative.startScan).toHaveBeenCalledTimes(1);
   expect(mockNative.startScan).toHaveBeenCalledWith(8);
 });
+
+test.each(['stop', 'unmount', 'signout'])(
+  'old chat %s cancels its request and fences late response',
+  async mode => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(true);
+    mockBackend.getApiContract.mockResolvedValue('omi');
+    mockBackend.request.mockImplementation(async value => ({
+      id: value.id,
+      status: 200,
+      body: '[]',
+    }));
+    let settle!: (value: {id: string; status: number; body: string}) => void;
+    mockBackend.sendOmiChat.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          settle = resolve;
+        }),
+    );
+    const renderer = await renderApp();
+    await act(async () => {
+      await flushAsyncQueue();
+    });
+    const omnibar = renderer.root
+      .findAllByType(TextInput)
+      .find(
+        node => node.props.placeholder === "Search what you've seen and heard…",
+      )!;
+    act(() => omnibar.props.onChangeText('my old request'));
+    await act(async () => {
+      omnibar.props.onSubmitEditing();
+    });
+    expect(mockBackend.sendOmiChat).toHaveBeenCalledTimes(1);
+    const requestId = mockBackend.sendOmiChat.mock.calls[0][0];
+    expect(labelsOf(renderer)).toContain('Stop');
+    if (mode === 'stop')
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === 'Stop')
+          .props.onPress();
+      });
+    else if (mode === 'signout') {
+      mockAuth.hasCloudSession.mockResolvedValue(false);
+      mockAuth.signOut.mockResolvedValue({signedOut: true});
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === 'Settings')
+          .props.onPress();
+      });
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === 'Account & Plan')
+          .props.onPress();
+      });
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === 'Sign out')
+          .props.onPress();
+      });
+    } else await act(async () => renderer.unmount());
+    expect(mockBackend.cancelOmiChat).toHaveBeenCalledWith(requestId);
+    await act(async () => {
+      settle({
+        id: requestId,
+        status: 200,
+        body: `done: ${Buffer.from(
+          JSON.stringify({
+            id: 'late-server',
+            text: 'PRIVATE LATE RESPONSE',
+            sender: 'ai',
+            created_at: '2026-09-07T00:00:00Z',
+          }),
+        ).toString('base64')}\n\n`,
+      });
+    });
+    if (mode === 'signout')
+      expect(textOf(renderer)).not.toContain('PRIVATE LATE RESPONSE');
+    if (mode === 'stop') {
+      expect(textOf(renderer)).not.toContain('PRIVATE LATE RESPONSE');
+      expect(textOf(renderer)).toContain('may still complete on the server');
+    }
+  },
+);

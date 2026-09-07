@@ -160,8 +160,10 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(
     source.match(/OmiResolvedBackendPolicy\(/g)?.length,
   ).toBeGreaterThanOrEqual(4);
-  expect(source.match(/resolveBackendPolicyWithCompletion/g)).toHaveLength(4);
-  expect(source.match(/OmiApplyAuthorization\(/g)?.length).toBe(4);
+  // Static tripwire: old chat uses the same native policy and authorization
+  // helpers; behavioral cancellation/routing coverage lives in the Apple harness.
+  expect(source.match(/resolveBackendPolicyWithCompletion/g)).toHaveLength(5);
+  expect(source.match(/OmiApplyAuthorization\(/g)?.length).toBe(5);
   expect(source.match(/Bearer %@/g)).toHaveLength(1);
   expect(source).toContain('OmiExamplePlatformRequestSupported');
   expect(source).toContain('OmiDevelopmentBackendUnsupportedResponse');
