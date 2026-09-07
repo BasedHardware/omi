@@ -7,6 +7,7 @@ import SwiftUI
 struct ConversationCapturePlaybackSection: View {
   let capture: ServerConversation
   @ObservedObject var playback: CapturePlaybackController
+  @ObservedObject var resync: CaptureTranscriptResyncer
   let onPrepare: () -> Void
   let onRefresh: () -> Void
 
@@ -97,6 +98,8 @@ struct ConversationCapturePlaybackSection: View {
             .foregroundStyle(Ink.secondary)
         }
 
+        resyncStatus
+
         if let playbackError = playback.playbackError {
           HStack(spacing: OmiSpacing.sm) {
             Label(playbackError, systemImage: "exclamationmark.triangle")
@@ -113,6 +116,50 @@ struct ConversationCapturePlaybackSection: View {
         .accessibilityLabel("Prepare capture audio")
         .accessibilityIdentifier("chat-first-capture-prepare-audio")
     }
+  }
+
+  /// Progress and outcome of the on-device transcript sync started from the
+  /// transcript header's refresh button.
+  @ViewBuilder
+  private var resyncStatus: some View {
+    switch resync.phase {
+    case .idle:
+      EmptyView()
+    case .downloading:
+      resyncLine("Downloading audio to sync the transcript…", systemImage: "arrow.down.circle")
+    case .listening:
+      resyncLine("Listening to the audio on this Mac to sync the transcript…", systemImage: "ear")
+    case .aligning:
+      resyncLine("Aligning sentences to the audio…", systemImage: "text.line.first.and.arrowtriangle.forward")
+    case .synced(let report):
+      resyncLine(Self.syncedSummary(report), systemImage: "checkmark.circle")
+        .accessibilityIdentifier("chat-first-capture-resync-done")
+    case .failed(let message):
+      Label(message, systemImage: "exclamationmark.triangle")
+        .scaledFont(size: OmiType.caption)
+        .foregroundStyle(Ink.errorRed)
+        .accessibilityIdentifier("chat-first-capture-resync-failed")
+    }
+  }
+
+  private func resyncLine(_ text: String, systemImage: String) -> some View {
+    Label(text, systemImage: systemImage)
+      .scaledFont(size: OmiType.caption)
+      .foregroundStyle(Ink.secondary)
+      .accessibilityLabel(text)
+  }
+
+  static func syncedSummary(_ report: CaptureTranscriptSyncReport) -> String {
+    func signed(_ seconds: TimeInterval) -> String {
+      let rounded = Int(seconds.rounded())
+      return rounded >= 0 ? "+\(rounded) s" : "\(rounded) s"
+    }
+    let shift =
+      abs(report.shiftAtStart - report.shiftAtEnd) < 1
+      ? "shifted \(signed(report.shiftAtStart))"
+      : "shifted \(signed(report.shiftAtStart)) to \(signed(report.shiftAtEnd))"
+    return
+      "Transcript synced to the audio (\(shift), \(report.matchedSegments) of \(report.alignableSegments) sentences matched)"
   }
 
   private static func wallPosition(

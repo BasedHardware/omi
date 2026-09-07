@@ -73,6 +73,16 @@ struct CapturePlaybackArtifact: Equatable, Sendable {
     return span.artifactOffset + (wallOffset - span.wallOffset)
   }
 
+  /// The same media with a single identity span: wall time is media time.
+  var onMediaClock: CapturePlaybackArtifact {
+    CapturePlaybackArtifact(
+      signedURL: signedURL, duration: duration,
+      spans: [
+        CaptureAudioURLSpan(fileID: spans.first?.fileID ?? "", wallOffset: 0, artifactOffset: 0, length: duration)
+      ]
+    )
+  }
+
   /// Converts the aggregate player's media time back to the source capture's
   /// wall-clock time so the transcript can follow playback without drifting
   /// across gaps between captured audio spans.
@@ -282,9 +292,13 @@ final class CapturePlaybackController: ObservableObject {
     self.provider = provider
   }
 
+  /// `transcriptOnMediaClock`: the transcript was re-synced on this machine and
+  /// its times are already seconds into the media, so server spans (which map
+  /// the conversation's clock) must not be applied a second time.
   func prepare(
     for capture: ServerConversation,
-    forceRefresh: Bool = false
+    forceRefresh: Bool = false,
+    transcriptOnMediaClock: Bool = false
   ) async -> CapturePlaybackResolution? {
     if !forceRefresh, activeCaptureID == capture.id, let resolution { return resolution }
     let token = UUID()
@@ -297,8 +311,11 @@ final class CapturePlaybackController: ObservableObject {
       }
     }
 
-    let next = await provider.resolvePlayback(for: capture)
+    var next = await provider.resolvePlayback(for: capture)
     guard activeResolutionToken == token, activeCaptureID == capture.id, !Task.isCancelled else { return nil }
+    if transcriptOnMediaClock, case .readyAggregate(let artifact) = next {
+      next = .readyAggregate(artifact.onMediaClock)
+    }
     resolution = next
     resetPlaybackStatus()
     switch next {

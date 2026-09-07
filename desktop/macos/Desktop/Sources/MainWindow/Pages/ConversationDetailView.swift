@@ -109,6 +109,12 @@ struct ConversationDetailView: View {
   /// This keeps the signed URL and AVPlayer lifecycle scoped to whichever
   /// conversation detail is currently visible.
   @StateObject private var capturePlayback = CapturePlaybackController()
+  /// On-device transcript-to-audio alignment behind the transcript refresh
+  /// button. Its result replaces `loadedConversation` for this selection only.
+  @StateObject private var transcriptResync = CaptureTranscriptResyncer()
+  /// True once the displayed transcript's times are seconds into the media
+  /// (a stored or fresh sync), so playback must not apply server spans again.
+  @State private var transcriptOnMediaClock = false
   /// This note's screenshots, owned here rather than inside the summary because both halves of the
   /// note read them: the strip is in the summary, and the banner is the *header's* background.
   /// Constructing it is free — the initialiser only captures closures — and it starts no work
@@ -315,6 +321,8 @@ struct ConversationDetailView: View {
         )
         didResolveInitialCaptureFocus = false
         capturePlayback.clear()
+        transcriptResync.reset()
+        transcriptOnMediaClock = false
       }
     }
     .onDisappear {
@@ -323,6 +331,8 @@ struct ConversationDetailView: View {
       detailReadyConversationID = nil
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
       capturePlayback.clear()
+      transcriptResync.reset()
+      transcriptOnMediaClock = false
     }
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
@@ -358,10 +368,10 @@ struct ConversationDetailView: View {
           guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
           let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
-            loadedConversation = cached
+            applyLoadedConversation(cached)
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
-          loadedConversation = fetched
+          applyLoadedConversation(fetched)
           if fetched.status != .processing { break }
           let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
@@ -374,10 +384,10 @@ struct ConversationDetailView: View {
         if let appState = AppState.current {
           let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
-            loadedConversation = cached
+            applyLoadedConversation(cached)
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
-          loadedConversation = fetched
+          applyLoadedConversation(fetched)
         }
         guard isCurrentDetailRequest(requestGeneration) else { return }
         isLoadingConversation = false
@@ -729,21 +739,52 @@ struct ConversationDetailView: View {
   /// Re-reads the detail through the repository and re-resolves capture
   /// playback. Selection identity is unchanged, so the same generation guards
   /// that protect the initial load also discard a refresh that outlives it.
+  /// A freshly loaded detail, with any sync this machine already made for
+  /// this audio part applied on top so reopening never regresses the timing.
+  private func applyLoadedConversation(_ fetched: ServerConversation) {
+    if let synced = CaptureTranscriptSyncStore().applied(to: fetched) {
+      loadedConversation = synced
+      transcriptOnMediaClock = true
+    } else {
+      loadedConversation = fetched
+      transcriptOnMediaClock = false
+    }
+  }
+
+  /// Refresh = re-fetch the transcript, then, for a capture with audio, listen
+  /// to that audio on-device and move every timestamp onto the audio's clock.
+  /// The raw transcript is always what gets aligned, never an already-synced
+  /// one, so repeated presses converge instead of compounding.
   private func refreshTranscript() {
-    guard !isRefreshingTranscript else { return }
+    guard !isRefreshingTranscript, !transcriptResync.phase.isBusy else { return }
     isRefreshingTranscript = true
     let requestGeneration = detailLoadGeneration
     Task {
       defer { isRefreshingTranscript = false }
+      var raw = displayConversation
       if let appState = AppState.current {
-        let fetched = await appState.loadConversationDetail(displayConversation) { _ in }
+        raw = await appState.loadConversationDetail(raw) { _ in }
         guard isCurrentDetailRequest(requestGeneration) else { return }
-        loadedConversation = fetched
       }
+      guard Self.showsCapturePlayback(for: raw.source, in: .transcript) else {
+        applyLoadedConversation(raw)
+        return
+      }
+      loadedConversation = raw
+      transcriptOnMediaClock = false
+      transcriptResync.reset()
+      let resolution = await capturePlayback.prepare(for: raw, forceRefresh: true)
       guard isCurrentDetailRequest(requestGeneration) else { return }
-      if Self.showsCapturePlayback(for: displayConversation.source, in: .transcript) {
-        startCapturePlaybackPreparation(forceRefresh: true)
+      guard case .readyAggregate(let artifact) = resolution else {
+        // Nothing exact to align against yet; the transport says why.
+        return
       }
+      guard let synced = await transcriptResync.resync(conversation: raw, artifact: artifact),
+        isCurrentDetailRequest(requestGeneration)
+      else { return }
+      loadedConversation = synced
+      transcriptOnMediaClock = true
+      startCapturePlaybackPreparation(forceRefresh: true)
     }
   }
 
@@ -873,6 +914,7 @@ struct ConversationDetailView: View {
     ConversationCapturePlaybackSection(
       capture: displayConversation,
       playback: capturePlayback,
+      resync: transcriptResync,
       onPrepare: { startCapturePlaybackPreparation() },
       onRefresh: { startCapturePlaybackPreparation(forceRefresh: true) }
     )
@@ -899,7 +941,8 @@ struct ConversationDetailView: View {
     guard
       let resolution = await capturePlayback.prepare(
         for: displayConversation,
-        forceRefresh: forceRefresh
+        forceRefresh: forceRefresh,
+        transcriptOnMediaClock: transcriptOnMediaClock
       )
     else { return }
     guard isCurrentCaptureFocusRequest(requestGeneration) else { return }
@@ -993,10 +1036,11 @@ struct ConversationDetailView: View {
           Image(systemName: "arrow.clockwise")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
-            .rotationEffect(.degrees(isRefreshingTranscript ? 360 : 0))
+            .rotationEffect(.degrees(isRefreshingTranscript || transcriptResync.phase.isBusy ? 360 : 0))
             .animation(
-              isRefreshingTranscript ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
-              value: isRefreshingTranscript
+              isRefreshingTranscript || transcriptResync.phase.isBusy
+                ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
+              value: isRefreshingTranscript || transcriptResync.phase.isBusy
             )
             .frame(width: 28, height: 28)
             .background(
@@ -1005,8 +1049,8 @@ struct ConversationDetailView: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(isRefreshingTranscript)
-        .help("Refresh transcript and audio")
+        .disabled(isRefreshingTranscript || transcriptResync.phase.isBusy)
+        .help("Refresh transcript and re-sync it to the audio")
         .accessibilityLabel("Refresh transcript and audio")
         .accessibilityIdentifier("conversation-detail-transcript-refresh")
 
