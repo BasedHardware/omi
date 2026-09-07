@@ -408,3 +408,27 @@ test('conversation list exposes refresh and load more with truthful pending acti
   expect(button('Load more conversations').props.disabled).toBe(true);
   expect(textOf(renderer)).toContain('The list has been refreshed');
 });
+
+test('a failed historical transcript read retries GET without requiring capture mutation authority', async () => {
+  mockRequest.mockResolvedValueOnce({id: 'read', status: 503, body: null});
+  const renderer = await render('historical-session');
+  expect(textOf(renderer)).toContain('Transcript could not be loaded.');
+  mockRequest.mockImplementationOnce(async (request: {method: string}) =>
+    request.method === 'GET'
+      ? response('historical-session', 'completed', 'Historical transcript')
+      : {id: 'mutation', status: 409, body: null},
+  );
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Reload recording transcript',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(mockRequest).toHaveBeenLastCalledWith({
+    id: expect.any(String),
+    method: 'GET',
+    path: '/v1/device-sessions/historical-session/transcript',
+  });
+  expect(textOf(renderer)).toContain('Historical transcript');
+});

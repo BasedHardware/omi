@@ -135,7 +135,12 @@ export function useRecordingTranscript(
         ? result
         : ({status: 'idle', sessionId: null} as const),
     reload: () => {
-      resume.current = sessionId;
+      resume.current =
+        result.sessionId === sessionId &&
+        result.status === 'loaded' &&
+        result.value.state !== 'completed'
+          ? sessionId
+          : null;
       setReload(value => value + 1);
     },
   };
