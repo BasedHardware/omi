@@ -53,6 +53,15 @@ object OmiCloudSession {
     return generated
   }
 
+  @Synchronized internal fun rememberedDevice(context: Context): JSONObject? = read(context)?.optJSONObject("rememberedDevice")
+
+  @Synchronized internal fun updateRememberedDevice(context: Context, login: String, device: JSONObject?) {
+    val session = read(context) ?: error("Native login is unavailable")
+    check(session.optString("journalLogin") == login)
+    if (device == null) session.remove("rememberedDevice") else session.put("rememberedDevice", device)
+    save(context, session)
+  }
+
   @Synchronized internal fun cachedToken(context: Context): String? = read(context)?.optString("idToken")?.ifEmpty { null }
 
   @Synchronized internal fun recordingOwner(context: Context, origin: String): OmiRecordingOwner? {
@@ -107,6 +116,7 @@ object OmiCloudSession {
     val next = session(refreshed.getString("id_token"), refreshed.getString("refresh_token"), refreshed.getString("expires_in"))
     next.put("journalLogin", session.optString("journalLogin").ifEmpty { java.util.UUID.randomUUID().toString() })
     session.optJSONObject("recordingOwner")?.let { next.put("recordingOwner", it) }
+    session.optJSONObject("rememberedDevice")?.let { next.put("rememberedDevice", it) }
     save(context, next)
     return next.getString("idToken")
   }

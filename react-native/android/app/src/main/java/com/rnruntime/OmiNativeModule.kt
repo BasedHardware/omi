@@ -26,6 +26,29 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   @ReactMethod
   fun removeListeners(count: Int) {}
 
+  private fun remembered(action: String, promise: Promise) {
+    val snapshot = ble.snapshot()
+    val id = snapshot.getString("connectedDeviceId")
+    val connection = if (snapshot.hasKey("connectionId")) snapshot.getString("connectionId") else null
+    if (action == "save" && (id == null || snapshot.getString("capture") != "recording")) {
+      promise.reject("OMI_REMEMBERED_DEVICE", "Connect your Omi before remembering it")
+      return
+    }
+    val devices = snapshot.getArray("devices")
+    var name: String? = null
+    if (devices != null) for (index in 0 until devices.size()) devices.getMap(index)?.let { if (it.getString("id") == id) name = it.getString("name") }
+    val backend = context.getNativeModule(OmiBackendModule::class.java)
+    if (backend == null) { promise.reject("OMI_REMEMBERED_DEVICE", "Remembered device storage is unavailable"); return }
+    backend.rememberedDevice(action, id, name, {
+      val now = ble.snapshot()
+      action != "save" || (now.hasKey("connectionId") && now.getString("connectionId") == connection && now.getString("connectedDeviceId") == id && now.getString("capture") == "recording")
+    }, promise)
+  }
+
+  @ReactMethod fun getRememberedDevice(promise: Promise) = remembered("get", promise)
+  @ReactMethod fun rememberConnectedDevice(promise: Promise) = remembered("save", promise)
+  @ReactMethod fun forgetRememberedDevice(promise: Promise) = remembered("forget", promise)
+
   @ReactMethod
   fun getSnapshot(promise: Promise) = promise.resolve(ble.snapshot())
 

@@ -95,6 +95,14 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
   const enabled = options?.enabled ?? true;
   const [nativeSnapshot, setNativeSnapshot] =
     useState<PlatformNativeSnapshot | null>(null);
+  const [rememberedDevice, setRememberedDevice] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const rememberedOperationRef = useRef(0);
+  const rememberedConnectionRef = useRef<string | null>(null);
+  const rememberIntentRef = useRef<string | null>(null);
+  const [rememberedBusy, setRememberedBusy] = useState(false);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const [deviceScanMessage, setDeviceScanMessage] = useState<string | null>(
     null,
@@ -623,6 +631,51 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         cancelledRef.current = false;
       }
       setNativeSnapshot(snapshot);
+      if (
+        enabledRef.current &&
+        snapshot.phase === 'connected' &&
+        snapshot.capture === 'recording' &&
+        snapshot.connectionId &&
+        snapshot.connectedDeviceId === requestedDeviceRef.current &&
+        snapshot.connectedDeviceId === rememberIntentRef.current &&
+        rememberedConnectionRef.current !== snapshot.connectionId &&
+        omiNative?.rememberConnectedDevice
+      ) {
+        const connection = snapshot.connectionId;
+        const epoch = epochRef.current;
+        const operation = ++rememberedOperationRef.current;
+        rememberedConnectionRef.current = connection;
+        rememberIntentRef.current = null;
+        setRememberedBusy(true);
+        void omiNative
+          .rememberConnectedDevice()
+          .then(device => {
+            if (
+              enabledRef.current &&
+              epoch === epochRef.current &&
+              operation === rememberedOperationRef.current
+            )
+              setRememberedDevice(device);
+          })
+          .catch(() => {
+            if (
+              enabledRef.current &&
+              epoch === epochRef.current &&
+              operation === rememberedOperationRef.current
+            )
+              setDeviceScanMessage(
+                'Connected, but the device shortcut could not be saved.',
+              );
+          })
+          .finally(() => {
+            if (
+              enabledRef.current &&
+              epoch === epochRef.current &&
+              operation === rememberedOperationRef.current
+            )
+              setRememberedBusy(false);
+          });
+      }
     },
     [finishSession],
   );
@@ -632,9 +685,16 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     cancelledRef.current = false;
     setNativeSnapshot(null);
     setDeviceBusy(false);
+    setRememberedDevice(null);
+    setRememberedBusy(false);
+    rememberedConnectionRef.current = null;
+    rememberIntentRef.current = null;
+    const rememberedOperation = ++rememberedOperationRef.current;
     setDeviceScanMessage(null);
     const retireSession = () => {
       active = false;
+      rememberedOperationRef.current++;
+      rememberIntentRef.current = null;
       const deviceIds = new Set([
         requestedDeviceRef.current,
         nativeSnapshotRef.current?.connectedDeviceId,
@@ -674,6 +734,20 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     };
     if (!enabled || omiNative === undefined || omiNative === null) {
       return retireSession;
+    }
+    if (omiNative.getRememberedDevice) {
+      void omiNative
+        .getRememberedDevice()
+        .then(device => {
+          if (active && rememberedOperation === rememberedOperationRef.current)
+            setRememberedDevice(device);
+        })
+        .catch(() => {
+          if (active && rememberedOperation === rememberedOperationRef.current)
+            setDeviceScanMessage(
+              'The saved device shortcut could not be loaded. You can still scan for your Omi.',
+            );
+        });
     }
     if (omiBackend != null && hasRecordingJournal(omiBackend)) {
       const backend = omiBackend;
@@ -889,6 +963,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       setDeviceScanMessage(null);
       try {
         if (connected) {
+          rememberIntentRef.current = null;
           await omiNative.disconnectDevice(id);
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
@@ -898,11 +973,20 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
           }
           await finishSession();
         } else {
+          if (rememberedDevice?.id === id) {
+            const current = await omiNative.getRememberedDevice?.();
+            if (!enabledRef.current || epoch !== epochRef.current) return;
+            if (current?.id !== id) {
+              setRememberedDevice(current ?? null);
+              throw new Error('Remembered device ownership changed');
+            }
+          }
           await journalReadyRef.current;
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
           }
           requestedDeviceRef.current = id;
+          rememberIntentRef.current = id;
           await omiNative.connectDevice(id);
           if (!enabledRef.current || epoch !== epochRef.current) {
             return;
@@ -936,10 +1020,46 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         }
       }
     },
-    [applySnapshot, finishSession],
+    [applySnapshot, finishSession, rememberedDevice],
   );
 
+  const forgetRememberedDevice = useCallback(async () => {
+    if (!enabledRef.current || !omiNative?.forgetRememberedDevice) return;
+    const epoch = epochRef.current;
+    const operation = ++rememberedOperationRef.current;
+    rememberIntentRef.current = null;
+    setRememberedBusy(true);
+    try {
+      await omiNative.forgetRememberedDevice();
+      if (
+        enabledRef.current &&
+        epoch === epochRef.current &&
+        operation === rememberedOperationRef.current
+      )
+        setRememberedDevice(null);
+    } catch {
+      if (
+        enabledRef.current &&
+        epoch === epochRef.current &&
+        operation === rememberedOperationRef.current
+      )
+        setDeviceScanMessage(
+          'The device shortcut could not be forgotten. Try again.',
+        );
+    } finally {
+      if (
+        enabledRef.current &&
+        epoch === epochRef.current &&
+        operation === rememberedOperationRef.current
+      )
+        setRememberedBusy(false);
+    }
+  }, []);
+
   return {
+    rememberedDevice: enabled ? rememberedDevice : null,
+    rememberedBusy,
+    forgetRememberedDevice,
     deviceBusy,
     deviceScanMessage,
     nativeSnapshot,

@@ -66,7 +66,13 @@ export function DeviceSession({
   onScan,
   onToggle,
   variant,
+  rememberedDevice = null,
+  rememberedBusy = false,
+  onForgetRemembered,
 }: {
+  rememberedDevice?: {id: string; name: string} | null;
+  rememberedBusy?: boolean;
+  onForgetRemembered?: () => void;
   bluetoothStatusColor?: string;
   deviceBusy: boolean;
   deviceScanMessage: string | null;
@@ -90,6 +96,35 @@ export function DeviceSession({
     (nativeSnapshot !== null && devices.length === 0
       ? nativeSnapshot.lastEvent ?? 'No Omi device was discovered.'
       : null);
+
+  const remembered =
+    rememberedDevice && onForgetRemembered ? (
+      <View accessibilityLabel="Remembered Omi device" style={styles.deviceRow}>
+        <View style={styles.homeDeviceRowLead}>
+          <Text numberOfLines={1} style={[styles.deviceName, {flexShrink: 1}]}>
+            {rememberedDevice.name}
+          </Text>
+        </View>
+        {!devices.some(device => device.connected || device.connecting) && (
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
+            disabled={deviceBusy || rememberedBusy}
+            onPress={() => onToggle(rememberedDevice.id, false)}
+            style={styles.scanButton}>
+            <Text style={styles.scanButtonText}>Reconnect</Text>
+          </FocusPressable>
+        )}
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel={`Forget ${rememberedDevice.name}`}
+          disabled={deviceBusy || rememberedBusy}
+          onPress={onForgetRemembered}
+          style={styles.scanButton}>
+          <Text style={styles.scanButtonText}>Forget</Text>
+        </FocusPressable>
+      </View>
+    ) : null;
 
   if (variant === 'affordance') {
     return (
@@ -149,6 +184,7 @@ export function DeviceSession({
             </Text>
           </FocusPressable>
         </View>
+        {remembered}
         {deviceScanMessage !== null && (
           <Text style={styles.macHomeDeviceHint}>{deviceScanMessage}</Text>
         )}
@@ -241,6 +277,8 @@ export function DeviceSession({
                 ? 'Connecting…'
                 : device.connected
                 ? 'Connected'
+                : device.rssi === undefined
+                ? 'Signal unavailable'
                 : `${device.rssi} dBm`}
             </Text>
           </View>
@@ -253,6 +291,8 @@ export function DeviceSession({
               ? 'Connecting…'
               : device.connected
               ? 'Connected'
+              : device.rssi === undefined
+              ? 'Signal unavailable'
               : `${device.rssi} dBm`}
           </Text>
         </View>
@@ -295,6 +335,7 @@ export function DeviceSession({
         style={[styles.homeSection, styles.homeDevicesSection]}>
         <View style={styles.homeDeviceCard}>
           {header}
+          {remembered}
           {rows}
           {information}
           {hintRow}
@@ -306,6 +347,7 @@ export function DeviceSession({
   return (
     <>
       {header}
+      {remembered}
       {rows}
       {information}
       {hintRow}

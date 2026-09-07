@@ -80,6 +80,37 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     promise.resolve(java.util.UUID.randomUUID().toString())
   }
 
+  private val rememberedLock = Any()
+  private var rememberedGeneration = 0L
+
+  internal fun rememberedDevice(action: String, id: String?, name: String?, current: () -> Boolean, promise: Promise) {
+    val ticket = synchronized(rememberedLock) { ++rememberedGeneration }
+    val login = OmiCloudSession.journalLogin(reactApplicationContext)
+    executor.execute {
+      try {
+        if (login == null) {
+          if (action == "get" || action == "forget") { promise.resolve(null); return@execute }
+          error("Native login is unavailable")
+        }
+        val saved = OmiCloudSession.rememberedDevice(reactApplicationContext)
+        val owner = if (action == "save" || (action == "get" && saved != null)) recordingOwner() else null
+        synchronized(rememberedLock) {
+          check(OmiRecordingPolicy.rememberedCurrent(ticket, rememberedGeneration, login, OmiCloudSession.journalLogin(reactApplicationContext), current()))
+          if (owner != null) check(owner.origin == resolvedPolicy(false)?.let { requestBaseURL(it, "/v1/device-sessions/ownership")?.toString() })
+          if (action == "forget") { OmiCloudSession.updateRememberedDevice(reactApplicationContext, login, null); promise.resolve(null) }
+          else {
+            val selected = if (action == "save") {
+              check(OmiRecordingPolicy.rememberedIdentity(id, name) && owner != null)
+              JSONObject().put("id", id).put("name", name).put("origin", owner.origin).put("login", owner.login).put("ownerKey", owner.ownerKey)
+            } else saved?.takeIf { OmiRecordingPolicy.rememberedIdentity(it.opt("id") as? String, it.opt("name") as? String) && owner != null && it.optString("origin") == owner.origin && it.optString("login") == owner.login && it.optString("ownerKey") == owner.ownerKey }
+            if (action == "save") OmiCloudSession.updateRememberedDevice(reactApplicationContext, login, selected)
+            promise.resolve(selected?.let { Arguments.createMap().apply { putString("id", it.getString("id")); putString("name", it.getString("name")) } })
+          }
+        }
+      } catch (_: Exception) { promise.reject("OMI_REMEMBERED_DEVICE", "Remembered device is unavailable. Check your connection and try again.") }
+    }
+  }
+
   private fun recordingOwner(allowCached: Boolean = false): OmiRecordingOwner {
     val configured = resolvedPolicy(false) ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Recording ownership is unavailable")
     val login = OmiCloudSession.journalLogin(reactApplicationContext)

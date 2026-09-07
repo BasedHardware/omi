@@ -23,6 +23,11 @@ const snapshot = (overrides: Partial<NativeSnapshot> = {}): NativeSnapshot => ({
 });
 
 const mockNative = {
+  getRememberedDevice: jest.fn(
+    async (): Promise<{id: string; name: string} | null> => null,
+  ),
+  rememberConnectedDevice: jest.fn(async () => ({id: 'omi-1', name: 'My Omi'})),
+  forgetRememberedDevice: jest.fn(async () => {}),
   stopScan: jest.fn(async (): Promise<void> => undefined),
   connectDevice: jest.fn(async (_id: string): Promise<void> => undefined),
   disconnectDevice: jest.fn(async (_id: string): Promise<void> => undefined),
@@ -74,6 +79,9 @@ jest.mock('../src/omiNative', () => ({
       mockBackend.cancelGenerationEvents(generationId),
   },
   omiNative: {
+    getRememberedDevice: () => mockNative.getRememberedDevice(),
+    rememberConnectedDevice: () => mockNative.rememberConnectedDevice(),
+    forgetRememberedDevice: () => mockNative.forgetRememberedDevice(),
     stopScan: () => mockNative.stopScan(),
     connectDevice: (id: string) => mockNative.connectDevice(id),
     disconnectDevice: (id: string) => mockNative.disconnectDevice(id),
@@ -199,6 +207,11 @@ async function renderHook(enabled?: boolean) {
 
 beforeEach(() => {
   mockListeners.length = 0;
+  mockNative.getRememberedDevice.mockReset().mockResolvedValue(null);
+  mockNative.rememberConnectedDevice
+    .mockReset()
+    .mockResolvedValue({id: 'omi-1', name: 'My Omi'});
+  mockNative.forgetRememberedDevice.mockReset().mockResolvedValue(undefined);
   mockNative.getSnapshot.mockResolvedValue(snapshot());
   mockNative.startScan.mockReset();
   mockNative.stopScan.mockClear();
@@ -1452,4 +1465,147 @@ test('disabling an in-flight scan stops native discovery and ignores its late re
   expect(hook.latest().nativeSnapshot).toBeNull();
   expect(hook.latest().deviceBusy).toBe(false);
   await hook.unmount();
+});
+
+test('loads a remembered shortcut without scanning or connecting and clears it on account retirement', async () => {
+  mockNative.getRememberedDevice.mockResolvedValue({
+    id: 'omi-1',
+    name: 'My Omi',
+  });
+  const hook = await renderHook();
+  try {
+    expect(hook.latest().rememberedDevice).toEqual({
+      id: 'omi-1',
+      name: 'My Omi',
+    });
+    expect(mockNative.startScan).not.toHaveBeenCalled();
+    expect(mockNative.connectDevice).not.toHaveBeenCalled();
+    await hook.setEnabled(false);
+    expect(hook.latest().rememberedDevice).toBeNull();
+    let finish!: (value: {id: string; name: string}) => void;
+    mockNative.getRememberedDevice.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve;
+        }),
+    );
+    await hook.setEnabled(true);
+    await hook.setEnabled(false);
+    await ReactTestRenderer.act(async () =>
+      finish({id: 'old', name: 'Old account'}),
+    );
+    expect(hook.latest().rememberedDevice).toBeNull();
+  } finally {
+    await hook.unmount();
+  }
+});
+
+test('remembers only explicit audio-ready connections and Forget cannot be undone by repeated snapshots', async () => {
+  const hook = await renderHook();
+  const ready = snapshot({
+    phase: 'connected',
+    capture: 'recording',
+    connectedDeviceId: 'omi-1',
+    devices: [{id: 'omi-1', name: 'My Omi', connected: true, rssi: -30}],
+  });
+  try {
+    await ReactTestRenderer.act(async () =>
+      emitNative({type: 'snapshot', snapshot: ready}),
+    );
+    expect(mockNative.rememberConnectedDevice).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', false);
+    });
+    expect(mockNative.rememberConnectedDevice).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () =>
+      emitNative({type: 'snapshot', snapshot: ready}),
+    );
+    expect(mockNative.rememberConnectedDevice).toHaveBeenCalledTimes(1);
+    expect(hook.latest().rememberedDevice?.id).toBe('omi-1');
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().forgetRememberedDevice();
+    });
+    expect(hook.latest().rememberedDevice).toBeNull();
+    await ReactTestRenderer.act(async () =>
+      emitNative({type: 'snapshot', snapshot: ready}),
+    );
+    expect(mockNative.rememberConnectedDevice).toHaveBeenCalledTimes(1);
+    await ReactTestRenderer.act(async () =>
+      emitNative({
+        type: 'snapshot',
+        snapshot: {...ready, connectionId: 'automatic-reconnect'},
+      }),
+    );
+    expect(mockNative.rememberConnectedDevice).toHaveBeenCalledTimes(1);
+    expect(hook.latest().rememberedDevice).toBeNull();
+    expect(mockNative.disconnectDevice).not.toHaveBeenCalled();
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', false);
+    });
+    await ReactTestRenderer.act(async () =>
+      emitNative({
+        type: 'snapshot',
+        snapshot: {...ready, connectionId: 'explicit-reconnect'},
+      }),
+    );
+    expect(mockNative.rememberConnectedDevice).toHaveBeenCalledTimes(2);
+    expect(hook.latest().rememberedDevice?.id).toBe('omi-1');
+  } finally {
+    await hook.unmount();
+  }
+});
+
+test('Forget fences a pending remembered-device lookup and failed deletion retains the shortcut', async () => {
+  let finish!: (value: {id: string; name: string}) => void;
+  mockNative.getRememberedDevice.mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        finish = resolve;
+      }),
+  );
+  const hook = await renderHook();
+  try {
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().forgetRememberedDevice();
+    });
+    await ReactTestRenderer.act(async () =>
+      finish({id: 'omi-1', name: 'Stale'}),
+    );
+    expect(hook.latest().rememberedDevice).toBeNull();
+    await hook.setEnabled(false);
+    mockNative.getRememberedDevice.mockResolvedValue({
+      id: 'omi-1',
+      name: 'My Omi',
+    });
+    await hook.setEnabled(true);
+    mockNative.forgetRememberedDevice.mockRejectedValueOnce(
+      new Error('storage error'),
+    );
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().forgetRememberedDevice();
+    });
+    expect(hook.latest().rememberedDevice?.id).toBe('omi-1');
+    expect(hook.latest().deviceScanMessage).toContain('could not be forgotten');
+  } finally {
+    await hook.unmount();
+  }
+});
+
+test('remembered reconnect checks current native ownership before connecting', async () => {
+  mockNative.getRememberedDevice.mockResolvedValue({
+    id: 'omi-1',
+    name: 'My Omi',
+  });
+  const hook = await renderHook();
+  try {
+    mockNative.getRememberedDevice.mockResolvedValueOnce(null);
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().toggleDevice('omi-1', false);
+    });
+    expect(mockNative.connectDevice).not.toHaveBeenCalled();
+    expect(hook.latest().rememberedDevice).toBeNull();
+    expect(hook.latest().deviceScanMessage).toContain('Could not connect');
+  } finally {
+    await hook.unmount();
+  }
 });
