@@ -23,8 +23,8 @@ task-specific instructions that follow it."""
 def shared_conversation_cache_supported() -> bool:
     """Return true only when notes and L1 memory reach the same OpenAI model cache."""
     if should_route_features_through_gateway():
-        # Gateway notes use Sol while L1 memory uses Luna. They cannot share a model cache.
-        return False
+        # generated_route_overrides.yaml pins both lanes to OpenAI gpt-5.6-luna.
+        return True
     note_route = get_model_config('conv_structure')
     memory_route = get_model_config('memory_l1')
     return note_route == memory_route and note_route[1] == 'openai' and note_route[0].startswith('gpt-5.6')

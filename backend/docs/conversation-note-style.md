@@ -22,67 +22,79 @@ IDs belong in `source_segment_ids`, not the visible prose.
 
 ## Integration and verification
 
-The gateway `conv_structure` override selects GPT-5.6 Sol with medium reasoning.
-Repeated diagnostic replays on Luna still merged unrelated entities and completed
-ambiguous quantities; the Sol comparison improved those cases. This is a quality
-tradeoff, not a demonstrated population-wide win. Legacy/direct routing remains
-Luna, including the existing recovery path, so its output may differ.
+Conversation notes stay on GPT-5.6 Luna. The gateway `conv_structure` override
+retains low reasoning; the direct/legacy profile and existing recovery behavior
+are unchanged. There is one writer call, with the existing deadline and no added
+retry or revision pass. L1 memory also stays on Luna, and the shared-prefix cache
+optimization remains enabled when eligible.
 
-Notes and L1 memory no longer share an OpenAI model cache in gateway mode.
-`shared_conversation_cache_supported()` therefore disables their cross-task cache
-optimization there. Direct mode retains it when the configured profiles match.
-The full conversation prefix, call count, response schema, task and event
-extraction rules, and section-to-overview projection are preserved. Independent
-memory extraction still receives the full transcript.
+The full conversation prefix, response schema, task/event extraction rules and
+section-to-overview projection are preserved. Independent memory extraction
+still receives the full transcript. When external text lacks segment markers,
+the prompt explicitly requires empty citation lists rather than invented IDs.
 
-Sol costs materially more. At the September 7, 2026 published standard rates,
-input/output cost per million tokens is $4/$20 for
-[Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol) versus $0.20/$1.20
-for [Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna), before
-caching or other discounts. Actual cost also depends on reasoning/output length
-and losing cross-model cache reuse. The gateway's dated accounting rate cards
-remain unchanged; their estimates are not an invoice. No timeout or retry budget
-was increased. Reverting the model override also requires revisiting the cache
-compatibility decision and its test.
+`tests/unit/test_conversation_notes_v2.py` exercises the real writer with
+controlled provider responses: multiline bullet projection, marked and unmarked
+sources, action metadata, placeholders, shared-prefix construction and cache
+compatibility against real gateway/direct routes. Prompt-text assertions verify
+the contract, not whether a model obeys it. Run the backend selector and `test.sh`
+for the component verification contract.
 
-`tests/unit/test_conversation_notes_v2.py` exercises the real writer with a
-controlled provider response, including multiline bullet projection, action
-metadata, placeholder removal, shared-prefix construction, and cache compatibility
-for the gateway and direct routes. Its prompt-text assertions
-are contract checks; they do not prove that a model follows the instructions.
-Run the backend selector and `test.sh` for the component verification contract.
+## Cost and diagnostic comparison
 
-Quality evidence comes from offline model replay through the real writer's prompt
-assembly and response parser, with the provider seam replaced by direct OpenAI
-calls. Raw sources and generated notes remain private. This measures note
-construction and source fidelity; it does not measure a deployed gateway, app
-rendering, endpoint latency, or population-wide user preference. Four exploratory
-blind comparisons informed the style; they do not establish a statistical win.
+The model, reasoning setting, call count and cache behavior are unchanged from
+the base branch. The prompt is longer, and generated-note length varies, so this
+is not a promise of identical token usage. Published standard Luna pricing on
+September 7, 2026 is $0.20 per million input tokens and $1.20 per million output
+tokens; cached input has a separate lower rate. See the [official Luna model
+documentation](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
 
-Prompt guidance cannot guarantee perfect attribution, coverage, or formatting on
-noisy transcripts. Exact-ID membership is only a structural check: reviewers must
-check what the cited segments actually support and whether important content was
-lost. Do not treat fluent wording or valid citations as proof of correctness.
+Seven previously inspected difficult conversations were replayed with the same
+prompt at low and high reasoning on Chat Completions. Each arm used 33,585 input
+tokens. Low used 4,165 output tokens; high used 12,223. At uncached standard rates,
+that is approximately $0.0117 versus $0.0214 for all seven (about 1.83x). Median
+direct-call time was 7.7 versus 15.3 seconds. These are diagnostic estimates,
+including reported reasoning usage, not invoices or production forecasts.
 
-## September 7 diagnostic replay
+A broader high-reasoning replay still conflated companies, inferred an unsupported
+subject and added a currency. A draft/revision experiment corrected some errors
+but retained others; one revision call timed out and was not retried. An
+extract-quotes-then-write experiment also lost useful detail and made unsupported
+claims despite valid quotes. None demonstrated enough consistent benefit to
+justify adding its cost or complexity to this change. Their receipts remain
+private; the shipped proposal adds neither higher reasoning nor another pass.
 
-The final prompt and Sol/medium completed 14 previously inspected conversations
-and five fictional adversarial cases using Chat Completions with `store=false`.
-All 19 responses passed the real writer parser; all emitted section IDs existed
-in their source and all section bodies started with bullets. The fictional cases
-preserved past/current separation, unfinished quantities, joke status, population
-scope, and distinct companies. They are diagnostic examples, not a held-out
-benchmark or a statistical score.
+## Evidence boundaries
 
-For the 14 conversation calls, reported usage totaled 61,485 input and 15,268
-output tokens. Median direct-call wall time was 15.9 seconds, maximum 33.8 seconds;
-these are neither gateway latency nor a production SLA. Final notes ranged from
-27 to 310 words. Targets are intentionally soft.
+Offline replay uses the actual writer's prompt assembly and response parser,
+replacing the provider seam with direct OpenAI calls and `store=false`. It does
+not exercise a deployed gateway, endpoint or application rendering. Raw sources,
+outputs and all failed or unresolved attempts remain private. Four exploratory
+blind user comparisons informed the sentence-bullet style; later inspected
+replays must not be described as an unseen holdout.
 
-Source review still found limitations: an inferred currency in one cost fragment,
-an ambiguous family relationship resolved too specifically, normalization of an
-uncertain game name, and some peripheral detail retained. Citation membership
-does not establish clause-level support. Do not characterize this candidate as
-hallucination-free or automatically approved for deployment. Earlier unsuccessful
-candidates and unresolved transport attempts remain in the private experiment
-ledger rather than being discarded from accounting.
+Valid citation IDs prove membership, not support for each clause. Prompt guidance
+cannot guarantee attribution, coverage or formatting on
+noisy transcripts. Review still needs to check whether fluent prose invents
+relationships, normalizes uncertain names, adds units or loses meaningful detail.
+
+## Final low-reasoning replay
+
+The final prompt completed 14 inspected source conversations, five fictional
+probes and one unmarked-source probe using Luna/low Chat Completions. All 20
+responses parsed through the real writer. Emitted section IDs belonged to their
+sources; the unmarked case emitted empty lists, and one unintelligible source
+correctly returned an uncertainty overview with no sections. These are structural
+checks, not an overall quality score.
+
+The 14 source calls used 61,779 input and 8,678 output tokens, approximately
+$0.0228 total at uncached standard rates. Median direct-call time was 7.2 seconds,
+maximum 11.0 seconds. In four paired comparisons against the original prompt,
+estimated cost was $0.00788 for the candidate versus $0.00831 for the control.
+This small sample does not establish savings in production.
+
+The candidate produced connected sentence bullets and removed incidental material
+in some cases, but sometimes omitted useful everyday detail. Source review still
+found a company conflation, added currency, garbled mechanics and a film-rating
+attribution error. The PR does not claim that readability improvements solve
+factual fidelity; higher-compute experiments are explicitly rejected, not hidden.

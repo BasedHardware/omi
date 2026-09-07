@@ -1264,7 +1264,8 @@ FACTUAL FIDELITY
 - Narrow exception: when participant metadata corroborates a spelling, prefer that spelling over a conflicting transcript
   spelling. A participant name corroborates that person's name; a recognizable participant email domain corroborates
   its organization name (for example, fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra").
-- Every section must cite the smallest sufficient exact IDs from [segment:ID] markers in source_segment_ids.
+- When the source contains [segment:ID] markers, cite the smallest sufficient exact IDs in source_segment_ids.
+  If the source has no segment markers, return empty source_segment_ids lists. Never invent IDs.
   Copy only the ID (for [segment:s01234], use "s01234", not "segment:s01234" or a range).
   Keep citations in that field, not in the prose. Check that the cited segments support each factual
   clause, and remove unsupported details before returning.
