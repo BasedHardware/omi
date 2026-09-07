@@ -893,6 +893,8 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('mindMapCoverageCopy=');
   expect(orchestrator).toContain('onOpenRecap=');
   expect(orchestrator).not.toContain('onOpenCalls=');
+  expect(orchestrator).toContain('conversationDayLabel(');
+  expect(orchestrator).not.toContain("weekday: 'long'");
   expect(orchestrator).toContain(
     'requestedConversationId={requestedConversationId}',
   );

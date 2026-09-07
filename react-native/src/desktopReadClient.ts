@@ -91,6 +91,14 @@ export function conversationGroupLabel(
   });
 }
 
+export function conversationDayLabel(
+  startedAt: string | null,
+  createdAt: string,
+  nowEpochMilliseconds: number,
+): string {
+  return conversationGroupLabel(startedAt ?? createdAt, nowEpochMilliseconds);
+}
+
 export type MemoryProjection = {
   kind: 'memory';
   id: string;

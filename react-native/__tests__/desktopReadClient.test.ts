@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationDayLabel,
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -648,6 +649,24 @@ test('groups validated UTC conversation timestamps by local calendar day', () =>
   expect(
     conversationGroupLabel(new Date(2026, 7, 10, 12, 0).toISOString(), now),
   ).toBe(
+    new Date(2026, 7, 10, 12, 0).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+  );
+});
+
+test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const older = new Date(2026, 7, 10, 12, 0).toISOString();
+  expect(
+    conversationDayLabel(new Date(2026, 7, 14, 1, 0).toISOString(), older, now),
+  ).toBe('Today');
+  expect(
+    conversationDayLabel(null, new Date(2026, 7, 13, 23, 0).toISOString(), now),
+  ).toBe('Yesterday');
+  expect(conversationDayLabel(null, older, now)).toBe(
     new Date(2026, 7, 10, 12, 0).toLocaleDateString(undefined, {
       day: 'numeric',
       month: 'short',

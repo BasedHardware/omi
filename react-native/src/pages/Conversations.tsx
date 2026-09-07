@@ -13,7 +13,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
-  conversationGroupLabel,
+  conversationDayLabel,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -174,8 +174,9 @@ export function ConversationsPage({
     () =>
       filtered.reduce<Array<{label: string; items: ConversationProjection[]}>>(
         (groups, item) => {
-          const label = conversationGroupLabel(
-            item.startedAt ?? item.createdAt,
+          const label = conversationDayLabel(
+            item.startedAt,
+            item.createdAt,
             nowEpochMilliseconds,
           );
           const current = groups.find(group => group.label === label);

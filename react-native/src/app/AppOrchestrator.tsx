@@ -36,6 +36,7 @@ import {
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
 import {
+  conversationDayLabel,
   conversationDisplayTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -1067,12 +1068,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             title: task.title,
           }))
         : [];
+    const recapNow = Date.now();
     const recapItems =
       readOutcomes?.conversations.status === 'success'
         ? readOutcomes.conversations.value.items.map(item => ({
-            dateLabel: new Date(
-              item.startedAt ?? item.createdAt,
-            ).toLocaleDateString(undefined, {weekday: 'long'}),
+            dateLabel: conversationDayLabel(
+              item.startedAt,
+              item.createdAt,
+              recapNow,
+            ),
             id: item.id,
             title: conversationDisplayTitle(item),
           }))
