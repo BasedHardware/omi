@@ -4126,7 +4126,7 @@ struct TasksPage: View {
         viewModel.toggleMultiSelectMode()
       }
     } label: {
-      PageQueryActionLabel(icon: "checkmark.circle", title: "Select")
+      PageQueryActionLabel(title: "Select")
     }
     .buttonStyle(.plain)
     .help("Select tasks for bulk actions")
