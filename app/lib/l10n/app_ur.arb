@@ -10801,6 +10801,16 @@
     "pendantFullSyncBlocked": "Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
     "conversationsNotCapturedCount": "ریکارڈ نہیں ہوا ({count})",
     "transcriptionNoAudio": "ٹرانسکرپشن آڈیو وصول نہیں کر رہی",
+    "chatBlockTask": "کام",
+    "chatBlockGoal": "ہدف",
+    "chatBlockConversation": "گفتگو",
+    "chatBlockMemory": "یاد",
+    "chatBlockQuestion": "سوال",
+    "chatBlockOpenInGoals": "اہداف میں کھولیں",
+    "chatBlockOpenConversation": "گفتگو کھولیں",
+    "chatBlockOpenInMemories": "یادوں میں کھولیں",
+    "chatBlockUnavailable": "اب دستیاب نہیں",
+    "chatBlockRecommendedNextSteps": "تجویز کردہ اگلے اقدامات",
     "couldNotLoadMemories": "یادیں لوڈ نہیں ہو سکیں",
     "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا"
 }

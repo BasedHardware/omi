@@ -129,10 +129,30 @@ UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Paylo
 _LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_WRITE_AUTHORITY = object()
 _DIRECT_USER_LEDGER_EVIDENCE_TYPES = {
+    "explicit_user_statement",
     "explicit_user_correction",
     "explicit_user_reopen",
     "explicit_user_revert",
 }
+
+
+def mint_direct_user_write_authority() -> object:
+    """Mint the in-process capability held by authenticated user routes.
+
+    The returned object carries no user data and is intentionally checked by
+    identity.  Internal integration and extraction callers cannot opt into
+    the direct-user ledger seam by setting a payload field.
+    """
+
+    return _DIRECT_USER_LEDGER_WRITE_AUTHORITY
+
+
+def is_direct_user_write_authority(value: object | None) -> bool:
+    """Return whether ``value`` is the route-minted direct-user capability."""
+
+    return value is _DIRECT_USER_LEDGER_WRITE_AUTHORITY
+
+
 # ``knowledge_ledger`` imports this adapter, so the wire discriminator cannot
 # be imported back without a cycle. Keep this private copy contract-tested.
 _LEDGER_SCHEMA_VERSION = "knowledge_ledger.v1"
@@ -941,11 +961,13 @@ def search_canonical_memories(
         keyword_search_ledger_memory_ids,
         keyword_search_memory_ids,
         merge_memory_search_ids,
+        require_typesense_projection_ready,
     )
 
     if ledger_kinds is None:
         keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     else:
+        require_typesense_projection_ready(uid)
         keyword_ids = keyword_search_ledger_memory_ids(
             uid,
             normalized_query,
@@ -1488,6 +1510,11 @@ def _existing_identical_add_row(
     item = MemoryItem(**_snapshot_payload(snapshot))
     if item.status != MemoryItemStatus.active:
         return None
+    if (item.promotion or {}).get("user_review") is False:
+        # A rejected row remains active for audit/history, but it is not a
+        # successful retry target.  Reusing it would silently resurrect a
+        # user-rejected statement under the old content-derived identity.
+        return None
     if (item.content or "").strip() != (data.get("content") or "").strip():
         return None
     return item
@@ -1764,17 +1791,29 @@ def write_canonical_direct_user_knowledge_ledger_memory(
     required_source_item: Optional[MemoryItem] = None,
     ledger_reopen_receipt: Optional[MemoryLedgerReopenReceipt] = None,
 ) -> str:
-    """Dedicated append boundary for an explicit user correction, reopen, or revert."""
+    """Dedicated boundary for an explicit user fact or correction append."""
 
     evidence = _evidence_items_from_payload(data)
-    if (
-        data.get("ledger_schema_version") != _LEDGER_SCHEMA_VERSION
-        or data.get("write_reason") != LedgerWriteReason.direct_user_statement.value
-        or data.get("user_asserted") is not True
-        or (not data.get("supersedes") and ledger_reopen_receipt is None)
-        or not any(item.source_type in _DIRECT_USER_LEDGER_EVIDENCE_TYPES for item in evidence)
-    ):
-        raise ValueError("direct user ledger writes require an explicit correction, reopen, or revert append")
+    is_initial_user_fact = (
+        data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
+        and data.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+        and data.get("user_asserted") is True
+        and not data.get("supersedes")
+        and ledger_reopen_receipt is None
+        and any(item.source_type == "explicit_user_statement" for item in evidence)
+    )
+    is_user_amendment = (
+        data.get("ledger_schema_version") == _LEDGER_SCHEMA_VERSION
+        and data.get("write_reason") == LedgerWriteReason.direct_user_statement.value
+        and data.get("user_asserted") is True
+        and (bool(data.get("supersedes")) or ledger_reopen_receipt is not None)
+        and any(
+            item.source_type in {"explicit_user_correction", "explicit_user_reopen", "explicit_user_revert"}
+            for item in evidence
+        )
+    )
+    if not (is_initial_user_fact or is_user_amendment):
+        raise ValueError("direct user ledger writes require an explicit user fact or append authority")
     client = db_client if db_client is not None else default_db_client
     evidence_items = (
         evidence if ledger_reopen_receipt is not None else _reissued_external_evidence(uid, evidence, db_client=client)

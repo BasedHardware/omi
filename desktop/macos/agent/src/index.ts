@@ -181,6 +181,7 @@ import type {
   ConversationTurnStatus,
 } from "./runtime/types.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
+import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1417,7 +1418,7 @@ function buildMcpServers(
   cwd?: string,
   sessionKey?: string,
   context?: McpServerBuildContext
-): McpServerConfig[] {
+): Array<McpServerConfig | UserMcpServer> {
   const servers: McpServerConfig[] = [];
 
   if (context?.includeSwiftBackedTools !== false) {
@@ -1438,6 +1439,9 @@ function buildMcpServers(
     }
     if (context?.jitKnowledgeToolsEnabled === true) {
       omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
+    }
+    if (context?.jitProactivity === true) {
+      omiToolsEnv.push({ name: "OMI_JIT_PROACTIVITY_MODE", value: "true" });
     }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
@@ -1486,7 +1490,16 @@ function buildMcpServers(
     });
   }
 
-  return servers;
+  // User-added MCP servers from ~/.omi/mcp.json (standard Claude Desktop
+  // format: stdio commands, plain URLs, API keys, and OAuth tokens the app
+  // keeps fresh). Read per session so changes apply without a restart.
+  const localServers = loadLocalMcpConfig(
+    process.env.OMI_LOCAL_MCP_FILE,
+    new Set(servers.map((s) => s.name)),
+    logErr,
+  );
+
+  return [...servers, ...localServers];
 }
 
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
@@ -2451,6 +2464,7 @@ async function main(): Promise<void> {
             runId: request.runId,
             attemptId: request.attemptId,
             terminalStatus: request.terminalStatus,
+            finalText: request.finalText,
             errorCode: request.errorCode,
           });
           send({
@@ -2464,6 +2478,7 @@ async function main(): Promise<void> {
             ok: true,
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
+            finalTextPersisted: result.finalTextPersisted,
           });
         } catch (error) {
           send({
@@ -2735,6 +2750,7 @@ async function main(): Promise<void> {
               ? update.appendResources as ConversationResource[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+            terminalRevision: update.terminalRevision === true,
           };
           assertPublicJournalUpdatePolicy(store, parsedUpdate);
           const turn = updateJournalTurn(store, parsedUpdate);

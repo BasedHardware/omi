@@ -7,7 +7,7 @@
 //  (`queryShellMatchCount`), which is the whole of its contract with the shell.
 //
 //  **What it owns is the reading order.** One merged reverse-chronological stream grouped by day, with
-//  the conversation dominant and the memories and frames it produced indented beneath it — and an hour
+//  the conversation dominant and the memories and frames it produced attached beneath it — and an hour
 //  rail beside it running the same direction the list does.
 //
 //  A day can be **folded shut** from its own header. Folding is presentation and never a filter: the
@@ -256,7 +256,12 @@ struct SpineStream: View {
               day: day,
               isCollapsed: collapse.contains(day.id),
               onToggle: { toggleCollapse(day) },
-              recapEmoji: recap(for: day)?.dayEmoji
+              recapEmoji: recap(for: day)?.dayEmoji,
+              // The stored recap is the card's own body: when the day is open and
+              // a recap is attached, the header is the card's top half, not a
+              // second floating surface above it.
+              attachesRecapBody:
+                !collapse.contains(day.id) && recapContent(for: day).attachesToHeaderCard
             )
           }
         }
@@ -325,7 +330,23 @@ struct SpineStream: View {
   @ViewBuilder
   private func recapSlot(for day: SpineDay) -> some View {
     let dateKey = SpineDayDateKey.string(from: day.id, calendar: store.calendar) ?? ""
-    let content = SpineDayRecapContent.resolve(
+    let content = recapContent(for: day)
+    if content != .hidden {
+      SpineDayRecapRow(
+        content: content,
+        dateKey: dateKey,
+        onOpenRecap: { record in
+          ChatFirstShellNavigation.shared.openDailyRecap(
+            DailyRecapRouteRef(recordID: record.id, date: record.date ?? ""))
+        }
+      )
+    }
+  }
+
+  /// What the day's recap slot shows, resolved once so the header's attached-card
+  /// shape and the slot's content can never disagree.
+  private func recapContent(for day: SpineDay) -> SpineDayRecapContent {
+    SpineDayRecapContent.resolve(
       recap: recap(for: day),
       conversationCount: day.conversationCount,
       isFiltering: request.isFiltering,
@@ -334,14 +355,6 @@ struct SpineStream: View {
       calendar: store.calendar,
       summaryHour: dailySummaries.summaryHour
     )
-    if content != .hidden {
-      SpineDayRecapRow(
-        content: content,
-        dateKey: dateKey,
-        now: Date(),
-        calendar: store.calendar
-      )
-    }
   }
 
   private func recap(for day: SpineDay) -> DailySummaryRecord? {
@@ -517,6 +530,11 @@ struct SpineDayHeader: View {
   let isCollapsed: Bool
   let onToggle: () -> Void
   var recapEmoji: String? = nil
+  /// True when the open day's recap body renders directly beneath this header.
+  /// The header is then the card's **top half**: rounded at the top, square at
+  /// the bottom, no gap — one continuous card with its body, never two floating
+  /// surfaces.
+  var attachesRecapBody: Bool = false
 
   @State private var isHovering = false
 
@@ -554,6 +572,7 @@ struct SpineDayHeader: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("spine-day-header")
     .accessibilityLabel(Text(isCollapsed ? "Expand \(day.title)" : "Collapse \(day.title)"))
     .accessibilityValue(Text(day.subtitle))
     .help(isCollapsed ? "Show this day" : "Hide this day")
@@ -564,17 +583,49 @@ struct SpineDayHeader: View {
     // right against one ground.
     //
     // A material is the vocabulary for exactly this — it occludes by frosting what is behind it, so
-    // the header stays made of the same glass the panel is. Bounded by a continuous corner and
-    // `Ink.separator` rather than bled to the edges, so it reads as a band belonging to the lane
-    // instead of a slab laid across it.
+    // the header stays made of the same glass the panel is. The card silhouette follows the body:
+    // with an attached recap the header is rounded at the top and square at the bottom, and the
+    // hairline runs only around the outer edges that are actually outer — no line across the seam,
+    // because the header and its body are one card.
     .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.regularMaterial)
+      cardShape.fill(.regularMaterial)
     )
-    .overlay(
+    .overlay(cardEdges)
+    .padding(.bottom, attachesRecapBody ? 0 : 4)
+  }
+
+  private var cardShape: some Shape {
+    if attachesRecapBody {
+      return AnyShape(
+        UnevenRoundedRectangle(
+          topLeadingRadius: 10, topTrailingRadius: 10, style: .continuous))
+    }
+    return AnyShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+  }
+
+  /// The card's outer hairline. Attached, the bottom edge is the body's — only
+  /// the top and sides are this header's to draw.
+  @ViewBuilder
+  private var cardEdges: some View {
+    if attachesRecapBody {
+      ZStack(alignment: .top) {
+        VStack {
+          HStack {
+            Rectangle().fill(Ink.separator).frame(width: 1)
+            Spacer(minLength: 0)
+            Rectangle().fill(Ink.separator).frame(width: 1)
+          }
+          Spacer(minLength: 0)
+        }
+        Rectangle().fill(Ink.separator).frame(height: 1)
+      }
+      .clipShape(
+        UnevenRoundedRectangle(
+          topLeadingRadius: 10, topTrailingRadius: 10, style: .continuous))
+    } else {
       RoundedRectangle(cornerRadius: 10, style: .continuous)
         .strokeBorder(Ink.separator, lineWidth: 1)
-    )
-    .padding(.bottom, 4)
+    }
   }
 }
 

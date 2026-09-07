@@ -34,16 +34,33 @@ enum SpineDayRecapContent: Equatable {
   }
 }
 
-/// Recap (or the generate affordance) drawn inside a day's `Section` content, before its rows,
-/// so it folds and unfolds with the day.
+extension SpineDayRecapContent {
+  /// True for `.recap` — the only content that attaches to the header's card.
+  /// The generate affordance stays its own small surface.
+  var attachesToHeaderCard: Bool {
+    if case .recap = self { return true }
+    return false
+  }
+}
+
+/// Recap chrome drawn inside a day's `Section` content, before its rows, so it folds and unfolds
+/// with the day.
+///
+/// A stored recap renders as a **pill: title and summary, nothing else.** The stat chips, the
+/// "Ask about this day" / "Regenerate" buttons, and the highlight chips are gone from the list on
+/// purpose — the day header is the recap's toggle (thin when the day is folded, title + summary
+/// when it is open), and the full experience with badges and actions is `DailyRecapPage`, which
+/// clicking the pill opens as a sheet. The generate affordance for a day with *no* recap stays:
+/// it is not recap chrome, it is the one way to make the recap exist.
 struct SpineDayRecapRow: View {
   let content: SpineDayRecapContent
   let dateKey: String
-  let now: Date
-  let calendar: Calendar
 
   @State private var isWorking = false
   @State private var errorMessage: String?
+
+  /// Opens the dedicated recap page for the day's record.
+  var onOpenRecap: (DailySummaryRecord) -> Void = { _ in }
 
   var body: some View {
     switch content {
@@ -52,7 +69,7 @@ struct SpineDayRecapRow: View {
     case .emptyGenerate:
       emptyState
     case .recap(let record):
-      recapCard(record)
+      recapPill(record)
     }
   }
 
@@ -82,73 +99,63 @@ struct SpineDayRecapRow: View {
     .accessibilityIdentifier("spine-day-recap-empty")
   }
 
-  private func recapCard(_ record: DailySummaryRecord) -> some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      Text(nonEmpty(record.headline) ?? "Your day in review")
-        .inkStyle(.rowCopy, color: Ink.primary)
-        .fixedSize(horizontal: false, vertical: true)
-      if let overview = nonEmpty(record.overview) {
-        Text(overview)
-          .inkStyle(.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-      highlightChips(in: record)
-      HStack(spacing: OmiSpacing.sm) {
-        Button("Ask about this day") {
-          let question = ChatDailySummaryPresentation.followUpQuestion(
-            for: record.date, now: now, calendar: calendar)
-          ChatDailySummaryCard.requestFollowUp(question)
-        }
-        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-        // A record the backend served without an `id` gets a synthesized `date:<day>` identity
-        // (see `DailySummaryRecord.init(from:)`); posting that to `/{summary_id}/regenerate`
-        // is a guaranteed 404, so the action is only offered for a real server id.
-        if !record.id.hasPrefix("date:") {
-          Button(isWorking ? "Regenerating…" : "Regenerate") {
-            Task { await runRegenerate(record) }
-          }
-          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-          .disabled(isWorking)
+  private func recapPill(_ record: DailySummaryRecord) -> some View {
+    Button {
+      onOpenRecap(record)
+    } label: {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        // The day header directly above already shows the recap's emoji and is
+        // the fold control: no second emoji, no second arrow. The body's whole
+        // surface opens the page (pointer + tooltip say so).
+        Text(nonEmpty(record.headline) ?? "Your day in review")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .lineLimit(1)
+          .truncationMode(.tail)
+        if let overview = nonEmpty(record.overview) {
+          Text(overview)
+            .scaledFont(size: OmiType.caption, weight: .regular)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
-      if let errorMessage {
-        Text(errorMessage)
-          .scaledFont(size: OmiType.micro, weight: .regular)
-          .foregroundStyle(Ink.secondary)
-      }
+      .padding(.horizontal, 12)
+      .padding(.top, OmiSpacing.xxs)
+      .padding(.bottom, OmiSpacing.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .glassRow(.rest, cornerRadius: InkGlass.cornerRadius)
-    .padding(.top, SpineMetrics.attachedGap)
+    .buttonStyle(.plain)
+    // **The day card's body, not a second surface.** Same material as the
+    // header above, square where they meet, rounded where the card ends, and
+    // the hairline only on the edges that are actually outer — so header and
+    // recap read as one continuous card.
+    .background(
+      UnevenRoundedRectangle(
+        bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous
+      )
+      .fill(.regularMaterial)
+    )
+    .overlay(
+      ZStack(alignment: .bottom) {
+        VStack {
+          HStack {
+            Rectangle().fill(Ink.separator).frame(width: 1)
+            Spacer(minLength: 0)
+            Rectangle().fill(Ink.separator).frame(width: 1)
+          }
+          Spacer(minLength: 0)
+        }
+        Rectangle().fill(Ink.separator).frame(height: 1)
+      }
+      .clipShape(
+        UnevenRoundedRectangle(
+          bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous))
+    )
     .accessibilityIdentifier("spine-day-recap")
-  }
-
-  @ViewBuilder
-  private func highlightChips(in record: DailySummaryRecord) -> some View {
-    let highlights = Array(ChatDailySummaryCard.highlights(in: record).prefix(3))
-    if !highlights.isEmpty {
-      HStack(spacing: OmiSpacing.xs) {
-        ForEach(Array(highlights.enumerated()), id: \.offset) { _, highlight in
-          HStack(spacing: OmiSpacing.xxs) {
-            if let emoji = nonEmpty(highlight.emoji) {
-              Text(emoji).scaledFont(size: OmiType.micro)
-            }
-            if let topic = nonEmpty(highlight.topic) {
-              Text(topic)
-                .scaledFont(size: OmiType.micro, weight: .medium)
-                .foregroundStyle(Ink.primary)
-                .lineLimit(1)
-            }
-          }
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.vertical, OmiSpacing.xxs)
-          .background(Capsule().fill(Ink.rowFill))
-          .overlay(Capsule().stroke(Ink.separator, lineWidth: 1))
-        }
-      }
-    }
+    .accessibilityLabel(Text("Open the daily recap"))
+    .help("Open the full recap for this day")
   }
 
   private func runGenerate() async {
@@ -162,26 +169,13 @@ struct SpineDayRecapRow: View {
     do {
       let record = try await APIClient.shared.createDailySummary(date: dateKey)
       store.upsert(record, isOwnerStillCurrent: isOwnerStillCurrent)
-    } catch APIError.httpError(statusCode: 409, detail: _) {
-      // The scheduled run for this day is mid-flight. Saying "couldn't generate" would be a
-      // false negative at the one moment the recap is actually on its way.
-      errorMessage = "Already being generated — check back in a moment."
     } catch {
-      errorMessage = "Couldn't generate this recap."
-    }
-  }
-
-  private func runRegenerate(_ record: DailySummaryRecord) async {
-    isWorking = true
-    errorMessage = nil
-    defer { isWorking = false }
-    let store = ChatDailySummaryCoordinator.shared.store
-    guard let isOwnerStillCurrent = store.captureOwnerFence() else { return }
-    do {
-      let updated = try await APIClient.shared.regenerateDailySummary(id: record.id)
-      store.upsert(updated, isOwnerStillCurrent: isOwnerStillCurrent)
-    } catch {
-      errorMessage = "Couldn't regenerate this recap."
+      // The transport logs only the request line, so without this the local log cannot tell a
+      // server decline from a dead network — which is exactly the question a "couldn't
+      // generate" report raises.
+      log("SpineDayRecapRow: generate failed for \(dateKey): \(error)")
+      errorMessage = ChatDailySummaryPresentation.generationFailureMessage(
+        for: error, fallback: "Couldn't generate this recap.")
     }
   }
 

@@ -18,11 +18,18 @@ import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+from config.plan_catalog import PlanType
+from models.client_processing import (
+    ClientProcessing,
+    ProjectionProvenance,
+    ProjectedStructure,
+)
 from models.conversation import Conversation, CreateConversation
-from models.conversation_enums import ConversationSource, ConversationStatus
+from models.conversation_enums import ConversationProcessingState, ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
+import utils.managed_compute as managed_compute
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from database.first_open_obligations import claim_first_open_work
 from utils.conversations import meeting_receipt as meeting_receipt_mod
@@ -529,9 +536,11 @@ def test_funding_owner_is_computed_inside_decision_for_not_before_policy(
         kwargs['decision_for']('conv_structure')
         return _plan(pc, 'process_normally', 'plan_paid')
 
-    monkeypatch.setattr(pc, 'authorize_managed_compute', fake_authorize)
+    # The decision_for closure lives in utils.managed_compute (hoisted when the
+    # connector memory producers started sharing it), so its seams patch there.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', fake_authorize)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'request_carries_validated_byok_key',
         lambda feature: carries_validated_key,
     )
@@ -849,12 +858,12 @@ def test_raising_byok_lookup_is_deterministic_minimum_not_a_crash(monkeypatch, p
     _enable_flag(monkeypatch, pc)
     spies = _spy_managed_effects(monkeypatch, pc)
     monkeypatch.setattr(
-        pc,
+        managed_compute,
         'request_carries_validated_byok_key',
         MagicMock(side_effect=RuntimeError('byok lookup boom')),
     )
     authorize = MagicMock(side_effect=AssertionError('must not authorize'))
-    monkeypatch.setattr(pc, 'authorize_managed_compute', authorize)
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', authorize)
     monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', MagicMock(return_value=True))
 
     result = pc.process_conversation('uid', 'en', _desktop_create())
@@ -1101,3 +1110,338 @@ def test_terminal_persist_writes_marker_and_normal_persist_clears_it(monkeypatch
     ), 'normal persist must write the marker as None so merge=True clears a stale terminal'
     assert normal_payloads[-1][field] is None
     assert terminal_payloads[-1][field] is True
+
+
+# --- S5 (§1.8): managed memory formation stops for basic ----------------------
+
+
+def _memory_decision(pc, *, allowed: bool, reason: str, plan: Any = None):
+    return managed_compute.Decision(
+        allowed=allowed,
+        reason=reason,
+        feature='memories',
+        funding_owner='omi',
+        plan=plan,
+        plan_resolved=plan is not None,
+    )
+
+
+def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) -> MagicMock:
+    """Drive the real `extract_memories` down to (or past) the §1.8 gate."""
+    # A MagicMock result, not a SimpleNamespace: past the gate the real
+    # telemetry reads attributes this test does not care about, and the point
+    # here is only whether the extractor was reached.
+    inner = MagicMock(return_value=MagicMock(count=1, path='eager'))
+    monkeypatch.setattr(pc, '_extract_memories_inner', inner)
+    monkeypatch.setattr(pc, 'MemoryService', MagicMock())
+    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
+    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', lambda: suppression_on)
+    # The §1.8 gate's decision_for closure lives in utils.managed_compute, so
+    # its authorize seam patches there. The funding-owner resolution is not
+    # controlled by any stub in this file: managed_compute binds utils.byok's
+    # functions at its own import, and only the stubbed
+    # authorize_managed_compute (which ignores its funding_owner argument)
+    # matters for the verdict.
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *args, **kwargs: decision)
+    return inner
+
+
+# red-proof: delete the `if free_tier_memory_suppression_enabled():` block in extract_memories
+def test_basic_uid_forms_no_managed_memory(monkeypatch, pc) -> None:
+    """Named proof (a): a finalized conversation on basic makes zero
+    memory-extraction provider-lane calls."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    pc.extract_memories('basic-uid', _existing_desktop('basic-conv'))
+    inner.assert_not_called()
+
+
+def test_paid_uid_still_forms_memories_with_the_flag_on(monkeypatch, pc) -> None:
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    pc.extract_memories('paid-uid', _existing_desktop('paid-conv'))
+    inner.assert_called_once()
+
+
+def test_flag_off_is_byte_identical_for_basic(monkeypatch, pc) -> None:
+    """Dark rollout: with the flag off, a basic uid extracts exactly as today —
+    the policy is not even consulted."""
+    consulted: list[str] = []
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=False,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    monkeypatch.setattr(
+        pc,
+        'memory_formation_verdict',
+        lambda **kwargs: consulted.append('called') or pytest.fail('policy consulted with the flag off'),
+    )
+    pc.extract_memories('basic-uid', _existing_desktop('flag-off-conv'))
+    inner.assert_called_once()
+    assert consulted == []
+
+
+def test_sweep_owned_writer_still_short_circuits_before_the_plan_gate(monkeypatch, pc) -> None:
+    """The plan gate is a *second* early return in the same boundary, not a
+    replacement: a ledger-cutover account is still skipped for its own reason,
+    and the plan lookup never runs for it."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: 'ledger')
+    asked: list[str] = []
+    monkeypatch.setattr(pc, 'memory_formation_verdict', lambda **kwargs: asked.append('asked'))
+    pc.extract_memories('ledger-uid', _existing_desktop('ledger-conv'))
+    inner.assert_not_called()
+    assert asked == [], 'the sweep-owned early return must win before any plan lookup'
+
+
+def test_replayed_finalization_of_a_suppressed_conversation_still_spends_nothing(monkeypatch, pc) -> None:
+    """S6's worst defect was request-scoped terminal state: a Cloud Task retry
+    re-ran memory extraction for a basic user. The gate must hold on replay."""
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
+    )
+    conversation = _existing_desktop('replayed-conv')
+    for _ in range(3):
+        pc.extract_memories('basic-uid', conversation)
+    inner.assert_not_called()
+
+
+def test_a_raising_plan_lookup_suppresses_instead_of_failing_finalization(monkeypatch, pc) -> None:
+    inner = _extract_memories_probe(
+        monkeypatch,
+        pc,
+        suppression_on=True,
+        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
+    )
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('authorization exploded')
+
+    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', boom)
+    pc.extract_memories('erroring-uid', _existing_desktop('erroring-conv'))
+    inner.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# processing_state dark persistence (flip-review F-1 + A-5).
+#
+# The modeled field's None default must never reach a persist payload: persist
+# is transaction.set(merge=True), so a dumped None is a real Firestore key, and
+# missing versus explicit-null is the exact distinction the dark rollout hangs
+# on (the terminal_no_derived_effects marker follows the same discipline).
+# Only the flag-on minimum writes a real state; enrichment merge-clears a
+# stale one — an omission cannot, because merge keeps an omitted key.
+#
+# red-proof: pop nothing (payload builders keep conversation.dict()'s default)
+#   → every assert of key absence / explicit-null below fails.
+# red-proof: enrichment "clears" by omitting the key instead of writing None
+#   → the merged document still reads 'local_pending' in the stale-state test.
+# ---------------------------------------------------------------------------
+
+
+def _capture_all_persists(monkeypatch, pc, *, store: Any = None, path: Any = None) -> list[dict[str, Any]]:
+    """Capture every lifecycle persist payload, merging into `store` like the
+    production transaction.set(merge=True) does."""
+    payloads: list[dict[str, Any]] = []
+
+    def capture(_uid: str, data: dict[str, Any], *_args: Any, **_kwargs: Any) -> bool:
+        payloads.append(data)
+        if store is not None and path is not None:
+            store.rows[path].update(data)
+        return True
+
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', capture)
+    monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', capture)
+    monkeypatch.setattr(pc.lifecycle_service, 'create_processing_conversation', capture)
+    return payloads
+
+
+def _drive_reprocess(pc, conversation: Any, uid: str = 'paid-uid') -> Any:
+    """Exact kwargs the reprocess route passes (routers/conversations.py:495);
+    the derived bundle is captured, never run."""
+    return pc.process_conversation(
+        uid,
+        'en',
+        conversation,
+        force_process=True,
+        is_reprocess=True,
+        bypass_jit_first_open=True,
+        persistence_observer=lambda _owned: None,
+        defer_derived_effects=True,
+        derived_effects_observer=lambda _runner: None,
+    )
+
+
+def _omi_create() -> CreateConversation:
+    return CreateConversation(
+        started_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 9, 2, 12, 5, tzinfo=timezone.utc),
+        transcript_segments=[
+            TranscriptSegment(
+                text='Hello from the phone capture', speaker='SPEAKER_00', is_user=True, start=0.0, end=1.0
+            )
+        ],
+        source=ConversationSource.omi,
+        language='en',
+    )
+
+
+def _disable_flag(monkeypatch, pc) -> None:
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+
+
+# red-proof: _normal_persist_payload keeps the dumped None default → key present
+def test_flag_off_fresh_create_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+
+    result = pc.process_conversation(
+        'free-uid',
+        'en',
+        _omi_create(),
+        persistence_observer=lambda _owned: None,
+        defer_derived_effects=True,
+        derived_effects_observer=lambda _runner: None,
+    )
+
+    assert result.status == ConversationStatus.completed
+    assert payloads, 'fresh create must persist'
+    assert (
+        'processing_state' not in payloads[-1]
+    ), f"both flags off must not stamp the key; got {payloads[-1].get('processing_state')!r}"
+    spies['get_structured'].assert_called_once()
+
+
+# red-proof: _store_deferred_conversation keeps the dumped None default
+def test_flag_off_legacy_deferred_store_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    spies = _spy_managed_effects(monkeypatch, pc)  # should_defer returns True
+    payloads = _capture_all_persists(monkeypatch, pc)
+
+    result = pc.process_conversation('basic-uid', 'en', _desktop_create())
+
+    assert result.deferred is True
+    assert result.status == ConversationStatus.processing
+    assert payloads, 'deferred store must persist'
+    assert 'processing_state' not in payloads[-1]
+    spies['get_structured'].assert_not_called()
+
+
+# red-proof: reprocess persist keeps the dumped None default → key present on a
+# document that never had the field
+def test_flag_off_reprocess_of_pre_s3_document_persists_no_processing_state_key(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    uid = 'legacy-uid'
+    conv_id = 'pre-s3-legacy'
+    path = ('users', uid, 'conversations', conv_id)
+    store = StrictFirestore({path: {'id': conv_id, 'status': 'completed'}})
+    payloads = _capture_all_persists(monkeypatch, pc, store=store, path=path)
+
+    _drive_reprocess(pc, _existing_desktop(conv_id), uid=uid)
+
+    assert 'processing_state' not in payloads[-1]
+    assert 'processing_state' not in store.rows[path], 'merged document must not gain the key'
+
+
+# red-proof: enrichment clears a stale state by omitting the key instead of
+# writing an explicit None → merge=True keeps 'local_pending' on the document
+def test_paid_reprocess_merge_clears_stale_local_pending_and_resets_the_object(monkeypatch, pc) -> None:
+    _disable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    uid = 'upgraded-uid'
+    conv_id = 'upgraded-then-paid'
+    path = ('users', uid, 'conversations', conv_id)
+    store = StrictFirestore({path: {'id': conv_id, 'status': 'completed', 'processing_state': 'local_pending'}})
+    payloads = _capture_all_persists(monkeypatch, pc, store=store, path=path)
+    conversation = _existing_desktop(conv_id)
+    conversation.processing_state = ConversationProcessingState.local_pending
+
+    result = _drive_reprocess(pc, conversation, uid=uid)
+
+    # An omitted key would survive the merge; the clear must be an explicit null.
+    assert payloads[-1]['processing_state'] is None
+    assert store.rows[path]['processing_state'] is None
+    # The object the caller returns must agree — not answer a stale pending
+    # state back to the client on an enriched conversation.
+    assert result.processing_state is None
+
+
+def test_flag_on_minimum_writes_local_pending_and_a_delivered_projection_stays_absent(monkeypatch, pc) -> None:
+    """The one writer of a real state is the flag-on minimum; a delivered
+    projection is 'nothing pending', so the field stays absent (omitted), not
+    null."""
+    _enable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(
+            pc, 'store_projection' if kwargs.get('has_projection') else 'deterministic_minimum', 'basic_not_entitled'
+        ),
+    )
+
+    result = pc.process_conversation('basic-uid', 'en', _desktop_create())
+
+    assert result.deferred is False
+    assert payloads[-1]['processing_state'] == 'local_pending'
+
+    payloads.clear()
+    projection = ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='local title', overview='local overview'),
+        provenance=ProjectionProvenance(
+            model_id='local-test-model',
+            runtime='test-runtime',
+            device_class='test-device',
+            generated_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+        ),
+    )
+    pc.process_conversation(
+        'basic-uid',
+        'en',
+        _desktop_create(),
+        client_projection=projection,
+    )
+    assert 'processing_state' not in payloads[-1], 'projected minimum must omit the field, not write null'
+    assert payloads[-1]['client_processing'] is not None
+
+
+# red-proof: the flag-on process_normally persist stamps the modeled default →
+# key present on an enriched conversation
+def test_flag_on_enrichment_omits_processing_state_while_merge_clearing_the_marker(monkeypatch, pc) -> None:
+    _enable_flag(monkeypatch, pc)
+    _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    monkeypatch.setattr(
+        pc,
+        'resolve_free_tier_processing_plan',
+        lambda **kwargs: _plan(pc, 'process_normally', 'plan_paid'),
+    )
+
+    _drive_reprocess(pc, _existing_desktop('paid-upgrade'), uid='paid-uid')
+
+    last = payloads[-1]
+    assert 'processing_state' not in last, 'nothing to say ⇒ the key stays absent, even flag-on'
+    assert last[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is None, 'the upgrade marker clear still lands'

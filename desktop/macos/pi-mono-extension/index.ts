@@ -28,11 +28,20 @@ import {
   type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
+import {
+  isStdioServer,
+  loadLocalMcpConfig,
+  type UserMcpServer,
+} from "../agent/dist/runtime/user-extensions.js";
+import { type McpClient, type McpPrompt, type McpRemoteTool } from "../agent/dist/runtime/mcp-client.js";
+import { McpHttpClient } from "../agent/dist/runtime/mcp-http-client.js";
+import { McpSseClient } from "../agent/dist/runtime/mcp-sse-client.js";
+import { McpStdioClient } from "../agent/dist/runtime/mcp-stdio-client.js";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -68,6 +77,442 @@ export function omiReasoningEffortFromRelayContext(raw: string): string | undefi
     return parsed.reasoningEffort === "adaptive" || parsed.reasoningEffort === "fast"
       ? parsed.reasoningEffort
       : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export type OmiJitBudget = {
+  contractVersion: string;
+  executionID: string;
+  maxProviderAttempts: number;
+  maxOutputTokensPerAttempt: number;
+  maxNormalizedInputTokensPerAttempt: number;
+  maxEstimatedSpendMicroUSD: number;
+};
+
+export type OmiJitGatewayAttemptReceipt = {
+  attemptID: string;
+  provider: string;
+  configuredModel: string;
+  actualModelVersion?: string;
+  providerResponseID?: string;
+  rateCardID?: string;
+  costBasis: string;
+  usageStatus: string;
+  costStatus: string;
+  normalizedUncachedInputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  estimatedCostMicroUSD: number | null;
+};
+
+export type OmiJitGatewayReceipt = {
+  schemaVersion: "jit-gateway-receipt-v1";
+  runID: string;
+  contractVersion: string;
+  attempts: OmiJitGatewayAttemptReceipt[];
+  aggregate: {
+    attemptCount: number;
+    normalizedUncachedInputTokens: number;
+    cachedInputTokens: number;
+    cacheWriteTokens: number;
+    outputTokens: number;
+    estimatedCostMicroUSD: number | null;
+    costStatus: string;
+  };
+};
+
+function receiptString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 && value.length <= 256 ? value : undefined;
+}
+
+function receiptInteger(value: unknown, allowNull = false): number | null | undefined {
+  if (allowNull && value === null) return null;
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
+function parseOmiJitGatewayReceipt(value: unknown): OmiJitGatewayReceipt | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (raw.schema_version !== "jit-gateway-receipt-v1") return undefined;
+  const runID = receiptString(raw.run_id);
+  const contractVersion = receiptString(raw.contract_version);
+  if (!runID || !OMI_REQUEST_ID_PATTERN.test(runID) || !contractVersion) return undefined;
+  if (!Array.isArray(raw.attempts) || raw.attempts.length === 0) return undefined;
+  const attempts: OmiJitGatewayAttemptReceipt[] = [];
+  for (const candidate of raw.attempts) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return undefined;
+    const attempt = candidate as Record<string, unknown>;
+    const normalized = receiptInteger(attempt.normalized_uncached_input_tokens);
+    const cached = receiptInteger(attempt.cached_input_tokens);
+    const cacheWrite = receiptInteger(attempt.cache_write_tokens);
+    const output = receiptInteger(attempt.output_tokens);
+    const cost = receiptInteger(attempt.estimated_cost_micro_usd, true);
+    const attemptID = receiptString(attempt.attempt_id);
+    const provider = receiptString(attempt.provider);
+    const configuredModel = receiptString(attempt.configured_model);
+    const costBasis = receiptString(attempt.cost_basis);
+    const usageStatus = receiptString(attempt.usage_status);
+    const costStatus = receiptString(attempt.cost_status);
+    if (normalized === undefined || cached === undefined || cacheWrite === undefined || output === undefined
+      || cost === undefined || !attemptID || !provider || !configuredModel || !costBasis || !usageStatus || !costStatus) {
+      return undefined;
+    }
+    attempts.push({
+      attemptID,
+      provider,
+      configuredModel,
+      actualModelVersion: receiptString(attempt.actual_model_version),
+      providerResponseID: receiptString(attempt.provider_response_id),
+      rateCardID: receiptString(attempt.rate_card_id),
+      costBasis,
+      usageStatus,
+      costStatus,
+      normalizedUncachedInputTokens: normalized,
+      cachedInputTokens: cached,
+      cacheWriteTokens: cacheWrite,
+      outputTokens: output,
+      estimatedCostMicroUSD: cost,
+    });
+  }
+  const aggregate = raw.aggregate;
+  if (!aggregate || typeof aggregate !== "object" || Array.isArray(aggregate)) return undefined;
+  const summary = aggregate as Record<string, unknown>;
+  const attemptCount = receiptInteger(summary.attempt_count);
+  const normalized = receiptInteger(summary.normalized_uncached_input_tokens);
+  const cached = receiptInteger(summary.cached_input_tokens);
+  const cacheWrite = receiptInteger(summary.cache_write_tokens);
+  const output = receiptInteger(summary.output_tokens);
+  const cost = receiptInteger(summary.estimated_cost_micro_usd, true);
+  const costStatus = receiptString(summary.cost_status);
+  if (attemptCount !== attempts.length || normalized === undefined || cached === undefined || cacheWrite === undefined
+    || output === undefined || cost === undefined || !costStatus) return undefined;
+  return {
+    schemaVersion: "jit-gateway-receipt-v1",
+    runID,
+    contractVersion,
+    attempts,
+    aggregate: {
+      attemptCount,
+      normalizedUncachedInputTokens: normalized,
+      cachedInputTokens: cached,
+      cacheWriteTokens: cacheWrite,
+      outputTokens: output,
+      estimatedCostMicroUSD: cost,
+      costStatus,
+    },
+  };
+}
+
+export function omiJitGatewayReceiptFromHeader(value: string | undefined): OmiJitGatewayReceipt | undefined {
+  if (!value) return undefined;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/") + "===";
+    return parseOmiJitGatewayReceipt(JSON.parse(Buffer.from(normalized, "base64").toString("utf8")));
+  } catch {
+    return undefined;
+  }
+}
+
+export function omiJitGatewayReceiptFromSSE(value: string): OmiJitGatewayReceipt | undefined {
+  for (const line of value.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    try {
+      const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
+      const receipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
+      if (receipt) return receipt;
+    } catch { /* ignore provider frames */ }
+  }
+  return undefined;
+}
+
+export function omiJitReceiptPathFromRelayContext(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const value = (JSON.parse(raw) as { jitReceiptPath?: unknown }).jitReceiptPath;
+    return typeof value === "string" && value.startsWith("/") && value.length <= 512 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type OmiJitReceiptState = {
+  providerAttempts: number;
+  costMicroUSD: number | null;
+  invalid: boolean;
+  /** Last request activity. States are retained after invalidation so an
+   * unknown receipt cannot be bypassed by starting a fresh state object. */
+  lastTouchedAt: number;
+};
+
+const omiJitReceiptStates = new Map<string, OmiJitReceiptState>();
+let omiJitFetchGuardInstalled = false;
+let omiJitUpstreamFetch: typeof globalThis.fetch | undefined;
+const OMI_JIT_STATE_TTL_MS = 30 * 60 * 1_000;
+
+function pruneExpiredOmiJitReceiptStates(now = Date.now()): void {
+  for (const [executionID, state] of omiJitReceiptStates) {
+    if (now - state.lastTouchedAt > OMI_JIT_STATE_TTL_MS) omiJitReceiptStates.delete(executionID);
+  }
+}
+
+/** Test-only reset; the extension installs its fetch guard at most once per
+ * process, while unit tests need to restore the host fetch between cases. */
+export function __resetOmiJitFetchGuardForTest(): void {
+  if (omiJitUpstreamFetch) globalThis.fetch = omiJitUpstreamFetch;
+  omiJitUpstreamFetch = undefined;
+  omiJitFetchGuardInstalled = false;
+  omiJitReceiptStates.clear();
+}
+
+export function __omiJitReceiptStateCountForTest(): number {
+  return omiJitReceiptStates.size;
+}
+
+function omiJitBudgetFromRequestHeaders(headers: Headers): OmiJitBudget | undefined {
+  const contractVersion = headers.get("x-omi-jit-contract-version") || undefined;
+  const executionID = headers.get("x-omi-jit-run-id") || undefined;
+  const values = {
+    maxProviderAttempts: Number(headers.get("x-omi-jit-max-attempts")),
+    maxOutputTokensPerAttempt: Number(headers.get("x-omi-jit-max-output-tokens")),
+    maxNormalizedInputTokensPerAttempt: Number(headers.get("x-omi-jit-max-input-tokens")),
+    maxEstimatedSpendMicroUSD: Number(headers.get("x-omi-jit-max-spend-micro-usd")),
+  };
+  if (!contractVersion || !executionID || !OMI_REQUEST_ID_PATTERN.test(executionID)
+    || !Object.values(values).every((value) => Number.isSafeInteger(value) && value > 0)) return undefined;
+  return { contractVersion, executionID, ...values };
+}
+
+async function appendOmiJitReceipt(path: string | undefined, receipt: OmiJitGatewayReceipt): Promise<void> {
+  if (!path) return;
+  await appendFile(path, `${JSON.stringify({
+    schema_version: receipt.schemaVersion,
+    run_id: receipt.runID,
+    contract_version: receipt.contractVersion,
+    attempts: receipt.attempts.map((attempt) => ({
+      attempt_id: attempt.attemptID,
+      provider: attempt.provider,
+      configured_model: attempt.configuredModel,
+      actual_model_version: attempt.actualModelVersion,
+      provider_response_id: attempt.providerResponseID,
+      rate_card_id: attempt.rateCardID,
+      cost_basis: attempt.costBasis,
+      usage_status: attempt.usageStatus,
+      cost_status: attempt.costStatus,
+      normalized_uncached_input_tokens: attempt.normalizedUncachedInputTokens,
+      cached_input_tokens: attempt.cachedInputTokens,
+      cache_write_tokens: attempt.cacheWriteTokens,
+      output_tokens: attempt.outputTokens,
+      estimated_cost_micro_usd: attempt.estimatedCostMicroUSD,
+    })),
+    aggregate: {
+      attempt_count: receipt.aggregate.attemptCount,
+      normalized_uncached_input_tokens: receipt.aggregate.normalizedUncachedInputTokens,
+      cached_input_tokens: receipt.aggregate.cachedInputTokens,
+      cache_write_tokens: receipt.aggregate.cacheWriteTokens,
+      output_tokens: receipt.aggregate.outputTokens,
+      estimated_cost_micro_usd: receipt.aggregate.estimatedCostMicroUSD,
+      cost_status: receipt.aggregate.costStatus,
+    },
+  })}\n`, "utf8");
+}
+
+/** Capture the gateway's authenticated receipt before pi-ai applies its
+ * configured model rates (which intentionally remain zero). The guard also
+ * enforces the run-wide ceiling across multiple tool-round HTTP requests. */
+function installOmiJitFetchGuard(): void {
+  if (omiJitFetchGuardInstalled || typeof globalThis.fetch !== "function") return;
+  omiJitFetchGuardInstalled = true;
+  const upstreamFetch = globalThis.fetch.bind(globalThis);
+  omiJitUpstreamFetch = upstreamFetch;
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const requestHeaders = new Headers(input instanceof Request ? input.headers : undefined);
+    if (init?.headers) new Headers(init.headers).forEach((value, key) => requestHeaders.set(key, value));
+    const budget = omiJitBudgetFromRequestHeaders(requestHeaders);
+    if (!budget) return upstreamFetch(input, init);
+    pruneExpiredOmiJitReceiptStates();
+    const state = omiJitReceiptStates.get(budget.executionID) ?? {
+      providerAttempts: 0,
+      costMicroUSD: 0,
+      invalid: false,
+      lastTouchedAt: Date.now(),
+    };
+    state.lastTouchedAt = Date.now();
+    omiJitReceiptStates.set(budget.executionID, state);
+    if (state.invalid || state.providerAttempts >= budget.maxProviderAttempts
+      || (state.costMicroUSD !== null && state.costMicroUSD >= budget.maxEstimatedSpendMicroUSD)) {
+      throw new Error("JIT gateway receipt missing or qualification budget exhausted");
+    }
+    try {
+      const response = await upstreamFetch(input, init);
+      let receipt = omiJitGatewayReceiptFromHeader(response.headers.get("x-omi-jit-gateway-receipt") || undefined);
+      let receiptAccepted = false;
+      const recordReceipt = async (candidate: OmiJitGatewayReceipt | undefined): Promise<void> => {
+        const relayContext = await omiRelayContextRaw();
+        if (!candidate || candidate.runID !== budget.executionID || candidate.contractVersion !== budget.contractVersion
+          || candidate.aggregate.attemptCount !== candidate.attempts.length) {
+          state.invalid = true;
+          return;
+        }
+        state.providerAttempts += candidate.aggregate.attemptCount;
+        if (candidate.aggregate.costStatus === "estimated"
+          && Number.isSafeInteger(candidate.aggregate.estimatedCostMicroUSD)
+          && Number(candidate.aggregate.estimatedCostMicroUSD) >= 0
+          && state.costMicroUSD !== null) {
+          state.costMicroUSD += Number(candidate.aggregate.estimatedCostMicroUSD);
+        } else {
+          // Unknown attribution is terminal for this execution. Retaining the
+          // invalid state prevents a later tool round from spending blindly.
+          state.costMicroUSD = null;
+          state.invalid = true;
+        }
+        if (!state.invalid) receiptAccepted = true;
+        await appendOmiJitReceipt(omiJitReceiptPathFromRelayContext(relayContext), candidate);
+      };
+      if (receipt) {
+        await recordReceipt(receipt);
+        return response;
+      }
+      if (!response.body) {
+        await recordReceipt(undefined);
+        return response;
+      }
+
+      // Keep the provider body byte-for-byte intact while inspecting SSE
+      // frames. A clone().text() here would consume/buffer the whole stream
+      // before pi-ai can receive its first delta.
+      const decoder = new TextDecoder();
+      let lineBuffer = "";
+      let bodyReceipt: OmiJitGatewayReceipt | undefined;
+      let receiptRecorded = false;
+      let bodyTerminal = false;
+      let bodyCancelled = false;
+      const inspect = (chunk: Uint8Array, flush = false): OmiJitGatewayReceipt | undefined => {
+        let newlyObserved: OmiJitGatewayReceipt | undefined;
+        lineBuffer += decoder.decode(chunk, { stream: !flush });
+        const lines = lineBuffer.split(/\r\n|\n|\r/);
+        lineBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim() === "data: [DONE]" || line.trim() === "data:[DONE]") bodyTerminal = true;
+          if (!line.startsWith("data:")) continue;
+          try {
+            const parsed = JSON.parse(line.slice(5).trim()) as { omi_jit_receipt?: unknown };
+            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
+            if (parsedReceipt && !bodyReceipt) {
+              bodyReceipt = parsedReceipt;
+              newlyObserved = parsedReceipt;
+            }
+          } catch { /* provider frames are not necessarily JSON */ }
+        }
+        if (flush && lineBuffer.startsWith("data:")) {
+          if (lineBuffer.trim() === "data: [DONE]" || lineBuffer.trim() === "data:[DONE]") bodyTerminal = true;
+          try {
+            const parsed = JSON.parse(lineBuffer.slice(5).trim()) as { omi_jit_receipt?: unknown };
+            const parsedReceipt = parseOmiJitGatewayReceipt(parsed.omi_jit_receipt);
+            if (parsedReceipt && !bodyReceipt) {
+              bodyReceipt = parsedReceipt;
+              newlyObserved = parsedReceipt;
+            }
+          } catch { /* incomplete provider frame */ }
+          lineBuffer = "";
+        }
+        return newlyObserved;
+      };
+      const sourceReader = response.body.getReader();
+      let bodyFinalized = false;
+      const finalizeBody = async (): Promise<void> => {
+        if (bodyFinalized) return;
+        bodyFinalized = true;
+        const newlyObserved = inspect(new Uint8Array(), true);
+        if (!receiptRecorded) {
+          receiptRecorded = true;
+          await recordReceipt(newlyObserved ?? bodyReceipt);
+        }
+      };
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          try {
+            const { done, value } = await sourceReader.read();
+            if (bodyCancelled) return;
+            if (done) {
+              await finalizeBody();
+              controller.close();
+              return;
+            }
+            const newlyObserved = inspect(value);
+            // Pi may stop consuming immediately after the [DONE] frame. The
+            // receipt must be durable before this chunk becomes visible so
+            // the adapter can join it even when EOF is never read.
+            if (newlyObserved && !receiptRecorded) {
+              receiptRecorded = true;
+              await recordReceipt(newlyObserved);
+            }
+            // Preserve the exact bytes and chunk boundaries supplied by the
+            // provider; only the side-channel inspection is transformed.
+            controller.enqueue(value);
+          } catch (error) {
+            if (bodyCancelled) return;
+            state.invalid = true;
+            controller.error(error);
+          }
+        },
+        async cancel(reason) {
+          // A consumer abort before EOF makes the receipt incomplete. Keep
+          // the execution blocked rather than allowing a later round to spend.
+          // Pi normally cancels immediately after consuming [DONE], though;
+          // once that terminal marker and a validated receipt were both seen,
+          // the run is complete and its known budget may continue.
+          bodyCancelled = true;
+          if (!(bodyTerminal && receiptAccepted)) state.invalid = true;
+          await sourceReader.cancel(reason);
+        },
+      });
+      return new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: new Headers(response.headers),
+      });
+    } catch (error) {
+      state.invalid = true;
+      throw error;
+    }
+  };
+}
+
+/** Test-only entry point for the process-global fetch guard. */
+export function __installOmiJitFetchGuardForTest(): void {
+  installOmiJitFetchGuard();
+}
+
+export function omiJitBudgetFromRelayContext(raw: string): OmiJitBudget | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { jitBudget?: unknown };
+    const value = parsed.jitBudget;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const budget = value as Record<string, unknown>;
+    if (typeof budget.contractVersion !== "string" || !budget.contractVersion
+      || typeof budget.executionID !== "string" || !OMI_REQUEST_ID_PATTERN.test(budget.executionID)) {
+      return undefined;
+    }
+    const numericKeys = [
+      "maxProviderAttempts",
+      "maxOutputTokensPerAttempt",
+      "maxNormalizedInputTokensPerAttempt",
+      "maxEstimatedSpendMicroUSD",
+    ] as const;
+    if (!numericKeys.every((key) => Number.isSafeInteger(budget[key]) && Number(budget[key]) > 0)) {
+      return undefined;
+    }
+    return {
+      contractVersion: budget.contractVersion,
+      executionID: budget.executionID,
+      maxProviderAttempts: Number(budget.maxProviderAttempts),
+      maxOutputTokensPerAttempt: Number(budget.maxOutputTokensPerAttempt),
+      maxNormalizedInputTokensPerAttempt: Number(budget.maxNormalizedInputTokensPerAttempt),
+      maxEstimatedSpendMicroUSD: Number(budget.maxEstimatedSpendMicroUSD),
+    };
   } catch {
     return undefined;
   }
@@ -476,7 +921,10 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
   const line = JSON.stringify(entry) + "\n";
   try {
     await mkdir(dirname(path), { recursive: true });
-    await appendFile(path, line, "utf-8");
+    // Owner-only: the log carries command text. `mode` applies at creation;
+    // a file that already exists is tightened at startup by
+    // restrictAuditLogPermissions.
+    await appendFile(path, line, { encoding: "utf-8", mode: 0o600 });
   } catch (err) {
     if (!auditWarned) {
       auditWarned = true;
@@ -485,6 +933,20 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
         `[omi-provider] audit log unavailable (${msg}); continuing without audit\n`
       );
     }
+  }
+}
+
+/**
+ * Best-effort startup hardening: the audit log carries command text, so an
+ * existing more-permissive file (written by an older build at 0644) is
+ * tightened to 0600. Failures are ignored — appending is best-effort too, and
+ * the 0600 create mode in appendAudit covers new files.
+ */
+export async function restrictAuditLogPermissions(): Promise<void> {
+  try {
+    await chmod(auditLogPath(), 0o600);
+  } catch {
+    // Missing file (nothing to harden yet) or chmod failure — never fatal.
   }
 }
 
@@ -585,14 +1047,31 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   });
 }
 
+/**
+ * Every relayed tool call used to re-read the kernel context file for its
+ * capabilityRef. Cache the parsed value per process, re-validated by a cheap
+ * mtime+size stat so a rewritten context is still picked up; a stat hit skips
+ * the content read entirely. Keyed by path, and failures are not cached — a
+ * context file being rewritten mid-read retries on the next call.
+ */
+let capabilityRefCache: { path: string; ref?: string; mtimeMs: number; size: number } | null = null;
+
 async function omiRelayCapabilityRef(): Promise<string | undefined> {
   const path = process.env.OMI_CONTEXT_FILE;
   if (!path) return undefined;
   try {
+    const fileStat = await stat(path);
+    const cached = capabilityRefCache;
+    if (cached && cached.path === path && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+      return cached.ref;
+    }
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
-      ? parsed.capabilityRef
-      : undefined;
+    const ref =
+      typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+        ? parsed.capabilityRef
+        : undefined;
+    capabilityRefCache = { path, ref, mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+    return ref;
   } catch {
     return undefined;
   }
@@ -612,6 +1091,15 @@ export function applyOmiProviderHeaders(
   if (requestId) headers["x-omi-request-id"] = requestId;
   const reasoningEffort = omiReasoningEffortFromRelayContext(relayContextRaw);
   if (reasoningEffort) headers["x-omi-reasoning-effort"] = reasoningEffort;
+  const jitBudget = omiJitBudgetFromRelayContext(relayContextRaw);
+  if (jitBudget) {
+    headers["x-omi-jit-contract-version"] = jitBudget.contractVersion;
+    headers["x-omi-jit-run-id"] = jitBudget.executionID;
+    headers["x-omi-jit-max-attempts"] = String(jitBudget.maxProviderAttempts);
+    headers["x-omi-jit-max-output-tokens"] = String(jitBudget.maxOutputTokensPerAttempt);
+    headers["x-omi-jit-max-input-tokens"] = String(jitBudget.maxNormalizedInputTokensPerAttempt);
+    headers["x-omi-jit-max-spend-micro-usd"] = String(jitBudget.maxEstimatedSpendMicroUSD);
+  }
 }
 
 export { isSafeSkillName };
@@ -715,10 +1203,13 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
       name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
+      part: Type.Optional(
+        Type.Number({ description: "1-based body section to read. Omit for the overview, section list, and first section." })
+      ),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -731,10 +1222,12 @@ function loadSkillTool() {
           details: undefined,
         };
       }
+      const rawPart = (params as { part?: unknown }).part;
+      const part = rawPart === "all" ? "all" : typeof rawPart === "number" ? rawPart : undefined;
       return {
         content: [{
           type: "text" as const,
-          text: await loadSkillInstructions(name),
+          text: await loadSkillInstructions(name, process.env.OMI_WORKSPACE ?? "", part === undefined ? {} : { part }),
         }],
         details: undefined,
       };
@@ -768,16 +1261,24 @@ function searchSkillsTool() {
   });
 }
 
-const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
-const chatFirstControlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
-const projectionContext = {
-  executionRole,
-  surfaceKind: process.env.OMI_SURFACE_KIND,
-  chatFirstUi: process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat",
-  controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
-    ? chatFirstControlGeneration
-    : null,
-} as const;
+export function omiToolProjectionContextFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): OmiToolProjectionContext {
+  const chatFirstControlGeneration = Number(env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+  return {
+    executionRole: env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator",
+    surfaceKind: env.OMI_SURFACE_KIND,
+    chatFirstUi: env.OMI_CHAT_FIRST_UI === "true" && env.OMI_SURFACE_KIND === "main_chat",
+    controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
+      ? chatFirstControlGeneration
+      : null,
+    // Only an explicit string true can widen the client-side catalog. The
+    // backend still authorizes every relay independently.
+    jitKnowledgeToolsEnabled: env.OMI_JIT_KNOWLEDGE_TOOLS_ENABLED === "true",
+  };
+}
+
+const projectionContext = omiToolProjectionContextFromEnv();
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
   return omiToolsForProjectionContext({ executionRole: role });
@@ -828,10 +1329,474 @@ export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
+// User-added MCP servers (~/.omi/mcp.json, managed from the desktop Apps page)
+//
+// Progressive disclosure. The servers are NOT registered tool-by-tool: a user
+// with a handful of servers would put hundreds of verbatim descriptions and
+// JSON schemas into the default tools payload before the model has expressed
+// any interest in one of them. Exactly two proxy tools are registered instead:
+//
+//   mcp_tools_info — discovery. The stable, sorted index of server names and
+//     tool names is embedded in the proxy descriptions below, so identifying
+//   a candidate needs no extra turn; calling it returns full descriptions
+//     and JSON input schemas on demand.
+//   mcp_call — dispatch. Runs a server's tool (or published prompt) by its
+//     REAL names and returns the result content faithfully.
+//
+// The old `mcp_<server>_<tool>` mangling is gone from the model's surface
+// entirely. Everything a server returns is untrusted tool-result data: it is
+// handed back as tool output and never interpolated into system instructions.
+// ---------------------------------------------------------------------------
+
+type McpServerStatus = "connecting" | "ready" | "failed";
+
+interface McpServerEntry {
+  readonly name: string;
+  readonly client: McpClient;
+  /** 30s for stdio (a first `npx <package>` run downloads it), 10s remote. */
+  readonly discoveryBudgetMs: number;
+  /** stdio servers spawn a child process at start; remote ones open a connection. */
+  readonly kind: "stdio" | "remote";
+  status: McpServerStatus;
+  error?: string;
+  tools: McpRemoteTool[];
+  prompts: McpPrompt[];
+}
+
+/** Every configured server, sorted by name; the proxy tools read this live. */
+let mcpServers: McpServerEntry[] = [];
+
+/**
+ * Ceiling on one MCP tool or prompt call. Nothing else settles these: an SSE
+ * server's reply arrives on a stream that may simply never carry it, and a stdio
+ * server's only other terminal event is the child exiting. Without this the
+ * user's turn spins with no way out short of quitting the app.
+ */
+const CALL_TIMEOUT_MS = 120_000;
+
+/**
+ * How long the first prompt waits for servers to connect before the proxies
+ * register with whatever has landed so far. This is the only MCP wait on the
+ * turn path — the per-server budgets below are connection timeouts, not
+ * prompt-blocking gates. Servers still connecting keep connecting in the
+ * background: pi's registerTool cannot revise a description after the fact,
+ * but the proxies read live state, so a late server becomes callable anyway
+ * and mcp_tools_info reports its true status.
+ */
+const DEFAULT_MCP_FIRST_TURN_BUDGET_MS = 3_000;
+
+function firstTurnBudgetMs(): number {
+  const raw = Number(process.env.OMI_MCP_FIRST_TURN_BUDGET_MS);
+  return Number.isSafeInteger(raw) && raw >= 0 ? raw : DEFAULT_MCP_FIRST_TURN_BUDGET_MS;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      timer.unref?.();
+    }),
+  ]);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
+
+function byName(a: { name: string }, b: { name: string }): number {
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+}
+
+function createMcpClient(server: UserMcpServer): McpClient {
+  if (isStdioServer(server)) {
+    return new McpStdioClient(server.command, server.args, server.env);
+  }
+  // Headers pass through as configured. `loadLocalMcpConfig` has already turned a
+  // `token` or a stored OAuth `access_token` into an Authorization header, so
+  // unwrapping one here only to have the client rebuild it corrupted any scheme
+  // that was not Bearer.
+  const headers = Object.fromEntries((server.headers ?? []).map((h) => [h.name, h.value]));
+  // An `sse` server publishes a long-lived event stream, not a POST target;
+  // driving it as Streamable HTTP is a 404 on every message.
+  return server.type === "sse"
+    ? new McpSseClient(server.url, headers)
+    : new McpHttpClient(server.url, headers);
+}
+
+/**
+ * At most this many stdio servers start at once. Every stdio start is a child
+ * process — often `npx`, which may download a package first — and a large
+ * config used to fire all of those spawns in the same instant. Remote servers
+ * (http/sse) open lightweight connections and deliberately stay unbounded; only
+ * the process-spawning lane shares the bound.
+ */
+export const MCP_STDIO_START_CONCURRENCY = 8;
+
+/**
+ * Start discovery for every entry, returning the promises for the caller to
+ * race against the first-turn budget. stdio entries share the concurrency
+ * bound above — a worker pool claims the next entry as each discovery
+ * settles — while remote entries start immediately. Never rejects: the start
+ * function is responsible for its own error handling.
+ */
+export function startMcpDiscoveries<T extends { kind: "stdio" | "remote" }>(
+  entries: readonly T[],
+  start: (entry: T) => Promise<void>,
+): Promise<unknown>[] {
+  const stdio = entries.filter((entry) => entry.kind === "stdio");
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(MCP_STDIO_START_CONCURRENCY, stdio.length) },
+    async () => {
+      // The event loop is single-threaded, so claiming the next index before
+      // the first await cannot race another worker.
+      while (cursor < stdio.length) {
+        await start(stdio[cursor++]);
+      }
+    },
+  );
+  return [
+    ...workers,
+    ...entries.filter((entry) => entry.kind !== "stdio").map((entry) => start(entry)),
+  ];
+}
+
+/**
+ * One server's tool and prompt discovery under a single budget — the two calls
+ * share one deadline: charging each its own turned a single wedged stdio server
+ * into a minute of blocked startup. Never rejects; the outcome lands on the
+ * entry the proxy tools read.
+ */
+function startMcpDiscovery(entry: McpServerEntry): Promise<void> {
+  return (async () => {
+    const deadline = Date.now() + entry.discoveryBudgetMs;
+    try {
+      const tools = await withTimeout(entry.client.listTools(), entry.discoveryBudgetMs);
+      const prompts = entry.client.supports("prompts")
+        ? await withTimeout(entry.client.listPrompts(), Math.max(1_000, deadline - Date.now()))
+        : [];
+      entry.tools = [...tools].sort(byName);
+      entry.prompts = [...prompts].sort(byName);
+      entry.status = "ready";
+      process.stderr.write(
+        `[user-mcp] ${entry.name}: discovered ${entry.tools.length} tools, ${entry.prompts.length} prompts\n`,
+      );
+      if (entry.tools.length === 0 && entry.prompts.length === 0) {
+        // Nothing to call means nothing holds this client, and nothing will ever
+        // close it: an SSE server's GET stream and a stdio server's child would
+        // stay open for the whole session with no way to reach them.
+        entry.client.dispose();
+      }
+    } catch (err) {
+      entry.status = "failed";
+      entry.error = err instanceof Error ? err.message : String(err);
+      entry.client.dispose();
+      process.stderr.write(
+        `[user-mcp] ${entry.name}: server unavailable: ${entry.error}\n`,
+      );
+    }
+  })();
+}
+
+/** Tool names listed inline per server before the index defers to mcp_tools_info. */
+const MCP_INDEX_NAME_CAP = 40;
+const MCP_INDEX_PROMPT_CAP = 10;
+/**
+ * Tool and prompt names are the server's to choose (`listTools` accepts any
+ * non-empty string), so each name is clipped before it rides in the proxy
+ * tools' frozen descriptions — the name caps bound the count, not the size.
+ * A clipped name is still findable: the live mcp_tools_info results always
+ * carry the real, full name.
+ */
+const MCP_INDEX_NAME_WIDTH = 64;
+/** Server lines embedded in the frozen descriptions before deferring to the live index. */
+const MCP_INDEX_SERVER_LINE_CAP = 20;
+
+function clippedName(name: string): string {
+  return name.length <= MCP_INDEX_NAME_WIDTH ? name : `${name.slice(0, MCP_INDEX_NAME_WIDTH)}…`;
+}
+
+function nameList(names: string[], cap: number): string {
+  const clipped = names.map(clippedName);
+  if (clipped.length <= cap) return clipped.join(", ");
+  return `${clipped.slice(0, cap).join(", ")} … +${names.length - cap} more`;
+}
+
+/**
+ * The discovery index: one line per configured server — name, one-line
+ * description if the server declares one, live status, tool names. Sorted and
+ * name-only, because this text rides in the proxy tools' descriptions on every
+ * turn: it must stay compact and never carry tool descriptions or schemas.
+ * Server lines are bounded too: past the cap the description defers to the
+ * live mcp_tools_info index instead of growing with the user's config.
+ */
+function mcpIndexText(): string {
+  if (mcpServers.length === 0) return "No user MCP servers are configured.";
+  const lines = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => {
+    const hint = entry.client.serverDescription;
+    if (entry.status === "connecting") {
+      // Neutral wording: pi cannot revise a registered description, so a
+      // literal "connecting…" here would outlive the connection it described.
+      // The live index — mcp_tools_info with no arguments — reports real status.
+      return `- ${entry.name}: status at registration — call mcp_tools_info with no arguments for live status`;
+    }
+    if (entry.status === "failed") {
+      return `- ${entry.name}: unavailable (${entry.error ?? "unknown error"})`;
+    }
+    const tools = `tools (${entry.tools.length}): ${nameList(entry.tools.map((tool) => tool.name), MCP_INDEX_NAME_CAP)}`;
+    const prompts = entry.prompts.length
+      ? `; prompts (${entry.prompts.length}): ${nameList(entry.prompts.map((prompt) => prompt.name), MCP_INDEX_PROMPT_CAP)}`
+      : "";
+    return `- ${entry.name}${hint ? ` — ${hint}` : ""}: ${tools}${prompts}`;
+  });
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    lines.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Server names for the mcp_call description: names only, count-bounded. The
+ * full name-only tool index rides once, in mcp_tools_info's description —
+ * duplicating it in both proxies cost its size again on every turn. Server
+ * names need no clipping: loadLocalMcpConfig admits 1-64 chars only.
+ */
+function mcpServerNameLine(): string {
+  if (mcpServers.length === 0) return "none";
+  const names = mcpServers.slice(0, MCP_INDEX_SERVER_LINE_CAP).map((entry) => entry.name);
+  if (mcpServers.length > MCP_INDEX_SERVER_LINE_CAP) {
+    names.push(
+      `… +${mcpServers.length - MCP_INDEX_SERVER_LINE_CAP} more — call mcp_tools_info with no arguments for the live index`,
+    );
+  }
+  return names.join(", ");
+}
+
+function mcpTextResult(text: string) {
+  return { content: [{ type: "text" as const, text }], details: undefined };
+}
+
+function findServer(name: string): McpServerEntry | undefined {
+  return mcpServers.find((entry) => entry.name === name);
+}
+
+function mcpToolsInfoTool() {
+  return defineTool({
+    name: "mcp_tools_info",
+    label: "MCP Tools Info",
+    description:
+      "Discover the user's MCP servers. With no arguments, returns the live index of configured servers " +
+      "and their tool names. Pass server (and optionally tool) to get full descriptions and JSON input " +
+      "schemas for one server or one tool. Run this before mcp_call whenever the index below is not enough.\n\n" +
+      `Configured servers right now:\n${mcpIndexText()}`,
+    parameters: Type.Object({
+      server: Type.Optional(Type.String({ description: "A server name from the index" })),
+      tool: Type.Optional(Type.String({ description: "A tool or prompt name on that server" })),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const serverName = typeof params.server === "string" ? params.server : undefined;
+      const toolName = typeof params.tool === "string" ? params.tool : undefined;
+      if (!serverName) {
+        return mcpTextResult(JSON.stringify({ servers: mcpServerSummaries() }, null, 2));
+      }
+      const entry = findServer(serverName);
+      if (!entry) {
+        return mcpTextResult(`Error: unknown MCP server '${serverName}'. ${mcpIndexText()}`);
+      }
+      if (entry.status === "connecting") {
+        return mcpTextResult(`MCP server '${serverName}' is still connecting; call again in a moment.`);
+      }
+      if (entry.status === "failed") {
+        return mcpTextResult(`MCP server '${serverName}' is unavailable: ${entry.error ?? "unknown error"}`);
+      }
+      if (toolName) {
+        const tool = entry.tools.find((candidate) => candidate.name === toolName);
+        if (tool) {
+          return mcpTextResult(JSON.stringify({
+            server: entry.name,
+            kind: "tool",
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          }, null, 2));
+        }
+        const prompt = entry.prompts.find((candidate) => candidate.name === toolName);
+        if (prompt) {
+          return mcpTextResult(JSON.stringify({
+            server: entry.name,
+            kind: "prompt",
+            name: prompt.name,
+            description: prompt.description,
+            arguments: prompt.arguments,
+          }, null, 2));
+        }
+        return mcpTextResult(
+          `Error: server '${serverName}' has no tool or prompt named '${toolName}'. ` +
+            `Tools: ${nameList(entry.tools.map((candidate) => candidate.name), MCP_INDEX_NAME_CAP)}.`,
+        );
+      }
+      return mcpTextResult(JSON.stringify({
+        server: entry.name,
+        status: entry.status,
+        ...(entry.client.serverDescription ? { description: entry.client.serverDescription } : {}),
+        tools: entry.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })),
+        prompts: entry.prompts.map((prompt) => ({
+          name: prompt.name,
+          description: prompt.description,
+          arguments: prompt.arguments,
+        })),
+      }, null, 2));
+    },
+  });
+}
+
+interface McpServerSummary {
+  name: string;
+  status: McpServerStatus;
+  description?: string;
+  error?: string;
+  tools?: string[];
+  prompts?: string[];
+}
+
+/** The live no-argument mcp_tools_info view: names and status, never schemas. */
+function mcpServerSummaries(): McpServerSummary[] {
+  return mcpServers.map((entry) => ({
+    name: entry.name,
+    status: entry.status,
+    ...(entry.client.serverDescription ? { description: entry.client.serverDescription } : {}),
+    ...(entry.error ? { error: entry.error } : {}),
+    ...(entry.status === "ready"
+      ? {
+          tools: entry.tools.map((tool) => tool.name),
+          prompts: entry.prompts.map((prompt) => prompt.name),
+        }
+      : {}),
+  }));
+}
+
+function mcpCallTool() {
+  return defineTool({
+    name: "mcp_call",
+    label: "MCP Call",
+    description:
+      "Run a tool (or a published prompt) on one of the user's MCP servers, by its real server and tool " +
+      "names, and get the result content back as text.\n\n" +
+      // Server names only: the tool index rides once, in mcp_tools_info's
+      // description — duplicating it here cost its full size again per turn.
+      `Configured servers right now: ${mcpServerNameLine()}\n` +
+      "Call mcp_tools_info first for the tool index and, when you need it, a tool's full description and input schema.",
+    parameters: Type.Object({
+      server: Type.String({ description: "Server name from the mcp_tools_info index" }),
+      tool: Type.String({ description: "Tool (or prompt) name on that server" }),
+      arguments: Type.Optional(Type.Unknown({
+        description: "Arguments object matching the tool's JSON input schema",
+      })),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const entry = findServer(params.server);
+      if (!entry) {
+        return mcpTextResult(
+          `Error: unknown MCP server '${params.server}'. ` +
+            `Configured servers: ${mcpServers.map((candidate) => candidate.name).join(", ") || "none"}.`,
+        );
+      }
+      if (entry.status === "connecting") {
+        return mcpTextResult(`Error: MCP server '${entry.name}' is still connecting; call again in a moment.`);
+      }
+      if (entry.status === "failed") {
+        return mcpTextResult(`Error: MCP server '${entry.name}' is unavailable: ${entry.error ?? "unknown error"}`);
+      }
+      const args = (params.arguments ?? {}) as Record<string, unknown>;
+      let text: string;
+      if (entry.tools.some((candidate) => candidate.name === params.tool)) {
+        // A tool and a prompt sharing a name resolve to the tool; the prompt
+        // stays reachable through its own listing.
+        try {
+          text = await withTimeout(entry.client.callTool(params.tool, args), CALL_TIMEOUT_MS);
+        } catch (err) {
+          text = `Error calling ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`;
+        }
+      } else if (entry.prompts.some((candidate) => candidate.name === params.tool)) {
+        try {
+          text = await withTimeout(entry.client.getPrompt(params.tool, args), CALL_TIMEOUT_MS);
+        } catch (err) {
+          text = `Error getting prompt ${entry.name}/${params.tool}: ${err instanceof Error ? err.message : err}`;
+        }
+      } else {
+        text =
+          `Error: server '${entry.name}' has no tool or prompt named '${params.tool}'. ` +
+          "Call mcp_tools_info with this server's name for the full list.";
+      }
+      return mcpTextResult(text);
+    },
+  });
+}
+
+/**
+ * Connect every configured server, then register the two proxy tools.
+ *
+ * Deterministic: servers are sorted by name, their tools and prompts are
+ * sorted by name, and the proxies go in in one pass after the await window —
+ * there are no per-tool registrations left to race, and the index text is
+ * built from that sorted snapshot.
+ *
+ * Non-blocking first turn: the turn path waits at most the short global
+ * budget above, not any server's own connection timeout. Whatever landed by
+ * then is in the embedded index; the rest finishes in the background and is
+ * picked up live by the proxies, which report each server's true state.
+ */
+async function registerUserMcpTools(pi: ExtensionAPI): Promise<void> {
+  const logErr = (msg: string) => process.stderr.write(`[user-mcp] ${msg}\n`);
+  const servers = loadLocalMcpConfig(process.env.OMI_LOCAL_MCP_FILE, new Set(), logErr)
+    .sort(byName);
+  mcpServers = servers.map((config) => ({
+    name: config.name,
+    client: createMcpClient(config),
+    discoveryBudgetMs: isStdioServer(config) ? 30_000 : 10_000,
+    kind: isStdioServer(config) ? "stdio" : "remote",
+    status: "connecting",
+    tools: [],
+    prompts: [],
+  }));
+  // stdio spawns share the bounded start pool; remote connects are unbounded.
+  const probes = startMcpDiscoveries(mcpServers, startMcpDiscovery);
+  await Promise.race([Promise.allSettled(probes), sleep(firstTurnBudgetMs())]);
+  pi.registerTool(mcpToolsInfoTool());
+  pi.registerTool(mcpCallTool());
+  // Stragglers keep connecting; startMcpDiscovery never rejects, and each
+  // completion updates the entry the proxies read and logs its outcome.
+}
+
+export async function __registerUserMcpToolsForTest(pi: ExtensionAPI): Promise<void> {
+  await registerUserMcpTools(pi);
+}
+
+/** Test-only: dispose every client and drop the registry between tests. */
+export function __resetUserMcpForTest(): void {
+  for (const entry of mcpServers) entry.client.dispose();
+  mcpServers = [];
+}
+
+// ---------------------------------------------------------------------------
 // Extension entry point
 // ---------------------------------------------------------------------------
 
-export default function omiProvider(pi: ExtensionAPI): void {
+export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
+  installOmiJitFetchGuard();
+  // Best-effort, never fatal: tighten a pre-existing audit log to owner-only.
+  void restrictAuditLogPermissions();
+
   const baseUrl = process.env.OMI_API_BASE_URL || "https://api.omi.me/v2";
   const apiKey = process.env.OMI_API_KEY || "";
 
@@ -940,6 +1905,14 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // Register Omi-specific tools (execute_sql, semantic_search, etc.)
   // These forward to Swift via the OMI_BRIDGE_PIPE Unix socket.
   void registerOmiTools(pi);
+
+  // User MCP servers from the Apps page, exposed through the two proxy tools
+  // (progressive disclosure). Awaited (pi waits for async extension factories)
+  // but bounded by a short global budget — a wedged server delays the first
+  // turn by that budget once, never by its own connection timeout, and
+  // stragglers are picked up live afterwards. A failing server is reported
+  // through the proxies, never fatal.
+  await registerUserMcpTools(pi);
 }
 
 // ---------------------------------------------------------------------------

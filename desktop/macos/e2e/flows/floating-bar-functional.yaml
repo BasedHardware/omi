@@ -17,6 +17,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
+  # Where the notch's own agent-exit routing decision lives.
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
@@ -37,10 +39,12 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayTimer.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientFeedback.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift

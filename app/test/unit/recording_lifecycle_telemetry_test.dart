@@ -13,8 +13,6 @@ class _TestEnvFields implements EnvFields {
   @override
   String? get apiBaseUrl => 'https://api.example.test/';
   @override
-  String? get googleMapsApiKey => null;
-  @override
   String? get intercomAppId => null;
   @override
   String? get intercomIOSApiKey => null;
@@ -61,15 +59,8 @@ void main() {
       RecordingLifecycleTelemetry.startedEvent,
       RecordingLifecycleTelemetry.completedEvent,
     ]);
-    expect(events.first.properties, {
-      'recording_id': 'recording-1',
-      'recording_source': 'phone_mic_live',
-    });
-    expect(events.last.properties, {
-      ...events.first.properties,
-      'duration_seconds': 2.75,
-      'reason': 'user_stopped',
-    });
+    expect(events.first.properties, {'recording_id': 'recording-1', 'recording_source': 'phone_mic_live'});
+    expect(events.last.properties, {...events.first.properties, 'duration_seconds': 2.75, 'reason': 'user_stopped'});
     expect(telemetry.recordingId, isNull);
   });
 

@@ -7,6 +7,8 @@ provider payloads, headers, and credentials never enter the accounting path.
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -152,6 +154,9 @@ class AccountingContext:
     api_surface: str
     payer: str
     app_platform: str | None = None
+    # Opaque qualification-run correlation. Normal chat leaves this absent.
+    jit_run_id: str | None = None
+    jit_contract_version: str | None = None
 
     @classmethod
     def create(
@@ -164,6 +169,8 @@ class AccountingContext:
         api_surface: str,
         payer: str,
         app_platform: str | None = None,
+        jit_run_id: str | None = None,
+        jit_contract_version: str | None = None,
     ) -> 'AccountingContext':
         return cls(
             invocation_id=str(uuid4()),
@@ -174,6 +181,8 @@ class AccountingContext:
             api_surface=api_surface,
             payer=payer,
             app_platform=app_platform,
+            jit_run_id=jit_run_id,
+            jit_contract_version=jit_contract_version,
         )
 
 
@@ -307,6 +316,8 @@ class AccountingEvent:
     cost_basis: str
     provider_response_id: str | None
     app_platform: str | None = None
+    jit_run_id: str | None = None
+    jit_contract_version: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +332,8 @@ class AccountingEvent:
             'api_surface': self.api_surface,
             'payer': self.payer,
             'app_platform': self.app_platform,
+            'jit_run_id': self.jit_run_id,
+            'jit_contract_version': self.jit_contract_version,
             'provider': self.provider,
             'configured_model': self.configured_model,
             'actual_model_version': self.actual_model_version,
@@ -609,7 +622,168 @@ def build_accounting_event(
         rate_card_id=rate_card_id,
         cost_basis=cost_basis,
         provider_response_id=attempt.provider_response_id,
+        jit_run_id=context.jit_run_id,
+        jit_contract_version=context.jit_contract_version,
     )
+
+
+def estimated_provider_cost_micro_usd(
+    *,
+    payer: str,
+    provider: str,
+    model: str,
+    metadata: ProviderResponseMetadata,
+) -> tuple[CostStatus, int | None]:
+    """Return the same rate-card estimate used by the persisted ledger event.
+
+    JIT reservations must settle before a retry or fallback can spend again.
+    Keep that decision on the gateway's existing accounting estimator so the
+    reservation authority and the durable AccountingEvent cannot drift into
+    separate pricing rules.
+    """
+    cost_status, estimated_cost, _cache_savings, _rate_card_id, _cost_basis = _estimate_cost(
+        payer=payer,
+        provider=provider,
+        model=model,
+        usage=metadata.usage,
+        usage_status=UsageStatus.CONFIRMED if metadata.usage is not None else UsageStatus.NOT_REPORTED,
+        traffic_type=metadata.traffic_type,
+    )
+    return cost_status, estimated_cost
+
+
+@dataclass(frozen=True)
+class AccountingAggregate:
+    """Run-level view over every provider attempt, including failures/retries."""
+
+    jit_run_id: str
+    attempt_count: int
+    normalized_uncached_input_tokens: int
+    cached_input_tokens: int
+    cache_write_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    estimated_cost_micro_usd: int | None
+    cost_status: CostStatus
+
+    @property
+    def cost_is_known(self) -> bool:
+        return self.estimated_cost_micro_usd is not None and self.cost_status == CostStatus.ESTIMATED
+
+
+def aggregate_accounting_events(events: list[AccountingEvent]) -> AccountingAggregate | None:
+    """Aggregate a JIT run without treating missing cost as zero.
+
+    The gateway persists one immutable event per provider attempt.  A full
+    agent turn can contain retries, fallbacks, and read-only tool rounds, so a
+    final-message usage value is insufficient.  Any unpriced/indeterminate
+    attempt makes the aggregate cost unknown and therefore ineligible for a
+    subsequent paid attempt.
+    """
+    jit_events = [event for event in events if event.jit_run_id]
+    if not jit_events:
+        return None
+    run_ids = {event.jit_run_id for event in jit_events if event.jit_run_id is not None}
+    if len(run_ids) != 1:
+        raise ValueError('cannot aggregate multiple JIT run IDs')
+    cost_known = all(
+        event.cost_status == CostStatus.ESTIMATED and event.estimated_cost_micro_usd is not None for event in jit_events
+    )
+    return AccountingAggregate(
+        jit_run_id=next(iter(run_ids)),
+        attempt_count=len(jit_events),
+        normalized_uncached_input_tokens=sum(event.uncached_input_tokens for event in jit_events),
+        cached_input_tokens=sum(event.cached_input_tokens for event in jit_events),
+        cache_write_tokens=sum(event.cache_write_tokens for event in jit_events),
+        output_tokens=sum(event.output_tokens for event in jit_events),
+        reasoning_tokens=sum(event.reasoning_tokens for event in jit_events),
+        estimated_cost_micro_usd=(
+            sum(event.estimated_cost_micro_usd or 0 for event in jit_events) if cost_known else None
+        ),
+        cost_status=CostStatus.ESTIMATED if cost_known else CostStatus.INDETERMINATE,
+    )
+
+
+JIT_GATEWAY_RECEIPT_SCHEMA = 'jit-gateway-receipt-v1'
+
+
+@dataclass(frozen=True)
+class JITGatewayReceipt:
+    """Small, prompt-free billing receipt returned to a qualified JIT caller."""
+
+    run_id: str
+    contract_version: str
+    attempts: tuple[dict[str, Any], ...]
+    aggregate: AccountingAggregate
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            'schema_version': JIT_GATEWAY_RECEIPT_SCHEMA,
+            'run_id': self.run_id,
+            'contract_version': self.contract_version,
+            'attempts': list(self.attempts),
+            'aggregate': {
+                'attempt_count': self.aggregate.attempt_count,
+                'normalized_uncached_input_tokens': self.aggregate.normalized_uncached_input_tokens,
+                'cached_input_tokens': self.aggregate.cached_input_tokens,
+                'cache_write_tokens': self.aggregate.cache_write_tokens,
+                'output_tokens': self.aggregate.output_tokens,
+                'reasoning_tokens': self.aggregate.reasoning_tokens,
+                'estimated_cost_micro_usd': self.aggregate.estimated_cost_micro_usd,
+                'cost_status': self.aggregate.cost_status.value,
+            },
+        }
+
+
+def jit_gateway_receipt_for_trace(
+    context: AccountingContext,
+    trace: AttemptTrace,
+) -> JITGatewayReceipt | None:
+    """Build the trusted wire receipt after all attempts in one request settle."""
+    if not context.jit_run_id or not context.jit_contract_version or not trace.attempts:
+        return None
+    events = [build_accounting_event(context, attempt) for attempt in trace.attempts]
+    aggregate = aggregate_accounting_events(events)
+    if aggregate is None:
+        return None
+    attempts = tuple(
+        {
+            'attempt_id': event.attempt_id,
+            'provider': event.provider,
+            'configured_model': event.configured_model,
+            'actual_model_version': event.actual_model_version,
+            'provider_response_id': event.provider_response_id,
+            'rate_card_id': event.rate_card_id,
+            'cost_basis': event.cost_basis,
+            'usage_status': event.usage_status.value,
+            'cost_status': event.cost_status.value,
+            'normalized_uncached_input_tokens': event.uncached_input_tokens,
+            'cached_input_tokens': event.cached_input_tokens,
+            'cache_write_tokens': event.cache_write_tokens,
+            'output_tokens': event.output_tokens,
+            'reasoning_tokens': event.reasoning_tokens,
+            'estimated_cost_micro_usd': event.estimated_cost_micro_usd,
+        }
+        for event in events
+    )
+    return JITGatewayReceipt(
+        run_id=context.jit_run_id,
+        contract_version=context.jit_contract_version,
+        attempts=attempts,
+        aggregate=aggregate,
+    )
+
+
+def encode_jit_gateway_receipt(receipt: JITGatewayReceipt) -> str:
+    """Encode a compact, header-safe copy for non-streaming callers."""
+    payload = json.dumps(receipt.as_dict(), separators=(',', ':'), sort_keys=True).encode('utf-8')
+    return base64.urlsafe_b64encode(payload).decode('ascii').rstrip('=')
+
+
+def jit_gateway_receipt_sse_frame(receipt: JITGatewayReceipt) -> bytes:
+    """Frame the same receipt as a terminal SSE event before ``[DONE]``."""
+    payload = json.dumps({'omi_jit_receipt': receipt.as_dict()}, separators=(',', ':'), sort_keys=True)
+    return f'event: omi_jit_receipt\ndata: {payload}\n\n'.encode('utf-8')
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:
@@ -724,7 +898,7 @@ def _estimate_cost(
         )
     if usage.unit_type != 'tokens':
         return CostStatus.UNPRICED, None, None, None, 'non_token_unit_rate_missing'
-    rate_card = _rate_card_for(provider, model)
+    rate_card = rate_card_for(provider, model)
     if rate_card is None:
         return CostStatus.UNPRICED, None, None, None, 'rate_card_missing'
     # The tier that applies is decided by total request context — cached,
@@ -778,12 +952,12 @@ def _estimate_cost(
         cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
     else:
         cost_basis = 'marginal_token_rates_excludes_cache_storage'
-    cost = _rounded_micro_usd(numerator)
-    savings = _rounded_micro_usd(cache_savings_numerator)
+    cost = rounded_micro_usd(numerator)
+    savings = rounded_micro_usd(cache_savings_numerator)
     return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, cost_basis
 
 
-def _rounded_micro_usd(numerator: int) -> int:
+def rounded_micro_usd(numerator: int) -> int:
     if numerator >= 0:
         return (numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION
     return -((-numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION)
@@ -840,7 +1014,7 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
     return cards
 
 
-def _rate_card_for(provider: str, model: str) -> RateCard | None:
+def rate_card_for(provider: str, model: str) -> RateCard | None:
     return _load_rate_cards().get((provider.strip().lower(), model.strip()))
 
 

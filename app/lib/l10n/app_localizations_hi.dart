@@ -9899,6 +9899,36 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tapPlusToStartRecording => 'Tap + to start recording';
 
   @override
+  String get chatBlockTask => 'कार्य';
+
+  @override
+  String get chatBlockGoal => 'लक्ष्य';
+
+  @override
+  String get chatBlockConversation => 'बातचीत';
+
+  @override
+  String get chatBlockMemory => 'स्मृति';
+
+  @override
+  String get chatBlockQuestion => 'प्रश्न';
+
+  @override
+  String get chatBlockOpenInGoals => 'लक्ष्यों में खोलें';
+
+  @override
+  String get chatBlockOpenConversation => 'बातचीत खोलें';
+
+  @override
+  String get chatBlockOpenInMemories => 'स्मृतियों में खोलें';
+
+  @override
+  String get chatBlockUnavailable => 'अब उपलब्ध नहीं है';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'अनुशंसित अगले कदम';
+
+  @override
   String get couldNotLoadMemories => 'यादें लोड नहीं हो सकीं';
 
   @override

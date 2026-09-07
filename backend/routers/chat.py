@@ -92,10 +92,12 @@ from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
+    MAX_SESSION_DURATION_S,
     compute_pcm_duration_ms,
     read_wav_duration_ms,
     try_consume_budget,
-    check_budget,
+    try_reserve_session_budget,
+    settle_reserved_duration,
     record_actual_duration,
 )
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -875,12 +877,14 @@ def create_voice_message_stream(
         # Daily budget check (first file only — matches actual DG usage).
         # A quota rejection is not an STT attempt and therefore is not an
         # invalid-input or provider-outcome metric.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         first_wav = wav_paths[0]
         duration_ms = read_wav_duration_ms(first_wav)
-        if duration_ms is not None:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        budget_duration_ms = duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, budget_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -1178,15 +1182,15 @@ async def transcribe_voice_message(
 
         # Daily budget check (sum all files). This is not a provider outcome,
         # so do it before recording an accepted transcription attempt.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         total_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
-            if duration_ms is not None:
-                total_duration_ms += duration_ms
-        if total_duration_ms > 0:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+            total_duration_ms += duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
@@ -1372,16 +1376,10 @@ async def transcribe_voice_message_stream(
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
-    # Daily budget check — reject if already exhausted before opening a provider connection.
-    budget_remaining_ms = None  # None = fail-open (no enforcement)
-    try:
-        has_budget, used_ms, remaining_ms = check_budget(uid)
-        if not has_budget:
-            await websocket.close(code=1008, reason='Daily transcription budget exhausted')
-            return
-        budget_remaining_ms = remaining_ms
-    except Exception:
-        pass  # Fail-open
+    # Daily budget reservation is taken inside the session try/finally so every
+    # exit path (including STT connect failure) can settle/refund.
+    budget_remaining_ms = None  # None = fail-open (no mid-session enforcement)
+    budget_reserved_ms = 0
 
     websocket_active = True
     dg_socket = None
@@ -1617,12 +1615,26 @@ async def transcribe_voice_message_stream(
         return False
 
     def record_stt_usage_once() -> None:
-        """Record accepted provider audio only after a terminal provider drain."""
+        """Settle the connect-time reservation after a successful provider drain."""
         nonlocal usage_recorded
-        if usage_recorded or accepted_audio_bytes <= 0 or bytes_per_second <= 0:
+        if usage_recorded or bytes_per_second <= 0:
             return
-        actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
-        record_actual_duration(uid, actual_duration_ms)
+        actual_duration_ms = (
+            compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels) if accepted_audio_bytes > 0 else 0
+        )
+        if budget_reserved_ms > 0:
+            settle_reserved_duration(uid, budget_reserved_ms, actual_duration_ms)
+        elif actual_duration_ms > 0:
+            # Fail-open path never reserved; keep force-record tracking.
+            record_actual_duration(uid, actual_duration_ms)
+        usage_recorded = True
+
+    def refund_reservation_once() -> None:
+        """Release an unused reservation when the session never drained successfully."""
+        nonlocal usage_recorded
+        if usage_recorded or budget_reserved_ms <= 0:
+            return
+        settle_reserved_duration(uid, budget_reserved_ms, 0)
         usage_recorded = True
 
     async def drain_stt_or_close() -> bool:
@@ -1644,6 +1656,22 @@ async def transcribe_voice_message_stream(
         return True
 
     try:
+        # Atomically reserve up to one session before opening a provider.
+        # Probe-only check_budget + force-record at end lets concurrent WS
+        # sessions each freeze the same remaining slice and overspend.
+        try:
+            allowed, reserved_ms, _used_ms, _remaining_ms = try_reserve_session_budget(
+                uid, MAX_SESSION_DURATION_S * 1000
+            )
+            if not allowed:
+                await websocket.close(code=1008, reason='Daily transcription budget exhausted')
+                return
+            if reserved_ms > 0:
+                budget_reserved_ms = reserved_ms
+                budget_remaining_ms = reserved_ms
+        except Exception:
+            pass  # Fail-open
+
         if stt_service == STTService.parakeet:
             dg_socket, stt_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.parakeet,
@@ -1775,6 +1803,9 @@ async def transcribe_voice_message_stream(
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
             record_stt_usage_once()
+        else:
+            # Provider never drained successfully — refund the connect-time reservation.
+            refund_reservation_once()
 
         if dg_socket and not stt_drained:
             try:

@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "พื้นที่จัดเก็บของ Pendant เต็มและยังอยู่ในโหมดบันทึกเสียง จึงไม่สามารถถ่ายโอนเสียงที่บันทึกไว้ได้ กดปุ่มของ Pendant เพื่อหยุดการบันทึก แล้วซิงค์อีกครั้ง",
     "conversationsNotCapturedCount": "ไม่ได้บันทึก ({count})",
     "transcriptionNoAudio": "การถอดเสียงไม่ได้รับเสียง",
+    "chatBlockTask": "งาน",
+    "chatBlockGoal": "เป้าหมาย",
+    "chatBlockConversation": "บทสนทนา",
+    "chatBlockMemory": "ความทรงจำ",
+    "chatBlockQuestion": "คำถาม",
+    "chatBlockOpenInGoals": "เปิดในเป้าหมาย",
+    "chatBlockOpenConversation": "เปิดบทสนทนา",
+    "chatBlockOpenInMemories": "เปิดในความทรงจำ",
+    "chatBlockUnavailable": "ไม่พร้อมใช้งานอีกต่อไป",
+    "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ",
     "couldNotLoadMemories": "ไม่สามารถโหลดความทรงจำได้",
     "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้"
 }

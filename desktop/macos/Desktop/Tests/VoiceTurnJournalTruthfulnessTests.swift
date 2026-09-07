@@ -28,6 +28,45 @@ import XCTest
       }
     }
 
+    // MARK: - I1b: delivery state separates "cut off" from "fully heard"
+
+    func testBargeInAfterFullDeliveryJournalsAsCompleted() {
+      // A barge-in after playback drained interrupts the silence, not the
+      // answer. Journaling it `.failed` taught the model its own delivered
+      // answer was cut off, and it re-delivered that answer turns later on an
+      // unrelated question (measured 2026-09-04: three fully spoken replies in
+      // one session sealed `interrupted_by_barge_in`, followed by exactly that
+      // recurrence).
+      XCTAssertEqual(
+        VoiceTurnJournalStatusPolicy.status(for: .interruptedByBargeIn, answerDelivered: true),
+        .completed)
+      XCTAssertEqual(
+        VoiceTurnJournalStatusPolicy.status(for: .explicitInterrupt, answerDelivered: true),
+        .completed)
+    }
+
+    func testDeliveryDoesNotRescueNonInterruptionFailures() {
+      for reason in VoiceTurnTerminalReason.allCases
+      where reason != .success && reason != .interruptedByBargeIn && reason != .explicitInterrupt {
+        XCTAssertEqual(
+          VoiceTurnJournalStatusPolicy.status(for: reason, answerDelivered: true), .failed,
+          "\(reason.rawValue) must not become a completed answer because audio drained")
+      }
+    }
+
+    func testInterruptedTurnPayloadCarriesDeliveryState() {
+      let delivered = InterruptedTurnPayload(
+        ownerID: "owner", userText: "what is it?", assistantText: "The full answer.",
+        idempotencyKey: "voice:abc", answerDelivered: true)
+      let cutOff = InterruptedTurnPayload(
+        ownerID: "owner", userText: "what is it?", assistantText: "The full ans",
+        idempotencyKey: "voice:abc")
+
+      XCTAssertTrue(delivered.answerDelivered)
+      XCTAssertFalse(cutOff.answerDelivered)
+      XCTAssertNotEqual(delivered, cutOff)
+    }
+
     func testScreenObservationTravelsInUserRowMetadata() throws {
       // Regression: "what was the last word of the first riddle?" failed because what Omi saw on
       // the earlier turn lived only in a dropped tool observation. The user row now carries it.

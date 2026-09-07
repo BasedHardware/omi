@@ -3,6 +3,32 @@ import Foundation
 struct ProactiveLaneUsage: Equatable, Sendable {
   let cachedTokens: Int
   let cacheWriteTokens: Int
+  /// Provider-reported totals. These remain optional because the released
+  /// desktop envelope only guarantees cache fields; a missing value is not a
+  /// zero-cost assertion.
+  let inputTokens: Int?
+  let outputTokens: Int?
+  let totalTokens: Int?
+  let reportedCachedTokens: Int?
+  let reportedCacheWriteTokens: Int?
+
+  init(
+    cachedTokens: Int,
+    cacheWriteTokens: Int,
+    inputTokens: Int? = nil,
+    outputTokens: Int? = nil,
+    totalTokens: Int? = nil,
+    reportedCachedTokens: Int? = nil,
+    reportedCacheWriteTokens: Int? = nil
+  ) {
+    self.cachedTokens = cachedTokens
+    self.cacheWriteTokens = cacheWriteTokens
+    self.inputTokens = inputTokens
+    self.outputTokens = outputTokens
+    self.totalTokens = totalTokens
+    self.reportedCachedTokens = reportedCachedTokens
+    self.reportedCacheWriteTokens = reportedCacheWriteTokens
+  }
 }
 
 struct ProactiveLaneResult: Equatable, Sendable {
@@ -13,6 +39,98 @@ struct ProactiveLaneResult: Equatable, Sendable {
   let cacheWrite: Bool
   let fallbackClass: String
   let content: String
+  let requestID: String?
+  let provider: String?
+  let providerResponseID: String?
+
+  init(
+    operation: String,
+    lane: String,
+    providerModel: String,
+    usage: ProactiveLaneUsage,
+    cacheWrite: Bool,
+    fallbackClass: String,
+    content: String,
+    requestID: String? = nil,
+    provider: String? = nil,
+    providerResponseID: String? = nil
+  ) {
+    self.operation = operation
+    self.lane = lane
+    self.providerModel = providerModel
+    self.usage = usage
+    self.cacheWrite = cacheWrite
+    self.fallbackClass = fallbackClass
+    self.content = content
+    self.requestID = requestID
+    self.provider = provider
+    self.providerResponseID = providerResponseID
+  }
+}
+
+/// Metadata observed at the proactivity route boundary. It intentionally
+/// carries no request or response body; the JIT runtime turns it into a
+/// bounded billing observation only for the fixed QA owner/bundle.
+struct ProactiveLaneResponseObservation: Equatable, Sendable {
+  let statusCode: Int?
+  let requestID: String?
+  /// Response metadata only. The model response text never enters this
+  /// observer path or its short-lived capture store.
+  let operation: String?
+  let provider: String?
+  let providerModel: String?
+  let providerResponseID: String?
+  let usage: ProactiveLaneUsage?
+  let fallbackClass: String?
+  let failure: ProactiveLaneFailureClassification?
+
+  init(
+    statusCode: Int?,
+    requestID: String?,
+    operation: String? = nil,
+    provider: String? = nil,
+    providerModel: String? = nil,
+    providerResponseID: String? = nil,
+    usage: ProactiveLaneUsage? = nil,
+    fallbackClass: String? = nil,
+    failure: ProactiveLaneFailureClassification?
+  ) {
+    self.statusCode = statusCode
+    self.requestID = requestID
+    self.operation = operation
+    self.provider = provider
+    self.providerModel = providerModel
+    self.providerResponseID = providerResponseID
+    self.usage = usage
+    self.fallbackClass = fallbackClass
+    self.failure = failure
+  }
+
+  static func successful(statusCode: Int, result: ProactiveLaneResult) -> Self {
+    Self(
+      statusCode: statusCode,
+      requestID: result.requestID,
+      operation: result.operation,
+      provider: result.provider,
+      providerModel: result.providerModel,
+      providerResponseID: result.providerResponseID,
+      usage: result.usage,
+      fallbackClass: result.fallbackClass,
+      failure: nil)
+  }
+
+  func withFailure(_ failure: ProactiveLaneFailureClassification) -> Self {
+    Self(
+      statusCode: statusCode,
+      requestID: requestID,
+      operation: operation,
+      provider: provider,
+      providerModel: providerModel,
+      providerResponseID: providerResponseID,
+      usage: usage,
+      fallbackClass: fallbackClass,
+      failure: failure)
+  }
 }
 
 enum ProactiveLaneClientError: LocalizedError {
@@ -20,6 +138,9 @@ enum ProactiveLaneClientError: LocalizedError {
   case http(status: Int, retryAfterSeconds: Int?)
   case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
+  /// Identified basic + non-BYOK pixel call, or a typed 402 `plan_gated`.
+  /// Text-only JIT completions stay open (S14 / S24 narrowing).
+  case planGated
 
   var errorDescription: String? {
     switch self {
@@ -31,6 +152,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
+    case .planGated:
+      return "proactive_plan_gated"
     }
   }
 }
@@ -66,6 +189,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       return "invalid_structured_output status=\(status ?? 0)"
     case "quota_cooldown":
       return "quota_cooldown status=\(status ?? 0)"
+    case "plan_gated":
+      return "plan_gated status=\(status ?? 402)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -88,6 +213,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
         return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      case .planGated:
+        return ProactiveLaneFailureClassification(failure: "plan_gated", status: 402, errorType: nil)
       }
     }
     if error is DecodingError {
@@ -139,6 +266,7 @@ actor ProactiveLaneClient {
     @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot) async throws
       -> Void
   private let now: @Sendable () -> Date
+  private let managedPixelDecision: @Sendable () async -> SubscriptionEntitlementDecision
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
@@ -203,7 +331,8 @@ actor ProactiveLaneClient {
       (
         @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot)
           async throws -> Void
-      )? = nil
+      )? = nil,
+    managedPixelDecision: (@Sendable () async -> SubscriptionEntitlementDecision)? = nil
   ) {
     self.session = session
     self.baseURL = baseURL
@@ -226,6 +355,11 @@ actor ProactiveLaneClient {
         _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
           authorizationSnapshot: authorizationSnapshot,
           knownAuthority: snapshot)
+      }
+    self.managedPixelDecision =
+      managedPixelDecision
+      ?? {
+        await ManagedProactivityDecisionSource.current()
       }
   }
 
@@ -273,7 +407,8 @@ actor ProactiveLaneClient {
         rollout: Self.jitState(object["rollout"]),
         killSwitch: Self.jitState(object["kill_switch"]),
         effective: Self.jitState(object["effective"]),
-        killSwitchPresent: object["kill_switch"] != nil)
+        killSwitchPresent: object["kill_switch"] != nil,
+        budgetContractVersion: object["budget_contract_version"] as? String)
       let rawTTL = object["cache_ttl_seconds"] as? Int ?? 60
       let ttl = min(max(rawTTL, 15), 15 * 60)
       jitFlagsCache = (
@@ -309,11 +444,22 @@ actor ProactiveLaneClient {
     jsonSchema: [String: Any],
     cacheKey: String? = nil,
     maxCompletionTokens: Int = 1024,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    responseObserver: (@Sendable (ProactiveLaneResponseObservation) async -> Void)? = nil
   ) async throws -> ProactiveLaneResult {
     let currentOwner = authorizationSnapshot?.ownerID
     clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
+    if imageData != nil {
+      if await managedPixelDecision() == .planGated {
+        // S24 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route pixels to
+        // LocalInferenceRuntime. Text-only completions stay ungated here.
+        if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+          // Local lane not shipped — still fail closed to `.planGated`.
+        }
+        throw ProactiveLaneClientError.planGated
+      }
+    }
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -369,8 +515,17 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
+    let requestID = http.value(forHTTPHeaderField: "X-Omi-Request-ID")
     Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
+      if ManagedPlanGateHTTP.isPlanGated(status: http.statusCode, data: data) {
+        await responseObserver?(
+          ProactiveLaneResponseObservation(
+            statusCode: http.statusCode,
+            requestID: requestID,
+            failure: ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)))
+        throw ProactiveLaneClientError.planGated
+      }
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)
@@ -378,9 +533,26 @@ actor ProactiveLaneClient {
       } else {
         retryAfter = nil
       }
+      await responseObserver?(
+        ProactiveLaneResponseObservation(
+          statusCode: http.statusCode,
+          requestID: requestID,
+          failure: ProactiveLaneFailureClassification.classify(
+            ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter))))
       throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter)
     }
-    return try Self.parseEnvelope(data)
+    do {
+      let result = try Self.parseEnvelope(data, requestID: requestID)
+      await responseObserver?(ProactiveLaneResponseObservation.successful(statusCode: http.statusCode, result: result))
+      return result
+    } catch {
+      await responseObserver?(
+        ProactiveLaneResponseObservation(
+          statusCode: http.statusCode,
+          requestID: requestID,
+          failure: ProactiveLaneFailureClassification.classify(error)))
+      throw error
+    }
   }
 
   private func clearCooldownsIfOwnerChanged(_ owner: String?) {
@@ -440,7 +612,7 @@ actor ProactiveLaneClient {
     log(ProactiveQuotaObservation.logLine(operation: operation, observation: observation))
   }
 
-  static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
+  static func parseEnvelope(_ data: Data, requestID: String? = nil) throws -> ProactiveLaneResult {
     let object: Any
     do {
       object = try JSONSerialization.jsonObject(with: data)
@@ -457,16 +629,63 @@ actor ProactiveLaneClient {
       let message = choices.first?["message"] as? [String: Any],
       let content = message["content"] as? String
     else { throw ProactiveLaneClientError.invalidResponse }
+    let responseUsage = response["usage"] as? [String: Any]
+    let accountingUsage = responseUsage ?? [:]
+    func nonNegativeInt(_ value: Any?) -> Int? {
+      guard let number = value as? NSNumber,
+        CFGetTypeID(number) != CFBooleanGetTypeID(),
+        let integer = Int(exactly: number),
+        integer >= 0
+      else { return nil }
+      // JSON numbers that arrive as floating point can round a value just
+      // above Int.max down to Int.max during NSNumber bridging. Keep the
+      // accounting unknown for that overflow edge rather than recording a
+      // fabricated token count.
+      let numberType = String(cString: number.objCType)
+      if numberType == "d" || numberType == "f", number.doubleValue >= Double(Int.max) {
+        return nil
+      }
+      return integer
+    }
+    let inputTokens = nonNegativeInt(
+      accountingUsage["prompt_tokens"] ?? accountingUsage["input_tokens"]
+        ?? usage["prompt_tokens"] ?? usage["input_tokens"])
+    let outputTokens = nonNegativeInt(
+      accountingUsage["completion_tokens"] ?? accountingUsage["output_tokens"]
+        ?? usage["completion_tokens"] ?? usage["output_tokens"])
+    let totalTokens = nonNegativeInt(accountingUsage["total_tokens"] ?? usage["total_tokens"])
+    let details =
+      (accountingUsage["prompt_tokens_details"] as? [String: Any])
+      ?? (accountingUsage["input_tokens_details"] as? [String: Any])
+      ?? (usage["prompt_tokens_details"] as? [String: Any])
+      ?? (usage["input_tokens_details"] as? [String: Any])
+    // Keep the released envelope's gateway accounting in the legacy fields.
+    // Provider usage is exposed separately below so a nested response cannot
+    // silently replace the accounting already used by existing telemetry.
+    let cachedTokens = nonNegativeInt(usage["cached_tokens"]) ?? 0
+    let cacheWriteTokens = nonNegativeInt(usage["cache_write_tokens"]) ?? 0
     return ProactiveLaneResult(
       operation: operation,
       lane: lane,
       providerModel: providerModel,
       usage: ProactiveLaneUsage(
-        cachedTokens: usage["cached_tokens"] as? Int ?? 0,
-        cacheWriteTokens: usage["cache_write_tokens"] as? Int ?? 0),
+        cachedTokens: cachedTokens,
+        cacheWriteTokens: cacheWriteTokens,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens,
+        totalTokens: totalTokens,
+        reportedCachedTokens: details?["cached_tokens"] != nil
+          ? nonNegativeInt(details?["cached_tokens"])
+          : nonNegativeInt(accountingUsage["cached_tokens"] ?? usage["cached_tokens"]),
+        reportedCacheWriteTokens: details?["cache_write_tokens"] != nil
+          ? nonNegativeInt(details?["cache_write_tokens"])
+          : nonNegativeInt(accountingUsage["cache_write_tokens"] ?? usage["cache_write_tokens"])),
       cacheWrite: root["cache_write"] as? Bool ?? false,
       fallbackClass: root["fallback_class"] as? String ?? "unknown",
-      content: content)
+      content: content,
+      requestID: requestID,
+      provider: root["provider"] as? String,
+      providerResponseID: response["id"] as? String)
   }
 }
 

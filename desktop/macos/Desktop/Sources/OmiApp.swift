@@ -297,6 +297,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // background-service startup so the probe has no product side effects.
     if AuthStorageCanary.runIfRequested() { return }
     if UserNotificationCallbackBridge.runSignedSmokeIfRequested() { return }
+    // A keystroke nothing handled must not fall off the end of a responder chain, where AppKit
+    // answers it with the alert sound. See `UnhandledKeystrokeSink`.
+    UnhandledKeystrokeSink.installEverywhere()
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
     // services start. Returns true when this process is being replaced.
@@ -313,6 +316,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     DesktopAutomationBridge.shared.startIfNeeded()
     DesktopAutomationWindowPresentation.installIfNeeded()
+    // Watching from launch, so the first push-to-talk turn already knows
+    // whether there is a network to route to instead of guessing.
+    NetworkReachability.shared.start()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 

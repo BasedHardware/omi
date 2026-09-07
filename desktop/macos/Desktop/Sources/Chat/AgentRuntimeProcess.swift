@@ -1553,6 +1553,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1569,6 +1571,10 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    if let jitBudget { message["jitBudget"] = jitBudget.wireDictionary }
+    if let jitCostEvidenceProjection {
+      message["jitCostEvidenceProjection"] = jitCostEvidenceProjection.value
+    }
     // UX gate only: the backend independently re-checks JIT entitlement on
     // every /v1/agent/execute-tool call. Omitted (not `false`) when the
     // rollout verdict isn't `enabled`, matching how the runtime treats an
@@ -2357,6 +2363,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2408,6 +2416,8 @@ actor AgentRuntimeProcess {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
         jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)
@@ -2668,6 +2678,27 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
+
+    // User-managed local skills and MCP servers (~/.omi). Skills re-read per
+    // turn for the prompt catalog, but the pi-mono extension registers its MCP
+    // proxy tools once per spawn, so a file change reaches chat through the
+    // ChatProvider respawn on .omiUserMcpDidChange (debounced, never mid-turn).
+    // The OAuth refresh is unawaited: a stale token costs one server a 401
+    // (fail-open), and its write notifies, so the refreshed token applies
+    // without waiting for the next session.
+    env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    // The disabled toggle must bind the tools too, not just the prompt catalog:
+    // load_skill/search_skills refuse names on this list.
+    if let disabledSkillsEnv = ChatProvider.disabledSkillsRuntimeEnvValue() {
+      env["OMI_DISABLED_SKILLS"] = disabledSkillsEnv
+    } else {
+      env.removeValue(forKey: "OMI_DISABLED_SKILLS")
+    }
+    // Skills dropped by hand never run the UI save path, so the ACP lane's
+    // plugin gate would silently miss them; write the manifest before spawn.
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
+    Task { await LocalMcpStore.refreshExpiredTokens() }
 
     try assertStartupAuthority(
       authorizationSnapshot,

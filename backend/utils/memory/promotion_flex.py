@@ -224,6 +224,19 @@ class PromotionFlexRunRouter:
             or isinstance(exc, (ConnectionError, TimeoutError))
         )
 
+    def job_budget_fits(self) -> bool:
+        """Whether one more Flex reservation still fits the one-hour job budget."""
+        elapsed = max(self._monotonic() - self._started_at, 0.0)
+        return (
+            elapsed + BACKGROUND_FLEX_TIMEOUT_SECONDS
+            <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
+        )
+
+    def require_job_budget(self) -> None:
+        """Stop in-UID TTL/outbox work when the same one-hour clock is gone."""
+        if not self.job_budget_fits():
+            raise PromotionFlexDeferred("job_budget")
+
     def invoke_flex(
         self,
         *,
@@ -233,12 +246,7 @@ class PromotionFlexRunRouter:
         flex_feature: str,
         workload: str,
     ) -> Any:
-        elapsed = max(self._monotonic() - self._started_at, 0.0)
-        flex_has_time = (
-            elapsed + BACKGROUND_FLEX_TIMEOUT_SECONDS
-            <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
-        )
-        if not flex_has_time:
+        if not self.job_budget_fits():
             raise PromotionFlexDeferred("job_budget")
 
         self.assert_control_current()

@@ -14,7 +14,7 @@ router module (the sanctioned monkeypatch-on-module seam).
 import asyncio
 import os
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -210,6 +210,57 @@ class TestAppGeneratorGates:
                 apps_router.generate_description_and_emoji_endpoint(data, uid='u1', x_app_platform='macos')
             assert exc_info.value.status_code == 402
             gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_app_blocked_past_cap(self):
+        # Regression for #12715: generate_app_endpoint tracked spend via
+        # track_usage but never called enforce_chat_quota, unlike the sibling
+        # description generators above — a free user past cap could still
+        # trigger billable AI app-config generation.
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppRequest(prompt='an app that summarizes my meetings')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_app_icon_blocked_past_cap(self):
+        # Regression for #12715: same gap as generate_app_endpoint, for the
+        # DALL-E icon generator (also billed under Features.APP_GENERATOR).
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate:
+            data = apps_router.GenerateAppIconRequest(name='My App', description='does things', category='other')
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_app_icon_endpoint(data, uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+
+    def test_generate_prompts_blocked_past_cap(self):
+        # The last ungated managed-spend route in this router. #12739 closed
+        # /v1/app/generate and /v1/app/generate-icon; generate_sample_prompts_endpoint
+        # still ran the same Features.APP_GENERATOR spend behind rate limiting alone,
+        # so a free user past cap could keep drawing billable suggestions from it.
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota', side_effect=_quota_402()) as gate, patch(
+            'utils.llm.clients.get_llm'
+        ) as llm:
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(apps_router.generate_sample_prompts_endpoint(uid='u1', x_app_platform='macos'))
+            assert exc_info.value.status_code == 402
+            gate.assert_called_once_with('u1', platform='macos')
+            llm.assert_not_called()
+
+    def test_generate_prompts_proceeds_within_cap(self):
+        import routers.apps as apps_router
+
+        with patch.object(apps_router, 'enforce_chat_quota') as gate, patch('utils.llm.clients.get_llm') as llm:
+            llm.return_value.ainvoke = AsyncMock(return_value=SimpleNamespace(content='["a","b","c","d","e"]'))
+            asyncio.run(apps_router.generate_sample_prompts_endpoint(uid='u1', x_app_platform='macos'))
+            gate.assert_called_once_with('u1', platform='macos')
+            llm.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

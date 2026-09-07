@@ -56,6 +56,46 @@ export interface QueryMessage extends ProtocolEnvelope {
    * which tools the model is offered, never authorization.
    */
   jitKnowledgeToolsEnabled?: boolean;
+  /** QA-only source-owned prompt projection; persisted beside the admitted
+   * snapshot and hashed by the runtime before the run is inserted. */
+  jitCostEvidenceProjection?: JitCostEvidenceProjection;
+  /** Qualification-only JIT budget; absent for all normal chat. */
+  jitBudget?: {
+    contractVersion: string;
+    executionID: string;
+    maxProviderAttempts: number;
+    maxOutputTokensPerAttempt: number;
+    maxNormalizedInputTokensPerAttempt: number;
+    maxEstimatedSpendMicroUSD: number;
+  };
+}
+
+export interface JitCostEvidenceProjection {
+  schema_version: string;
+  owner_id: string;
+  execution_id: string;
+  producer_lane: "planned" | "ambient";
+  matched_input: {
+    evaluation_time: string;
+    timezone: string;
+    context_id: string;
+    evidence_sha256?: string;
+  };
+  legacy: {
+    prompt: string;
+    uncached_prompt: string;
+    [key: string]: unknown;
+  };
+  nano: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  full: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  evidence_sha256?: string;
+  [key: string]: unknown;
 }
 
 export interface QueryAttachment {
@@ -127,6 +167,21 @@ export interface ExternalSurfaceRunCompleteMessage extends ProtocolEnvelope {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /**
+   * The answer text the external surface reports for this run.
+   *
+   * An external surface owns its own streaming, so the kernel never observes this
+   * run's output — it has to be handed back at terminalization or it is lost.
+   * Without it `runs.final_text` stays null and every consumer that reads a run's
+   * answer is content-free: the completion lane can only report that an agent
+   * finished, and a spawn-agent child's receipt, which builds its journal block
+   * from the child's final text, has nothing to write (#12731).
+   *
+   * What a surface can actually report is its own problem: for a realtime voice
+   * deferral the text must be accumulated over the turn stream, because the
+   * turn-end hub property is already cleared by the time terminalization runs.
+   */
+  finalText?: string;
   errorCode?: string;
 }
 
@@ -753,6 +808,12 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  /**
+   * Whether the kernel stored `finalText` for this run. Absent from an older
+   * kernel, which lets a surface keep its own journal fallback instead of
+   * trusting a silent no-op (#12731).
+   */
+  finalTextPersisted?: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -791,6 +852,11 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Qualification-only gateway attribution; null is explicit unknown. */
+  jitCostStatus?: "estimated" | "unknown";
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
@@ -877,6 +943,9 @@ export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
   failure?: RuntimeFailurePayload;
+  /** Qualification-only gateway attribution; failures are always unknown. */
+  jitCostStatus?: "unknown";
+  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */

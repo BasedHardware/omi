@@ -2,6 +2,7 @@
 
 import json
 import runpy
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -217,7 +218,12 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    dev = deepcopy(_MANIFEST['environments']['dev'])
+    # The dev-only ledger drain has an explicit operational fence for the two
+    # owner test accounts. Product/runtime surfaces must still contain no
+    # first-user or capture admission lists.
+    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
+    serialized = json.dumps(dev, sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']

@@ -24,6 +24,7 @@ quota or allowlist is read from the environment.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -402,3 +403,34 @@ def _authorize_omi(uid: str, feature: str, *, subscription: Any) -> Decision:
         plan=plan,
         plan_resolved=plan_resolved,
     )
+
+
+def funding_owner_for_feature(feature: str) -> str:
+    """``byok`` only when this request carries a validated key for ``feature``'s provider.
+
+    Reuses ``request_carries_validated_byok_key`` so the only dynamic
+    ``get_provider(feature)`` site stays inside this module. Called only from
+    inside an injected ``decision_for`` closure so a raising BYOK lookup is
+    caught by the caller's exception guard.
+    """
+    return 'byok' if request_carries_validated_byok_key(feature) else 'omi'
+
+
+def managed_compute_decision_for(uid: str) -> Callable[[str], Decision]:
+    """Injected ``decision_for(feature) -> Decision`` for a free-tier policy.
+
+    Funding owner is computed inside the closure, not before the policy call.
+    A raising BYOK/provider lookup therefore becomes the policy's
+    ``policy_unavailable`` (deterministic minimum / suppressed) instead of
+    crashing the caller. Defined here, next to ``authorize_managed_compute``
+    and the BYOK lookup it composes, so every producer of the same managed
+    spend injects the same closure — the coordinator's copy moved here when
+    the app-integration, X-connector and twitter-persona producers started
+    consulting the memory-formation policy (flip-review F-3).
+    """
+
+    def decision_for(feature: str) -> Decision:
+        owner = funding_owner_for_feature(feature)
+        return authorize_managed_compute(uid, feature, owner)
+
+    return decision_for

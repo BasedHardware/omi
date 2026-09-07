@@ -393,6 +393,7 @@ describe("protocol v2", () => {
       runId: invoke.runId,
       attemptId: invoke.attemptId,
       terminalStatus: "completed",
+      finalText: "Three parts sand to one part clay.",
     };
     const completed: ExternalSurfaceRunCompleteResultMessage = {
       type: "external_surface_run_complete_result",
@@ -406,6 +407,7 @@ describe("protocol v2", () => {
       ok: true,
       terminalStatus: "completed",
       duplicate: false,
+      finalTextPersisted: true,
     };
     expect([begin, invoke, complete] satisfies InboundMessage[]).toHaveLength(3);
     expect([began, invoked, completed] satisfies OutboundMessage[]).toHaveLength(3);

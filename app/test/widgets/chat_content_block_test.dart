@@ -65,20 +65,33 @@ void main() {
     required ServerMessage message,
     void Function(String)? sendMessage,
     List<Memory> memories = const [],
+    bool preloadMemories = true,
+    VoidCallback? onFetchMemories,
+    bool displayOptions = false,
+    double? messageWidth,
   }) async {
     final conversationProvider = ConversationProvider(isSignedIn: () => false);
     addTearDown(conversationProvider.dispose);
     final memoriesProvider = MemoriesProvider(
-      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
-          GetMemoriesResult(memories, true),
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        onFetchMemories?.call();
+        return GetMemoriesResult(memories, true);
+      },
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
           const GetLedgerHistoryResult([], supported: true),
       reviewMemoryRequest: (id, value) async => true,
       editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
     );
     addTearDown(memoriesProvider.dispose);
-    await memoriesProvider.loadMemories();
+    if (preloadMemories) await memoriesProvider.loadMemories();
 
+    final messageWidget = AIMessage(
+      message: message,
+      sendMessage: sendMessage ?? (_) {},
+      displayOptions: displayOptions,
+      updateConversation: (_) {},
+      setMessageNps: (int value, {String? reason}) {},
+    );
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -92,13 +105,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SingleChildScrollView(
-              child: AIMessage(
-                message: message,
-                sendMessage: sendMessage ?? (_) {},
-                displayOptions: false,
-                updateConversation: (_) {},
-                setMessageNps: (int value, {String? reason}) {},
-              ),
+              child: messageWidth == null ? messageWidget : SizedBox(width: messageWidth, child: messageWidget),
             ),
           ),
         ),
@@ -129,6 +136,252 @@ void main() {
     await tester.pump();
 
     expect(sent, ['Want the rest of what she said?']);
+  });
+
+  testWidgets('keeps prose text blocks beside cards in a structured fallback', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {'type': 'text', 'id': 'block-text', 'text': 'The deadline is Friday.'},
+          {
+            'type': 'conversationLink',
+            'id': 'block-conversation',
+            'conversationId': 'conversation-1',
+            'summary': 'Weekly planning',
+          },
+        ],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('chat-block-text-block-text')), findsOneWidget);
+    expect(find.byKey(const Key('chat-block-conversationLink-block-conversation')), findsOneWidget);
+  });
+
+  testWidgets('keeps synthesized lines beside cards in a structured fallback', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {'type': 'thinking', 'id': 'block-thinking', 'text': 'Checking the latest notes.'},
+          {
+            'type': 'toolCall',
+            'id': 'block-tool',
+            'name': 'search_knowledge',
+            'output': 'Found 3 matching notes.',
+          },
+          {
+            'type': 'citation',
+            'id': 'block-citation',
+            'ordinal': 0,
+            'kind': 'conversation',
+            'sourceId': 'conversation-1',
+            'title': 'Weekly planning',
+          },
+          {'type': 'futureBlock', 'id': 'block-unknown', 'title': 'A future card'},
+          {
+            'type': 'conversationLink',
+            'id': 'block-conversation',
+            'conversationId': 'conversation-1',
+            'summary': 'Weekly planning',
+          },
+        ],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('chat-block-fallback-block-thinking')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-block-fallback-block-tool')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-block-fallback-block-citation')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-block-fallback-block-unknown')), findsOneWidget);
+    expect(find.byKey(const Key('chat-block-conversationLink-block-conversation')), findsOneWidget);
+  });
+
+  testWidgets('keeps a malformed raw block fallback beside a valid card', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          // Missing id and wrong field types make this block intentionally
+          // undecodable; its canonical raw fallback must still be visible.
+          {
+            'type': 'toolCall',
+            'name': 42,
+            'output': {'unexpected': true}
+          },
+          {
+            'type': 'conversationLink',
+            'id': 'block-conversation',
+            'conversationId': 'conversation-1',
+            'summary': 'Weekly planning',
+          },
+        ],
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('chat-block-fallback-0')), findsOneWidget);
+    expect(find.byKey(const Key('chat-block-conversationLink-block-conversation')), findsOneWidget);
+  });
+
+  testWidgets('structured fallback markdown fills the available message width', (tester) async {
+    await pumpMessage(
+      tester,
+      messageWidth: 320,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {'type': 'thinking', 'id': 'block-thinking', 'text': 'Checking the latest notes.'},
+          {
+            'type': 'conversationLink',
+            'id': 'block-conversation',
+            'conversationId': 'conversation-1',
+            'summary': 'Weekly planning',
+          },
+        ],
+      ),
+    );
+
+    expect(tester.getSize(find.byKey(const ValueKey('chat-block-fallback-block-thinking'))).width, 320);
+  });
+
+  testWidgets('does not duplicate fallback prose in a day summary', (tester) async {
+    final message = _decodedAiMessage(
+      text: '',
+      type: 'day_summary',
+      contentBlocks: const [
+        {'type': 'text', 'id': 'block-text', 'text': 'The deadline is Friday.'},
+        {
+          'type': 'conversationLink',
+          'id': 'block-conversation',
+          'conversationId': 'conversation-1',
+          'summary': 'Weekly planning',
+        },
+      ],
+    );
+    expect(message.text, contains('The deadline is Friday.'));
+    await pumpMessage(
+      tester,
+      message: message,
+    );
+
+    expect(find.byKey(const ValueKey('chat-block-text-block-text')), findsNothing);
+  });
+
+  testWidgets('does not duplicate fallback prose in initial options', (tester) async {
+    final message = _decodedAiMessage(
+      text: '',
+      type: 'text',
+      contentBlocks: const [
+        {'type': 'text', 'id': 'block-text', 'text': 'The deadline is Friday.'},
+        {
+          'type': 'conversationLink',
+          'id': 'block-conversation',
+          'conversationId': 'conversation-1',
+          'summary': 'Weekly planning',
+        },
+      ],
+    );
+    expect(message.text, contains('The deadline is Friday.'));
+    await pumpMessage(
+      tester,
+      displayOptions: true,
+      message: message,
+    );
+
+    expect(find.byKey(const ValueKey('chat-block-text-block-text')), findsNothing);
+  });
+
+  testWidgets('cold memory links hydrate before the Memories page is opened', (tester) async {
+    var fetches = 0;
+    final memory = Memory(
+      id: 'memory-cold',
+      uid: 'chat-block-user',
+      content: 'A cold-chat memory',
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 9, 1),
+      visibility: MemoryVisibility.private,
+    );
+    await pumpMessage(
+      tester,
+      preloadMemories: false,
+      onFetchMemories: () => fetches++,
+      memories: [memory],
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {'type': 'memoryLink', 'id': 'block-memory', 'memoryId': 'memory-cold', 'summary': 'A cold-chat memory'},
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(fetches, 1);
+    expect(find.byKey(const Key('chat-block-memoryLink-block-memory-open')), findsOneWidget);
+  });
+
+  testWidgets('unknown agent terminal states do not render as completed', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {
+            'type': 'agentCompletion',
+            'id': 'block-agent',
+            'runId': 'run-1',
+            'sessionId': 'session-1',
+            'title': 'Run the report',
+            'output': 'The run was orphaned.',
+            'status': 'orphaned',
+          },
+        ],
+      ),
+    );
+
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+  });
+
+  testWidgets('cancelled and timed-out agent states use their localized labels', (tester) async {
+    await pumpMessage(
+      tester,
+      message: _decodedAiMessage(
+        text: '',
+        type: 'text',
+        contentBlocks: const [
+          {
+            'type': 'agentCompletion',
+            'id': 'block-cancelled',
+            'title': 'Cancelled run',
+            'output': 'The run was stopped.',
+            'status': 'stopped',
+          },
+          {
+            'type': 'agentCompletion',
+            'id': 'block-timeout',
+            'title': 'Timed out run',
+            'output': 'The run timed out.',
+            'status': 'timed_out',
+          },
+        ],
+      ),
+    );
+
+    expect(find.text('Cancelled'), findsOneWidget);
+    expect(find.text('Timed out'), findsOneWidget);
+    expect(find.byIcon(Icons.cancel_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
   });
 
   testWidgets('a day summary carrying a memoryReviewCard renders the review rows', (tester) async {

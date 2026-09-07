@@ -21,6 +21,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
+import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -287,8 +288,32 @@ Widget buildMessageWidget(
   bool showThinkingAfterText = false,
   Future<ServerConversation?> Function(String id)? fetchConversation,
 }) {
+  final hasRenderableBlocks = ChatContentBlockList.hasRenderableBlocks(message);
+  // A message whose text is only the fallback synthesized from its blocks has
+  // nothing to say that the components do not already show, so the components
+  // replace the body instead of repeating it. Keep this decision explicit for
+  // the block list: day summaries, memory citations, and the initial-options
+  // surface still render the normal body and must not render its text block a
+  // second time below it.
+  final blocksReplaceBody = hasRenderableBlocks &&
+      message.memories.isEmpty &&
+      message.type != MessageType.daySummary &&
+      !displayOptions &&
+      message.textIsStructuredFallback;
+  final contentBlocks = hasRenderableBlocks
+      ? ChatContentBlockList(
+          message: message,
+          sendMessage: sendMessage,
+          onAskOmi: onAskOmi,
+          renderStructuredFallbackText: blocksReplaceBody,
+          fetchConversation: fetchConversation,
+        )
+      : null;
+
   final Widget messageWidget;
-  if (message.memories.isNotEmpty) {
+  if (blocksReplaceBody) {
+    messageWidget = contentBlocks!;
+  } else if (message.memories.isNotEmpty) {
     messageWidget = MemoriesMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageMemories: message.memories,
@@ -327,16 +352,21 @@ Widget buildMessageWidget(
   }
 
   final evidence = visibleSupplementalEvidence(message);
+  final appendBlocks = contentBlocks != null && !blocksReplaceBody;
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
   final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
   final followUp = showTypingIndicator ? null : message.followUpQuestion;
-  if (evidence == null && reviewCard == null && followUp == null) return messageWidget;
+  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
+      if (appendBlocks) ...[
+        const SizedBox(height: 8),
+        contentBlocks,
+      ],
       if (reviewCard != null) ...[
         const SizedBox(height: 12),
         MemoryReviewCard(

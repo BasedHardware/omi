@@ -221,7 +221,10 @@ final class ChatDiscoverabilityTests: XCTestCase {
         declaredTools.insert(name)
       }
     }
-    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot"]
+    // `look_at_frame` is `get_screenshot`'s alias on the local agent API, and
+    // inherits its reach: the local API is the only adapter either is
+    // advertised to, so neither can appear in a chat adapter's declarations.
+    let localApiOnlyTools: Set<String> = ["get_local_status", "get_screenshot", "look_at_frame"]
 
     for toolName in DesktopCapabilityRegistry.desktopToolNames where !localApiOnlyTools.contains(toolName) {
       XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")

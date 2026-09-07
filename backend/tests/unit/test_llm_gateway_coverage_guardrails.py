@@ -248,6 +248,28 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
+def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
+    """A GPT-5 lane without a pinned effort rides the provider default.
+
+    File chat ran unpinned with a 2048-token output cap, and the provider
+    default can spend a capped completion budget on hidden reasoning before
+    any answer text — the truncation failure desktop proactivity hit on its
+    direct path. Every OpenAI GPT-5 lane must name its effort explicitly.
+    """
+    overrides = load_generated_route_overrides()
+
+    for feature in get_all_configured_features():
+        override = overrides.get(feature)
+        model = override.primary.model if override is not None else get_model(feature)
+        provider = override.primary.provider if override is not None else get_provider(feature)
+        if provider != 'openai' or not model.startswith('gpt-5'):
+            continue
+        options = get_route_options(feature, model, provider)
+        if override is not None:
+            options.update(override.provider_options)
+        assert 'reasoning_effort' in options, feature
+
+
 def test_only_background_flex_routes_allow_the_documented_flex_timeout():
     config = load_gateway_config(prod_mode=True)
 

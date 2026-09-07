@@ -3277,6 +3277,16 @@
     "pendantFullSyncBlocked": "Penyimpanan Pendant penuh dan masih dalam mode perekaman, sehingga audio yang tersimpan tidak dapat ditransfer. Tekan tombol Pendant untuk menghentikan perekaman, lalu sinkronkan lagi.",
     "conversationsNotCapturedCount": "Tidak direkam ({count})",
     "transcriptionNoAudio": "Transkripsi tidak menerima audio",
+    "chatBlockTask": "Tugas",
+    "chatBlockGoal": "Tujuan",
+    "chatBlockConversation": "Percakapan",
+    "chatBlockMemory": "Memori",
+    "chatBlockQuestion": "Pertanyaan",
+    "chatBlockOpenInGoals": "Buka di Tujuan",
+    "chatBlockOpenConversation": "Buka percakapan",
+    "chatBlockOpenInMemories": "Buka di Memori",
+    "chatBlockUnavailable": "Tidak lagi tersedia",
+    "chatBlockRecommendedNextSteps": "Langkah berikutnya yang disarankan",
     "couldNotLoadMemories": "Tidak dapat memuat kenangan",
     "couldNotLoadKnowledgeGraph": "Tidak dapat memuat graf pengetahuan"
 }

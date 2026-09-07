@@ -22,6 +22,17 @@ final class ChatDailySummaryCoordinator: ObservableObject {
 
   let store: HomeDailySummaryStore
 
+  /// True while the summary on hand is the one the owner cleared out of Chat.
+  ///
+  /// Clearing the transcript is a statement about the whole surface, not about
+  /// the rows the journal happens to own. The card is chrome above the thread
+  /// (INV-CHAT-1 keeps transcript authorship in the kernel, so nothing here
+  /// writes a turn) and a journal clear cannot reach it — which left the day's
+  /// summary sitting alone in a chat the reader had just emptied. Clearing
+  /// records the summary it was showing instead, and the card stays away until
+  /// a newer day's summary arrives.
+  @Published private(set) var isClearedFromTranscript = false
+
   private let defaults: UserDefaults
   private let cardSink: CardSink
   private let ownerID: () -> String?
@@ -66,6 +77,7 @@ final class ChatDailySummaryCoordinator: ObservableObject {
   func refreshIfNeeded() async {
     guard ownerID() != nil else { return }
     await store.refreshIfNeeded()
+    refreshClearedState()
     announceIfNew()
   }
 
@@ -74,7 +86,31 @@ final class ChatDailySummaryCoordinator: ObservableObject {
   func refresh() async {
     guard ownerID() != nil else { return }
     await store.refresh()
+    refreshClearedState()
     announceIfNew()
+  }
+
+  // MARK: - Clearing
+
+  /// Chat was cleared. Take the card with it.
+  ///
+  /// Recording the id rather than a flag is what lets tomorrow's summary come
+  /// back on its own: the card is withdrawn only while the summary on hand is
+  /// the one that was on screen when the reader cleared.
+  func noteChatCleared() {
+    guard let owner = ownerID(), let record = store.latest else { return }
+    defaults.set(record.id, forKey: ScopedDefaultsKey.dailySummaryClearedID(ownerID: owner))
+    isClearedFromTranscript = true
+    AnalyticsManager.shared.trackDailySummary(.cardDismissed)
+  }
+
+  private func refreshClearedState() {
+    guard let owner = ownerID(), let record = store.latest else {
+      isClearedFromTranscript = false
+      return
+    }
+    isClearedFromTranscript =
+      defaults.string(forKey: ScopedDefaultsKey.dailySummaryClearedID(ownerID: owner)) == record.id
   }
 
   // MARK: - New-summary announcement
@@ -95,6 +131,13 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     AnalyticsManager.shared.trackDailySummary(.cardShown)
   }
 
+  /// The assistant identity the recap announcement presents under, so the floating bar's kind
+  /// derivation (`ProactiveNotificationKind.from(assistantId:)`) lands on `.dailyRecap` —
+  /// presentation-only. The announcement must not journal a transcript turn: the recap is already
+  /// in the thread as the dedicated `ChatDailyRecapRow` day boundary, and a journaled bell card
+  /// rendered a truncated, stat-less copy of it (INV-CHAT-1 — the recap is chrome, not a turn).
+  static let assistantID = "daily_recap"
+
   private static let defaultCardSink: CardSink = { ownerID, title, body in
     // Fenced to the owner the summary was fetched for, not whoever is current now.
     guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else {
@@ -104,6 +147,7 @@ final class ChatDailySummaryCoordinator: ObservableObject {
       ownerID: snapshot.ownerID,
       title: title,
       message: body,
+      assistantId: ChatDailySummaryCoordinator.assistantID,
       // The summary is a statement about a day that already happened; the frequency budget exists
       // to throttle interruptions the user did not ask for, and this one is at most one per day.
       respectFrequency: false,

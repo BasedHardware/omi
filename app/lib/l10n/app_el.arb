@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Ο αποθηκευτικός χώρος του Pendant είναι πλήρης και βρίσκεται ακόμα σε λειτουργία εγγραφής, οπότε ο αποθηκευμένος ήχος δεν μπορεί να μεταφερθεί. Πατήστε το κουμπί του Pendant για να σταματήσετε την εγγραφή και μετά συγχρονίστε ξανά.",
     "conversationsNotCapturedCount": "Δεν καταγράφηκε ({count})",
     "transcriptionNoAudio": "Η μεταγραφή δεν λαμβάνει ήχο",
+    "chatBlockTask": "Εργασία",
+    "chatBlockGoal": "Στόχος",
+    "chatBlockConversation": "Συνομιλία",
+    "chatBlockMemory": "Ανάμνηση",
+    "chatBlockQuestion": "Ερώτηση",
+    "chatBlockOpenInGoals": "Άνοιγμα στους Στόχους",
+    "chatBlockOpenConversation": "Άνοιγμα συνομιλίας",
+    "chatBlockOpenInMemories": "Άνοιγμα στις Αναμνήσεις",
+    "chatBlockUnavailable": "Δεν είναι πλέον διαθέσιμο",
+    "chatBlockRecommendedNextSteps": "Προτεινόμενα επόμενα βήματα",
     "couldNotLoadMemories": "Δεν ήταν δυνατή η φόρτωση των αναμνήσεων",
     "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης"
 }

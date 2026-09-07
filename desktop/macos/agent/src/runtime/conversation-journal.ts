@@ -98,6 +98,14 @@ export interface UpdateJournalTurnInput {
   producingRunId?: string | null;
   producingAttemptId?: string | null;
   metadataJson?: string;
+  /**
+   * Narrow revision authority: the desktop client that optimistically sealed a
+   * row `completed` (before answer delivery resolved) downgrades it to
+   * `failed` once the reducer proves the answer never reached the user
+   * (#12743). Only a payload-free downgrade is accepted, and `metadataJson`
+   * merges into the row's existing metadata instead of replacing it.
+   */
+  terminalRevision?: boolean;
   nowMs?: number;
 }
 
@@ -678,7 +686,24 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
     const current = requireJournalTurn(store, input.conversationId, input.turnId);
-    if (input.status !== undefined) assertTurnStatusTransition(current.status, input.status);
+    if (input.terminalRevision === true) {
+      assertTerminalRevisionShape(input);
+    }
+    if (input.status !== undefined) {
+      // The one sanctioned exception to the terminal transition table: the
+      // desktop client that sealed a row `completed` optimistically (before
+      // answer delivery resolved) downgrades it to `failed` when the reducer
+      // proves the answer never reached the user (#12743). Everything else —
+      // including run-linked turns, which the caller rejects earlier — still
+      // goes through the strict table.
+      const sealedCompletionDowngrade =
+        input.terminalRevision === true
+        && current.status === "completed"
+        && input.status === "failed";
+      if (!sealedCompletionDowngrade) {
+        assertTurnStatusTransition(current.status, input.status);
+      }
+    }
     if (input.producingRunId !== undefined) {
       assertProducingRunOwner(store, input.producingRunId, input.ownerId);
       if (current.producingRunId !== null && current.producingRunId !== input.producingRunId) {
@@ -712,14 +737,22 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
 
     const contentBlocks = input.replaceContentBlocks === undefined
       ? mergeById(current.contentBlocks, validateContentBlocks(input.appendContentBlocks ?? []))
-      : mergeById([], validateContentBlocks(input.replaceContentBlocks));
+      : mergeById(
+        [],
+        projectContentBlocksOverKernelAuthored(
+          current.contentBlocks,
+          validateContentBlocks(input.replaceContentBlocks),
+        ),
+      );
     const resources = input.replaceResources === undefined
       ? mergeById(current.resources, validateResources(input.appendResources ?? []))
       : mergeById([], validateResources(input.replaceResources));
     const status = input.status ?? current.status;
     const metadataJson = input.metadataJson === undefined
       ? current.metadataJson
-      : validObjectJson(input.metadataJson, "metadataJson");
+      : input.terminalRevision === true
+        ? mergedObjectJson(current.metadataJson, input.metadataJson)
+        : validObjectJson(input.metadataJson, "metadataJson");
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
     const producingAttemptId = input.producingAttemptId === undefined
@@ -1711,7 +1744,7 @@ export function terminalizeJournalTurn(
     }
     const content = input.content ?? current.content;
     const finalContentBlocks = input.disposition === "accept" && contentBlocks !== undefined
-      ? monotonicAcceptContentBlocks(current.contentBlocks, contentBlocks)
+      ? projectContentBlocksOverKernelAuthored(current.contentBlocks, contentBlocks)
       : contentBlocks ?? current.contentBlocks;
     const finalResources = input.disposition === "accept" && resources !== undefined
       ? monotonicAcceptResources(current.resources, resources)
@@ -1974,19 +2007,62 @@ function markDiscardedBackendProjection(store: AgentStore, turnId: string, nowMs
   );
 }
 
-function monotonicAcceptContentBlocks(
+/**
+ * The block kinds the kernel writes and the visible projection never authors.
+ *
+ * Both the streaming update and the terminal commit hand us the projection
+ * Swift assembled from the adapter stream — text, tool calls, thinking, and the
+ * cards Swift itself appends. A block the *agent* rendered mid-turn through
+ * `render_chat_blocks` cannot be in it: that append is a journal mutation, not
+ * a stream event, so the surface has never seen it. Replacing the turn's blocks
+ * with that projection deleted every task card, goal link and memory link the
+ * turn had rendered, seconds after the tool reported success — which is why
+ * chat-first components looked like they never rendered while the tool returned
+ * `ok`.
+ */
+const KERNEL_AUTHORED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+  "taskCard",
+  "goalLink",
+  "captureLink",
+  "conversationLink",
+  "memoryLink",
+  "questionCard",
+]);
+
+/**
+ * Blocks the surface may re-send but never re-derive, so the journal's copy
+ * stays canonical even when a projection carries one of its own.
+ */
+const PINNED_CONTENT_BLOCK_TYPES: ReadonlySet<ConversationContentBlock["type"]> = new Set([
+  "agentSpawn",
+  "agentCompletion",
+]);
+
+/**
+ * Apply a surface projection over the journal's blocks without losing the ones
+ * the surface could not have known about.
+ *
+ * An id the projection carries is the projection's to define — that is how a
+ * question card's options get retired — except for the pinned kinds above.
+ * An id it omits survives only when the kernel wrote it.
+ */
+function projectContentBlocksOverKernelAuthored(
   current: readonly ConversationContentBlock[],
   incoming: readonly ConversationContentBlock[],
 ): ConversationContentBlock[] {
-  const protectedCurrent = new Map(
+  const pinned = new Map(
     current
-      .filter((block) => block.type === "agentSpawn" || block.type === "agentCompletion")
+      .filter((block) => PINNED_CONTENT_BLOCK_TYPES.has(block.type))
       .map((block) => [block.id, block] as const),
   );
-  const result = incoming.map((block) => structuredClone(protectedCurrent.get(block.id) ?? block));
+  const result = incoming.map((block) => structuredClone(pinned.get(block.id) ?? block));
   const resultIds = new Set(result.map((block) => block.id));
-  for (const block of protectedCurrent.values()) {
-    if (!resultIds.has(block.id)) result.push(structuredClone(block));
+  for (const block of current) {
+    if (resultIds.has(block.id)) continue;
+    if (!KERNEL_AUTHORED_CONTENT_BLOCK_TYPES.has(block.type)) continue;
+    result.push(structuredClone(block));
   }
   return result;
 }
@@ -4235,6 +4311,44 @@ function validObjectJson(raw: string, field: string): string {
     throw new Error(`${field} must contain a JSON object`);
   }
   return JSON.stringify(parsed);
+}
+
+/**
+ * Shallow key-merge used only by terminal revisions: the truncation cause
+ * joins the row's existing metadata (model attribution, continuity) instead
+ * of replacing it. The patch's keys win on conflict.
+ */
+function mergedObjectJson(base: string, patch: string): string {
+  const baseObject = parseObjectJson(base);
+  const patchObject = parseObjectJson(patch);
+  if (
+    baseObject === null || Array.isArray(baseObject) || typeof baseObject !== "object"
+    || patchObject === null || Array.isArray(patchObject) || typeof patchObject !== "object"
+  ) {
+    throw new Error("metadataJson must contain a JSON object");
+  }
+  return JSON.stringify({ ...(baseObject as Record<string, unknown>), ...(patchObject as Record<string, unknown>) });
+}
+
+/**
+ * A terminal revision is a payload-free downgrade of an optimistically sealed
+ * completion: status must be `failed`, and no payload or run-identity field
+ * may ride along — the sealed row's content, blocks, resources, and metadata
+ * (beyond the merged terminal reason) stay exactly as written.
+ */
+function assertTerminalRevisionShape(input: UpdateJournalTurnInput): void {
+  if (
+    input.status !== "failed"
+    || input.content !== undefined
+    || input.replaceContentBlocks !== undefined
+    || input.appendContentBlocks !== undefined
+    || input.replaceResources !== undefined
+    || input.appendResources !== undefined
+    || input.producingRunId !== undefined
+    || input.producingAttemptId !== undefined
+  ) {
+    throw new Error("Terminal journal revision must be a payload-free downgrade to failed");
+  }
 }
 
 function parseObjectJson(raw: string): unknown {

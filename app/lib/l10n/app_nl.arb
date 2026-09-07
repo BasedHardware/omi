@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "De opslag van je Pendant is vol en hij staat nog in de opnamemodus, dus de opgeslagen audio kan niet worden overgedragen. Druk op de knop van de Pendant om de opname te stoppen en synchroniseer daarna opnieuw.",
     "conversationsNotCapturedCount": "Niet opgenomen ({count})",
     "transcriptionNoAudio": "Transcriptie ontvangt geen audio",
+    "chatBlockTask": "Taak",
+    "chatBlockGoal": "Doel",
+    "chatBlockConversation": "Gesprek",
+    "chatBlockMemory": "Herinnering",
+    "chatBlockQuestion": "Vraag",
+    "chatBlockOpenInGoals": "Openen in Doelen",
+    "chatBlockOpenConversation": "Gesprek openen",
+    "chatBlockOpenInMemories": "Openen in Herinneringen",
+    "chatBlockUnavailable": "Niet langer beschikbaar",
+    "chatBlockRecommendedNextSteps": "Aanbevolen volgende stappen",
     "couldNotLoadMemories": "Herinneringen konden niet worden geladen",
     "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen"
 }

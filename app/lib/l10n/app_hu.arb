@@ -3331,6 +3331,16 @@
     "pendantFullSyncBlocked": "A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.",
     "conversationsNotCapturedCount": "Nincs rögzítve ({count})",
     "transcriptionNoAudio": "Az átírás nem kap hangot",
+    "chatBlockTask": "Feladat",
+    "chatBlockGoal": "Cél",
+    "chatBlockConversation": "Beszélgetés",
+    "chatBlockMemory": "Emlék",
+    "chatBlockQuestion": "Kérdés",
+    "chatBlockOpenInGoals": "Megnyitás a Célokban",
+    "chatBlockOpenConversation": "Beszélgetés megnyitása",
+    "chatBlockOpenInMemories": "Megnyitás az Emlékekben",
+    "chatBlockUnavailable": "Már nem érhető el",
+    "chatBlockRecommendedNextSteps": "Javasolt következő lépések",
     "couldNotLoadMemories": "Nem sikerült betölteni az emlékeket",
     "couldNotLoadKnowledgeGraph": "Nem sikerült betölteni a tudásgráfot"
 }

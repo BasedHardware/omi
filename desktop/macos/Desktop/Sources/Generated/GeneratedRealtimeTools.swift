@@ -29,6 +29,7 @@ enum HubTool: String {
   case webSearch = "web_search"
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
+  case recordInterjectFeedback = "record_interject_feedback"
   case pointClick = "point_click"
 }
 
@@ -480,7 +481,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "get_action_items",
-    "description": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
+    "description": "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish') or a DATE RANGE ('what's due next week') — for any plain question about the open list, prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -631,7 +632,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "get_tasks",
-    "description": "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
+    "description": "Read the user's open tasks locally and get them back as text to speak: everything overdue, everything due today, and everything on the list with no due date. This is the same list the Tasks page shows, so an empty result means the user genuinely has no open tasks — never say they have none without calling this first. Fast synchronous read — use it for 'what are my tasks', 'what's due today', 'what's on my list', 'what should I work on'. Reading tasks is always a direct call, never background work.",
     "parameters": {
       "type": "object",
       "properties": {},
@@ -760,6 +761,32 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "observation"
+      ]
+    }
+  },
+  {
+    "type": "function",
+    "name": "record_interject_feedback",
+    "description": "Record how the user's latest utterance relates to the proactive card, then speak only the user-facing reply. Call silently and immediately: do not speak a heads-up, do not speak the verb, and do not read the tool result. The app does not play a canned acknowledgement. For a question or continuation, use riff or omit this tool and let the first audio be the answer. For a correction, speak one English consequence sentence that names the fact that changed. Never speak taxonomy names as labels.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "verb": {
+          "type": "string",
+          "enum": [
+            "useful",
+            "false_positive",
+            "snooze",
+            "disable",
+            "missed",
+            "correction",
+            "riff"
+          ],
+          "description": "How the utterance relates to the card. riff is continuation or a question about the card."
+        }
+      },
+      "required": [
+        "verb"
       ]
     }
   },

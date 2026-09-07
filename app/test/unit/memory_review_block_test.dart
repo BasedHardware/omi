@@ -111,8 +111,11 @@ void main() {
 
     expect(message.followUpQuestion, 'Want the rest of what she said?');
     expect(message.text, 'You met Priya on Tuesday.');
-    // followUp is not desktop-only chrome; the answer still shows on mobile.
-    expect(message.hideFromMobileChat, isFalse);
+    // Mobile renders the desktop chat-first blocks now rather than hiding the
+    // messages that carry them, so `hideFromMobileChat` is gone. What this test
+    // was protecting — the answer still shows — is now that the body is real
+    // prose rather than fallback text the blocks would replace.
+    expect(message.textIsStructuredFallback, isFalse);
   });
 
   test('a blank follow-up question is not a chip', () {

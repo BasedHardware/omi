@@ -21,7 +21,6 @@ Covers round 3:
 - routers/mcp.py: threading.Thread → postprocess_executor for persona update
 - routers/wrapped.py: threading.Thread → llm_executor for wrapped generation
 - utils/chat.py: threading.Thread → storage_executor for file cleanup
-- utils/conversations/postprocess_conversation.py: threading.Thread → storage_executor
 - utils/other/notifications.py: threading.Thread → critical_executor for webhooks
 - utils/other/storage.py: ad-hoc ThreadPoolExecutor → storage_executor
 - utils/retrieval/tools/calendar_tools.py: requests → httpx, time.sleep → asyncio.sleep
@@ -324,18 +323,6 @@ class TestChatUtilsExecutorMigration:
         assert 'time.sleep(480)' not in src
         assert 'DeferredDeleter' in storage_src
         assert 'def schedule_syncing_temporal_file_deletion' in storage_src
-
-
-class TestPostprocessExecutorMigration:
-    """Verify postprocess_conversation uses storage_executor for audio cleanup."""
-
-    def test_no_threading_thread(self):
-        src = _read_source('utils/conversations/postprocess_conversation.py')
-        assert 'threading.Thread' not in src
-
-    def test_uses_storage_executor(self):
-        src = _read_source('utils/conversations/postprocess_conversation.py')
-        assert 'storage_executor.submit(' in src
 
 
 class TestNotificationsExecutorMigration:

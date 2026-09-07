@@ -72,6 +72,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import (
     db_executor,
@@ -1682,6 +1683,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # Enrich raw sync geolocation (address / place id) once per job before any
+    # conversation is created. This is the single enrichment point covering both
+    # the inline and Cloud Tasks dispatch branches; it runs before the
+    # concurrency gate so no slot is held during the geocode call. The resolver
+    # keeps the caller's exact coordinates and returns the input unchanged on
+    # any geocode failure, so a miss never drops the user's location.
+    geolocation = await async_resolve_geolocation(geolocation)
+
     sync_provider = 'unknown'
     sync_model = 'unknown'
     job_outcome_recorded = False

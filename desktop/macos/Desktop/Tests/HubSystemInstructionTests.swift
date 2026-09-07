@@ -477,6 +477,8 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertTrue(instruction.contains("think_deeper and web_search tool cards are exceptions"))
     XCTAssertTrue(instruction.contains("call either one silently and immediately"))
     XCTAssertTrue(instruction.contains("Do not repeat that acknowledgement"))
+    XCTAssertTrue(instruction.contains("record_interject_feedback is also silent and immediate"))
+    XCTAssertTrue(instruction.contains("does not play a canned acknowledgement"))
     XCTAssertTrue(instruction.contains("Keep latency low for simple requests"))
     XCTAssertTrue(instruction.contains("Never skip a tool call required by its declaration"))
     XCTAssertFalse(instruction.contains("prefer answering directly when you can"))

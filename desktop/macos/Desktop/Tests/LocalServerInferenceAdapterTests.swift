@@ -30,6 +30,62 @@ private actor RecordingLocalInferenceHTTPClient: LocalInferenceHTTPClient {
 }
 
 final class LocalServerInferenceAdapterTests: XCTestCase {
+  // red-proof: return `request` instead of `nil` from the delegate
+  func testRedirectPolicyRefusesEveryRedirect() throws {
+    let policy = LocalInferenceRedirectPolicy()
+    let session = URLSession(configuration: .ephemeral)
+    let original = try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1/chat/completions"))
+    let task = session.dataTask(with: original)
+    let response = try XCTUnwrap(
+      HTTPURLResponse(url: original, statusCode: 307, httpVersion: "HTTP/1.1", headerFields: nil)
+    )
+
+    for target in [
+      "https://api.openai.com/v1/chat/completions",
+      "http://127.0.0.1:9999/v1/chat/completions",
+    ] {
+      let expectation = expectation(description: "redirect decision for \(target)")
+      var followed: URLRequest? = URLRequest(url: try XCTUnwrap(URL(string: target)))
+      policy.urlSession(
+        session,
+        task: task,
+        willPerformHTTPRedirection: response,
+        newRequest: try XCTUnwrap(followed)
+      ) { decision in
+        followed = decision
+        expectation.fulfill()
+      }
+      wait(for: [expectation], timeout: 1)
+      XCTAssertNil(followed, "a local model server has no legitimate redirect; \(target) must not be followed")
+    }
+    task.cancel()
+    session.invalidateAndCancel()
+  }
+
+  // red-proof: change the default back to `URLSession.shared`
+  func testDefaultHTTPClientSessionRefusesRedirects() {
+    let client = URLSessionLocalInferenceHTTPClient()
+    XCTAssertFalse(
+      client.session === URLSession.shared,
+      "URLSession.shared carries no delegate, so it follows redirects past the loopback fence"
+    )
+    XCTAssertTrue(
+      client.session.delegate is LocalInferenceRedirectPolicy,
+      "the adapter's session must carry the redirect fence"
+    )
+  }
+
+  func testNonHTTPSchemesAreRejectedEvenOnLoopback() throws {
+    // `file:` would turn the "base URL" into a path read; a custom scheme can
+    // be claimed by any installed application.
+    for raw in ["file:///etc/passwd", "omi://127.0.0.1/v1", "ftp://localhost/v1"] {
+      let url = try XCTUnwrap(URL(string: raw))
+      XCTAssertFalse(LocalInferenceLoopback.isAllowed(url), "\(raw) is not a local model server")
+    }
+    XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "http://127.0.0.1:11434/v1"))))
+    XCTAssertTrue(LocalInferenceLoopback.isAllowed(try XCTUnwrap(URL(string: "https://localhost:8443/v1"))))
+  }
+
   func testRejectsNonLoopbackURLWithoutSendingHTTP() async throws {
     let http = RecordingLocalInferenceHTTPClient()
     let adapter = LocalServerInferenceAdapter(

@@ -51,6 +51,17 @@ generated_route_overrides:
   - feature: external_structure
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
+  # File chat is no-tools single-shot completions capped at 2048 output tokens.
+  # Unpinned effort rides the provider default, which can spend that cap on
+  # hidden reasoning before any answer text (desktop proactivity's truncation
+  # failure mode); medium is the interactive-chat tier (chat_responses,
+  # persona_chat_premium).
+  - feature: file_chat_documents
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
+  - feature: file_chat_vision
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
   - feature: fair_use
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}

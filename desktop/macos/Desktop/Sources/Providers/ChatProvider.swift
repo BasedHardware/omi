@@ -219,7 +219,7 @@ struct ChatSession: Identifiable, Codable, Equatable {
 // MARK: - Content Block Model
 
 /// Structured tool input for inline display
-struct ToolCallInput {
+struct ToolCallInput: Equatable {
   /// Short summary for inline display (e.g., file path, command)
   let summary: String
   /// Full JSON details for expanded view
@@ -1400,6 +1400,8 @@ class ChatProvider: ObservableObject {
   private var sessionInvalidateObserver: AnyCancellable?
 
   private var refreshAllObserver: AnyCancellable?
+  private var userSkillsObserver: AnyCancellable?
+  private var userMcpObserver: AnyCancellable?
 
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
@@ -1585,6 +1587,40 @@ class ChatProvider: ObservableObject {
         }
       }
 
+    // A skill saved or toggled in the Apps page changed the on-disk catalog;
+    // re-discover so the next message's compact catalog includes it.
+    userSkillsObserver = NotificationCenter.default.publisher(for: .omiUserSkillsDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in
+        Task { @MainActor in
+          await self?.discoverClaudeConfig()
+        }
+      }
+
+    // Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
+    // never mid-turn. The pi-mono extension registers its MCP proxy tools once
+    // per process spawn, so unlike skills a file change needs a respawn. The
+    // coordinator is process-wide (task chat consumes it at its own boundary)
+    // and is bound here to this provider's bridge state.
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { [weak self] in self?.isSending ?? false },
+      isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
+      respawn: { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        try await self.respawnBridgeForUserMcpChange()
+      })
+
+    // A server was added, removed, or re-authed in ~/.omi/mcp.json. The runtime
+    // reads the file once per process spawn, so the shared bridge respawns
+    // (debounced, never mid-turn — see UserMcpRuntimeRefresh).
+    userMcpObserver = NotificationCenter.default.publisher(for: .omiUserMcpDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { _ in
+        Task { @MainActor in
+          UserMcpRuntimeRefresh.shared.changeDetected()
+        }
+      }
+
     // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
     playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
       .dropFirst()
@@ -1702,6 +1738,11 @@ class ChatProvider: ObservableObject {
   private func ensureBridgeStarted(
     authoritativeGeneration: Int? = nil
   ) async -> Bool {
+    // Apply a pending ~/.omi/mcp.json change here — the safe point between
+    // turns: this turn has issued no runtime work yet, and the runtime's
+    // restart still refuses while some other surface's requests are active.
+    // Task chat applies the same pending state at its own boundary.
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       await presentBridgeStartupFailure(
         BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
@@ -1716,6 +1757,29 @@ class ChatProvider: ObservableObject {
       await presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
       return false
     }
+  }
+
+  /// Respawns the shared runtime so a ~/.omi/mcp.json change reaches the
+  /// pi-mono extension, which registers its MCP proxy tools once per spawn.
+  /// Mirrors the Playwright-setting restart: mark the warm bridge stale,
+  /// restart the process, and rebuild readiness. A refused restart (requests
+  /// active elsewhere) leaves the old process alive and serving, so it keeps
+  /// counting as started and the caller's pending change retries later.
+  private func respawnBridgeForUserMcpChange() async throws {
+    log("ChatProvider: user MCP servers changed — restarting agent bridge")
+    agentBridgeStarted = false
+    do {
+      try await resolvedAgentClient().restart()
+    } catch {
+      if await resolvedAgentClient().isAlive {
+        agentBridgeStarted = true
+      }
+      throw error
+    }
+    guard await ensureBridgeStarted() else {
+      throw BridgeError.stopped
+    }
+    log("ChatProvider: agent bridge restarted with current user MCP servers")
   }
 
   private func performBridgeReadinessStartup() async throws -> Bool {
@@ -1926,6 +1990,12 @@ class ChatProvider: ObservableObject {
       for: surface,
       ownerID: ownerID
     )
+    if surface.surfaceKind == "main_chat" {
+      log(
+        "ChatProvider: resolving main_chat session chatFirstCapability="
+          + (projection == nil ? "absent" : "present")
+          + " gateConfigured=\(chatFirstMainChatProjectionGate.isConfigured(for: ownerID))")
+    }
     let session = try await resolvedAgentClient().resolveSurfaceSession(
       surface,
       creationProfile: creationProfile,
@@ -1943,6 +2013,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includeSkillCatalog: Bool = true,
     includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil,
@@ -2028,6 +2099,15 @@ class ChatProvider: ObservableObject {
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+    // One catalog per lane: the ACP lane's user-skills plugin already indexes the
+    // same skills natively, so the compact catalog would reach the model twice.
+    var workspacePayload: [String: Any] = [
+      "workingDirectory": workspacePath,
+      "databaseSchema": cachedDatabaseSchema,
+    ]
+    if includeSkillCatalog, Self.shouldInjectSkillCatalog(adapterId: session.profile.adapterId) {
+      workspacePayload["skillCatalog"] = skillContextProjection()
+    }
     var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
       (
         .identity,
@@ -2053,16 +2133,7 @@ class ChatProvider: ObservableObject {
         taskText.isEmpty ? [:] : ["content": taskText],
         nil
       ),
-      (
-        .workspace,
-        .available,
-        [
-          "workingDirectory": workspacePath,
-          "databaseSchema": cachedDatabaseSchema,
-          "skillCatalog": skillContextProjection(),
-        ],
-        nil
-      ),
+      (.workspace, .available, workspacePayload, nil),
       (.surface, .available, surfacePayload, nil),
     ]
     if includeScreenSource {
@@ -2112,6 +2183,9 @@ class ChatProvider: ObservableObject {
         notificationContext: nil,
         screenPayload: nil,
         includeScreenSource: false,
+        // The realtime renderer drops the workspace source entirely, so building
+        // and uploading a skill catalog here is dead work the model never sees.
+        includeSkillCatalog: false,
         includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
@@ -3257,7 +3331,7 @@ class ChatProvider: ObservableObject {
   // MARK: - CLAUDE.md & Skills Discovery
 
   /// Results from background Claude config discovery
-  private struct ClaudeConfigResult: Sendable {
+  struct ClaudeConfigResult: Sendable {
     let claudeMdContent: String?
     let claudeMdPath: String?
     let skills: [(name: String, description: String, path: String)]
@@ -3268,7 +3342,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Perform all file I/O for Claude config discovery off the main thread
-  private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
+  nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let claudeDir = "\(home)/.claude"
     let fm = FileManager.default
@@ -3290,6 +3364,21 @@ class ChatProvider: ObservableObject {
     if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
       for dir in skillDirs.sorted() {
         let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+        if fm.fileExists(atPath: skillPath),
+          let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
+        {
+          let desc = extractSkillDescription(from: content)
+          skills.append((name: dir, description: desc, path: skillPath))
+        }
+      }
+    }
+
+    // Skills the user created in Omi's Apps page, stored locally at
+    // ~/.omi/skills. Same layout as ~/.claude/skills.
+    let userSkillsDir = LocalSkillsStore.skillsDirURL.path
+    if let skillDirs = try? fm.contentsOfDirectory(atPath: userSkillsDir) {
+      for dir in skillDirs.sorted() where !skills.contains(where: { $0.name == dir }) {
+        let skillPath = "\(userSkillsDir)/\(dir)/SKILL.md"
         if fm.fileExists(atPath: skillPath),
           let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
         {
@@ -3418,12 +3507,7 @@ class ChatProvider: ObservableObject {
 
   /// Get the set of explicitly disabled skill names from UserDefaults
   func getDisabledSkillNames() -> Set<String> {
-    guard let data = disabledSkillsJSON.data(using: .utf8),
-      let names = try? JSONDecoder().decode([String].self, from: data)
-    else {
-      return []  // Default: nothing disabled = all enabled
-    }
-    return Set(names)
+    Self.disabledSkillNamesFromDefaults()
   }
 
   /// Save the set of disabled skill names to UserDefaults
@@ -4124,6 +4208,15 @@ class ChatProvider: ObservableObject {
 
   /// Question-card controls are only live on a completed assistant turn at
   /// the conversation tail. A later user response retires its choices.
+  /// Whether the server-owned chat-first capability is currently projected for
+  /// main chat. A question card renders its options either way; this decides
+  /// whether they are pressable or dimmed (`QuestionCardView.isCapabilityAvailable`).
+  func hasChatFirstMainChatCapability() -> Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(
+      for: mainChatSurfaceReference(), ownerID: ownerID) != nil
+  }
+
   func isQuestionCardActionable(
     messageID: String,
     questionID: String,
@@ -4390,6 +4483,7 @@ class ChatProvider: ObservableObject {
     questionInteraction: ChatQuestionCardSelection? = nil,
     questionContinuation: ChatQuestionCardContinuation? = nil,
     onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil,
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4895,7 +4989,11 @@ class ChatProvider: ObservableObject {
     // turn. Clearing composer state keeps it out of the next draft without
     // removing the pill from this message or a later journal replay.
     pendingComposerReferences.removeAll()
-    onAccepted?()
+    Self.notifyAccepted(
+      telemetryAttempt: telemetryAttempt,
+      onAccepted: onAccepted,
+      onAcceptedWithAttemptID: onAcceptedWithAttemptID
+    )
 
     // Track onboarding user-message shape without content.
     if isOnboarding {
@@ -5990,7 +6088,11 @@ class ChatProvider: ObservableObject {
   /// was accepted into the timeline. Preflight failures leave it untouched,
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
-  func sendMainDraft(_ text: String, onAccepted: (@MainActor () -> Void)? = nil) async -> String? {
+  func sendMainDraft(
+    _ text: String,
+    onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil
+  ) async -> String? {
     let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
@@ -6001,6 +6103,9 @@ class ChatProvider: ObservableObject {
           self.draftText == text
         else { return }
         self.draftText = ""
+      },
+      onAcceptedWithAttemptID: { attemptID in
+        onAcceptedWithAttemptID?(attemptID)
       })
   }
 
@@ -6025,6 +6130,18 @@ class ChatProvider: ObservableObject {
     stagedImageAttachmentPresent: Bool
   ) -> Bool {
     explicitImagePresent || stagedImageAttachmentPresent
+  }
+
+  /// Runs acceptance callbacks from the same attempt object that emits the
+  /// terminal `question_answered` event. Keeping the ID lookup here prevents
+  /// an acceptance caller from accidentally substituting a second turn ID.
+  static func notifyAccepted(
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    onAccepted: (@MainActor () -> Void)?,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)?
+  ) {
+    onAccepted?()
+    onAcceptedWithAttemptID?(telemetryAttempt.context.attemptId)
   }
 
   nonisolated static func messageIds(forAttemptId attemptId: String) -> (
@@ -6309,24 +6426,41 @@ class ChatProvider: ObservableObject {
     return normalized
   }
 
-  /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-  /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+  /// Append text to a streaming message via a buffer that flushes at ~35ms intervals.
+  /// This reduces SwiftUI re-renders from once-per-token to ~28 times/second,
+  /// and each of those flushes reveals a paced slice rather than the whole
+  /// backlog (`ChatStreamingReveal`), so a burst from the wire reads as flow.
   private func appendToMessage(id: String, text: String) {
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(paced: true)
     }
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer() {
-    streamingBuffer.flush(messages: &messages) { message, text in
+  ///
+  /// `paced` is the timer's flush: it lets a bounded slice of text through and
+  /// re-arms itself while any remains. The un-paced flush is for boundaries —
+  /// a tool call, the turn settling — where everything must land at once.
+  private func flushStreamingBuffer(paced: Bool = false) {
+    let normalize: (ChatMessage, String) -> String = { message, text in
       if message.sender == .ai {
         return Self.normalizeStreamingAssistantText(text)
       }
       return text
     }
+    var remaining = false
+    if paced {
+      remaining = streamingBuffer.flushPaced(messages: &messages, normalizeText: normalize)
+    } else {
+      streamingBuffer.flush(messages: &messages, normalizeText: normalize)
+    }
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
+    }
+    if remaining {
+      streamingBuffer.scheduleFlush { [weak self] in
+        self?.flushStreamingBuffer(paced: true)
+      }
     }
   }
 
@@ -6931,6 +7065,10 @@ class ChatProvider: ObservableObject {
     // the transcript the user just cleared.
     revokeActiveTurn(reason: .superseded)
     pendingComposerReferences.removeAll()
+    // The daily summary renders above the thread as chrome, so the journal
+    // clear below cannot reach it — and a summary left sitting alone in a chat
+    // the reader just emptied reads as a clear that did not work.
+    ChatDailySummaryCoordinator.shared.noteChatCleared()
 
     if isInDefaultChat {
       let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)

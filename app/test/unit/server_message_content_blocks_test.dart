@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/schema/chat_content_block.dart';
 import 'package:omi/backend/schema/message.dart';
 
 void main() {
@@ -71,12 +72,12 @@ void main() {
       );
 
       expect(message.text, 'Meeting notes ready - Canonical title');
-      expect(message.hideFromMobileChat, isFalse);
+      expect(message.textIsStructuredFallback, isFalse);
     },
   );
 
   test(
-    'hides desktop goal and task chrome fallbacks from the mobile timeline',
+    'keeps desktop goal and task chrome on the mobile timeline',
     () {
       final message = ServerMessage.fromJson(
         messageJson(
@@ -84,45 +85,52 @@ void main() {
           contentBlocks: [
             {
               'type': 'goalLink',
+              'id': 'block-goal',
               'goalId': 'goal-1',
               'summary': 'Make Omi Great Again',
             },
-            {'type': 'taskCard', 'taskId': 'task-1'},
-            {'type': 'taskCard', 'taskId': 'task-2'},
-            {'type': 'taskCard', 'taskId': 'task-3'},
+            {'type': 'taskCard', 'id': 'block-task-1', 'taskId': 'task-1'},
+            {'type': 'taskCard', 'id': 'block-task-2', 'taskId': 'task-2'},
+            {'type': 'taskCard', 'id': 'block-task-3', 'taskId': 'task-3'},
           ],
         ),
       );
 
       expect(message.text, 'Goal - Make Omi Great Again\nTask\nTask\nTask');
-      expect(message.hideFromMobileChat, isTrue);
-      expect(ServerMessage.visibleOnMobile([message]), isEmpty);
+      // The body is nothing but the synthesized fallback, so the interactive
+      // components replace it instead of repeating it.
+      expect(message.textIsStructuredFallback, isTrue);
+      expect(message.typedContentBlocks, hasLength(4));
+      expect(message.typedContentBlocks.first, isA<GoalLinkContentBlock>());
+      expect(message.typedContentBlocks.last, isA<TaskCardContentBlock>());
     },
   );
 
-  test('hides stored one-line goal/task fallback dumps', () {
+  test('keeps stored one-line goal/task fallback dumps renderable', () {
     final message = ServerMessage.fromJson(
       messageJson(
         text: 'Goal - Make Omi Great Again Task Task Task',
         contentBlocks: [
-          {'type': 'goalLink', 'summary': 'Make Omi Great Again'},
-          {'type': 'taskCard', 'taskId': 'task-1'},
-          {'type': 'taskCard', 'taskId': 'task-2'},
-          {'type': 'taskCard', 'taskId': 'task-3'},
+          {'type': 'goalLink', 'id': 'block-goal', 'goalId': 'goal-1', 'summary': 'Make Omi Great Again'},
+          {'type': 'taskCard', 'id': 'block-task-1', 'taskId': 'task-1'},
+          {'type': 'taskCard', 'id': 'block-task-2', 'taskId': 'task-2'},
+          {'type': 'taskCard', 'id': 'block-task-3', 'taskId': 'task-3'},
         ],
       ),
     );
 
-    expect(message.hideFromMobileChat, isTrue);
+    expect(message.textIsStructuredFallback, isTrue);
+    expect(message.typedContentBlocks, hasLength(4));
   });
 
-  test('hides question cards that have no other content', () {
+  test('keeps question cards that have no other content', () {
     final message = ServerMessage.fromJson(
       messageJson(
         text: 'What should we focus on?',
         contentBlocks: [
           {
             'type': 'questionCard',
+            'id': 'block-question',
             'questionId': 'question-1',
             'text': 'What should we focus on?',
             'subject': {'kind': 'goal', 'id': 'goal-1'},
@@ -134,7 +142,8 @@ void main() {
       ),
     );
 
-    expect(message.hideFromMobileChat, isTrue);
+    expect(message.textIsStructuredFallback, isTrue);
+    expect(message.typedContentBlocks.single, isA<QuestionCardContentBlock>());
   });
 
   test('keeps meeting-note cards and mixed useful blocks', () {
@@ -144,6 +153,7 @@ void main() {
         contentBlocks: [
           {
             'type': 'conversationLink',
+            'id': 'block-conversation',
             'conversationId': 'conversation-1',
             'summary': 'Founders explore AI memory',
           },
@@ -154,8 +164,8 @@ void main() {
       messageJson(
         text: 'I started tracking this.',
         contentBlocks: [
-          {'type': 'text', 'text': 'I started tracking this.'},
-          {'type': 'goalLink', 'summary': 'Make Omi Great Again'},
+          {'type': 'text', 'id': 'block-text', 'text': 'I started tracking this.'},
+          {'type': 'goalLink', 'id': 'block-goal', 'goalId': 'goal-1', 'summary': 'Make Omi Great Again'},
         ],
       ),
     );
@@ -163,19 +173,14 @@ void main() {
       messageJson(
         text: 'Here is a real reply about the weather.',
         contentBlocks: [
-          {'type': 'goalLink', 'summary': 'Make Omi Great Again'},
+          {'type': 'goalLink', 'id': 'block-goal', 'goalId': 'goal-1', 'summary': 'Make Omi Great Again'},
         ],
       ),
     );
 
-    expect(meeting.hideFromMobileChat, isFalse);
-    expect(mixed.hideFromMobileChat, isFalse);
-    expect(prose.hideFromMobileChat, isFalse);
-    expect(ServerMessage.visibleOnMobile([meeting, mixed, prose]), [
-      meeting,
-      mixed,
-      prose,
-    ]);
+    expect(meeting.typedContentBlocks.single, isA<ConversationLinkContentBlock>());
+    expect(mixed.typedContentBlocks, hasLength(2));
+    expect(prose.textIsStructuredFallback, isFalse);
   });
 
   test('decodes optional evidence envelope without changing the answer text', () {

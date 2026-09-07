@@ -216,9 +216,6 @@ final class QuickActionsIconPatcher: NSObject {
         }
     }
 
-    // Create WiFi Network plugin for device AP connection
-    _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
-
     // Battery widget channel — writes Omi device battery to the shared App Group
     // so the WidgetKit extension can read it.
     let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)

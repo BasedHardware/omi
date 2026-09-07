@@ -65,6 +65,36 @@ enum ContextDirectorEligibility {
   static func permitsEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
     snapshot.notifyWorthiness > 0 && !snapshot.validatedFacts.isEmpty
   }
+
+  /// Planned JIT matching is grounded on validated facts, not director worthiness.
+  /// A standing Safari trigger still has to see a Safari fact whose
+  /// `notifyWorthiness` is 0. Ambient nano keeps the worthiness gate via
+  /// `JITAmbientRuntimeContext.locallyRelevant`.
+  static func permitsJITEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
+    !snapshot.validatedFacts.isEmpty
+  }
+}
+
+enum ContextProactivityVisitRoute: Equatable, Sendable {
+  case skip
+  case jitOnly
+  case jitThenLegacyDirector
+}
+
+enum ContextProactivityAdmissionOutcome: Equatable, Sendable {
+  case skipped
+  case jitConsumed
+  case legacyDirector
+}
+
+enum ContextProactivityVisitAdmission {
+  static func route(for snapshot: ContextBucketSnapshot) -> ContextProactivityVisitRoute {
+    guard ContextDirectorEligibility.permitsJITEvaluation(of: snapshot) else { return .skip }
+    if ContextDirectorEligibility.permitsEvaluation(of: snapshot) {
+      return .jitThenLegacyDirector
+    }
+    return .jitOnly
+  }
 }
 
 enum ContextDirectorGrounding {
@@ -139,10 +169,16 @@ enum ContextDirectorTaskSelection {
 
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
+  typealias JITHandle =
+    @Sendable (
+      ContextVisitFence, ContextBucketSnapshot, CapturedFrame, RuntimeOwnerAuthorizationSnapshot
+    ) async -> Bool
+
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
   private let presentationPreflight: @Sendable (String) async -> OwnerBoundNotificationPresentationResult
   private let retrieve: @Sendable (String, RuntimeOwnerAuthorizationSnapshot) async -> [ContextRetrievedItem]
+  private let jitHandle: JITHandle
   private var dwellAdmission = ContextVisitDwellAdmission()
   private let dwellNanoseconds: UInt64
 
@@ -158,6 +194,11 @@ actor ContextProactivityEngine {
       query, authorizationSnapshot in
       await ContextDirectorRetrievalExecutor.retrieve(
         query: query, authorizationSnapshot: authorizationSnapshot)
+    },
+    jitHandle: @escaping JITHandle = { fence, snapshot, frame, authorizationSnapshot in
+      await JITProactivityCoordinator.shared.handle(
+        fence: fence, snapshot: snapshot, frame: frame,
+        authorizationSnapshot: authorizationSnapshot)
     }
   ) {
     self.client = client
@@ -165,6 +206,7 @@ actor ContextProactivityEngine {
     self.dwellNanoseconds = dwellNanoseconds
     self.presentationPreflight = presentationPreflight
     self.retrieve = retrieve
+    self.jitHandle = jitHandle
   }
 
   func contextEntered(_ fence: ContextVisitFence) async {
@@ -195,9 +237,10 @@ actor ContextProactivityEngine {
       freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
-    // Facts are the only source of notification worthiness. A bucket containing
-    // ambient narrative alone cannot purchase a frontier-model call.
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // Validated facts are enough to run planned JIT matching. A bucket of
+    // ambient narrative alone still cannot purchase a frontier-model call;
+    // `admitJITThenLegacyDirector` keeps that worthiness gate on the director.
+    guard ContextProactivityVisitAdmission.route(for: snapshot) != .skip else { return }
     // After a departure the latest tracked frame can be the NEXT context's
     // screen. Sample the frame first, then re-read freshness and bound the
     // sample against it: the transition persists `endedAt` before the next
@@ -219,16 +262,10 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: frameSample.frame,
-      authorizationSnapshot: authorizationSnapshot)
-    {
-      return
-    }
-    await evaluateAndDeliver(
+    await admitJITThenLegacyDirector(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: frameSample.frame,
+      frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot)
   }
 
@@ -271,24 +308,41 @@ actor ContextProactivityEngine {
       log("DepartureEvalDebug: no snapshot")
       return
     }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else {
       log(
         "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
       )
       return
     }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: departingFrame,
+    _ = await admitJITThenLegacyDirector(
+      fence: fence,
+      snapshot: snapshot,
+      frame: departingFrame,
       authorizationSnapshot: authorizationSnapshot)
-    {
-      return
+  }
+
+  /// Shared post-snapshot tail: planned JIT may run on validated facts even at
+  /// zero worthiness; the legacy director still requires positive worthiness.
+  @discardableResult
+  func admitJITThenLegacyDirector(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    frame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> ContextProactivityAdmissionOutcome {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else { return .skipped }
+    if await jitHandle(fence, snapshot, frame, authorizationSnapshot) {
+      return .jitConsumed
     }
-    log("DepartureEvalDebug: proceeding to evaluateAndDeliver")
+    guard route == .jitThenLegacyDirector else { return .skipped }
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: departingFrame,
+      currentFrame: frame,
       authorizationSnapshot: authorizationSnapshot)
+    return .legacyDirector
   }
 
   /// The shared post-settle tail of the director pipeline: presentation

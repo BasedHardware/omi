@@ -20,14 +20,18 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(role: "coordinator" | "leaf" = "coordinator", mode: "ask" | "act" = "act") {
+function fixture(
+  role: "coordinator" | "leaf" = "coordinator",
+  mode: "ask" | "act" = "act",
+  surfaceKind?: string,
+) {
   const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
   roots.push(root);
   const databasePath = join(root, "agent.sqlite");
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
   const session = store.insertSession({
     ownerId: "owner-1",
-    surfaceKind: role === "leaf" ? "background_agent" : "main_chat",
+    surfaceKind: surfaceKind ?? (role === "leaf" ? "background_agent" : "main_chat"),
     defaultAdapterId: "acp",
     executionRole: role,
   });
@@ -524,6 +528,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(capability.allowedToolNames).toContain("think_deeper");
     expect(capability.allowedToolNames).toContain("web_search");
     expect(capability.allowedToolNames).toContain("point_click");
+    expect(capability.allowedToolNames).toContain("record_interject_feedback");
     const authorized = broker.authorize({
       capabilityRef: capability.capabilityRef,
       invocationId: "invoke-voice",
@@ -548,6 +553,7 @@ describe("RunToolCapabilityBroker", () => {
     expect(chatCapability.allowedToolNames).not.toContain("think_deeper");
     expect(chatCapability.allowedToolNames).not.toContain("web_search");
     expect(chatCapability.allowedToolNames).not.toContain("point_click");
+    expect(chatCapability.allowedToolNames).not.toContain("record_interject_feedback");
     chat.store.close();
   });
 
@@ -945,6 +951,54 @@ describe("RunToolCapabilityBroker JIT knowledge-ledger gate", () => {
       toolInput: { query: "release checklist" },
     });
     expect(authorized.canonicalToolName).toBe("search_knowledge");
+    store.close();
+  });
+
+  it("narrows an admitted service JIT run to read-only ledger retrieval", () => {
+    const { store, session, run, attempt } = fixture("coordinator", "ask", "service");
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "ground this notification",
+        metadata: {
+          jitKnowledgeToolsEnabled: true,
+          jitBudget: {
+            contractVersion: "jit-cloud-qa-v1",
+            executionID: "execution-1",
+            maxProviderAttempts: 3,
+            maxOutputTokensPerAttempt: 2048,
+            maxNormalizedInputTokensPerAttempt: 32768,
+            maxEstimatedSpendMicroUSD: 50000,
+          },
+        },
+      }),
+      run.runId,
+    ]);
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toEqual([
+      "get_entity_timeline_tool",
+      "read_playbook",
+      "search_historical_facts",
+      "search_knowledge",
+    ]);
+    expectCode(
+      () => broker.authorize({
+        capabilityRef: capability.capabilityRef,
+        invocationId: "jit-service-write-1",
+        runId: run.runId,
+        attemptId: attempt.attemptId,
+        activeOwnerId: session.ownerId,
+        toolName: "save_playbook",
+        toolInput: { description: "not admitted", body: "not admitted" },
+      }),
+      "tool_not_allowed",
+    );
     store.close();
   });
 });

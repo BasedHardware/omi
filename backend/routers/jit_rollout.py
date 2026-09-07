@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import os
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -40,6 +41,8 @@ _DECISION_PATH = '/v1/jit/rollout-decision'
 _TRIGGER_SNAPSHOT_PATH = '/v1/jit/trigger-snapshot'
 _TRIGGER_FEEDBACK_PATH = '/v1/jit/trigger-feedback'
 _PROACTIVITY_RESERVATION_PATH = '/v1/jit/proactivity/reservations'
+_JIT_BUDGET_CONTRACT_ENV = 'OMI_JIT_PROACTIVITY_BUDGET_CONTRACT'
+_JIT_BUDGET_CONTRACT_VERSION = 'jit-cloud-qa-v1'
 
 
 class JITRolloutDecisionEnvelope(BaseModel):
@@ -52,6 +55,7 @@ class JITRolloutDecisionEnvelope(BaseModel):
     error_class: JITErrorClass
     cache_hit: bool
     cache_ttl_seconds: int
+    budget_contract_version: str | None = None
 
     @classmethod
     def from_decision(cls, decision: JITRolloutDecision) -> 'JITRolloutDecisionEnvelope':
@@ -63,6 +67,11 @@ class JITRolloutDecisionEnvelope(BaseModel):
             error_class=decision.error_class,
             cache_hit=decision.cache_hit,
             cache_ttl_seconds=decision.cache_ttl_seconds,
+            budget_contract_version=(
+                _JIT_BUDGET_CONTRACT_VERSION
+                if os.getenv(_JIT_BUDGET_CONTRACT_ENV, '').strip() == _JIT_BUDGET_CONTRACT_VERSION
+                else None
+            ),
         )
 
 
@@ -97,6 +106,11 @@ class JITTriggerSnapshotEnvelope(BaseModel):
     rows: list[JITTriggerSnapshotRowEnvelope]
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
     failure_reason: str | None = None
+    # Matches the timezone authority used by the reservation transaction. Both
+    # are optional for old/synthetic user records; reservations still fail
+    # closed when the profile has no usable timezone.
+    budget_day: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    budget_timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class JITTriggerFeedbackRequest(BaseModel):
@@ -233,6 +247,8 @@ async def get_jit_trigger_snapshot(
         ],
         policy=snapshot.policy,
         failure_reason=snapshot.failure_reason,
+        budget_day=snapshot.budget_day,
+        budget_timezone=snapshot.budget_timezone,
     )
 
 

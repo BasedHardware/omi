@@ -277,7 +277,8 @@ jobs:
 
       # Sign only when Azure Trusted Signing secrets are present. When absent the
       # installer is built unsigned (Windows SmartScreen shows "unknown
-      # publisher"); the release notes say so. See docs/release-pipeline.md.
+      # publisher"); the release notes say so. See
+      # desktop/windows/docs/release-pipeline.md.
       - name: Detect signing secrets
         id: signing
         shell: bash

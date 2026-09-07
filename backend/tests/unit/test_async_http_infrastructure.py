@@ -517,21 +517,39 @@ class TestExecutorConfiguration:
 
 
 class TestNotificationWebhookWiring:
-    """Verify async webhook is correctly wired through storage_executor."""
+    """Pin how the daily-summary webhook is owned: run inline, never submitted to a pool.
 
-    def test_send_summary_calls_storage_executor_with_asyncio_run(self):
-        """_send_summary_notification must submit asyncio.run(day_summary_webhook(...)) to storage_executor."""
+    The name predates two rewirings. It was storage_executor, then postprocess_executor
+    (#7387), and is now an inline awaited call bounded by its own budget (#12530) --
+    because the coordinator was already running on postprocess_executor, so submitting
+    back into it made the function its own child and left the coroutine unowned at exit.
+    """
+
+    def test_day_summary_webhook_is_awaited_inline_not_submitted(self):
+        """The daily-summary webhook must run inline, never be submitted to a pool.
+
+        This pin used to require the opposite — ``postprocess_executor.submit(asyncio.run,
+        day_summary_webhook(...))`` (#7387). That wiring turned out to be wrong in both
+        directions (#12530): ``_send_summary_notification`` already runs *on*
+        postprocess_executor, so the submit made it its own child, and the Cloud Run Job
+        exits without joining the pool, so a queued webhook was dropped outright.
+
+        The behavioral coverage lives in test_daily_summary_generation.py; this stays a
+        source pin because the defect is a wiring shape, and it is the negative half —
+        "not submitted anywhere" — that a behavioral test cannot express.
+        """
         import os
-        import sys
-        from unittest.mock import MagicMock, patch
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
-        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' in src
+        assert '.submit(asyncio.run, day_summary_webhook(' not in src
+        assert 'asyncio.run(' in src and 'day_summary_webhook(' in src
+        # Bounded inside the per-user budget it now shares: a slow receiver must not be
+        # able to spend someone else's recap. See DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS.
+        assert 'timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS' in src
         assert 'critical_executor' not in src
         assert 'storage_executor' not in src
 

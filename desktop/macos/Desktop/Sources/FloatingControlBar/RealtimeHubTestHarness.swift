@@ -161,6 +161,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
+    case .recordInterjectFeedback: stub = #"{"ok":true}"#
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }

@@ -98,6 +98,49 @@ private func minimumInput() -> DeterministicMinimumInput {
       super.tearDown()
     }
 
+    // red-proof: delete the `guard Self.isRetryable(error)` in `invoke`
+    func testPolicyRefusalIsNotAttemptedTwice() async {
+      let local = CallCountingEngine(
+        engineID: .localServer,
+        generateResults: [
+          .failure(LocalInferenceError.nonLoopbackBaseURL("https://api.openai.com/v1")),
+          .success(ProbeSummary(title: "a retry must never reach this")),
+        ]
+      )
+      let runtime = LocalInferenceRuntime(
+        engines: [local],
+        killSwitches: .enabled,
+        fallback: DesktopLocalInferenceFallbackRecorder(),
+        defaultEngineID: .localServer
+      )
+
+      let result: LocalInferenceGeneration<ProbeSummary> = await runtime.generateStructuredFailClosed(
+        prompt: "summarize",
+        schema: ProbeSchema.json,
+        minimumInput: minimumInput()
+      )
+
+      guard case .deterministicMinimum = result else {
+        return XCTFail("a refused request must fail closed, and its retry must not be able to succeed")
+      }
+      XCTAssertEqual(local.generateCallCount, 1, "a fail-closed component must not re-attempt a refused request")
+    }
+
+    func testRetryClassifierSeparatesTransientFromDeterministic() {
+      XCTAssertTrue(LocalInferenceRuntime.isRetryable(LocalInferenceError.httpStatus(429)))
+      XCTAssertTrue(LocalInferenceRuntime.isRetryable(LocalInferenceError.httpStatus(503)))
+      XCTAssertTrue(LocalInferenceRuntime.isRetryable(LocalInferenceError.engineFailed("transport")))
+      XCTAssertTrue(LocalInferenceRuntime.isRetryable(URLError(.cannotConnectToHost)))
+
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.httpStatus(400)))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.httpStatus(401)))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.nonLoopbackBaseURL("https://x")))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.capabilityUnavailable("tool_loop")))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.invalidResponse("empty_content")))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(LocalInferenceError.disabled))
+      XCTAssertFalse(LocalInferenceRuntime.isRetryable(CancellationError()))
+    }
+
     func testForcedEngineFailureReturnsDeterministicMinimumRecordsFallbackAndDoesNotCallCloud() async throws {
       let local = CallCountingEngine(
         engineID: .localServer,

@@ -122,6 +122,8 @@ export interface OmiToolProjectionContext {
    * or shows tools — it never grants or denies access.
    */
   jitKnowledgeToolsEnabled?: boolean;
+  /** Qualification-only proactive turn projection. */
+  jitProactivity?: boolean;
   executionRole?: "coordinator" | "leaf";
   surfaceKind?: string;
   chatFirstUi?: boolean;
@@ -141,6 +143,15 @@ export interface OmiToolAvailabilitySnapshot {
 
 /** Single generated-policy revision consumed by capability registration. */
 export const OMI_TOOL_MANIFEST_VERSION = 1 as const;
+
+/** Read-only retrieval needed by the bounded JIT proactivity prompt. */
+export const JIT_PROACTIVITY_READ_TOOL_NAMES = [
+  "search_knowledge",
+  "read_playbook",
+  "search_historical_facts",
+  "get_entity_timeline_tool",
+] as const;
+const JIT_PROACTIVITY_READ_TOOL_NAME_SET = new Set<string>(JIT_PROACTIVITY_READ_TOOL_NAMES);
 
 const readOnlyLocal: OmiToolAnnotations = {
   readOnlyHint: true,
@@ -180,6 +191,110 @@ function schema(properties: Record<string, unknown>, required: string[] = []): O
     additionalProperties: false,
   };
 }
+
+/**
+ * The backend's TriggerCondition is a typed Pydantic contract even though the
+ * LangChain Dict annotation currently exposes it as an open object. Keep the
+ * desktop model-facing schema typed here so it can produce a payload the
+ * server compiler accepts on the first call. The backend remains the
+ * authority for selector bounds and safe-regex validation.
+ */
+const standingTriggerStringArray = (description: string, maxItems: number, maxLength = 80) => ({
+  type: "array",
+  items: { type: "string", minLength: 1, maxLength },
+  minItems: 1,
+  maxItems,
+  description,
+});
+
+const standingTriggerConditionSchema = {
+  type: "object",
+  properties: {
+    match_mode: {
+      type: "string",
+      enum: ["all", "any"],
+      default: "all",
+      description: "Whether every selector must match (all) or any one selector may match (any).",
+    },
+    entity_aliases: {
+      type: "object",
+      minProperties: 1,
+      maxProperties: 12,
+      additionalProperties: {
+        type: "array",
+        items: { type: "string", minLength: 1, maxLength: 80 },
+        minItems: 1,
+        maxItems: 16,
+      },
+      description: "Map an entity name to one or more aliases, e.g. {\"release_owner\":[\"David\",\"Dave\"]}.",
+    },
+    keywords: standingTriggerStringArray("Whole-word terms to match in captured context, e.g. [\"incident\", \"outage\"].", 32),
+    regex: standingTriggerStringArray(
+      "Safe regular expressions to match in captured context (no lookarounds, backreferences, or nested quantifiers).",
+      8,
+      160,
+    ),
+    apps: standingTriggerStringArray("Application names to match, e.g. [\"Slack\"].", 16),
+    windows: standingTriggerStringArray("Window titles to match, e.g. [\"#release\"].", 16, 120),
+    time: {
+      type: "object",
+      properties: {
+        weekdays: {
+          type: "array",
+          items: { type: "integer", minimum: 0, maximum: 6 },
+          maxItems: 7,
+          description: "Optional ISO weekday indexes 0 (Monday) through 6 (Sunday).",
+        },
+        start: {
+          type: "string",
+          pattern: "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$",
+          description: "Inclusive local start time, e.g. 09:00.",
+        },
+        end: {
+          type: "string",
+          pattern: "^(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d)?$",
+          description: "Inclusive local end time, e.g. 17:00.",
+        },
+        timezone: {
+          type: "string",
+          minLength: 1,
+          description: "Optional installed IANA timezone; defaults to UTC, e.g. America/New_York.",
+        },
+      },
+      required: ["start", "end"],
+      additionalProperties: false,
+      description: "Time selector; start and end are both required when time is present.",
+    },
+    calendar: {
+      type: "object",
+      properties: {
+        event_keywords: standingTriggerStringArray("Calendar event title terms, e.g. [\"release review\"].", 32),
+        event_types: standingTriggerStringArray("Calendar event types, e.g. [\"meeting\"].", 32),
+      },
+      anyOf: [{ required: ["event_keywords"] }, { required: ["event_types"] }],
+      additionalProperties: false,
+      description: "Calendar selector; provide event_keywords or event_types (at least one).",
+    },
+  },
+  anyOf: [
+    { required: ["entity_aliases"] },
+    { required: ["keywords"] },
+    { required: ["regex"] },
+    { required: ["apps"] },
+    { required: ["windows"] },
+    { required: ["time"] },
+    { required: ["calendar"] },
+  ],
+  maxProperties: 8,
+  additionalProperties: false,
+  description:
+    "Typed deterministic selector payload. Examples: {\"keywords\":[\"incident\"]}; {\"apps\":[\"Slack\"],\"keywords\":[\"budget\"]}; {\"time\":{\"start\":\"09:00\",\"end\":\"17:00\",\"timezone\":\"UTC\"}}.",
+  examples: [
+    { keywords: ["incident"] },
+    { apps: ["Slack"], keywords: ["budget"] },
+    { time: { start: "09:00", end: "17:00", timezone: "UTC" } },
+  ],
+};
 
 function piAndStdio(condition: OmiToolCondition = "always"): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
   return {
@@ -347,16 +462,16 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc(
       "Get Tasks",
-      "Read the user's overdue and due-today tasks locally.",
+      "Read the user's open tasks locally: overdue, due today, and undated.",
       [
         "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-        "Prefer get_action_items for completed tasks, date ranges, or the full list.",
+        "Prefer get_action_items for completed tasks or an explicit date range.",
       ],
     ),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
+        "Read the user's open tasks locally and get them back as text to speak: everything overdue, everything due today, and everything on the list with no due date. This is the same list the Tasks page shows, so an empty result means the user genuinely has no open tasks — never say they have none without calling this first. Fast synchronous read — use it for 'what are my tasks', 'what's due today', 'what's on my list', 'what should I work on'. Reading tasks is always a direct call, never background work.",
     },
   },
   complete_task: {
@@ -377,9 +492,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   load_skill: {
     surfaces: ["desktop_chat"],
-    capabilityDoc: doc("Load Skill", "Load the full instructions for a named skill listed in available_skills.", [
-      "Use the exact skill name from available_skills.",
-    ]),
+    capabilityDoc: doc(
+      "Load Skill",
+      "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
+      ["Use the exact skill name from available_skills.", "Read additional sections with part only when the first section is relevant."],
+    ),
   },
   search_skills: {
     surfaces: ["desktop_chat"],
@@ -537,13 +654,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Get Action Items",
       "Retrieve the user's tasks with optional completion and due-date filters.",
       [
-        "Use for completed tasks, date ranges, or the full task list.",
-        "For voice, prefer get_tasks for plain overdue/due-today questions.",
+        "Use for completed tasks or an explicit date range.",
+        "For voice, prefer get_tasks for any plain question about the open list.",
       ],
     ),
     voice: {
       realtimeDescription:
-        "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
+        "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish') or a DATE RANGE ('what's due next week') — for any plain question about the open list, prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
     },
   },
   create_action_item: {
@@ -841,6 +958,34 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
     },
   },
+  record_interject_feedback: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Record Interject Feedback",
+      "Silently record how the user's utterance relates to the proactive card.",
+      [
+        "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+        "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+        "Never speak the verb, a heads-up, or the tool result.",
+      ],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Record how the user's latest utterance relates to the proactive card, then speak only the user-facing reply. Call silently and immediately: do not speak a heads-up, do not speak the verb, and do not read the tool result. The app does not play a canned acknowledgement. For a question or continuation, use riff or omit this tool and let the first audio be the answer. For a correction, speak one English consequence sentence that names the fact that changed. Never speak taxonomy names as labels.",
+      schemaOverride: schema(
+        {
+          verb: {
+            type: "string",
+            enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+            description:
+              "How the utterance relates to the card. riff is continuation or a question about the card.",
+          },
+        },
+        ["verb"],
+      ),
+    },
+  },
   point_click: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Point Click", "Click at on-screen pixel coordinates.", [
@@ -1086,15 +1231,21 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    description: "Load a relevant skill progressively: the first call returns metadata, the body's section table of contents, and only the first section's content; additional sections load one at a time with a part number.",
     promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     latency: "fast local",
-    inputSchema: schema({ name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" } }, ["name"]),
+    inputSchema: schema(
+      {
+        name: { type: "string", description: "Skill name returned by the compact catalog or search_skills" },
+        part: { type: "number", description: "1-based body section to read. Omit for the overview, section list, and first section." },
+      },
+      ["name"]
+    ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app are refused."],
     adapters: piAndStdio(),
   },
   {
@@ -1112,7 +1263,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: "normal",
     executor: { kind: "nodeTool" },
     intendedForAgents: true,
-    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots."],
+    runtimePreconditions: ["Requires a local SKILL.md under the configured skill roots.", "Skills the user disabled in the desktop app never match."],
     adapters: piAndStdio(),
   },
   {
@@ -1174,6 +1325,11 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Conversations",
     description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
     promptSnippet: "get_conversations - Retrieve conversations by date range",
+    promptGuidelines: [
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       start_date: { type: "string", description: "ISO date with timezone" },
@@ -1195,6 +1351,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Conversations",
     description: "Search conversations by topic or exact canonical ID/share link.",
     promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
+    promptGuidelines: [
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -1219,6 +1379,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Memories",
     description: "Retrieve user memories - facts, preferences, habits. Use for 'what do you know about me?' type questions.",
     promptSnippet: "get_memories - Retrieve stored facts and preferences",
+    promptGuidelines: [
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number", description: "Default 50" },
@@ -1239,6 +1403,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Search Memories",
     description: "Semantic search across user memories. Find memories about a topic using AI embeddings.",
     promptSnippet: "search_memories - Find memories about a topic",
+    promptGuidelines: [
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema(
       {
@@ -1439,20 +1607,20 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
       "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
       "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
+      "Use match_mode 'all' or 'any' (never 'exact'); regex must be an array of safe patterns; entity_aliases must be an object; time requires start and end; calendar requires event_keywords or event_types.",
+      "For an exact phrase, use a keyword selector such as condition={keywords:[\"incident marker\"]} and describe the notification in description.",
     ],
     latency: "fast network",
     inputSchema: schema(
       {
         description: {
           type: "string",
+          minLength: 1,
+          maxLength: 2000,
           description: "What to tell the user when this trigger fires, in your own words (at most 2000 characters).",
         },
         condition: {
-          type: "object",
-          properties: {},
-          additionalProperties: true,
-          description:
-            "Deterministic selector payload: match_mode, entity_aliases, keywords, regex, apps, windows, time, calendar.",
+          ...standingTriggerConditionSchema,
         },
       },
       ["description", "condition"],
@@ -1493,6 +1661,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     label: "Get Action Items",
     description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
     promptSnippet: "get_action_items - Retrieve tasks",
+    promptGuidelines: [
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks. Say how many there are in total — a count, never their names. Naming them in the message, as a list or as bullets, prints every card twice: once as words that cannot be ticked off and once as the card itself.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing.",
+    ],
     latency: "fast network",
     inputSchema: schema({
       limit: { type: "number" },
@@ -1884,6 +2056,31 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: {},
   },
   {
+    name: "record_interject_feedback",
+    label: "Record Interject Feedback",
+    description:
+      "Silently record how the user's latest utterance relates to the proactive card. Not a user-facing reply.",
+    promptSnippet: "record_interject_feedback - Silently classify a card reply, then speak only the answer",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        verb: {
+          type: "string",
+          enum: ["useful", "false_positive", "snooze", "disable", "missed", "correction", "riff"],
+          description:
+            "How the utterance relates to the card. riff is continuation or a question about the card.",
+        },
+      },
+      ["verb"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; Interject classification for the current PTT turn."],
+    adapters: {},
+  },
+  {
     name: "point_click",
     label: "Point Click",
     description: "Click at on-screen pixel coordinates.",
@@ -2151,7 +2348,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     promptSnippet: "get_canonical_goals - Retrieve canonical goals with IDs for native goal links",
     promptGuidelines: [
       "For goal questions, call this before answering and use only returned canonical goals.",
-      "Render every returned goal the user should act on as a goalLink in the same response.",
+      "Render a goalLink only for a goal this turn is actually about — the one the user asked for or just changed. Goals you merely read to answer a question are citations.",
       "If it returns no goals, state that plainly; do not infer goals from memories or local SQL.",
     ],
     latency: "fast network",
@@ -2170,13 +2367,17 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
   {
     name: "render_chat_blocks",
     label: "Render Chat Blocks",
-    description: "Render native, interactive Omi components on the producing main Chat turn. In Chat-first UI, call this in the same turn whenever you retrieve, create, or summarize tasks, goals, memories, or captured conversations; do not leave those entities as a Markdown table/list or ask whether the user wants cards. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
-    promptSnippet: "render_chat_blocks - Render native interactive Omi components in this main Chat response; use by default for entity results",
+    description: "Render native, interactive Omi components on the producing main Chat turn. Use it when the entity IS the answer — the user asked to see or act on that task, goal, memory or conversation, or this turn created or changed one — so the next thing they do is click it. Do NOT use it for entities you merely read to answer in prose: those are sources, and sources belong in citations. Most turns need no components at all. Render at most three. The components ARE the list: when you render them, the message text must be at most one short lead-in sentence, and must never be a numbered or bulleted list repeating what the components already show. For taskCard, taskId MUST be the opaque canonical ID returned by get_action_items or create_action_item; never use a local SQLite/execute_sql numeric row ID. If another lookup found task text, call get_action_items before rendering. Supported shapes include {type:'taskCard', taskId:'...'}, {type:'goalLink', goalId:'...', summary:'...'}, {type:'memoryLink', memoryId:'...', summary:'...'}, and {type:'captureLink', conversationId:'...', summary:'...'}.",
+    promptSnippet: "render_chat_blocks - Render a native interactive Omi component when the entity is what the user asked for or acted on; cite sources in prose otherwise",
     promptGuidelines: [
-      "After reading or mutating tasks, goals, memories, or captured conversations, render the relevant native components before finishing the same response.",
-      "Do not ask whether the user wants cards and do not substitute Markdown tables or lists for entities that have canonical IDs.",
+      "Default to a component whenever the user asks for something Omi draws natively — a task, goal, memory, conversation or capture. Prose wins only when the request is to read rather than to open or act on the thing: a summary, a recap, an analysis, a comparison, a count, or a list too long to render. 'Pick one', 'show me', 'which one', 'find the one about X', 'my tasks for today' all want the component, and a bold title with a citation number is not a substitute for it.",
+      "Render a component when the entity is the point of the turn: the user asked to see or act on it, or this turn created, completed, or changed it.",
+      "Rendering replaces the writing. \"Here are your three tasks:\" followed by three task cards is right; the same sentence followed by a numbered list of those same three tasks, with or without cards, is the failure this rule exists to stop.",
+      "Answering a question from what you read is the common case and needs no components. Cite those entities inline instead — a summary of yesterday cites the conversations it drew on, it does not stack cards above itself.",
+      "Render at most three components in a turn, and prefer none to a wall of them.",
+      "The cap is not a reason to fall back to prose. When the user asked to see or work through their tasks, goals or memories, render the three that matter and say how many more there are — a numbered list of entities written out in the message is the exact thing components replace.",
+      "Do not ask whether the user wants cards, and do not substitute a Markdown table for entities the user asked to act on.",
       "For task cards, obtain opaque canonical task IDs from get_action_items or create_action_item; execute_sql numeric row IDs are invalid.",
-      "Use only for a compact actionable question, task, goal, memory, or Omi-device capture reference.",
       "Never invent entity identifiers or URLs; the server validates every requested reference.",
     ],
     latency: "fast network",
@@ -2336,6 +2537,12 @@ export function toolsForAdapter(
   context: OmiToolProjectionContext = {},
 ): OmiToolManifestEntry[] {
   const base = omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  // JIT proactivity is a bounded read-only service turn. Project the four
+  // ledger retrieval tools only; do not append Chat-first capabilities even
+  // if a caller happens to reuse a main-chat context object.
+  if (context.jitProactivity === true) {
+    return base.filter((tool) => JIT_PROACTIVITY_READ_TOOL_NAME_SET.has(tool.name));
+  }
   if (!isChatFirstMainChat(context)) return base;
   return [
     ...base,

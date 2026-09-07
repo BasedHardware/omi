@@ -590,6 +590,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         'structured',
         'client_processing',
+        # S3 (§1.7): server-authored, NOT projection-family. It says why
+        # `structured` is the deterministic minimum; it carries no client text,
+        # so the integration redactor must not strip it.
+        'processing_state',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',

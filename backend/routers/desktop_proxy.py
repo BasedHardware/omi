@@ -35,8 +35,9 @@ from utils.llm.desktop_llm_stub import (
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.managed_compute import Decision, authorize_managed_compute
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_desktop_trial_paywalled
+from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
 router = APIRouter()
 
@@ -1622,11 +1623,57 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
     return uid
 
 
+# Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
+# screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
+# Gemini BYOK key satisfies authorize_managed_compute. embedContent stays ungated
+# here (TBD-4 / S24). desktop_proactivity completions are the JIT/context-bucket
+# lane and are intentionally not gated in this shard — a blanket 402 there would
+# kill the ambient nano triage (S24) and the shipped completion lane
+# (test_legacy_clients_are_not_gated_by_jit_rollout).
+_PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+_PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
+
+
+def _plan_gate_detail(decision: Decision) -> dict[str, str]:
+    plan_type = decision.plan.value if decision.plan is not None else 'basic'
+    return {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+
+
+async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
+    try:
+        _, _, action = _path_parts(path)
+    except HTTPException:
+        return
+    if action not in _PLAN_GATED_PROXY_ACTIONS:
+        return
+    # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
+    # this fixed non-human Free-plan UID to prove the Gemini provider path.
+    # Gating it 402s every desktop-backend auto-dev promotion (seen on
+    # 9cbe134a3c / #12839: `gemini_proxy: HTTP 402 (untyped)`).
+    if uid == RELEASE_PROBE_UID:
+        return
+    funding_owner = 'byok' if get_byok_key('gemini') else 'omi'
+    decision = await run_blocking(
+        db_executor,
+        authorize_managed_compute,
+        uid,
+        _PLAN_GATED_PROXY_FEATURE,
+        funding_owner,
+    )
+    if decision.allowed:
+        return
+    if decision.reason == 'authorization_unavailable':
+        raise HTTPException(status_code=503, detail='plan authorization is temporarily unavailable')
+    raise HTTPException(status_code=402, detail=_plan_gate_detail(decision))
+
+
 @router.post('/v1/proxy/gemini/{path:path}')
 async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, False, uid)
 
 
 @router.post('/v1/proxy/gemini-stream/{path:path}')
 async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, True, uid)

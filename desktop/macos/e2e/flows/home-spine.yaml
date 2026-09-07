@@ -15,12 +15,16 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineDayRecapRow.swift
+  # The spine recap is a doorway: the day header folds it, and the pill opens the dedicated page.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DailyRecapPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
   - desktop/macos/Desktop/Sources/MainWindow/ServerPaging.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  # Home's corner counts and goal rows read this view model.
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/DashboardViewModel.swift
 preconditions:
   - auth_ready
 

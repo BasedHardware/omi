@@ -318,6 +318,10 @@ class AuthService {
       }
     }
     let attempt = beginSessionAttempt()
+    // Arm the phase watchdog BEFORE the restore awaits anything: the restore's
+    // own awaits (owner transitions, the token refresh) must not be able to
+    // delay the restoring phase's bounded resolution by delaying the arming.
+    armRestoringPhaseWatchdog(attempt: attempt)
     await restoreAuthState(attempt: attempt)
     // The listener enriches a configured SDK session, but a REST-backed
     // session can still restore and validate without it. Do not make listener
@@ -327,14 +331,34 @@ class AuthService {
     } else {
       log("AuthService: Firebase SDK unavailable; continuing with REST-backed auth")
     }
+  }
 
-    // Timeout: if auth isn't restored within 5 seconds, stop showing loading
-    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-      guard let self, self.isSessionAttemptCurrent(attempt) else { return }
-      if AuthState.shared.isRestoringAuth {
-        NSLog("OMI AUTH: Auth restore timed out after 5s, entering recoverable state")
-        AuthState.shared.transition(to: .recoveryRequired)
-      }
+  /// The one guaranteed escape from the restoring phase.
+  ///
+  /// Every fenced exit in the restore flow is silent (`validateRestoredSessionNow`,
+  /// `refreshIdToken`, and the `saveAuthState`/`commitRestoredSession` commits all
+  /// return without a transition when the attempt is no longer current), and any
+  /// newer session attempt — including the restore flow's own invalidation
+  /// branches — defuses an attempt-gated watchdog. Gating on the attempt therefore
+  /// made the watchdog defusable by exactly the interleaving it exists for: three
+  /// dev launches hung in `.restoring` for their whole session with the launch
+  /// attempt superseded and no further auth log after the listener's skip line.
+  /// The phase alone decides now: while the app still reports restoring, the
+  /// watchdog resolves it to the recoverable state (the same landing the old
+  /// watchdog produced whenever it was not defused). A user-driven sign-in that
+  /// is still running defers the resolution via `isLoading`, and a superseded
+  /// launch attempt is named in the log so the next occurrence names its race.
+  func armRestoringPhaseWatchdog(attempt: AuthSessionAttempt, timeout: TimeInterval = 5.0) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+      guard let self else { return }
+      guard AuthState.shared.isRestoringAuth, !AuthState.shared.isLoading else { return }
+      let superseded = !self.isSessionAttemptCurrent(attempt)
+      log(
+        "AUTH_WATCHDOG: restoring phase timed out after \(String(format: "%.1f", timeout))s"
+          + (superseded
+            ? " — launch attempt superseded; a newer auth flow never resolved the phase"
+            : " — restore still in flight"))
+      AuthState.shared.transition(to: .recoveryRequired)
     }
   }
 

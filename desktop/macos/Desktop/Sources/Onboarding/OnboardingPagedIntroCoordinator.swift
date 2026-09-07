@@ -337,13 +337,20 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
-    guard case .imported(let memories, _, let profileSummary) = result else {
+    guard case .imported(let memories, let failed, let profileSummary) = result else {
       if case .failure(let message, failureClass: _) =
         ConnectorImportOperations.memoryLogOutcome(result, source: source)
       {
         lastActionError = message
       }
       return
+    }
+
+    if failed > 0,
+      case .success(_, let message) =
+        ConnectorImportOperations.memoryLogOutcome(result, source: source)
+    {
+      lastActionError = message
     }
 
     let defaults = UserDefaults.standard

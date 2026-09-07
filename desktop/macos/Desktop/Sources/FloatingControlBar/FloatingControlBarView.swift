@@ -541,7 +541,8 @@ struct FloatingControlBarView: View {
           barWindow: window,
           isVoiceListening: showingNotchWaveform,
           isThinking: showingNotchThinking,
-          isSpeaking: showingNotchSpeaking
+          isSpeaking: showingNotchSpeaking,
+          isDictating: state.isVoiceDictating
         )
         .scaleEffect(notchLogoHovering ? 1.06 : 1.0)
       }
@@ -562,10 +563,17 @@ struct FloatingControlBarView: View {
 
   /// Picks the actionable "Couldn't reach Omi" card for reach errors, else the
   /// normal notification card.
+  private enum JITFeedbackPresentation {
+    case planned(JITTriggerFeedbackContext)
+    case ambient(JITAmbientFeedbackContext)
+  }
+
   @ViewBuilder
   private func barNotification(_ notification: FloatingBarNotification) -> some View {
     if let feedbackContext = notification.jitFeedbackContext {
-      jitFeedbackCard(notification, context: feedbackContext)
+      jitFeedbackCard(notification, presentation: .planned(feedbackContext))
+    } else if let ambientFeedbackContext = notification.jitAmbientFeedbackContext {
+      jitFeedbackCard(notification, presentation: .ambient(ambientFeedbackContext))
     } else if notification.assistantId == "reach_error" {
       reachErrorCard(notification)
     } else if notification.assistantId == NotchMoment.receiptAssistantId {
@@ -602,7 +610,7 @@ struct FloatingControlBarView: View {
   /// never calls this path.
   private func jitFeedbackCard(
     _ notification: FloatingBarNotification,
-    context: JITTriggerFeedbackContext
+    presentation: JITFeedbackPresentation
   ) -> some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Button {
@@ -641,21 +649,23 @@ struct FloatingControlBarView: View {
 
       HStack(spacing: OmiSpacing.xs) {
         jitFeedbackButton("Useful", systemImage: "hand.thumbsup.fill") {
-          submitJITFeedback(.useful, notification: notification, context: context)
+          submitJITFeedback(.useful, notification: notification, presentation: presentation)
         }
         jitFeedbackButton("Not relevant", systemImage: "hand.thumbsdown.fill") {
-          submitJITFeedback(.falsePositive, notification: notification, context: context)
+          submitJITFeedback(.falsePositive, notification: notification, presentation: presentation)
         }
-        jitFeedbackButton("Snooze", systemImage: "zzz") {
-          submitJITFeedback(
-            .snooze, notification: notification, context: context,
-            snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
-        }
-        jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
-          submitJITFeedback(.disable, notification: notification, context: context)
-        }
-        jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
-          submitJITFeedback(.missedOrLate, notification: notification, context: context)
+        if case .planned = presentation {
+          jitFeedbackButton("Snooze", systemImage: "zzz") {
+            submitJITFeedback(
+              .snooze, notification: notification, presentation: presentation,
+              snoozedUntil: Date().addingTimeInterval(24 * 60 * 60))
+          }
+          jitFeedbackButton("Disable", systemImage: "bell.slash.fill") {
+            submitJITFeedback(.disable, notification: notification, presentation: presentation)
+          }
+          jitFeedbackButton("Missed", systemImage: "clock.badge.exclamationmark") {
+            submitJITFeedback(.missedOrLate, notification: notification, presentation: presentation)
+          }
         }
       }
     }
@@ -699,25 +709,44 @@ struct FloatingControlBarView: View {
   private func submitJITFeedback(
     _ action: JITTriggerFeedbackAction,
     notification: FloatingBarNotification,
-    context: JITTriggerFeedbackContext,
+    presentation: JITFeedbackPresentation,
     snoozedUntil: Date? = nil
   ) {
+    let ownerID: String
+    switch presentation {
+    case .planned(let context): ownerID = context.ownerID
+    case .ambient(let context): ownerID = context.ownerID
+    }
     guard
       let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: context.ownerID
+        expectedOwnerID: ownerID
       )
     else { return }
-    let identity = notification.feedbackIdentity
+    let accountGeneration = AccountCutoverControlManager.shared.control.accountGeneration
+    let notificationID = notification.id
     Task {
-      await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
-        identity: identity,
-        verb: action.interjectVerb)
-      await JITTriggerFeedbackActionRouter.record(
-        action,
-        context: context,
-        snoozedUntil: snoozedUntil,
-        authorizationSnapshot: authorizationSnapshot)
+      switch presentation {
+      case .planned(let context):
+        await FloatingControlBarManager.shared.recordInterjectJITVerdictIfEnabled(
+          identity: notification.feedbackIdentity,
+          verb: action.interjectVerb)
+        await JITTriggerFeedbackActionRouter.record(
+          action,
+          context: context,
+          snoozedUntil: snoozedUntil,
+          authorizationSnapshot: authorizationSnapshot)
+      case .ambient(let context):
+        await JITAmbientFeedbackActionRouter.record(
+          action,
+          context: context,
+          authorizationSnapshot: authorizationSnapshot,
+          currentAccountGeneration: accountGeneration,
+          presentationCurrent: {
+            FloatingControlBarManager.shared.isCurrentNotification(notificationID)
+          })
+      }
       await MainActor.run {
+        guard FloatingControlBarManager.shared.isCurrentNotification(notificationID) else { return }
         FloatingControlBarManager.shared.dismissCurrentNotification()
       }
     }
@@ -2203,11 +2232,23 @@ private struct AgentMainChatView: View {
           case .discoveryCard(_, let title, let summary, let fullText):
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
-          // Rich controls are main-chat-only; floating/notch stays passive. The
-          // follow-up chip belongs to the answer surface, not this agent-pill
-          // transcript, which has no lane to send the next turn on.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
-            .followUp, .memoryReviewCard:
+          // The notch projects the same journal as the main window, so it
+          // renders the same interactable cards. Taps route the one shell and
+          // summon the main window (`ChatFirstRichBlockContext.auxiliary`).
+          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+            if let context = ChatFirstRichBlockContext.floatingSurface {
+              ChatFirstRichBlockGroupView(
+                group: group,
+                messageID: message.id,
+                context: context
+              )
+              .environment(\.colorScheme, .light)
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+          // The follow-up chip belongs to the answer surface, not this agent-pill
+          // transcript, which has no lane to send the next turn on, and the review
+          // card is a rich editor this passive surface does not own.
+          case .followUp, .memoryReviewCard:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider
@@ -2240,7 +2281,6 @@ private struct AgentMainChatView: View {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)
-          .textSelection(.enabled)
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -2357,6 +2397,7 @@ private struct NotchAgentPillsRowView: View {
   let isVoiceListening: Bool
   let isThinking: Bool
   let isSpeaking: Bool
+  let isDictating: Bool
   @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
   @State private var pillStatusChangeToken = 0
 
@@ -2372,7 +2413,8 @@ private struct NotchAgentPillsRowView: View {
       },
       isListening: isVoiceListening,
       isThinking: isThinking,
-      isSpeaking: isSpeaking
+      isSpeaking: isSpeaking,
+      isDictating: isDictating
     )
     // Keep every PTT dot inside the same 21pt identity slot as the resting
     // Omi mark. The slot is frontmost and trails the visible left lobe, so the

@@ -6542,6 +6542,11 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "is_overage_plan": {
+            "default": false,
+            "title": "Is Overage Plan",
+            "type": "boolean"
+          },
           "limit": {
             "anyOf": [
               {
@@ -7355,6 +7360,16 @@
             ],
             "title": "Processing Memory Id"
           },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
@@ -7995,6 +8010,15 @@
         "title": "ConversationPhoto",
         "type": "object"
       },
+      "ConversationProcessingState": {
+        "description": "Why a conversation's ``structured`` holds the §1.7 deterministic minimum.\n\nAbsent (``None``) on every conversation the server enriched itself, and on a\nconversation that already carries a ``client_processing`` projection.\nClients check ``client_processing`` FIRST: a projection that arrives after\nthe terminal persist is stamped by its own ingress mutation and does not\nrewrite this field, so a projected conversation may still read\n``local_pending`` and must render the projection regardless.\n\n- ``local_pending``: a capable client is expected to deliver a projection.\n  Render a spinner with a timeout, not a permanent empty state.\n- ``none``: no projection is coming. Render \"Summary unavailable on the\n  free plan\".",
+        "enum": [
+          "local_pending",
+          "none"
+        ],
+        "title": "ConversationProcessingState",
+        "type": "string"
+      },
       "ConversationRecordingResponse": {
         "properties": {
           "has_recording": {
@@ -8438,6 +8462,16 @@
               }
             ],
             "title": "Processing Memory Id"
+          },
+          "processing_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationProcessingState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -15697,6 +15731,17 @@
       "JITRolloutDecisionEnvelope": {
         "additionalProperties": false,
         "properties": {
+          "budget_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Contract Version"
+          },
           "cache_hit": {
             "title": "Cache Hit",
             "type": "boolean"
@@ -15961,6 +16006,31 @@
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
+          },
+          "budget_day": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Day"
+          },
+          "budget_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Timezone"
           },
           "commit_sequence": {
             "minimum": 0.0,
@@ -32520,19 +32590,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -32783,19 +32853,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },
@@ -32871,19 +32941,19 @@
         "parameters": [
           {
             "in": "header",
-            "name": "authorization",
+            "name": "X-App-Platform",
             "required": false,
             "schema": {
-              "title": "Authorization",
+              "title": "X-App-Platform",
               "type": "string"
             }
           },
           {
             "in": "header",
-            "name": "X-App-Platform",
+            "name": "authorization",
             "required": false,
             "schema": {
-              "title": "X-App-Platform",
+              "title": "Authorization",
               "type": "string"
             }
           },

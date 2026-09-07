@@ -857,13 +857,17 @@ def _stub_router_deps():
     pydub_stub.AudioSegment = MagicMock()
     sys.modules['pydub'] = pydub_stub
     limiter_stub = ModuleType('utils.voice_duration_limiter')
+    limiter_stub.MAX_SESSION_DURATION_S = 120
     limiter_stub.compute_pcm_duration_ms = lambda byte_count, sample_rate, channels: int(
         byte_count / (sample_rate * channels * 2) * 1000
     )
     limiter_stub.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter_stub.try_consume_budget = MagicMock(return_value=(True, 0, 7200000))
     limiter_stub.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter_stub.try_reserve_session_budget = MagicMock(return_value=(True, 120000, 120000, 7080000))
+    limiter_stub.settle_reserved_duration = MagicMock()
     limiter_stub.record_actual_duration = MagicMock()
+    limiter_stub.MAX_SESSION_DURATION_S = 120
     sys.modules['utils.voice_duration_limiter'] = limiter_stub
     subscription_stub = sys.modules.setdefault('utils.subscription', MagicMock())
     subscription_stub.enforce_chat_quota = MagicMock()
@@ -1223,7 +1227,7 @@ class TestTranscribeStreamWebSocket:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
@@ -1310,7 +1314,7 @@ class TestTranscribeStreamWebSocket:
             async def mock_process_audio_modulate(stream_transcript, sample_rate, language):
                 return fallback_socket
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(
                     module,
                     'get_stt_service_for_language',
@@ -1365,11 +1369,11 @@ class TestTranscribeStreamWebSocket:
                     return 'parakeet'
                 return None
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(module, 'get_stt_service_for_language', side_effect=select_provider):
                     with patch.object(module, 'provider_for_service', side_effect=provider_for, create=True):
                         with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                            with patch.object(module, 'record_actual_duration') as mock_record_duration:
+                            with patch.object(module, 'settle_reserved_duration') as mock_record_duration:
                                 with pytest.raises(WebSocketDisconnect) as exc_info:
                                     with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                         ws.send_bytes(b'\x00' * 960)
@@ -1380,7 +1384,7 @@ class TestTranscribeStreamWebSocket:
             mock_dg_socket.send.assert_called_once_with(b'\x00' * 960)
             mock_dg_socket.finalize.assert_not_called()
             mock_dg_socket.finish.assert_called_once()
-            mock_record_duration.assert_not_called()
+            mock_record_duration.assert_called_once_with('test-uid', 120000, 0)
         finally:
             _cleanup_chat_client(saved)
 
@@ -1460,7 +1464,7 @@ class TestTranscribeStreamWebSocket:
                     return 'modulate'
                 return None
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(module, 'get_stt_service_for_language', side_effect=select_provider):
                     with patch.object(module, 'provider_for_service', side_effect=provider_for, create=True):
                         with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
@@ -1468,7 +1472,7 @@ class TestTranscribeStreamWebSocket:
                                 module, 'process_audio_modulate', side_effect=mock_process_audio_modulate
                             ):
                                 with patch.object(module, 'ClientJourneyAttempt', return_value=attempt):
-                                    with patch.object(module, 'record_actual_duration'):
+                                    with patch.object(module, 'settle_reserved_duration'):
                                         with client.websocket_connect(
                                             '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000',
                                             headers={'X-App-Platform': 'macos'},
@@ -1538,7 +1542,7 @@ class TestTranscribeStreamWebSocket:
                     return 'modulate'
                 return None
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(module, 'get_stt_service_for_language', side_effect=select_provider):
                     with patch.object(module, 'provider_for_service', side_effect=provider_for, create=True):
                         with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
@@ -1546,7 +1550,7 @@ class TestTranscribeStreamWebSocket:
                                 module, 'process_audio_modulate', side_effect=mock_process_audio_modulate
                             ):
                                 with patch.object(module, 'ClientJourneyAttempt', return_value=attempt):
-                                    with patch.object(module, 'record_actual_duration') as mock_record_duration:
+                                    with patch.object(module, 'settle_reserved_duration') as mock_record_duration:
                                         with pytest.raises(WebSocketDisconnect) as exc_info:
                                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                                 ws.send_bytes(b'\x00' * 960)
@@ -1562,7 +1566,7 @@ class TestTranscribeStreamWebSocket:
             assert selector_calls[1] == frozenset({'modulate'})
             attempt.fail.assert_called_once_with('provider_error')
             attempt.succeed.assert_not_called()
-            mock_record_duration.assert_not_called()
+            mock_record_duration.assert_called_once_with('test-uid', 120000, 0)
         finally:
             _cleanup_chat_client(saved)
 
@@ -1580,12 +1584,12 @@ class TestTranscribeStreamWebSocket:
             async def mock_process_audio_parakeet(stream_transcript, **kwargs):
                 return mock_dg_socket
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
                     with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with patch.object(module, 'record_actual_duration') as mock_record_duration:
+                        with patch.object(module, 'settle_reserved_duration') as mock_record_duration:
                             with pytest.raises(WebSocketDisconnect) as exc_info:
                                 with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                     ws.send_bytes(b'\x00' * 500)
@@ -1598,7 +1602,7 @@ class TestTranscribeStreamWebSocket:
             mock_dg_socket.send.assert_called_once_with(b'\x00' * 500)
             mock_dg_socket.finalize.assert_called_once()
             mock_dg_socket.finish.assert_called_once()
-            mock_record_duration.assert_not_called()
+            mock_record_duration.assert_called_once_with('test-uid', 120000, 0)
         finally:
             _cleanup_chat_client(saved)
 
@@ -1654,7 +1658,7 @@ class TestTranscribeStreamWebSocket:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
@@ -1936,6 +1940,31 @@ class TestVoiceMessagesEndpointBudget:
         finally:
             _cleanup_chat_client(saved)
 
+    def test_voice_messages_unreadable_wav_does_not_skip_budget_check(self):
+        """An unreadable WAV duration on /v2/voice-messages must still be
+        metered (charged the worst case) instead of transcribing for free."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/test_vm.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/test_vm_decoded.wav']):
+                    with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                        with patch.object(
+                            module, 'try_consume_budget', return_value=(False, 7200000, 0)
+                        ) as mock_budget:
+                            resp = client.post(
+                                '/v2/voice-messages',
+                                files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                            )
+                            assert resp.status_code == 429
+                            assert 'budget exhausted' in resp.json()['detail']
+                            mock_budget.assert_called_once()
+                            call_args = mock_budget.call_args[0]
+                            assert call_args[1] == module.MAX_SESSION_DURATION_S * 1000
+        finally:
+            _cleanup_chat_client(saved)
+
 
 class TestWsBudgetAndSessionCap:
     """Test WS budget gate and actual duration recording."""
@@ -1944,7 +1973,7 @@ class TestWsBudgetAndSessionCap:
         """WS should close with 1008 if daily budget is exhausted at connect."""
         client, module, saved = _make_chat_client()
         try:
-            with patch.object(module, 'check_budget', return_value=(False, 7200000, 0)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(False, 0, 7200000, 0)):
                 with pytest.raises(Exception):
                     with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                         ws.receive_json()
@@ -1952,7 +1981,7 @@ class TestWsBudgetAndSessionCap:
             _cleanup_chat_client(saved)
 
     def test_ws_records_actual_duration_on_close(self):
-        """WS should call record_actual_duration with correct ms after session ends."""
+        """WS should settle the connect-time reservation to actual accepted ms."""
         client, module, saved = _make_chat_client()
         try:
             mock_dg_socket = MagicMock()
@@ -1965,23 +1994,20 @@ class TestWsBudgetAndSessionCap:
                 mock_dg_socket.finish = MagicMock()
                 return mock_dg_socket
 
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
                     with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with patch.object(module, 'record_actual_duration') as mock_record:
+                        with patch.object(module, 'settle_reserved_duration') as mock_record:
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 # Send 32000 bytes = 1s at 16kHz mono
                                 ws.send_bytes(b'\x00' * 32000)
                                 deadline = time.time() + 1.0
                                 while not mock_dg_socket.send.called and time.time() < deadline:
                                     time.sleep(0.01)
-                            # After WS close, finally block should have called record_actual_duration
-                            mock_record.assert_called_once()
-                            call_args = mock_record.call_args[0]
-                            assert call_args[0] == 'test-uid'
-                            assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+                            # After WS close, finally block should have settled the reservation
+                            mock_record.assert_called_once_with('test-uid', 120000, 1000)
         finally:
             _cleanup_chat_client(saved)
 
@@ -2048,14 +2074,14 @@ class TestWsIdleTimeout:
 
             # Set idle timeout very short for test
             with patch.object(module, '_WS_IDLE_TIMEOUT_S', 0.1):
-                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                     with patch.object(
                         module,
                         'get_stt_service_for_language',
                         return_value=(module.STTService.parakeet, 'en', 'parakeet'),
                     ):
                         with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                            with patch.object(module, 'record_actual_duration'):
+                            with patch.object(module, 'settle_reserved_duration'):
                                 with pytest.raises(Exception):
                                     with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                         # Don't send any audio — idle timeout should fire
@@ -2082,14 +2108,14 @@ class TestWsIdleTimeout:
 
             # Set idle timeout very short for test
             with patch.object(module, '_WS_IDLE_TIMEOUT_S', 0.2):
-                with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
+                with patch.object(module, 'try_reserve_session_budget', return_value=(True, 120000, 120000, 7080000)):
                     with patch.object(
                         module,
                         'get_stt_service_for_language',
                         return_value=(module.STTService.parakeet, 'en', 'parakeet'),
                     ):
                         with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                            with patch.object(module, 'record_actual_duration'):
+                            with patch.object(module, 'settle_reserved_duration'):
                                 with pytest.raises(Exception):
                                     with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                         import time
@@ -2184,16 +2210,22 @@ class TestMultipartBudgetAggregation:
     """Test that multipart multi-file uploads sum WAV durations correctly."""
 
     def test_multipart_multi_file_budget_sums_durations(self):
-        """Budget should be consumed with sum of all WAV durations."""
+        """Budget should be consumed with sum of all WAV durations, charging the
+        worst case (MAX_SESSION_DURATION_S) for any file whose duration is
+        unreadable — an unreadable file must not transcribe for free."""
         import io
 
         client, module, saved = _make_chat_client()
         try:
-            # Simulate 3 files: 1000ms, None (unreadable), 2000ms → budget call with 3000
+            # Simulate 3 files: 1000ms, None (unreadable), 2000ms →
+            # budget call with 1000 + MAX_SESSION_DURATION_S*1000 + 2000
             duration_values = iter([1000, None, 2000])
+            expected_total = 1000 + module.MAX_SESSION_DURATION_S * 1000 + 2000
 
             with patch.object(module, 'read_wav_duration_ms', side_effect=lambda p: next(duration_values)):
-                with patch.object(module, 'try_consume_budget', return_value=(True, 3000, 7197000)) as mock_budget:
+                with patch.object(
+                    module, 'try_consume_budget', return_value=(True, expected_total, 7200000 - expected_total)
+                ) as mock_budget:
                     with patch.object(module, 'transcribe_voice_message_segment', return_value=('hello', 'en')):
                         resp = client.post(
                             '/v2/voice-message/transcribe',
@@ -2204,11 +2236,31 @@ class TestMultipartBudgetAggregation:
                             ],
                         )
                         assert resp.status_code == 200
-                        # Budget consumed with sum: 1000 + 2000 = 3000 (None skipped)
                         mock_budget.assert_called_once()
                         call_args = mock_budget.call_args[0]
                         assert call_args[0] == 'test-uid'
-                        assert call_args[1] == 3000
+                        assert call_args[1] == expected_total
+        finally:
+            _cleanup_chat_client(saved)
+
+    def test_multipart_unreadable_wav_does_not_skip_budget_check(self):
+        """An unreadable WAV duration must still be metered and can trip the
+        429 budget-exhausted gate, instead of transcribing for free."""
+        import io
+
+        client, module, saved = _make_chat_client()
+        try:
+            with patch.object(module, 'read_wav_duration_ms', return_value=None):
+                with patch.object(module, 'try_consume_budget', return_value=(False, 7200000, 0)) as mock_budget:
+                    resp = client.post(
+                        '/v2/voice-message/transcribe',
+                        files=[('files', ('a.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                    )
+                    assert resp.status_code == 429
+                    assert 'budget exhausted' in resp.json()['detail']
+                    mock_budget.assert_called_once()
+                    call_args = mock_budget.call_args[0]
+                    assert call_args[1] == module.MAX_SESSION_DURATION_S * 1000
         finally:
             _cleanup_chat_client(saved)
 
@@ -2236,12 +2288,12 @@ class TestWsMidSessionBudgetEnforcement:
                 return mock_dg_socket
 
             # User has only 500ms of budget remaining
-            with patch.object(module, 'check_budget', return_value=(True, 7199500, 500)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 500, 7200000, 0)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
                     with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with patch.object(module, 'record_actual_duration') as mock_record:
+                        with patch.object(module, 'settle_reserved_duration') as mock_record:
                             with pytest.raises(Exception):
                                 with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                     # Send 32000 bytes = 1000ms at 16kHz mono — exceeds 500ms remaining
@@ -2250,9 +2302,8 @@ class TestWsMidSessionBudgetEnforcement:
 
                                     time.sleep(0.1)
                                     ws.receive_json()  # should fail — WS closed due to budget
-                            # The triggering frame is NOT counted (check happens before increment),
-                            # so record_actual_duration should NOT be called (0 bytes processed)
-                            mock_record.assert_not_called()
+                            # Triggering frame not accepted; settle refunds the full reservation.
+                            mock_record.assert_called_once_with('test-uid', 500, 0)
         finally:
             _cleanup_chat_client(saved)
 
@@ -2271,12 +2322,12 @@ class TestWsMidSessionBudgetEnforcement:
                 return mock_dg_socket
 
             # User has 60s of budget remaining
-            with patch.object(module, 'check_budget', return_value=(True, 7140000, 60000)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 60000, 7200000, 0)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
                     with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with patch.object(module, 'record_actual_duration'):
+                        with patch.object(module, 'settle_reserved_duration'):
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 # Send 32000 bytes = 1000ms at 16kHz mono — well within 60s remaining
                                 ws.send_bytes(b'\x00' * 32000)
@@ -2299,12 +2350,12 @@ class TestWsMidSessionBudgetEnforcement:
                 return mock_dg_socket
 
             # User has 1500ms of budget remaining
-            with patch.object(module, 'check_budget', return_value=(True, 7198500, 1500)):
+            with patch.object(module, 'try_reserve_session_budget', return_value=(True, 1500, 7200000, 0)):
                 with patch.object(
                     module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
                 ):
                     with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with patch.object(module, 'record_actual_duration') as mock_record:
+                        with patch.object(module, 'settle_reserved_duration') as mock_record:
                             with pytest.raises(Exception):
                                 with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                     # Frame 1: 32000 bytes = 1000ms — within 1500ms budget
@@ -2315,10 +2366,8 @@ class TestWsMidSessionBudgetEnforcement:
 
                                     time.sleep(0.1)
                                     ws.receive_json()
-                            # Only frame 1 was processed (1000ms), frame 2 was rejected
-                            mock_record.assert_called_once()
-                            call_args = mock_record.call_args[0]
-                            assert call_args[1] == 1000  # 32000 / (16000*1*2) * 1000
+                            # Frame 1 accepted (1000ms); settle reserved 1500 → actual 1000
+                            mock_record.assert_called_once_with('test-uid', 1500, 1000)
         finally:
             _cleanup_chat_client(saved)
 

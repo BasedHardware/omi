@@ -264,6 +264,16 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-grdb-insert-idiom.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11204: a mutating didInsert never witnesses PersistableRecord's non-mutating insert, so a direct record.insert(db) drops the rowid silently onto an optional field; two shipped instances went undetected until unrelated work tripped over them"
+  - id: desktop-single-chat-shell-self-test
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the tripwire must keep failing on each shape it was written for, and keep passing on prose that merely names one"
+  - id: desktop-single-chat-shell
+    command: ["python3", "desktop/macos/scripts/check-single-chat-shell.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-single-chat-shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12598: the app mounted one of two shells behind a preference, and six content-block kinds rendered as controls on one and as nothing on the other; both grow back one symbol at a time"
   - id: brand-ui-ratchet-tests
     command: ["python3", ".github/scripts/test_check_brand_ui.py"]
     triggers: [".github/scripts/check_brand_ui.py", ".github/scripts/test_check_brand_ui.py", ".github/checks-manifest.yaml"]
@@ -519,6 +529,11 @@ checks:
     triggers: ["backend/charts/pusher/**", "backend/scripts/verify_shared_config_migration.py", "backend/tests/unit/test_verify_shared_config_migration.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-39: static preflight that fails closed when pusher chart env/envFrom config references are structurally invalid (the 2026-07-22 REDIS_DB_HOST outage class)"
+  - id: pusher-cohost-env-diff
+    command: ["python3", "backend/scripts/verify_pusher_cohost_env_diff.py"]
+    triggers: ["backend/charts/pusher/**", "backend/charts/backend-listen/**", "backend/scripts/verify_pusher_cohost_env_diff.py", "backend/tests/unit/test_verify_pusher_cohost_env_diff.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-08-30 pusher finalization outage: unexplained pusher vs backend-listen env divergence must fail the deploy path (decision 4 co-host env-diff)"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
@@ -622,6 +637,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "the Swift-only fast bundle path bypassed Omi Dev preference seeding, while overlay semantics retained target hotkeys absent from the source; exact domain mirroring plus common prelaunch wiring must stay guarded"
+  - id: desktop-auth-seed-acl
+    command: ["bash", "desktop/macos/tests/test-omi-auth-seed-acl.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/omi-auth-dump.sh", "desktop/macos/scripts/omi-auth-seed.sh", "desktop/macos/tests/test-omi-auth-seed-acl.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "auth seeding now resolves a dumpable source with a production fallback and an env override; it must keep passing APP_PATH into the seed and never CLI-write Keychain tokens"
   - id: desktop-agent-runtime-payload
     command: ["bash", "desktop/macos/tests/test-fast-dev-bundle.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
@@ -827,6 +848,26 @@ checks:
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
+  - id: dead-code-ratchet
+    command: ["python3", ".github/scripts/check_dead_code.py"]
+    triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "57 unreachable Flutter files accumulated until a June 2026 security fix landed on unreachable code; import-graph reachability (flutter from main.dart, agent, windows entries, incl. dynamic import(), string-spawned .js/.mjs siblings, and the @renderer alias) plus zero-importer backend buckets now fail NEW dead code with a delete-or-allowlist-with-reason fix, and the committed baseline only shrinks. Backend triggers are all of backend/**/*.py because scan_backend reads every non-test backend .py as an import source and mention text — the older five-lib-prefix list let routers/scripts/main.py edits create dead code without tripping the ratchet"
+  - id: dead-code-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_dead_code.py"]
+    triggers: [".github/scripts/check_dead_code.py", ".github/scripts/test_check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the four area scanners, their trap edges (package-submodule imports, __main__ guards, mention demotion, dynamic import, spawned siblings, alias resolution), baseline round-trip, and allowlist schema must stay behaviorally covered"
+  - id: duplicate-route-ratchet
+    command: ["python3", ".github/scripts/check_duplicate_routes.py"]
+    triggers: ["backend/routers/**", "backend/main.py", "backend/desktop_backend.py", "backend/pusher/**", ".github/scripts/check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "FC-shadowed-route-handler: DELETE /v1/conversations/{id}/action-items was registered in two routers and FastAPI first-match silently shadowed the richer handler (and its vector cleanup) while that handler's tests stayed green; this check diffs every (app, method, path) mounted by the three service entrypoints and fails on any duplicate registration"
+  - id: duplicate-route-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_duplicate_routes.py"]
+    triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

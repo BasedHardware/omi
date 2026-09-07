@@ -6,6 +6,26 @@ enum ChatBubbleMetadataControlMetrics {
   static let leadingInset = OmiSpacing.xxs
   static let topInset = leadingInset
   static let targetSize: CGFloat = 24
+
+  /// What an assistant row reserves under its last line for the hover strip.
+  /// The transcript's row spacing subtracts it, so the gap under a reply is the
+  /// band itself rather than the band *plus* a full inter-exchange gap.
+  static let bandHeight: CGFloat = topInset + targetSize
+}
+
+/// `.keyboardShortcut` is unconditional on a `Button`, so the guard has to be
+/// the modifier's presence rather than an argument to it.
+struct ChatCopyKeyboardShortcut: ViewModifier {
+  let isActive: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if isActive {
+      content.keyboardShortcut("c", modifiers: .command)
+    } else {
+      content
+    }
+  }
 }
 
 enum ChatBubbleMetadataHoverRegion {
@@ -64,9 +84,10 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
-  /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
-  /// only the capability-gated main shell is allowed to turn them into controls.
-  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The owners a content block needs to become an interactable control. Every
+  /// Chat surface has one — a rendered card is transcript data either way, and a
+  /// card the reader cannot act on is worse than no card at all.
+  let chatFirstRichBlockContext: ChatFirstRichBlockContext
   var metadataRevealOverrideForTesting: Bool? = nil
   @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
@@ -94,7 +115,7 @@ struct ChatBubble: View {
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
-    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+    chatFirstRichBlockContext: ChatFirstRichBlockContext
   ) {
     self.message = message
     self.app = app
@@ -110,8 +131,23 @@ struct ChatBubble: View {
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
-  /// Messages longer than this are truncated with a "Show more" button
-  private static let truncationThreshold = ChatBubbleTruncation.threshold
+  /// The transcript's visible size, so a long reply is folded in screens of
+  /// text rather than a fixed count of characters.
+  @Environment(\.chatTranscriptViewport) private var transcriptViewport
+  @Environment(\.fontScale) private var truncationFontScale
+
+  /// How much of this reply shows before "Show more": two screens of prose at
+  /// the column this row actually renders in.
+  private var truncationBudget: ChatBubbleTruncation.Budget {
+    let column =
+      transcriptViewport.width > 0
+      ? min(Self.messageColumnMaxWidth, transcriptViewport.width)
+      : Self.messageColumnMaxWidth
+    return ChatBubbleTruncation.budget(
+      viewportHeight: transcriptViewport.height,
+      columnWidth: column,
+      fontScale: truncationFontScale)
+  }
 
   /// Readable width shared by the bubble and its metadata row. Keeping this
   /// explicit lets the metadata row expand to the message column even when
@@ -123,7 +159,8 @@ struct ChatBubble: View {
     ChatBubbleTruncation.shouldTruncate(
       text: bubbleText,
       isStreaming: message.isStreaming,
-      isExpanded: isExpanded
+      isExpanded: isExpanded,
+      budget: truncationBudget
     )
   }
 
@@ -140,7 +177,8 @@ struct ChatBubble: View {
     ChatBubbleTruncation.displayText(
       bubbleText,
       isStreaming: message.isStreaming,
-      isExpanded: isExpanded
+      isExpanded: isExpanded,
+      budget: truncationBudget
     )
   }
 
@@ -177,8 +215,7 @@ struct ChatBubble: View {
       } else {
         let groupedBlocks = ContentBlockGroup.visibleChatGroups(
           message.contentBlocks,
-          isStreaming: message.isStreaming,
-          richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+          isStreaming: message.isStreaming
         )
 
         HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -222,11 +259,18 @@ struct ChatBubble: View {
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
       }
     }
+    // The reserved mark height is for **an empty streaming reply**, which has no
+    // content of its own and would otherwise clip the mark. A settled row is
+    // always taller than the mark, so reserving it there only centred short
+    // content — a one-line answer or a memory card — inside a 32 pt box and
+    // floated it in symmetric dead space.
     .frame(
       maxWidth: .infinity,
-      minHeight: ChatOmiMarkPlacement.rowHeight(
-        showsMark: message.sender == .ai && app == nil && showsOmiMark),
-      alignment: message.sender == .user ? .trailing : .leading
+      minHeight: message.isStreaming
+        ? ChatOmiMarkPlacement.rowHeight(
+          showsMark: message.sender == .ai && app == nil && showsOmiMark)
+        : 0,
+      alignment: message.sender == .user ? .topTrailing : .topLeading
     )
     .overlay(alignment: .topLeading) {
       if message.sender == .ai, app == nil, showsOmiMark {
@@ -245,8 +289,53 @@ struct ChatBubble: View {
         .offset(x: -ChatOmiMarkPlacement.markGutter)
       }
     }
+    // **The settle frame folds, it does not teleport.** When `isStreaming`
+    // flips, the row drops its tool trace and pre-tool commentary and swaps
+    // in the terminal answer, citations and metadata band — a whole-frame
+    // layout change that used to land in one frame and read as a jump.
+    // Scoped on the flip itself, so every per-token streaming frame (where
+    // `isStreaming` did not change) stays exactly as instantaneous as before.
+    // Reduce Motion folds instantly, as everywhere else.
+    .omiAnimation(.easeOut(duration: InkMotion.settle), value: message.isStreaming)
     .contentShape(Rectangle())
+    .onChange(of: message.isStreaming) { wasStreaming, isStreaming in
+      guard
+        ChatBubbleTruncation.settlingKeepsFullBody(
+          wasStreaming: wasStreaming, isStreaming: isStreaming)
+      else { return }
+      isExpanded = true
+    }
     .onHover { updateMetadataHover(.row, hovering: $0) }
+    // Copy without hunting for the hover strip — and the only copy affordance a
+    // user turn has ever had.
+    .contextMenu { messageContextMenu }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(message.sender == .user ? "You" : "Omi")
+  }
+
+  /// The text the row's copy actions put on the pasteboard. `copyableText`
+  /// excludes pre-tool commentary, but it is empty for a user turn, whose whole
+  /// body is the message.
+  private var copyPayload: String {
+    message.copyableText.isEmpty ? message.text : message.copyableText
+  }
+
+  private func copyMessageToPasteboard() {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(copyPayload, forType: .string)
+    showCopied = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      showCopied = false
+    }
+  }
+
+  @ViewBuilder
+  private var messageContextMenu: some View {
+    if !copyPayload.isEmpty {
+      // Selecting is done in the words themselves now; this stays for the
+      // whole message, which a drag would have to be exact to reproduce.
+      Button("Copy Message") { copyMessageToPasteboard() }
+    }
   }
 
   @ViewBuilder
@@ -347,13 +436,23 @@ struct ChatBubble: View {
     // `ChatTurnFailureNotice`). The blanket "Couldn't save this reply" caption
     // both duplicated that reason in different words and named the wrong
     // cause — the turn failed, no save was attempted. Keep a stamp only for a
-    // failed row that has nothing of its own to say.
-    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed
-      && message.text.isEmpty && message.contentBlocks.isEmpty
-    {
+    // failed row that has nothing of its own to say — and, for a row that was
+    // cut off mid-sentence, a quiet mark so the reader can see it was cut.
+    switch ChatTurnFailurePresentation.of(message) {
+    case .none:
+      EmptyView()
+    case .emptyTurnStamp:
       Text("This turn didn't finish")
         .scaledFont(size: OmiType.micro, weight: .medium)
         .foregroundColor(PageGlass.warning)
+    case .truncatedAnswer:
+      HStack(spacing: OmiSpacing.xxs) {
+        Text("\u{2026}")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+        Text("Interrupted")
+          .scaledFont(size: OmiType.micro, weight: .medium)
+      }
+      .foregroundColor(Ink.secondary)
     }
 
     switch ChatBubbleMetadataBand.of(message) {
@@ -373,14 +472,10 @@ struct ChatBubble: View {
       ChatResourceActions.open(resource)
       return
     }
-    if let chatFirstRichBlockContext {
-      let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
-      chatFirstRichBlockContext.navigation.open(
-        focus: .capture(id: reference.sourceID, momentTs: moment)
-      )
-      return
-    }
-    onOpenInlineCitation?(reference.navigationReference)
+    let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+    chatFirstRichBlockContext.navigation.open(
+      focus: .capture(id: reference.sourceID, momentTs: moment)
+    )
   }
 
   private var presentation: ChatRowPresentation { ChatRowPresentation.of(message) }
@@ -400,7 +495,8 @@ struct ChatBubble: View {
         text: text,
         sender: message.sender,
         citations: citationReferencesForThisSurface,
-        onOpenCitation: onOpenInlineCitation
+        onOpenCitation: onOpenInlineCitation,
+        appKitProseSelection: true
       )
       .chatMessageBlock(filled: presentation.isFilled)
     }
@@ -418,7 +514,7 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private var truncationControl: some View {
-    if backgroundAgentSummary == nil, bubbleText.count > Self.truncationThreshold {
+    if backgroundAgentSummary == nil, ChatBubbleTruncation.exceedsBudget(bubbleText, budget: truncationBudget) {
       if isExpanded {
         Button(action: { isExpanded.toggle() }) {
           Text("Show less")
@@ -450,7 +546,8 @@ struct ChatBubble: View {
           text: text,
           sender: .ai,
           citations: citationReferencesForThisSurface,
-          onOpenCitation: onOpenInlineCitation
+          onOpenCitation: onOpenInlineCitation,
+          appKitProseSelection: true
         )
         .chatMessageBlock(filled: false))
     case .commentary(_, let text):
@@ -472,87 +569,18 @@ struct ChatBubble: View {
       return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
-    case .questionCard(_, let questionID, let text, let options, let selectedOptionID):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+    case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+      // One renderer for all six, shared with the task panel and the notch.
       return AnyView(
-        QuestionCardView(
-          questionID: questionID,
-          text: text,
-          options: options,
-          selectedOptionID: selectedOptionID,
-          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
-            messageID: message.id,
-            questionID: questionID,
-            selectedOptionID: selectedOptionID
-          ),
-          onSelect: { optionID, isDeferral in
-            Task { @MainActor in
-              AnalyticsManager.shared.chatFirst(
-                .question(lifecycle: isDeferral ? .deferred : .answered)
-              )
-              AnalyticsManager.shared.chatFirst(
-                .richBlock(kind: .questionCard, outcome: .acted, action: .select)
-              )
-              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
-                questionID: questionID,
-                optionID: optionID
-              )
-            }
-          }
-        )
-      )
-    case .taskCard(_, let taskID):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        TaskCardView(
-          taskID: taskID,
-          tasksStore: chatFirstRichBlockContext.tasksStore,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .goalLink(_, let goalID, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        GoalLinkView(
-          goalID: goalID,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation,
-          goalsStore: chatFirstRichBlockContext.canonicalGoalsStore
-        )
-      )
-    case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        CaptureLinkView(
-          conversationID: conversationID,
-          momentTimestampMs: momentTimestampMs,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .conversationLink(_, let conversationID, let summary, let recommendedActionItems):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        ConversationLinkView(
-          conversationID: conversationID,
-          summary: summary,
-          recommendedActionItems: recommendedActionItems,
-          navigation: chatFirstRichBlockContext.navigation
-        )
-      )
-    case .memoryLink(_, let memoryID, let summary):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
-      return AnyView(
-        MemoryLinkView(
-          memoryID: memoryID,
-          summary: summary,
-          navigation: chatFirstRichBlockContext.navigation
+        ChatFirstRichBlockGroupView(
+          group: group,
+          messageID: message.id,
+          context: chatFirstRichBlockContext
         )
       )
     case .memoryReviewCard(_, let summaryID, let date, let items):
       return AnyView(MemoryReviewCardView(summaryID: summaryID, date: date, items: items))
     case .followUp(_, let question):
-      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
       let provider = chatFirstRichBlockContext.chatProvider
       return AnyView(
         FollowUpChip(
@@ -629,6 +657,9 @@ struct ChatBubble: View {
     .onHover { updateMetadataHover(.controls, hovering: $0) }
     .opacity(isVisible ? 1 : 0)
     .allowsHitTesting(isVisible)
+    // Opacity and hit-testing hide the strip from the eye and the mouse; without
+    // this VoiceOver still walked through invisible thumbs and a copy button.
+    .accessibilityHidden(!isVisible)
     .omiAnimation(.easeInOut(duration: 0.15), value: isVisible)
   }
 
@@ -739,14 +770,7 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private var copyButton: some View {
-    Button(action: {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(message.copyableText, forType: .string)
-      showCopied = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        showCopied = false
-      }
-    }) {
+    Button(action: copyMessageToPasteboard) {
       Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showCopied ? Ink.listeningGreen : Ink.secondary)
@@ -758,6 +782,9 @@ struct ChatBubble: View {
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
+    // Only while this row's control strip holds keyboard focus. A window-wide
+    // ⌘C would take the shortcut away from selected prose and the composer.
+    .modifier(ChatCopyKeyboardShortcut(isActive: isMetadataControlFocused))
     .help("Copy message")
   }
 
@@ -1197,10 +1224,7 @@ enum ContentBlockGroup: Identifiable {
   }
 
   /// Groups consecutive `.toolCall` blocks together; passes other blocks through
-  static func group(
-    _ blocks: [ChatContentBlock],
-    richBlockRenderingEnabled: Bool = false
-  ) -> [ContentBlockGroup] {
+  static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
 
@@ -1226,21 +1250,17 @@ enum ContentBlockGroup: Identifiable {
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
       case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .questionCard(
             id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
       case .taskCard(let id, let taskID):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.taskCard(id: id, taskID: taskID))
       case .goalLink(let id, let goalID, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.goalLink(id: id, goalID: goalID, summary: summary))
       case .captureLink(let id, let conversationID, let momentTimestampMs, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .captureLink(
             id: id,
@@ -1251,7 +1271,6 @@ enum ContentBlockGroup: Identifiable {
         )
       case .conversationLink(let id, let conversationID, let summary, let recommendedActionItems):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(
           .conversationLink(
             id: id,
@@ -1260,7 +1279,6 @@ enum ContentBlockGroup: Identifiable {
             recommendedActionItems: recommendedActionItems))
       case .memoryLink(let id, let memoryID, let summary):
         flushToolCalls()
-        guard richBlockRenderingEnabled else { continue }
         groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
       case .memoryReviewCard(let id, let summaryID, let date, let items):
         flushToolCalls()
@@ -1315,8 +1333,7 @@ enum ContentBlockGroup: Identifiable {
   /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
   static func visibleChatGroups(
     _ blocks: [ChatContentBlock],
-    isStreaming: Bool,
-    richBlockRenderingEnabled: Bool = false
+    isStreaming: Bool
   ) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
@@ -1341,7 +1358,7 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    let grouped = group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled)
+    let grouped = group(blocks)
     let lastToolIndex = grouped.lastIndex { group in
       if case .toolCalls = group { return true }
       return false

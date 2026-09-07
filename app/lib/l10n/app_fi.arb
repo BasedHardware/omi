@@ -3235,6 +3235,16 @@
     "pendantFullSyncBlocked": "Pendantin muisti on täynnä ja se on yhä äänitystilassa, joten tallennettua ääntä ei voi siirtää. Pysäytä äänitys painamalla Pendantin painiketta ja synkronoi sitten uudelleen.",
     "conversationsNotCapturedCount": "Ei tallennettu ({count})",
     "transcriptionNoAudio": "Transkriptio ei vastaanota ääntä",
+    "chatBlockTask": "Tehtävä",
+    "chatBlockGoal": "Tavoite",
+    "chatBlockConversation": "Keskustelu",
+    "chatBlockMemory": "Muisto",
+    "chatBlockQuestion": "Kysymys",
+    "chatBlockOpenInGoals": "Avaa Tavoitteissa",
+    "chatBlockOpenConversation": "Avaa keskustelu",
+    "chatBlockOpenInMemories": "Avaa Muistoissa",
+    "chatBlockUnavailable": "Ei ole enää saatavilla",
+    "chatBlockRecommendedNextSteps": "Suositellut seuraavat vaiheet",
     "couldNotLoadMemories": "Muistoja ei voitu ladata",
     "couldNotLoadKnowledgeGraph": "Tietograafia ei voitu ladata"
 }
