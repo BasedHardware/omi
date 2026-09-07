@@ -830,4 +830,8 @@ test('coverage copy wins over a complete Home search miss', () => {
     'memoryNotice ===\n                                        desktopBackendUnavailableCopy',
   );
   expect(orchestrator).toContain('<OutcomeStatus');
+  expect(orchestrator).toContain('recapCoverageCopy=');
+  expect(orchestrator).toContain('taskCoverageCopy=');
+  expect(orchestrator).toContain("readStatusCopy(\n                'Recaps'");
+  expect(orchestrator).toContain("readStatusCopy(\n                'Tasks'");
 });

@@ -78,8 +78,10 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
   recapEmptyCopy?: string;
+  recapCoverageCopy?: string | null;
   recapErrorCopy?: string;
   taskEmptyCopy?: string;
+  taskCoverageCopy?: string | null;
   taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   mindMapErrorCopy?: string;
@@ -298,8 +300,10 @@ export function MobileAppSurface({
   recaps,
   recapStatus,
   recapEmptyCopy,
+  recapCoverageCopy,
   recapErrorCopy,
   taskEmptyCopy,
+  taskCoverageCopy,
   taskErrorCopy,
   tasks,
   taskStatus,
@@ -418,6 +422,9 @@ export function MobileAppSurface({
                       task={task}
                     />
                   ))}
+                  {taskCoverageCopy ? (
+                    <Text style={styles.stateText}>{taskCoverageCopy}</Text>
+                  ) : null}
                 </View>
               )
             ) : (
@@ -449,13 +456,18 @@ export function MobileAppSurface({
                   </Text>
                 </View>
               ) : (
-                <FlatList
-                  data={recaps}
-                  horizontal
-                  keyExtractor={recap => recap.id}
-                  renderItem={({item: recap}) => <RecapCard recap={recap} />}
-                  showsHorizontalScrollIndicator={false}
-                />
+                <>
+                  <FlatList
+                    data={recaps}
+                    horizontal
+                    keyExtractor={recap => recap.id}
+                    renderItem={({item: recap}) => <RecapCard recap={recap} />}
+                    showsHorizontalScrollIndicator={false}
+                  />
+                  {recapCoverageCopy ? (
+                    <Text style={styles.stateText}>{recapCoverageCopy}</Text>
+                  ) : null}
+                </>
               )
             ) : (
               <StatePanel
@@ -507,8 +519,10 @@ export function MobileAppSurface({
       recaps,
       recapStatus,
       recapEmptyCopy,
+      recapCoverageCopy,
       recapErrorCopy,
       taskEmptyCopy,
+      taskCoverageCopy,
       taskErrorCopy,
       tasks,
       taskStatus,
@@ -566,7 +580,14 @@ export function MobileAppSurface({
                 data={tasks}
                 keyExtractor={task => task.id}
                 ListFooterComponent={<>{taskPagination}</>}
-                ListHeaderComponent={taskFeedback}
+                ListHeaderComponent={
+                  <>
+                    {taskFeedback}
+                    {tasks.length > 0 && taskCoverageCopy ? (
+                      <Text style={styles.stateText}>{taskCoverageCopy}</Text>
+                    ) : null}
+                  </>
+                }
                 ListEmptyComponent={
                   <View
                     accessibilityLabel="tasks empty state"

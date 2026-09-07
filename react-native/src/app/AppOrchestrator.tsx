@@ -48,6 +48,7 @@ import {styles} from '../ui/styles';
 import {
   emptyLibraryCopy,
   homeSearchPhaseCopy,
+  readStatusCopy,
   savedDataEmptyTitle,
   OutcomeStatus,
 } from '../ui/ReadStatus';
@@ -1193,6 +1194,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           '',
           'No recaps yet',
         )}
+        recapCoverageCopy={
+          readOutcomes?.conversations.status === 'success'
+            ? readStatusCopy(
+                'Recaps',
+                readOutcomes.conversations.value.page,
+                conversationNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
         recapErrorCopy={
           readOutcomes?.conversations.status === 'error'
             ? readOutcomes.conversations.error
@@ -1207,6 +1217,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           '',
           "Nothing's waiting on you.",
         )}
+        taskCoverageCopy={
+          readOutcomes?.tasks.status === 'success'
+            ? readStatusCopy(
+                'Tasks',
+                readOutcomes.tasks.value.page,
+                taskNotice === desktopBackendUnavailableCopy,
+              )
+            : null
+        }
         taskErrorCopy={
           readOutcomes?.tasks.status === 'error'
             ? readOutcomes.tasks.error

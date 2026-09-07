@@ -245,6 +245,57 @@ test('empty Daily Recaps keep incomplete conversation coverage instead of claimi
   expect(renderedText(renderer)).not.toContain('No recaps yet');
 });
 
+test('loaded Daily Recaps keep incomplete coverage instead of looking complete', () => {
+  const renderer = render({
+    recapCoverageCopy: 'Recaps are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+  expect(renderedText(renderer)).toContain('Recaps are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('loaded Daily Recaps omit more-available after a closed later page', () => {
+  const renderer = render({
+    recapCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+  expect(renderedText(renderer)).not.toContain('More recaps are available.');
+});
+
+test('loaded Home tasks keep more-available coverage instead of looking complete', () => {
+  const renderer = render({
+    taskCoverageCopy: 'More tasks are available.',
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+});
+
+test('loaded Home tasks omit more-available after a closed later page', () => {
+  const renderer = render({
+    taskCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).not.toContain('More tasks are available.');
+});
+
+test('loaded Tasks tab omit more-available after a closed later page', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskCoverageCopy: null,
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).not.toContain('More tasks are available.');
+});
+
+test('loaded Tasks tab keep more-available coverage instead of looking complete', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskCoverageCopy: 'More tasks are available.',
+  });
+  expect(renderedText(renderer)).toContain('Prepare product demo');
+  expect(renderedText(renderer)).toContain('More tasks are available.');
+});
+
 test('nested non-retryable recap errors use unavailable copy instead of a load blip', () => {
   const renderer = render({
     recaps: [],
