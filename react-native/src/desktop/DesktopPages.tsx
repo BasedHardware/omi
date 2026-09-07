@@ -149,9 +149,15 @@ export function TasksPage({
                   accessibilityRole={
                     writesAvailable && onTaskToggle ? 'checkbox' : 'text'
                   }
-                  accessibilityLabel={`${
-                    item.completed ? 'Reopen' : 'Complete'
-                  } task: ${item.title}`}
+                  accessibilityLabel={
+                    writesAvailable
+                      ? `${item.completed ? 'Reopen' : 'Complete'} task: ${
+                          item.title
+                        }`
+                      : item.completed
+                      ? `Completed task: ${item.title}`
+                      : `Task: ${item.title}`
+                  }
                   accessibilityState={{
                     checked: item.completed,
                     disabled:

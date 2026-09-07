@@ -2053,6 +2053,18 @@ test('desktop Tasks reports a closed write door after tasks load', () => {
   expect(renderedText(renderer)).toContain(
     'Task editing is unavailable for this connection.',
   );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Task: Ship the desktop chrome',
+    ).props.disabled,
+  ).toBe(true);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel ===
+        'Complete task: Ship the desktop chrome',
+    ),
+  ).toHaveLength(0);
 });
 
 test('actual desktop Tasks controls toggle and edit through shared mutation callbacks', () => {
