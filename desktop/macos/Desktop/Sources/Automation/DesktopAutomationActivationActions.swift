@@ -106,6 +106,100 @@ extension DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "recent_screen_frames_snapshot",
+      summary: "Rows the composer's recent-screen-frames menu will offer (loader output, metadata only)",
+      params: ["limit"],
+      category: "chat",
+      surfaces: ["main_chat"],
+      safety: "read_only"
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "recent_screen_frames_snapshot is disabled on production bundles"]
+      }
+      let limit = Int(params["limit"] ?? "") ?? 12
+      let rows = await RewindFrameLoader.shared.attachableRows(limit: limit)
+      var detail: [String: String] = [
+        "rowCount": String(rows.count),
+        "hasRows": rows.isEmpty ? "false" : "true",
+      ]
+      if let first = rows.first {
+        // Provenance only, never frame bytes: a harness asserts the menu's
+        // shape, and OCR/window text is not automation's to read.
+        detail["firstAppName"] = first.appName
+        detail["firstAgeSeconds"] = String(Int(Date().timeIntervalSince(first.timestamp)))
+      }
+      return detail
+    }
+
+    register(
+      name: "open_chat_prefilled_with_screen_frame",
+      summary:
+        "Drive the first-real-app card's handoff end to end: load the newest screen frame, stage it, "
+        + "and open the chat with the prompt prefilled and the frame attached (not sent)",
+      params: ["prompt"],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "open_chat_prefilled_with_screen_frame is disabled on production bundles"]
+      }
+      let trimmedPrompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let prompt = trimmedPrompt.isEmpty ? FirstRealAppCardPolicy.prompt : trimmedPrompt
+      // The exact chain the card tap's default closure runs, in the same
+      // order: fetch before request, because the store's notification is
+      // consumed synchronously on composer mount.
+      let frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+        maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+      )
+      guard let frame else {
+        return [
+          "error": "no attachable screen frame within the freshness bound",
+          "staged": "false",
+        ]
+      }
+      guard
+        let attachment = RecentScreenFrameStaging.attachment(
+          appName: frame.appName,
+          jpegData: frame.data,
+          capturedAt: frame.timestamp
+        )
+      else {
+        return ["error": "frame staging failed", "staged": "false"]
+      }
+      guard let target = AppDelegate.summonWindowTarget() else {
+        return ["error": "no window target"]
+      }
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
+      return [
+        "staged": "true",
+        "frameAppName": frame.appName,
+        "frameAgeSeconds": String(Int(Date().timeIntervalSince(frame.timestamp))),
+        "attachmentBytes": String(attachment.data?.count ?? 0),
+      ]
+    }
+
+    register(
+      name: "chat_composer_snapshot",
+      summary: "Main composer state: draft text plus staged-attachment count and first file name",
+      params: [],
+      category: "chat",
+      surfaces: ["main_chat"],
+      safety: "read_only"
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "chat_composer_snapshot is disabled on production bundles"]
+      }
+      return [
+        "main": ChatProvider.mainInstance?.draftText
+          ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
+        // Staged image frames ride the composer between the prefill handoff and
+        // the send; the count is what a flow asserts (never bytes or content).
+        "mainStagedAttachments": String(ChatProvider.mainInstance?.pendingAttachments.count ?? 0),
+        "mainStagedFirstAttachment": ChatProvider.mainInstance?.pendingAttachments.first?.fileName ?? "",
+      ]
+    }
+
+    register(
       name: "tap_chat_follow_up_chip",
       summary:
         "Tap the follow-up chip under the last main-chat answer (same send as the chip) and report "

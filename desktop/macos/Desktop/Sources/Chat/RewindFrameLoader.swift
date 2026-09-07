@@ -48,7 +48,12 @@ final class RewindFrameLoader {
     static var live: Environment {
       Environment(
         recentScreenshots: { limit in
-          try await RewindDatabase.shared.getRecentScreenshots(limit: limit)
+          // The store opens lazily — on a fresh install where the capture loop
+          // has never run, nothing else may have opened it, and the row query
+          // would throw not-initialized and read as "no frames". Idempotent
+          // and a no-op when the pool is already open for this owner.
+          try await RewindDatabase.shared.initialize()
+          return try await RewindDatabase.shared.getRecentScreenshots(limit: limit)
         },
         activeChunkPath: { await VideoChunkEncoder.shared.currentChunkPath },
         loadData: { screenshot in
