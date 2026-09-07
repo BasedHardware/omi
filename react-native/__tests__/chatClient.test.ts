@@ -393,6 +393,33 @@ test('maps ratified public recovery without automatically retrying', () => {
     ),
   ).toBe('Chat history is not available on this backend yet.');
   expect(
+    chatErrorCopy(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe('Sending messages is not available on this backend yet.');
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe('Chat history is not available on this backend yet.');
+  expect(
+    chatErrorCopy(
+      new ChatBackendError(503, 'service_unavailable', false, 'none', null),
+    ),
+  ).toBe('This request cannot be completed.');
+  expect(
     chatErrorCopy(new ChatBackendError(403, 'forbidden', false, 'none', null)),
   ).toBe('Chat is not available for this account.');
   expect(
@@ -436,6 +463,45 @@ test('classifies string and nested chat 404 without retrying send', async () => 
     expect(request).toHaveBeenCalledTimes(1);
     expect(backend.generationEvents).not.toHaveBeenCalled();
   }
+});
+
+test('honors nested non-retryable 503 without treating it as an outage', async () => {
+  const request = jest.fn(async (input: NativeHttpRequest) => ({
+    id: input.id,
+    status: 503,
+    body: '{"error":{"code":"development_backend_unsupported","retryable":false,"action":"none"}}',
+  }));
+  const backend = {
+    request,
+    generationEvents: jest.fn(),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'development_backend_unsupported',
+    retryable: false,
+  });
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(backend.generationEvents).not.toHaveBeenCalled();
+});
+
+test('treats omitted 503 retryable as a retryable outage', async () => {
+  const request = jest.fn(async (input: NativeHttpRequest) => ({
+    id: input.id,
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  }));
+  const backend = {
+    request,
+    generationEvents: jest.fn(),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+  await expect(sendChatMessage(backend, 'Hello', 1)).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'service_unavailable',
+    retryable: true,
+  });
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 test('loads opaque older cursors and preserves exact page metadata', async () => {

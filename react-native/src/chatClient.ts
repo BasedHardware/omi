@@ -60,7 +60,11 @@ export function chatErrorCopy(error: unknown): string {
   if (error.status === 403 || error.backendCode === 'forbidden') {
     return 'Chat is not available for this account.';
   }
-  if (error.status === 404 || error.backendCode === 'not_found') {
+  if (
+    error.status === 404 ||
+    error.backendCode === 'not_found' ||
+    error.backendCode === 'development_backend_unsupported'
+  ) {
     return 'Sending messages is not available on this backend yet.';
   }
   if (error.status === 429) {
@@ -68,7 +72,7 @@ export function chatErrorCopy(error: unknown): string {
       ? 'Too many requests. Try again shortly.'
       : `Too many requests. Try again in ${error.retryAfterSeconds} seconds.`;
   }
-  if (error.retryable || error.status === 503) {
+  if (error.retryable) {
     return 'Omi is temporarily unavailable. Try again.';
   }
   return 'This request cannot be completed.';
@@ -104,7 +108,11 @@ export function chatSessionLost(error: unknown): boolean {
 
 export function chatHistoryErrorCopy(error: unknown): string {
   if (error instanceof ChatBackendError) {
-    if (error.status === 404 || error.backendCode === 'not_found') {
+    if (
+      error.status === 404 ||
+      error.backendCode === 'not_found' ||
+      error.backendCode === 'development_backend_unsupported'
+    ) {
       return 'Chat history is not available on this backend yet.';
     }
     return chatErrorCopy(error);
@@ -425,7 +433,7 @@ function readGeneration(response: NativeHttpResponse): string {
 
 function throwBackendError(response: NativeHttpResponse): never {
   let code = 'unknown';
-  let retryable = false;
+  let retryable = response.status === 503;
   let action = 'none';
   if (response.body !== null) {
     try {
