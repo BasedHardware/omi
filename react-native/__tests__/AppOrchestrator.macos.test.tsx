@@ -1065,6 +1065,67 @@ test('signed-in macOS Settings exposes device scanning only after an explicit ac
   expect(mockNative.startScan).toHaveBeenCalledWith(8);
 });
 
+test('a nested chat write 404 disables Ask instead of leaving it sendable', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      return {
+        id: value.id,
+        status: 404,
+        body: JSON.stringify({
+          error: {code: 'not_found', retryable: false, action: 'none'},
+        }),
+      };
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing?.();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(admitCalls);
+});
+
 test.each(['stop', 'unmount', 'signout'])(
   'old chat %s cancels its request and fences late response',
   async mode => {

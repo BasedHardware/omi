@@ -619,6 +619,27 @@ test('ready chat transport error stays in the chrome and off the Home stage', ()
   }
 });
 
+test('an unavailable write door disables Ask instead of leaving it sendable', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({
+    chatError: 'Sending messages is not available on this backend yet.',
+    chatSendUnavailable: true,
+    onSend,
+  });
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send unavailable',
+  );
+  expect(send.props.disabled).toBe(true);
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
+});
+
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
   const renderer = renderDesktop();
   await act(async () => {

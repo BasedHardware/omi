@@ -4,6 +4,7 @@ import {
   chatErrorCopy,
   chatHistoryCanReload,
   chatHistoryErrorCopy,
+  chatWriteDoorUnavailable,
   loadChatHistory,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -432,6 +433,16 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(
     chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
   ).toBe('Sending messages is not available on this backend yet.');
+  expect(
+    chatWriteDoorUnavailable(
+      new ChatBackendError(404, 'not_found', false, 'none', null),
+    ),
+  ).toBe(true);
+  expect(
+    chatWriteDoorUnavailable(
+      new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
+    ),
+  ).toBe(false);
   expect(
     chatHistoryErrorCopy(
       new ChatBackendError(404, 'not_found', false, 'none', null),

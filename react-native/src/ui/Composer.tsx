@@ -18,6 +18,7 @@ export function Composer({
   onFocusChange,
   onSend,
   onStop,
+  sendUnavailable,
 }: {
   activeGenerationId: string | null;
   chatBusy: boolean;
@@ -30,7 +31,10 @@ export function Composer({
   onFocusChange: (focused: boolean) => void;
   onSend: () => void;
   onStop: () => void;
+  sendUnavailable: boolean;
 }) {
+  const backendMissing = omiBackend === undefined || omiBackend === null;
+  const sendBlocked = backendMissing || sendUnavailable;
   return (
     <View style={[styles.composerWrap, compact && styles.composerWrapCompact]}>
       <View
@@ -57,14 +61,13 @@ export function Composer({
             accessibilityLabel={
               activeGenerationId !== null
                 ? 'Stop response'
-                : omiBackend === undefined || omiBackend === null
+                : sendBlocked
                 ? 'Send message unavailable'
                 : 'Send message'
             }
             accessibilityRole="button"
             disabled={
-              omiBackend === undefined ||
-              omiBackend === null ||
+              sendBlocked ||
               (activeGenerationId === null && (draft.trim() === '' || chatBusy))
             }
             onPress={activeGenerationId === null ? onSend : onStop}
@@ -72,8 +75,7 @@ export function Composer({
               styles.sendButton,
               draft.trim() !== '' &&
                 !chatBusy &&
-                omiBackend !== undefined &&
-                omiBackend !== null &&
+                !sendBlocked &&
                 styles.sendButtonEnabled,
               activeGenerationId !== null && styles.stopButton,
               pressed && styles.pressed,

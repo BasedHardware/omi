@@ -50,6 +50,15 @@ export class ChatBackendError extends Error {
   }
 }
 
+export function chatWriteDoorUnavailable(error: unknown): boolean {
+  return (
+    error instanceof ChatBackendError &&
+    (error.status === 404 ||
+      error.backendCode === 'not_found' ||
+      error.backendCode === 'development_backend_unsupported')
+  );
+}
+
 export function chatErrorCopy(error: unknown): string {
   if (!(error instanceof ChatBackendError)) {
     return 'Message not sent. Check your connection and try again.';
@@ -60,11 +69,7 @@ export function chatErrorCopy(error: unknown): string {
   if (error.status === 403 || error.backendCode === 'forbidden') {
     return 'Chat is not available for this account.';
   }
-  if (
-    error.status === 404 ||
-    error.backendCode === 'not_found' ||
-    error.backendCode === 'development_backend_unsupported'
-  ) {
+  if (chatWriteDoorUnavailable(error)) {
     return 'Sending messages is not available on this backend yet.';
   }
   if (error.status === 429) {
@@ -108,11 +113,7 @@ export function chatSessionLost(error: unknown): boolean {
 
 export function chatHistoryErrorCopy(error: unknown): string {
   if (error instanceof ChatBackendError) {
-    if (
-      error.status === 404 ||
-      error.backendCode === 'not_found' ||
-      error.backendCode === 'development_backend_unsupported'
-    ) {
+    if (chatWriteDoorUnavailable(error)) {
       return 'Chat history is not available on this backend yet.';
     }
     return chatErrorCopy(error);

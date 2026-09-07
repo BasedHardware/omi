@@ -80,6 +80,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskEmptyCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   askValue: string;
+  askUnavailable?: boolean;
   onAskChange: (value: string) => void;
   onAskSubmit: () => void;
   onOpenSettings: () => void;
@@ -246,6 +247,7 @@ export function MobileAppSurface({
   taskPagination,
   activeRoute,
   askValue,
+  askUnavailable = false,
   capture,
   device,
   deviceMessage,
@@ -617,18 +619,26 @@ export function MobileAppSurface({
         <View style={styles.askDock}>
           <TextInput
             accessibilityLabel="Ask Omi"
+            editable={!askUnavailable}
             onChangeText={onAskChange}
-            onSubmitEditing={onAskSubmit}
-            placeholder="Ask Omi anything about your life…"
+            onSubmitEditing={askUnavailable ? undefined : onAskSubmit}
+            placeholder={
+              askUnavailable
+                ? 'Sending messages is not available on this backend yet.'
+                : 'Ask Omi anything about your life…'
+            }
             placeholderTextColor={mobileColor.textSubtle}
             returnKeyType="send"
             style={styles.askInput}
             value={askValue}
           />
           <Pressable
-            accessibilityLabel="Send to Omi"
+            accessibilityLabel={
+              askUnavailable ? 'Send to Omi unavailable' : 'Send to Omi'
+            }
             accessibilityRole="button"
-            onPress={onAskSubmit}
+            disabled={askUnavailable}
+            onPress={askUnavailable ? () => undefined : onAskSubmit}
             style={styles.askButton}>
             <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>

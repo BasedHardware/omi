@@ -66,7 +66,11 @@ Cloud Linux after `18a002a274`: real PostgreSQL still 503'd the first union `lim
 
 Cloud Linux after `1938b55105`: the inner class is PostgreSQL `2201B` on `save_conversation_union_cursor`: POSIX `{1,256}` exceeds the 255 repetition limit. Chat-only pages never saved a union cursor, so they stayed 200. `last_id` now uses `length(...) BETWEEN 1 AND 256` plus `^[!-~]+$`, matching listen capture tokens, without shrinking the 256 bound. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after `2fea38f4d1`: GitHub `Validate backend worker` passed, including real PostgreSQL 18.4 Listen-only cursor capacity and the first union `limit=1` page. Worker `GET /v1/settings` still reports D1 admission `used` and `STAGING_CHAT_LIMIT` as the Worker chat ceiling, and no longer projects `STAGING_PLAN_LABEL` or `upgradeAvailable: true` as a billing plan. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2fea38f4d1`: GitHub `Validate backend worker` passed, including real PostgreSQL 18.4 Listen-only cursor capacity and the first union `limit=1` page. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after `5e90b3d7e6`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker `GET /v1/settings` still reports D1 admission `used` and `STAGING_CHAT_LIMIT` as the Worker chat ceiling, and no longer projects `STAGING_PLAN_LABEL` or `upgradeAvailable: true` as a billing plan.
+
+Cloud Linux after the unusable-send latch: nested `not_found` / `development_backend_unsupported` write doors disable desktop Ask, mobile Ask, and composer Send instead of leaving a live CTA. Conversations/Memories/Tasks empty-search titles prefer completeness copy over a complete miss, matching Home. Chat writes still need a source-owned producer. Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

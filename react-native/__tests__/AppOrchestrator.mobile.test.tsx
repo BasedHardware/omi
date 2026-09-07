@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {Platform, TextInput} from 'react-native';
+import {Platform} from 'react-native';
 
 const mockDevice = {id: 'omi-1', name: 'Test Omi', rssi: -50, connected: false};
 const mockNative = {
@@ -93,17 +93,15 @@ test.each([
   },
 );
 
-test('mobile Ask Omi opens the actual chat and reports a missing backend', async () => {
+test('mobile Ask Omi stays unavailable without a backend', async () => {
   const renderer = await renderApp();
-  await act(async () => {
-    renderer.root
-      .findAllByType(TextInput)
-      .find(node => node.props.accessibilityLabel === 'Ask Omi')!
-      .props.onChangeText('Hello Omi');
-  });
-  await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
-  expect(control(renderer, 'Chat scroll region')).toBeDefined();
-  expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
+  expect(control(renderer, 'Send to Omi unavailable')).toBeDefined();
+  const ask = control(renderer, 'Ask Omi');
+  expect(ask.props.editable).toBe(false);
+  expect(ask.props.placeholder).toBe(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(ask.props.onSubmitEditing).toBeUndefined();
 });
 
 test('mobile device panel exposes the existing scan and connection controls', async () => {

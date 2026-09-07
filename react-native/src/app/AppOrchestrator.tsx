@@ -22,6 +22,7 @@ import {
   chatHistoryCanReload,
   chatHistoryErrorCopy,
   chatSessionLost,
+  chatWriteDoorUnavailable,
   createLocalChatMessage,
   loadNewestChatHistory,
   loadOlderChatHistory,
@@ -120,6 +121,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const omiRequestRef = useRef<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatWriteDoorClosed, setChatWriteDoorClosed] = useState(false);
   const [chatEpoch, setChatEpoch] = useState(0);
   const chatMutationSeqRef = useRef(0);
   // Monotonic chat session epoch. Each run of the chat-history effect (a gate
@@ -234,6 +236,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       // start while chatBusy, so a send that never settled must not brick the
       // next session's composer.
       setChatError(null);
+      setChatWriteDoorClosed(false);
       setDraft('');
       setMessages([]);
       setOlderChatCursor(null);
@@ -279,6 +282,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
+          if (chatWriteDoorUnavailable(error)) {
+            setChatWriteDoorClosed(true);
+          }
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
           if (nativeSessionRequired && chatSessionLost(error)) {
@@ -489,7 +495,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const send = async () => {
     const text = draft.trim();
     const backend = omiBackend;
-    if (backend === undefined || backend === null || text === '' || chatBusy) {
+    if (
+      backend === undefined ||
+      backend === null ||
+      text === '' ||
+      chatBusy ||
+      chatWriteDoorClosed
+    ) {
       return;
     }
     const session = chatSessionEpochRef.current;
@@ -571,6 +583,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ? 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
+        if (!admitted && !requestStarted && chatWriteDoorUnavailable(error)) {
+          setChatWriteDoorClosed(true);
+        }
         if (nativeSessionRequired && chatSessionLost(error)) {
           revalidateSession().catch(() => undefined);
         }
@@ -663,6 +678,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       }
       if (chatSessionEpochRef.current === session) {
         setChatError(chatHistoryErrorCopy(error));
+        if (chatWriteDoorUnavailable(error)) {
+          setChatWriteDoorClosed(true);
+        }
         if (!chatHistoryCanReload(error)) {
           setHasOlderChat(false);
         }
@@ -739,6 +757,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       onStop={() => {
         stopGeneration().catch(() => undefined);
       }}
+      sendUnavailable={chatWriteDoorClosed}
     />
   );
 
@@ -898,6 +917,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           authError={authError}
           chatBusy={chatBusy}
           chatError={chatError}
+          chatSendUnavailable={chatWriteDoorClosed}
           deviceContent={
             <DeviceSession
               rememberedDevice={rememberedDevice}
@@ -1054,6 +1074,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
         }
         askValue={draft}
+        askUnavailable={
+          omiBackend === undefined || omiBackend === null || chatWriteDoorClosed
+        }
         capture={{
           active: nativeSnapshot?.capture === 'recording',
           waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',

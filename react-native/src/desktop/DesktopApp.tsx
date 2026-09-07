@@ -54,6 +54,7 @@ type Props = TaskMutationProps & {
   loadingOlderChat: boolean;
   chatBusy: boolean;
   chatError: string | null;
+  chatSendUnavailable?: boolean;
   onRefresh: () => void;
   onSignIn: () => void;
   onCancelSignIn?: () => void;
@@ -71,6 +72,7 @@ export function DesktopApp({
   deviceContent,
   chatBusy,
   chatError,
+  chatSendUnavailable = false,
   draft,
   hasOlderChat,
   loadingOlderChat,
@@ -150,6 +152,7 @@ export function DesktopApp({
         }}
         onStop={onStop}
         route={route}
+        sendUnavailable={chatSendUnavailable}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
         <DesktopReadBanner

@@ -105,6 +105,22 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
+test('an unavailable write door disables Ask instead of leaving it sendable', () => {
+  const onAskSubmit = jest.fn();
+  const renderer = render({askUnavailable: true, onAskSubmit});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi unavailable',
+  );
+  expect(send.props.disabled).toBe(true);
+  send.props.onPress();
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  const ask = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(ask.props.editable).toBe(false);
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+});
+
 describe('MobileAppSurface', () => {
   test.each(['home', 'tasks', 'chat', 'apps'] as const)(
     '%s uses the native safe-area boundary',

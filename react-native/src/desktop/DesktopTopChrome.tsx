@@ -45,6 +45,7 @@ type Props = {
   onStop: () => void;
   chatNotice: string | null;
   omnibarRef: React.RefObject<TextInput | null>;
+  sendUnavailable?: boolean;
 };
 
 export function DesktopChrome({
@@ -57,6 +58,7 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  sendUnavailable = false,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const [frames, setFrames] = useState<
@@ -209,7 +211,9 @@ export function DesktopChrome({
           accessibilityLabel="Search what you have seen and heard"
           blurOnSubmit={false}
           onChangeText={onDraftChange}
-          onSubmitEditing={onSend}
+          onSubmitEditing={
+            sendUnavailable && activeGenerationId === null ? undefined : onSend
+          }
           placeholder={desktopSearchPlaceholder}
           placeholderTextColor={token.color.inkMuted}
           ref={omnibarRef}
@@ -217,9 +221,22 @@ export function DesktopChrome({
           value={draft}
         />
         <FocusPressable
-          accessibilityLabel={activeGenerationId === null ? 'Send' : 'Stop'}
+          accessibilityLabel={
+            activeGenerationId === null
+              ? sendUnavailable
+                ? 'Send unavailable'
+                : 'Send'
+              : 'Stop'
+          }
           accessibilityRole="button"
-          onPress={activeGenerationId === null ? onSend : onStop}
+          disabled={sendUnavailable && activeGenerationId === null}
+          onPress={
+            activeGenerationId === null
+              ? sendUnavailable
+                ? () => undefined
+                : onSend
+              : onStop
+          }
           style={({pressed}) => [styles.send, pressed && styles.pressed]}>
           <Text style={styles.sendText}>
             {activeGenerationId === null ? 'Ask' : 'Stop'}
