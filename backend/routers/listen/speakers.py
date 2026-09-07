@@ -49,6 +49,11 @@ class SpeakerMatcher:
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
         self.speaker_evidence: Dict[int, Deque[Tuple[Any, float]]] = {}
+        # Serialize evidence and decisions for each diarized speaker. Covered
+        # intervals survive centroid eviction, but are pruned with the audio ring.
+        self._speaker_locks: Dict[int, asyncio.Lock] = {}
+        self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
+        self._generation = 0
         self.tasks: set[asyncio.Task[Any]] = set()
 
     async def load_and_run(self) -> None:
@@ -152,6 +157,14 @@ class SpeakerMatcher:
             return None
 
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
+        generation = self._generation
+        lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
+        async with lock:
+            if generation != self._generation or speaker_id in self.speaker_to_person:
+                return
+            await self._match_unmapped(speaker_id, segment, generation)
+
+    async def _match_unmapped(self, speaker_id: int, segment: dict[str, Any], generation: int) -> None:
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
             if ring_buffer is None or segment['duration'] < self.host.limits.speaker_id_min_audio:
@@ -160,16 +173,30 @@ class SpeakerMatcher:
             if time_range is None:
                 return
             buffer_start, buffer_end = time_range
-            segment_start = segment['abs_start']
-            segment_end = segment['abs_end']
-            if segment['duration'] <= MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS:
-                extract_start, extract_end = segment_start, segment_end
-            else:
-                center = (segment_start + segment_end) / 2
+            # Streaming providers resend/extend merged segments. Subtract every
+            # successfully embedded interval before choosing a fresh clip, so an
+            # update cannot turn three seconds of speech into six seconds of evidence.
+            covered = [(a, b) for a, b in self._covered_audio.get(speaker_id, []) if b > buffer_start]
+            self._covered_audio[speaker_id] = covered
+            fresh = [(max(buffer_start, segment['abs_start']), min(buffer_end, segment['abs_end']))]
+            for used_start, used_end in covered:
+                remaining = []
+                for start, end in fresh:
+                    if used_end <= start or used_start >= end:
+                        remaining.append((start, end))
+                    else:
+                        if start < used_start:
+                            remaining.append((start, used_start))
+                        if used_end < end:
+                            remaining.append((used_end, end))
+                fresh = remaining
+            if not fresh:
+                return
+            extract_start, extract_end = max(fresh, key=lambda interval: interval[1] - interval[0])
+            if extract_end - extract_start > MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS:
+                center = (extract_start + extract_end) / 2
                 half_window = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS / 2
                 extract_start, extract_end = center - half_window, center + half_window
-            extract_start = max(buffer_start, extract_start)
-            extract_end = min(buffer_end, extract_end)
             if extract_end - extract_start < self.host.limits.speaker_id_min_audio:
                 return
             pcm = ring_buffer.extract(extract_start, extract_end)
@@ -190,11 +217,15 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
+            if generation != self._generation or speaker_id in self.speaker_to_person:
+                return
+            # Reserve only successful embeddings: a failed request may be retried.
+            covered.append((extract_start, extract_end))
             clip_seconds = extract_end - extract_start
             evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
             evidence.append((query, clip_seconds))
             evidence_seconds = sum(seconds for _, seconds in evidence)
-            if evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS and len(evidence) < SPEAKER_MATCH_MAX_CLIPS:
+            if evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
                 logger.info(
                     'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending',
                     speaker_id,
@@ -240,6 +271,9 @@ class SpeakerMatcher:
             await self.host.drain(list(self.tasks), timeout=timeout, label=label)
 
     def clear(self) -> None:
+        self._generation += 1
+        self._speaker_locks.clear()
+        self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
         self.speaker_evidence.clear()

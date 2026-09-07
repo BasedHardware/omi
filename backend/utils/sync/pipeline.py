@@ -951,13 +951,15 @@ def identify_speakers_for_segments(
                 logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
                 continue
 
-            # Compare only against unmatched candidates (each person can be one speaker)
+            # Keep assigned candidates in the ambiguity comparison. Removing the
+            # owner after a first match must not make a similar household voice
+            # look unambiguous; apply one-person/one-speaker dedup only afterward.
             distances = {
                 person_id: compare_embeddings(query_embedding, data['embedding'])
                 for person_id, data in person_embeddings_cache.items()
-                if person_id not in matched_person_ids
             }
             decision = select_speaker_match(distances)
+            accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
             logger.info(
                 'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
                 'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s',
@@ -967,9 +969,9 @@ def identify_speakers_for_segments(
                 decision.best_id,
                 decision.best_distance,
                 decision.runner_up_distance,
-                decision.accepted,
+                accepted,
             )
-            if decision.person_id is not None:
+            if accepted and decision.person_id is not None:
                 person_id = decision.person_id
                 speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
                 segment_person_assignment_map[best_seg.id] = person_id

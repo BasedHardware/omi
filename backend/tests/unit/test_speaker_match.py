@@ -114,7 +114,7 @@ class _AudioRingBuffer:
         return 0.0, 60.0
 
     def extract(self, _start, _end):
-        return b'\x00\x00' * 32000
+        return b'\x00\x00' * round((_end - _start) * 16000)
 
 
 def _live_matcher(monkeypatch, clip_embeddings):
@@ -209,3 +209,86 @@ def test_clear_forgets_evidence(monkeypatch):
     assert matcher.speaker_evidence
     matcher.clear()
     assert matcher.speaker_evidence == {}
+
+
+@pytest.mark.parametrize('second_start,second_seconds', [(0.0, 3.0), (1.0, 3.0)])
+def test_overlapping_updates_do_not_count_as_new_evidence(monkeypatch, second_start, second_seconds):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, _host, emitted = _live_matcher(monkeypatch, [owner] * 3)
+    asyncio.run(matcher.match(1, _segment('s1', 0.0, 3.0)))
+    asyncio.run(matcher.match(1, _segment('s1', second_start, second_seconds)))
+    assert emitted == []
+    assert sum(seconds for _, seconds in matcher.speaker_evidence[1]) == 3.0
+    # A growing update contains a genuinely new two-second tail.
+    asyncio.run(matcher.match(1, _segment('s1', 0.0, 5.0)))
+    assert emitted == [(1, 'user', 'User', 's1')]
+    assert sum(seconds for _, seconds in matcher.speaker_evidence[1]) == 5.0
+
+
+def test_three_clips_still_require_five_seconds(monkeypatch):
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, emitted = _live_matcher(monkeypatch, [owner] * 3)
+    host.limits.speaker_id_min_audio = 1.0
+    for index in range(3):
+        asyncio.run(matcher.match(1, _segment(str(index), index * 2.0, 1.0)))
+    assert emitted == []
+    assert not matcher.segment_identity_status
+
+
+def test_concurrent_updates_preserve_the_first_accepted_identity(monkeypatch):
+    import routers.listen.speakers as speakers_mod
+
+    async def scenario():
+        owner = np.array([[1.0, 0.0]], dtype=np.float32)
+        sarah = np.array([[0.0, 1.0]], dtype=np.float32)
+        matcher, _host, emitted = _live_matcher(monkeypatch, [])
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def embed(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                entered.set()
+                await release.wait()
+                return owner
+            return sarah
+
+        monkeypatch.setattr(speakers_mod, 'run_blocking', embed)
+        first = asyncio.create_task(matcher.match(1, _segment('s1', 0.0, 5.0)))
+        await entered.wait()
+        second = asyncio.create_task(matcher.match(1, _segment('s2', 6.0, 5.0)))
+        release.set()
+        await asyncio.gather(first, second)
+        assert calls == 1
+        assert emitted == [(1, 'user', 'User', 's1')]
+        assert matcher.speaker_to_person[1] == ('user', 'User')
+
+    asyncio.run(scenario())
+
+
+def test_clear_invalidates_inflight_embeddings(monkeypatch):
+    import routers.listen.speakers as speakers_mod
+
+    async def scenario():
+        owner = np.array([[1.0, 0.0]], dtype=np.float32)
+        matcher, _host, emitted = _live_matcher(monkeypatch, [])
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def embed(*args):
+            entered.set()
+            await release.wait()
+            return owner
+
+        monkeypatch.setattr(speakers_mod, 'run_blocking', embed)
+        pending = asyncio.create_task(matcher.match(1, _segment('s1', 0.0, 5.0)))
+        await entered.wait()
+        matcher.clear()
+        release.set()
+        await pending
+        assert not matcher.speaker_evidence
+        assert emitted == []
+
+    asyncio.run(scenario())
