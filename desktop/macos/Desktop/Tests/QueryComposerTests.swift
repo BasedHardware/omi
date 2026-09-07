@@ -13,7 +13,7 @@ import XCTest
 /// 1. The composer bound a `@State` on `QueryShellHome` while `ChatProvider.draftText` — what
 ///    persistence restores, what a send clears and what the automation bridge's `set_chat_drafts`
 ///    writes — went somewhere nothing rendered. `chat_drafts_snapshot` reported a draft stored and
-///    the bar went on showing `Ask a follow-up…`, so every harness assertion made through the bridge
+///    the bar went on showing its placeholder, so every harness assertion made through the bridge
 ///    was an assertion about a dead variable.
 /// 2. It was an `NSTextField`. A pasted three-line block was stored in full and drawn as its last
 ///    line, a long question scrolled its own beginning out of view, and Shift-⏎ did nothing.
