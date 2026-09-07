@@ -55,6 +55,14 @@ Permission checks and requests are direct desktop actions on both main chat and 
 
 `VoiceTurnUIProjection` is the semantic source for listening, lock, transcript, thinking, response-waiting, response-active, and terminal hints. `PTTBarPresenter` is the only writer for those floating-bar fields. User-facing failures stay visible briefly as actionable hints; developer signals remain available through typed terminal diagnostics, stale-event and invalid-transition counts, and the bounded event timeline.
 
+## Dictation, insertion, and recovery
+
+Dictation polish has a finite skip path: only already-clean English utterances from the explicit short acknowledgement and greeting allowlist, with no spelling hints, skip remote polishing; arbitrary prose keeps the model path. The opening `type` check uses one exact-audio decoder entry: an identical opening shares the in-flight decode, while a shorter prefix is never reused for the released turn.
+
+At shortcut release, `VoiceTypeSession` captures the exact Accessibility text element, process, bundle, selection, and value digest before closing transcription. It prefers a verified AX replacement. A verified insertion at a collapsed caret keeps a 30-second, owner-authorized receipt for `Undo Last Dictation`, and invalidates it if the target or value changes or ownership or Accessibility trust is lost. If AX insertion is unavailable, the clipboard fallback rechecks the captured field and posts `Cmd-V` to that same PID; a detected target change degrades to copy. A same-app focus change after the last check but before the paste event is delivered remains a limitation of this fallback; it does not offer Undo.
+
+An offline question remains in an owner-scoped in-memory recovery for five minutes, stays unsent, and is available only while that authorization remains current. Review opens main Chat, where the pending text is appended once the composer hydrates its own draft; Copy remains available without sending. The notch keeps a persistent `SEND` affordance during listening, with a lock icon and `Locked` accessibility state in hands-free mode.
+
 ## Testing contract
 
 Reducer tests use deterministic events and fake-clock deadlines. Cover the happy path plus races that can change ownership: late capture completion, old session or response callbacks, warm-wait fallback, deferred and replacement commits, pending tools, provider-finish versus playback-drain ordering, competing leases, barge-in, cleanup from every phase, duplicate terminal events, and randomized stale-event sequences.

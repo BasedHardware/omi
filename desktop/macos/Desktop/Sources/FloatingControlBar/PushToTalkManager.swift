@@ -784,6 +784,7 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
+    OfflinePTTQuestionRecovery.shared.clear()
     voiceTypeSession.begin()
     resetVoiceTypingSources()
     voiceTypingLastOutcome = VoiceTypingOutcome()
@@ -856,6 +857,7 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
+      OfflinePTTQuestionRecovery.shared.clear()
       voiceTypeSession.begin()
       resetVoiceTypingSources()
       voiceTypingLastOutcome = VoiceTypingOutcome()
@@ -958,6 +960,8 @@ class PushToTalkManager: ObservableObject {
     // cannot be a legitimate active capture, but fail closed and clear every
     // driver anyway.
     performTerminalCleanup(discardBufferedAudio: true)
+    OfflinePTTQuestionRecovery.shared.clear()
+    voiceTypeSession.invalidateUndoLastDictation()
     FloatingBarVoicePlaybackService.shared.stop()
     await captureBeingStopped?.waitForPhysicalStop()
     // A warm capture opened for the previous owner must not still be starting
@@ -3076,10 +3080,21 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Voice typing
 
+  var canUndoLastDictation: Bool {
+    currentVoiceTurnID == nil && voiceTypeSession.canUndoLastDictation
+  }
+
+  @discardableResult
+  func undoLastDictation() -> Bool {
+    guard canUndoLastDictation else { return false }
+    return voiceTypeSession.undoLastDictation()
+  }
+
   /// When the opening of the hold is decoded for the wake word. Advisory: the
   /// closing transcript decides the turn on its own.
   private var voiceTypingProbeSchedule = VoiceTypeWakeWordProbeSchedule()
   private var voiceTypingProbeInFlight = false
+  private let voiceTypingOpeningDecoder = VoiceTypeOpeningDecoder()
   /// Set once a dictation has released its hub turn, so key-up does not
   /// cancel it a second time.
   private var voiceTypingReleasedHubTurn = false
@@ -3097,6 +3112,7 @@ class PushToTalkManager: ObservableObject {
 
   private func resetVoiceTypingSources() {
     voiceTypingProbeSchedule.reset()
+    voiceTypingOpeningDecoder.reset()
     voiceTypingProbeInFlight = false
     voiceTypingReleasedHubTurn = false
   }
@@ -3128,12 +3144,15 @@ class PushToTalkManager: ObservableObject {
     // from the last probe keeps it owed until the decoder is free.
     voiceTypingProbeSchedule.beginProbe()
     voiceTypingProbeInFlight = true
+    let openingDecoder = voiceTypingOpeningDecoder
     Task { @MainActor [weak self] in
       let started = Date()
-      let text = await PTTLanguageIdentifier.shared.transcribe(pcm16k: clip)
-      guard let self else { return }
+      let text = await openingDecoder.decode(clip) {
+        await PTTLanguageIdentifier.shared.transcribe(pcm16k: $0)
+      }
+      guard let self, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       self.voiceTypingProbeInFlight = false
-      guard self.voiceTurnCoordinator.activeTurnID == turnID, self.phase?.isRecording == true else { return }
+      guard self.phase?.isRecording == true else { return }
       // The text, not just its length: a probe that loses the wake word is
       // indistinguishable from one that heard it when all you have is a count.
       log(
@@ -3178,9 +3197,9 @@ class PushToTalkManager: ObservableObject {
   /// opens on a quiet /t/ burst that the trim's pre-roll does not always
   /// preserve. Committed as an ordinary question, the model, hearing "type …",
   /// spawned an agent to do the typing itself: not a missed dictation but an
-  /// unrequested action. So every hub commit pays one on-device decode of the
-  /// opening (~100–200 ms) first. It is paid at key-up, never while the user
-  /// is speaking.
+  /// unrequested action. So every hub commit checks the exact released opening first. An identical
+  /// mid-hold decode is reused (or joined while in flight); a shorter prefix
+  /// is never reused, because more audio can change the decoded wake word.
   private func gateHubCommitOnFinalDictationCheck(
     turnID: VoiceTurnID, turnAudio: Data, commit: @escaping () -> Void
   ) {
@@ -3189,9 +3208,12 @@ class PushToTalkManager: ObservableObject {
       commit()
       return
     }
+    let openingDecoder = voiceTypingOpeningDecoder
     Task { @MainActor [weak self] in
       let started = Date()
-      let decoded = await PTTLanguageIdentifier.shared.transcribe(pcm16k: opening)
+      let decoded = await openingDecoder.decode(opening) {
+        await PTTLanguageIdentifier.shared.transcribe(pcm16k: $0)
+      }
       let decodeMs = Int(Date().timeIntervalSince(started) * 1000)
       guard let self, self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       // Lenient, like the probes: this is the same on-device model reading the
@@ -3207,8 +3229,8 @@ class PushToTalkManager: ObservableObject {
         self.finishVoiceTypingTurn(turnID: turnID, audio: turnAudio, knownTranscript: nil)
         return
       }
-      // The one serial cost every committed hub turn pays; logged so the
-      // latency is measurable from a real turn rather than estimated.
+      // Includes waiting for an in-flight exact-opening probe; a completed
+      // matching probe removes this serial decode from the release path.
       log("PushToTalkManager: closing decode (\(decodeMs)ms) heard no wake word — committing")
       commit()
     }
@@ -3343,11 +3365,16 @@ class PushToTalkManager: ObservableObject {
       return run
     }
     var text = DictationFormatter.format(payload, language: language)
-    if !text.isEmpty, allowNetwork, NetworkReachability.shared.isOnline,
+    let context = DictationPolisher.Context(
+      appName: appName, keywords: DictationPolisher.spellingHints(from: keywords), language: language)
+    let polishPolicy = DictationPolisher.policy(original: payload, formatted: text, context: context)
+    if polishPolicy == .skip, allowNetwork, NetworkReachability.shared.isOnline {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "voice_typing", from: "llm_polish", to: "local_format", reason: "policy", outcome: .recovered)
+    }
+    if !text.isEmpty, polishPolicy == .required, allowNetwork, NetworkReachability.shared.isOnline,
       let client = try? GeminiClient(model: ModelQoS.Gemini.dictation, workload: .interactive)
     {
-      let context = DictationPolisher.Context(
-        appName: appName, keywords: DictationPolisher.spellingHints(from: keywords), language: language)
       do {
         if let polished = try await DictationPolisher.polish(text, context: context, using: client) {
           text = polished
@@ -3376,6 +3403,10 @@ class PushToTalkManager: ObservableObject {
         run.abandoned = true
         return run
       }
+    }
+    guard isCurrent() else {
+      run.abandoned = true
+      return run
     }
     run.text = text
     run.completion = voiceTypeSession.deliver(text)
@@ -3417,6 +3448,10 @@ class PushToTalkManager: ObservableObject {
     let appName = NSWorkspace.shared.frontmostApplication?.localizedName
     let wasClaimed = voiceTypeSession.claimsTurn
     let offlineRoute = isOnDeviceASR
+    let recoveryAuthorization =
+      offlineRoute
+      ? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: voiceTurnCoordinator.activeTurn?.ownerID)
+      : nil
     if isHubMode || isWaitingForHub {
       voiceTypingDidArm(turnID: turnID)
     }
@@ -3459,7 +3494,10 @@ class PushToTalkManager: ObservableObject {
         // Only the offline route reaches here unclaimed: its closing transcript
         // is the first anyone has read. Nothing offline can answer a question,
         // and the turn says so rather than reporting a provider that failed.
-        log("PushToTalkManager: offline turn was not a dictation — no provider to answer it")
+        log("PushToTalkManager: offline question kept for explicit review or copy")
+        if let recoveryAuthorization, let transcript = run.transcript {
+          OfflinePTTQuestionRecovery.shared.capture(transcript, authorization: recoveryAuthorization)
+        }
         AnalyticsManager.shared.floatingBarPTTEnded(mode: self.finalizedMode, committed: false, transcriptLength: nil)
         self.terminateVoiceTypingLifecycle(disposition: .cancelled, totalSec: totalSec)
         self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .noNetwork))
@@ -3534,14 +3572,17 @@ class PushToTalkManager: ObservableObject {
   /// it can never paste into the middle of a real turn. The real turn's
   /// `begin()` owns the session from that moment; the automation neither
   /// claims nor resets it afterwards.
-  func dictateForAutomation(pcm16k: Data, allowNetwork: Bool) async -> [String: String] {
+  func dictateForAutomation(
+    pcm16k: Data, allowNetwork: Bool, knownTranscript: String? = nil
+  ) async -> [String: String] {
     guard currentVoiceTurnID == nil else { return ["error": "a voice turn is active"] }
+    OfflinePTTQuestionRecovery.shared.clear()
     voiceTypeSession.begin()
     voiceTypeSession.noteRelease()
     let started = Date()
     let run = await runDictationPipeline(
       audio: pcm16k,
-      knownTranscript: nil,
+      knownTranscript: knownTranscript,
       keywords: [],
       language: AssistantSettings.shared.effectiveTranscriptionLanguage,
       appName: NSWorkspace.shared.frontmostApplication?.localizedName,

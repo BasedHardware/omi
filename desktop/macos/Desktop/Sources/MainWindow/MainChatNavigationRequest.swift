@@ -13,6 +13,17 @@ import Foundation
 final class MainChatNavigationRequestStore {
   static let shared = MainChatNavigationRequestStore()
 
+  enum DraftDisposition { case replace, append }
+  private var draftDisposition = DraftDisposition.replace
+  private var draftAuthorization: RuntimeOwnerAuthorizationSnapshot?
+  private let isAuthorized: (RuntimeOwnerAuthorizationSnapshot) -> Bool
+
+  init(
+    isAuthorized: @escaping (RuntimeOwnerAuthorizationSnapshot) -> Bool = RuntimeOwnerIdentity.isAuthorizationCurrent
+  ) {
+    self.isAuthorized = isAuthorized
+  }
+
   private(set) var isPending = false
   /// Text to place in the composer, focused and **not sent**. Set by surfaces
   /// that want the user to glance at a suggested question before asking it
@@ -31,7 +42,12 @@ final class MainChatNavigationRequestStore {
   /// overwrite a newer request's draft and attachment.
   private var requestGeneration = 0
 
-  func request(draft: String? = nil, attachment: ChatAttachment? = nil) {
+  func request(
+    draft: String? = nil,
+    attachment: ChatAttachment? = nil,
+    disposition: DraftDisposition = .replace,
+    authorization: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) {
     requestGeneration &+= 1
     isPending = true
     // Every request owns the draft slot: a plain "Continue in Omi" must never
@@ -39,6 +55,8 @@ final class MainChatNavigationRequestStore {
     let trimmed = draft?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     pendingDraft = trimmed.isEmpty ? nil : draft
     pendingAttachment = attachment
+    draftDisposition = disposition
+    draftAuthorization = authorization
     NotificationCenter.default.post(name: .openMainChatRequested, object: nil)
   }
 
@@ -67,9 +85,22 @@ final class MainChatNavigationRequestStore {
   }
 
   /// Returns the pending composer draft, and clears it. Exactly one composer
-  /// takes it; a second caller gets `nil`.
-  func consumeDraft() -> String? {
-    defer { pendingDraft = nil }
+  /// takes it; a second caller gets `nil`. `existingDraft` defaults to empty
+  /// so plain replace-style callers can omit it.
+  func consumeDraft(existingDraft: String = "") -> String? {
+    defer {
+      pendingDraft = nil
+      draftAuthorization = nil
+      draftDisposition = .replace
+    }
+    if let draftAuthorization, !isAuthorized(draftAuthorization) { return nil }
+    guard let pendingDraft else { return nil }
+    if draftDisposition == .append,
+      !existingDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      existingDraft.trimmingCharacters(in: .whitespacesAndNewlines) != pendingDraft
+    {
+      return existingDraft + "\n\n" + pendingDraft
+    }
     return pendingDraft
   }
 
