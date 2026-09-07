@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test-only fix. Exempts an alias tool name from a capability-declaration assertion; no production code or user-facing behavior changes."
+}
