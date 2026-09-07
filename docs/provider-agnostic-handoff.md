@@ -92,7 +92,9 @@ Cloud Linux after `d74db69efc`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `7d8e9f0891`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested non-retryable later `GET /v1/memories` pages no longer claim "More memories could not be loaded." They use the same unavailable copy as conversation and task later pages and omit Load more. Generic later-page failures keep the load-failure copy and Load more.
 
-Cloud Linux after the native chat-history unsupported copy slice: native `OMI_DEV_BACKEND_UNSUPPORTED` history loads no longer claim "Chat history could not be loaded. Check your connection and try again." They use the same unavailable copy as nested non-retryable 503s and omit Check again. Transport failures still offer Check again. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `1941186ad7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Native `OMI_DEV_BACKEND_UNSUPPORTED` history loads no longer claim "Chat history could not be loaded. Check your connection and try again." They use the same unavailable copy as nested non-retryable 503s and omit Check again. Transport failures still offer Check again.
+
+Cloud Linux after the conversation-detail older-page honesty slice: later `GET /v1/chat-messages` failures no longer replace loaded messages with a full-page error. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load older. Generic later-page failures keep Load older. An empty first page with a remaining older cursor still does not claim "No messages in this chat yet." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

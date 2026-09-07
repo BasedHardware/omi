@@ -10,10 +10,8 @@ export function ChatConversationHistory({
 }: {
   conversationId: string;
 }) {
-  const {result, reload, loadingOlder, loadOlder} = useChatConversationHistory(
-    true,
-    conversationId,
-  );
+  const {result, reload, loadingOlder, loadOlder, olderNotice, olderRetryable} =
+    useChatConversationHistory(true, conversationId);
   return (
     <View style={styles.conversationDetailFields}>
       <Text accessibilityRole="header" style={styles.resultTitle}>
@@ -43,20 +41,28 @@ export function ChatConversationHistory({
         </>
       ) : (
         <>
-          {chatHistoryHasOlder(result.hasOlder, result.olderCursor) && (
-            <FocusPressable
-              accessibilityLabel="Load older messages"
-              accessibilityRole="button"
-              disabled={loadingOlder}
-              onPress={() => {
-                void loadOlder();
-              }}
-              style={styles.conversationTranscriptAction}>
-              <Text style={styles.conversationDetailField}>
-                {loadingOlder ? 'Loading older…' : 'Load older'}
-              </Text>
-            </FocusPressable>
+          {olderNotice !== null && (
+            <Text
+              accessibilityRole="alert"
+              style={styles.conversationDetailSummary}>
+              {olderNotice}
+            </Text>
           )}
+          {chatHistoryHasOlder(result.hasOlder, result.olderCursor) &&
+            olderRetryable && (
+              <FocusPressable
+                accessibilityLabel="Load older messages"
+                accessibilityRole="button"
+                disabled={loadingOlder}
+                onPress={() => {
+                  void loadOlder();
+                }}
+                style={styles.conversationTranscriptAction}>
+                <Text style={styles.conversationDetailField}>
+                  {loadingOlder ? 'Loading older…' : 'Load older'}
+                </Text>
+              </FocusPressable>
+            )}
           {result.messages.length === 0 ? (
             chatHistoryHasOlder(result.hasOlder, result.olderCursor) ? null : (
               <Text style={styles.conversationDetailSummary}>

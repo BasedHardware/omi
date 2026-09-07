@@ -42,6 +42,8 @@ export function useChatConversationHistory(
 ) {
   const [result, setResult] = useState<ChatHistoryRead>({status: 'idle'});
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderNotice, setOlderNotice] = useState<string | null>(null);
+  const [olderRetryable, setOlderRetryable] = useState(true);
   const [reload, setReload] = useState(0);
   const epoch = useRef(0);
   useEffect(
@@ -49,6 +51,8 @@ export function useChatConversationHistory(
       subscribeOmiBackendSessionInvalidated(() => {
         epoch.current++;
         setLoadingOlder(false);
+        setOlderNotice(null);
+        setOlderRetryable(true);
         setResult(previous =>
           previous.status === 'idle'
             ? previous
@@ -68,12 +72,16 @@ export function useChatConversationHistory(
     let alive = true;
     if (!active) {
       setLoadingOlder(false);
+      setOlderNotice(null);
+      setOlderRetryable(true);
       setResult({status: 'idle'});
       return () => {
         alive = false;
       };
     }
     setLoadingOlder(false);
+    setOlderNotice(null);
+    setOlderRetryable(true);
     setResult({status: 'loading'});
     const load = async () => {
       try {
@@ -111,6 +119,8 @@ export function useChatConversationHistory(
   return {
     result,
     loadingOlder,
+    olderNotice,
+    olderRetryable,
     loadOlder: async () => {
       if (
         result.status !== 'loaded' ||
@@ -123,6 +133,8 @@ export function useChatConversationHistory(
       const current = epoch.current;
       const cursor = result.olderCursor;
       setLoadingOlder(true);
+      setOlderNotice(null);
+      setOlderRetryable(true);
       try {
         if (omiBackend == null) {
           throw new Error('Native transport unavailable');
@@ -135,6 +147,8 @@ export function useChatConversationHistory(
         if (epoch.current !== current) {
           return;
         }
+        setOlderNotice(null);
+        setOlderRetryable(true);
         setResult(previous =>
           previous.status === 'loaded'
             ? {
@@ -160,11 +174,8 @@ export function useChatConversationHistory(
           setReload(value => value + 1);
           return;
         }
-        setResult({
-          status: 'error',
-          error: chatHistoryErrorCopy(error),
-          canReload: chatHistoryCanReload(error),
-        });
+        setOlderNotice(chatHistoryErrorCopy(error));
+        setOlderRetryable(chatHistoryCanReload(error));
       } finally {
         if (epoch.current === current) {
           setLoadingOlder(false);

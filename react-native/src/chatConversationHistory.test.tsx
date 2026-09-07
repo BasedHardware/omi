@@ -419,3 +419,139 @@ test('loads older pages for a named chat session without mixing main history', a
   expect(textOf(renderer)).toContain('You · older named');
   expect(textOf(renderer)).toContain('You · newer named');
 });
+
+test('generic later-page chat history failures keep loaded messages', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse(
+        [{id: 'human-2', text: 'newer prompt', sender: 'human'}],
+        {olderCursor: 'older-1', hasOlder: true},
+      ),
+    )
+    .mockRejectedValueOnce(new Error('older page failed'));
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(textOf(renderer)).toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload chat messages',
+    ),
+  ).toHaveLength(0);
+});
+
+test('nested non-retryable later chat history pages keep loaded messages', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse(
+        [{id: 'human-2', text: 'newer prompt', sender: 'human'}],
+        {olderCursor: 'older-1', hasOlder: true},
+      ),
+    )
+    .mockRejectedValueOnce(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(textOf(renderer)).toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload chat messages',
+    ),
+  ).toHaveLength(0);
+});
+
+test('an empty chat page with a blocked older cursor does not claim the chat is empty', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse([], {olderCursor: 'older-1', hasOlder: true}),
+    )
+    .mockRejectedValueOnce(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
