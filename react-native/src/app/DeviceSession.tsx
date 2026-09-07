@@ -50,7 +50,11 @@ export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
   return {
     connectedDevice,
     label: `Connected · ${
-      snapshot.capture === 'recording' ? 'Listening' : 'Ready'
+      snapshot.capture === 'recording'
+        ? snapshot.audioStatus === 'waiting'
+          ? 'Waiting for audio'
+          : 'Listening'
+        : 'Ready'
     }`,
     color: '#45b79b',
   };
@@ -83,6 +87,11 @@ export function DeviceSession({
   onToggle: (id: string, connected: boolean) => void;
   variant: DeviceSessionVariant;
 }): React.JSX.Element {
+  const connectedLabel =
+    nativeSnapshot?.capture === 'recording' &&
+    nativeSnapshot.audioStatus === 'waiting'
+      ? 'Waiting for audio'
+      : 'Connected';
   const scanDisabled =
     deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
   const devices = (nativeSnapshot?.devices ?? []).map(device => ({
@@ -165,7 +174,7 @@ export function DeviceSession({
                 {device.connecting
                   ? 'Connecting…'
                   : device.connected
-                  ? 'Connected'
+                  ? connectedLabel
                   : 'Connect'}
               </Text>
             </FocusPressable>
@@ -276,7 +285,7 @@ export function DeviceSession({
               {device.connecting
                 ? 'Connecting…'
                 : device.connected
-                ? 'Connected'
+                ? connectedLabel
                 : device.rssi === undefined
                 ? 'Signal unavailable'
                 : `${device.rssi} dBm`}
@@ -290,7 +299,7 @@ export function DeviceSession({
             {device.connecting
               ? 'Connecting…'
               : device.connected
-              ? 'Connected'
+              ? connectedLabel
               : device.rssi === undefined
               ? 'Signal unavailable'
               : `${device.rssi} dBm`}

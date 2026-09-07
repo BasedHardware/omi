@@ -13,6 +13,25 @@ final class OmiBleLease {
   synchronized boolean acceptsGatt(long token, Object current, Object callback) { return current != null && current == callback && accepts(token); }
   synchronized long operation() { return ++operation; }
   synchronized boolean operationPending(long token, long ticket) { return accepts(token) && operation == ticket; }
+  static final class FirstAudio {
+    static final int WINDOW_MS = 4000;
+    private long generation;
+    private boolean started;
+    private boolean waiting;
+    private boolean retried;
+    private boolean observed;
+    boolean begin() { if (started) return false; started = true; waiting = !observed; generation++; return waiting; }
+    boolean observed() { return observed; }
+    long token() { return generation; }
+    boolean receive(int length) { if (length <= 0 || observed) return false; observed = true; waiting = false; generation++; return true; }
+    int timeout(long token) {
+      if (!waiting || token != generation) return 0;
+      generation++;
+      if (!retried) { retried = true; return 1; }
+      waiting = false; return -1;
+    }
+    void cancel() { generation++; started = false; waiting = false; retried = false; observed = false; }
+  }
   static final class Reconnect {
     private long generation;
     private boolean armed;

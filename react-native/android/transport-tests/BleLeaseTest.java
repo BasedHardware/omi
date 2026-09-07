@@ -2,6 +2,31 @@ package com.rnruntime;
 
 public final class BleLeaseTest {
   public static void main(String[] args) {
+    OmiBleLease.FirstAudio audio = new OmiBleLease.FirstAudio();
+    assert OmiBleLease.FirstAudio.WINDOW_MS == 4000;
+    assert audio.begin();
+    long audioTicket = audio.token();
+    assert !audio.begin();
+    assert !audio.receive(0);
+    assert audio.timeout(audioTicket) == 1;
+    assert audio.timeout(audioTicket) == 0;
+    assert audio.timeout(audio.token()) == -1;
+    assert audio.timeout(audio.token()) == 0;
+    assert audio.receive(4);
+    assert audio.observed();
+    assert !audio.receive(4);
+    audio.cancel();
+    assert audio.receive(4);
+    assert !audio.begin();
+    assert audio.timeout(audio.token()) == 0;
+    audio.cancel();
+    assert audio.begin();
+    audioTicket = audio.token();
+    audio.cancel();
+    assert audio.begin();
+    assert audio.timeout(audioTicket) == 0;
+    assert audio.receive(4);
+    assert audio.timeout(audio.token()) == 0;
     assert OmiBleLease.recordingReady(true, true, true);
     assert !OmiBleLease.recordingReady(true, false, true);
     assert !OmiBleLease.recordingReady(true, true, false);

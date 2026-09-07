@@ -3,6 +3,30 @@
 
 int main() {
   @autoreleasepool {
+    OmiBleFirstAudio audio;
+    assert(OmiBleFirstAudio::windowMs == 4000);
+    assert(audio.begin());
+    NSUInteger audioTicket = audio.generation;
+    assert(!audio.begin());
+    assert(!audio.receive(0));
+    assert(audio.timeout(audioTicket) == 1);
+    assert(audio.timeout(audioTicket) == 0);
+    assert(audio.timeout(audio.generation) == -1);
+    assert(audio.timeout(audio.generation) == 0);
+    assert(audio.receive(4) && audio.observed);
+    assert(!audio.receive(4));
+    audio.cancel();
+    assert(audio.receive(4));
+    assert(!audio.begin());
+    assert(audio.timeout(audio.generation) == 0);
+    audio.cancel();
+    assert(audio.begin());
+    audioTicket = audio.generation;
+    audio.cancel();
+    assert(audio.begin());
+    assert(audio.timeout(audioTicket) == 0);
+    assert(audio.receive(4));
+    assert(audio.timeout(audio.generation) == 0);
     assert(OmiBleRecordingReady(YES, YES, YES));
     assert(!OmiBleRecordingReady(YES, NO, YES));
     assert(!OmiBleRecordingReady(YES, YES, NO));

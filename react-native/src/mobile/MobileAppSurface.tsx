@@ -58,6 +58,7 @@ export type MobileDeviceState = {
 
 export type MobileCaptureState = {
   active: boolean;
+  waitingForAudio?: boolean;
   transcript: string;
 };
 
@@ -323,19 +324,26 @@ export function MobileAppSurface({
           <View style={styles.captureCard}>
             <View style={styles.listeningBadge}>
               <Text style={styles.listeningText}>
-                {capture.active ? 'Listening' : 'Paused'}
+                {capture.active
+                  ? capture.waitingForAudio
+                    ? 'Waiting for audio'
+                    : 'Listening'
+                  : 'Paused'}
               </Text>
               <View
                 style={[
                   styles.captureDot,
-                  !capture.active && styles.captureDotPaused,
+                  (!capture.active || capture.waitingForAudio) &&
+                    styles.captureDotPaused,
                 ]}
               />
             </View>
             <Text numberOfLines={1} style={styles.transcript}>
               {capture.transcript ||
                 (capture.active
-                  ? 'Listening for speech…'
+                  ? capture.waitingForAudio
+                    ? 'Your Omi is connected. Waiting for audio…'
+                    : 'Listening for speech…'
                   : 'Capture is paused')}
             </Text>
             <View style={styles.microphoneButton}>

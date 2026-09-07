@@ -291,3 +291,23 @@ test('mobile task footer exposes pending pagination and its action', () => {
   expect(renderedText(renderer)).toContain('Try again');
   act(() => renderer.unmount());
 });
+
+test('mobile waiting-for-audio state never claims Listening before the first packet', () => {
+  const renderer = render({
+    capture: {active: true, waitingForAudio: true, transcript: ''},
+  });
+  expect(renderedText(renderer)).toContain('Waiting for audio');
+  expect(renderedText(renderer)).not.toContain('Listening');
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...buildProps({
+          capture: {active: true, waitingForAudio: false, transcript: ''},
+        })}
+      />,
+    ),
+  );
+  expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).not.toContain('Waiting for audio');
+  act(() => renderer.unmount());
+});
