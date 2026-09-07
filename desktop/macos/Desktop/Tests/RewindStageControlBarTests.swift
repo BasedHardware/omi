@@ -24,13 +24,29 @@ final class RewindStageControlBarTests: XCTestCase {
       "the pill's leading edge and the stage's leading edge are one line")
   }
 
-  func testTheControlRowSitsAsFarFromTheTrackAsItDoesFromThePicture() {
-    // Above the row: the stage's own vertical inset. Below it: the row's bottom gap plus the track's
-    // top padding. The two must agree or the row reads as belonging to one neighbour and not the other.
-    let above = RewindStageFit.verticalInset
-    let below = RewindStageControlBarLayout.bottomGap + RewindTrackBar.topPadding
-    XCTAssertEqual(above, below, accuracy: 0.001)
+  /// Above the row: the stage's own vertical inset. Below it: the row's bottom gap plus the track's
+  /// top padding. `bottomGap` is *defined* as the difference, so asserting the sum would hold by
+  /// construction; what can actually regress is which view applies which constant. Each of the
+  /// three paddings is a `body` fact, so this reads the sources for the wiring and checks the one
+  /// value that is not settled by the definition: the gap must not have gone negative.
+  func testTheControlRowSitsAsFarFromTheTrackAsItDoesFromThePicture() throws {
     XCTAssertGreaterThanOrEqual(RewindStageControlBarLayout.bottomGap, 0, "a negative gap overlaps the track")
+
+    let page = try source("Rewind/UI/RewindPage.swift")
+    let frameDisplay = try body(ofProperty: "frameDisplay", in: page)
+    XCTAssertTrue(
+      frameDisplay.contains(".padding(.vertical, RewindStageFit.verticalInset)"),
+      "the picture no longer keeps `RewindStageFit.verticalInset` above the row")
+
+    let chrome = try source("Rewind/UI/RewindPlaybackChrome.swift")
+    let bar = try body(ofType: "RewindStageControlBar", in: chrome)
+    XCTAssertTrue(
+      bar.contains(".padding(.bottom, RewindStageControlBarLayout.bottomGap)"),
+      "the row no longer closes its bottom gap with `RewindStageControlBarLayout.bottomGap`")
+    let track = try body(ofType: "RewindTrackBar", in: chrome)
+    XCTAssertTrue(
+      track.contains(".padding(.top, Self.topPadding)"),
+      "the track no longer pads its top with the `topPadding` the gap is computed against")
   }
 
   func testTheControlsAreOneHeightSoTheRowHasOneBaseline() {
@@ -110,6 +126,17 @@ final class RewindStageControlBarTests: XCTestCase {
       .appendingPathComponent(relativePath)
     // omi-test-quality: source-inspection -- static contract: the frame's border colour and the pill's owner are SwiftUI body facts with no runtime value
     return try String(contentsOf: url, encoding: .utf8)
+  }
+
+  /// The text of `private var <name>: some View {` up to the next property or function at the
+  /// same indentation, so a padding asserted on one view cannot be satisfied by a neighbour.
+  private func body(ofProperty name: String, in source: String) throws -> Substring {
+    guard let start = source.range(of: "private var \(name): some View {") else {
+      throw XCTSkip("`private var \(name): some View` not found — the property was renamed; update this test")
+    }
+    let rest = source[start.upperBound...]
+    guard let end = rest.range(of: "\n  }\n") else { return rest }
+    return rest[..<end.lowerBound]
   }
 
   /// The text from `struct <name>` to the next top-level `// MARK: -`, which is how this file is
