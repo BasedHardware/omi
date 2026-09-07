@@ -5,6 +5,7 @@ import type {
   NativeSnapshot,
   OmiNativeEvent,
   RecordingJournal,
+  RecordingJournalInput,
 } from '../src/omiNativeTypes';
 
 const mockCapture = '11111111-2222-4333-8444-555555555555';
@@ -37,8 +38,11 @@ const mockBackend = {
     ...mockSaved!,
     entries: [...mockSaved!.entries],
   })),
-  createRecordingJournal: jest.fn(async () => {
+  createRecordingJournal: jest.fn(async (input: RecordingJournalInput) => {
     mockSaved = {
+      ...(input.capturedAtMs === undefined
+        ? {}
+        : {capturedAtMs: input.capturedAtMs}),
       handle: mockCapture,
       captureId: mockCapture,
       deviceId: 'omi-1',
@@ -71,6 +75,9 @@ const mockBackend = {
         status: 200,
         body: JSON.stringify({
           session: {
+            ...(mockSaved!.capturedAtMs === undefined
+              ? {}
+              : {capturedAtMs: mockSaved!.capturedAtMs}),
             id: mockSession,
             deviceId: 'omi-1',
             deviceName: null,
@@ -426,3 +433,32 @@ test('a failed upload keeps later pending fsync bytes charged across reconnect',
     mockBackend.appendRecordingJournal.mockImplementation(originalAppend);
   }
 });
+
+test.each([undefined, 0, 1700000000000])(
+  'offline recovery reopens with original optional native capture time %s',
+  async capturedAtMs => {
+    mockSaved = {
+      handle: mockCapture,
+      captureId: mockCapture,
+      sessionId: null,
+      deviceId: 'omi-1',
+      deviceName: null,
+      codec: 21,
+      ...(capturedAtMs === undefined ? {} : {capturedAtMs}),
+      entries: [JSON.stringify(['p', 'AAAB']), JSON.stringify(['s'])],
+    };
+    const view = await render();
+    try {
+      const open = mockBackend.requestRecordingJournal.mock.calls.find(
+        ([, request]) => request.path === '/v1/device-sessions',
+      )!;
+      const body = JSON.parse(open[1].body!);
+      if (capturedAtMs === undefined)
+        expect(body).not.toHaveProperty('capturedAtMs');
+      else expect(body.capturedAtMs).toBe(capturedAtMs);
+      expect(mockBackend.createRecordingJournal).not.toHaveBeenCalled();
+    } finally {
+      await ReactTestRenderer.act(async () => view.unmount());
+    }
+  },
+);

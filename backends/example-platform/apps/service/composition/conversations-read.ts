@@ -277,6 +277,9 @@ const projectRecord = (record: OrderedConversationRecord["record"], revision: st
   if (record.folder_id !== null && typeof record.folder_id !== "string") {
     throw new UnprojectableConversationRecordError();
   }
+  if (record.captured_at_ms !== undefined && (!Number.isSafeInteger(record.captured_at_ms)
+    || record.captured_at_ms < 0 || record.captured_at_ms > 8640000000000000))
+    throw new UnprojectableConversationRecordError();
   return {
     id: record.id,
     title: record.structured.title,
@@ -284,6 +287,7 @@ const projectRecord = (record: OrderedConversationRecord["record"], revision: st
     createdAt: isoToMs(record.created_at),
     updatedAt: isoToMs(record.updated_at),
     startedAt: isoToMs(record.started_at),
+    ...(record.captured_at_ms === undefined ? {} : { capturedAtMs: record.captured_at_ms }),
     finishedAt: isoToMs(record.finished_at),
     source: record.source,
     status: record.status,

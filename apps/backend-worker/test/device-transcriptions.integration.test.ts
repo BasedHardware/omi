@@ -9,7 +9,7 @@ import {
   processDeviceTranscriptions,
   readDeviceTranscription,
 } from "../src/device-transcriptions";
-import { readConversations } from "../src/conversations";
+import { readConversations, toLegacyConversation } from "../src/conversations";
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM device_transcriptions").run();
@@ -17,7 +17,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM chat_messages").run();
 });
 
-async function recording() {
+async function recording(capturedAtMs?: number) {
   const session = await openDeviceSession(
     env.DB,
     "record-owner",
@@ -26,6 +26,7 @@ async function recording() {
       deviceId: "pendant",
       deviceName: "Omi",
       codec: 1,
+      ...(capturedAtMs === undefined ? {} : { capturedAtMs }),
     },
     100
   );
@@ -83,6 +84,26 @@ test("verified completion atomically queues once, persists transcription and pro
     visibility: "private",
   });
   expect(await readConversations(env.DB, "another-owner")).toEqual([]);
+});
+
+test("recording conversation preserves capture provenance separately from server times", async () => {
+  for (const capturedAtMs of [undefined, 0, 8640000000000000]) {
+    const session = await recording(capturedAtMs);
+    await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+    const rows = await readConversations(env.DB, "record-owner");
+    const projected = rows.find((row) => row.id === `recording:${session.id}`)!;
+    const legacy = toLegacyConversation(projected);
+    expect(projected.startedAt).toBe(100);
+    expect(projected.finishedAt).toBe(102);
+    expect(legacy.started_at).toBe(new Date(100).toISOString());
+    if (capturedAtMs === undefined) {
+      expect(projected).not.toHaveProperty("capturedAtMs");
+      expect(legacy).not.toHaveProperty("captured_at_ms");
+    } else {
+      expect(projected.capturedAtMs).toBe(capturedAtMs);
+      expect(legacy.captured_at_ms).toBe(capturedAtMs);
+    }
+  }
 });
 
 test("incomplete uploads never queue and malformed audio fails without provider work", async () => {

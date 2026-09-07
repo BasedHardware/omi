@@ -1,4 +1,16 @@
 #import <Foundation/Foundation.h>
+#import <math.h>
+
+static BOOL OmiRecordingCapturedAtValid(id value) {
+  if (value == nil) return YES;
+  if (![value isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return NO;
+  double number = [value doubleValue];
+  return isfinite(number) && number >= 0 && number <= 8640000000000000.0 && number == floor(number);
+}
+static BOOL OmiRecordingCapturedAtMatches(id expected, id actual) {
+  return OmiRecordingCapturedAtValid(expected) && OmiRecordingCapturedAtValid(actual)
+    && (expected == nil ? actual == nil : [expected isEqual:actual]);
+}
 
 static BOOL OmiRecordingOffline(NSError *error) {
   if (![error.domain isEqual:NSURLErrorDomain]) return NO;

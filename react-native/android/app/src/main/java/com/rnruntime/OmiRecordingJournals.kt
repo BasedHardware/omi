@@ -7,6 +7,7 @@ import android.system.Os
 import android.system.OsConstants
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.ReadableType
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import org.json.JSONObject
@@ -66,6 +67,7 @@ internal class OmiRecordingJournals(
     putString("deviceId", entry.input.getString("deviceId"))
     if (entry.input.isNull("deviceName")) putNull("deviceName") else putString("deviceName", entry.input.getString("deviceName"))
     putInt("codec", entry.input.getInt("codec"))
+    OmiRecordingPolicy.capturedAt(entry.input.opt("capturedAtMs"))?.let { putDouble("capturedAtMs", it.toDouble()) }
     if (entry.sessionId == null) putNull("sessionId") else putString("sessionId", entry.sessionId)
     putArray("entries", Arguments.createArray().apply {
       for (record in if (includeEntries) entry.log.readAll() else emptyList()) if (record[0].toInt() == 0) pushString(String(record, 1, record.size - 1, Charsets.UTF_8))
@@ -77,9 +79,14 @@ internal class OmiRecordingJournals(
     val name = if (value.hasKey("deviceName")) value.getString("deviceName") else null
     val codec = value.getDouble("codec")
     require(deviceId.isNotBlank() && deviceId.length <= 256 && (name == null || name.length <= 256) && codec in 0.0..255.0 && codec % 1 == 0.0)
+    val capturedAt = if (value.hasKey("capturedAtMs")) {
+      require(value.getType("capturedAtMs") == ReadableType.Number)
+      OmiRecordingPolicy.capturedAt(value.getDouble("capturedAtMs"))
+    } else null
     budget(4096, true)
     val id = UUID.randomUUID().toString()
     val input = JSONObject().put("deviceId", deviceId).put("deviceName", name ?: JSONObject.NULL).put("codec", codec.toInt())
+    if (capturedAt != null) input.put("capturedAtMs", capturedAt)
     val log = open(owner, id)
     try { log.append(byteArrayOf(1) + input.toString().toByteArray()) }
     catch (error: Exception) { log.close(); throw error }
@@ -104,6 +111,7 @@ internal class OmiRecordingJournals(
         if (records.isEmpty()) { log.close(); check(file.delete()); sync(directory); continue }
         require(records[0][0].toInt() == 1)
         val input = JSONObject(String(records[0], 1, records[0].size - 1, Charsets.UTF_8))
+        OmiRecordingPolicy.capturedAt(input.opt("capturedAtMs"))
         val entry = Entry(id, owner, file, log, input)
         for (record in records.drop(1)) {
           require(record.isNotEmpty() && (record[0].toInt() == 0 || record[0].toInt() == 2))
@@ -139,7 +147,8 @@ internal class OmiRecordingJournals(
     if (path == "/v1/device-sessions" && method == "POST") {
       val body = JSONObject(request.getString("body").orEmpty())
       require(body.getString("captureId") == entry.id && body.getString("deviceId") == entry.input.getString("deviceId")
-        && body.getInt("codec") == entry.input.getInt("codec") && body.optString("deviceName", null) == entry.input.optString("deviceName", null))
+        && body.getInt("codec") == entry.input.getInt("codec")
+        && OmiRecordingPolicy.capturedAtMatches(entry.input.opt("capturedAtMs"), body.opt("capturedAtMs")) && body.optString("deviceName", null) == entry.input.optString("deviceName", null))
     } else {
       val base = "/v1/device-sessions/${entry.sessionId ?: error("Recording session is not acknowledged") }"
       require((method == "POST" && path in setOf("$base/audio", "$base/complete", "$base/transcribe"))
@@ -153,7 +162,8 @@ internal class OmiRecordingJournals(
     val session = JSONObject(response.getString("body").orEmpty()).getJSONObject("session")
     val id = session.getString("id")
     require(uuid.matches(id) && session.getString("deviceId") == entry.input.getString("deviceId")
-      && session.getInt("codec") == entry.input.getInt("codec") && (entry.sessionId == null || entry.sessionId == id))
+      && session.getInt("codec") == entry.input.getInt("codec")
+      && OmiRecordingPolicy.capturedAtMatches(entry.input.opt("capturedAtMs"), session.opt("capturedAtMs")) && (entry.sessionId == null || entry.sessionId == id))
     if (entry.sessionId == null) {
       budget(512)
       entry.log.append(byteArrayOf(2) + id.toByteArray())

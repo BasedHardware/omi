@@ -43,7 +43,7 @@ them. A paired canonical capture and conversation migration is still required th
 
 | Request | Result |
 | --- | --- |
-| `POST /v1/device-sessions` with `captureId`, `deviceId`, optional `deviceName`, and numeric `codec` | 201 `{session}`; UUID-v4 `captureId` is stable client retry identity, and the server chooses the session ID |
+| `POST /v1/device-sessions` with `captureId`, `deviceId`, optional `deviceName` and `capturedAtMs`, and numeric `codec` | 201 `{session}`; UUID-v4 `captureId` is stable client retry identity, and the server chooses the session ID |
 | `POST /v1/device-sessions/:id/audio` with `{chunks:[{chunkIndex,bytesBase64},...]}` | 200 `{session}` after every indexed packet in the batch is durable; exact full or prefix replay does not increment counters twice |
 | `POST /v1/device-sessions/:id/complete` | 200 `{session}` after upload completion commits; exact replay retains the original completion timestamp |
 | `GET /v1/device-sessions/:id` | 200 `{session}`, or 404 for an unknown session in the authenticated account |
@@ -56,9 +56,20 @@ valid after completion. A batch contains 1–128 consecutive packets, at most 1 
 of decoded audio in total, and at most 2 MiB of encoded JSON. The session retains
 the 8-MiB limit and 65,536 contiguous zero-based packet indices. Invalid
 JSON, noncanonical base64, substituted transcript fields, and invalid UUIDs fail
-before mutation. Errors retain the client `{error:{code}}` envelope. Timestamps
-are Unix seconds on the session; transcript `updatedAt` retains the existing
-client's Unix milliseconds wire.
+before mutation. Errors retain the client `{error:{code}}` envelope. Session `startedAt` and `endedAt`, and transcript `updatedAt`, are Unix
+milliseconds. Migration 0054 corrects the portable session JSON units to match the
+existing Worker and app wire; PostgreSQL timestamps and processing durations are unchanged.
+
+Migration 0054 and Worker migration `0009_device_capture_time.sql` store optional
+`capturedAtMs`: the native app receipt time of the first audio packet, as a safe
+integer from 0 through 8,640,000,000,000,000 Unix milliseconds. Null, fractional,
+and out-of-range request values are rejected. Historical or omitted values remain
+unknown and are omitted from session responses; neither recovery nor migration
+substitutes the current time. Presence and value are immutable capture metadata:
+replaying the same capture ID with a changed or newly omitted timestamp returns 409.
+Conversation projections expose the optional value without changing ordering,
+pagination, server start/end times, decoded duration, or billing. This is display
+provenance, not trusted device chronology or an authorization input.
 
 Migration 0048 attaches immutable device metadata and bytea chunks to canonical
 `listen_capture_sessions`. Application credentials receive fixed operations,

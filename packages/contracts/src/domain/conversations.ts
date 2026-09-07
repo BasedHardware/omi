@@ -38,6 +38,7 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   startedAt: number | null;
+  capturedAtMs?: number;
   finishedAt: number | null;
   /**
    * Legacy `ConversationSource` is a large open set with a `_missing_` →

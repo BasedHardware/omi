@@ -19,6 +19,7 @@ export type ConversationProjection = {
   createdAt: number;
   updatedAt: number;
   startedAt: number | null;
+  capturedAtMs?: number;
   finishedAt: number | null;
   source: string;
   status: string;
@@ -37,6 +38,7 @@ export type LegacyConversationRecord = {
   created_at: string;
   updated_at: string;
   started_at: string | null;
+  captured_at_ms?: number;
   finished_at: string | null;
   source: string;
   status: string;
@@ -110,13 +112,14 @@ export async function readConversations(
   const conversations = result.results.map(projectConversation);
   const recordings = await db
     .prepare(
-      "SELECT s.id, s.started_at, s.ended_at, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
+      "SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(trim(t.text), 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC"
     )
     .bind(accountId)
     .all<{
       id: string;
       started_at: number;
       ended_at: number | null;
+      captured_at_ms: number | null;
       state: string;
       text: string | null;
       updated_at: number;
@@ -131,6 +134,9 @@ export async function readConversations(
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,
+      ...(recording.captured_at_ms == null
+        ? {}
+        : { capturedAtMs: recording.captured_at_ms }),
       finishedAt: recording.ended_at,
       source: "omi",
       status:
@@ -213,6 +219,9 @@ export function toLegacyConversation(
     created_at: iso(item.createdAt),
     updated_at: iso(item.updatedAt),
     started_at: item.startedAt === null ? null : iso(item.startedAt),
+    ...(item.capturedAtMs === undefined
+      ? {}
+      : { captured_at_ms: item.capturedAtMs }),
     finished_at: item.finishedAt === null ? null : iso(item.finishedAt),
     source: item.source,
     status: item.status,

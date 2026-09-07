@@ -23,12 +23,14 @@ export type NativeHttpResponse = {
 };
 
 export type RecordingJournalInput = {
+  capturedAtMs?: number;
   deviceId: string;
   deviceName?: string;
   codec: number;
 };
 
 export type RecordingJournal = {
+  capturedAtMs?: number;
   handle: string;
   captureId: string;
   deviceId: string;
@@ -133,6 +135,7 @@ export type OmiNativeEvent =
   | {type: 'battery'; deviceId: string; battery: number}
   | {
       type: 'audio';
+      capturedAtMs?: number;
       deviceId: string;
       connectionId: string;
       codec: number;

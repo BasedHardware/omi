@@ -45,6 +45,13 @@ export function createD1Mock(): D1Database {
     )
   );
 
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0009_device_capture_time.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
   const prepareStatement = (
     sql: string,
     bindings: unknown[] = []

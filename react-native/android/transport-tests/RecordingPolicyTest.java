@@ -2,6 +2,20 @@ package com.rnruntime;
 
 public final class RecordingPolicyTest {
   public static void main(String[] args) {
+    assert OmiRecordingPolicy.capturedAt(null) == null;
+    assert OmiRecordingPolicy.capturedAt(0d) == 0L;
+    assert OmiRecordingPolicy.capturedAt(8640000000000000d) == 8640000000000000L;
+    assert OmiRecordingPolicy.capturedAt(1720000000123d) == 1720000000123L;
+    assert OmiRecordingPolicy.capturedAtMatches(null, null);
+    assert !OmiRecordingPolicy.capturedAtMatches(null, 0d);
+    assert !OmiRecordingPolicy.capturedAtMatches(0d, null);
+    assert OmiRecordingPolicy.capturedAtMatches(1720000000123L, 1720000000123d);
+    assert !OmiRecordingPolicy.capturedAtMatches(1720000000123L, 1720000000124d);
+    for (Object malformed : new Object[]{true, false, "1720000000123", -1, 0.5, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 8640000000000001d, new Object()}) {
+      boolean rejected = false;
+      try { OmiRecordingPolicy.capturedAt(malformed); } catch (IllegalArgumentException expected) { rejected = true; }
+      assert rejected;
+    }
     assert OmiRecordingPolicy.rememberedIdentity("device", "Omi");
     assert !OmiRecordingPolicy.rememberedIdentity(null, "Omi");
     assert !OmiRecordingPolicy.rememberedIdentity("device", "");

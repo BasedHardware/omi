@@ -305,6 +305,7 @@ test('opens a recording row into the full transcript detail and retires it on ba
     expect(textOf(renderer)).toContain(
       'Actual full transcript beyond the summary',
     );
+    expect(textOf(renderer)).not.toContain('Captured (device time)');
     expect(textOf(renderer)).not.toContain('Unlocked record');
     expect(textOf(renderer)).not.toContain('Active record');
     expect(textOf(renderer)).not.toContain('Locked');
@@ -316,7 +317,9 @@ test('opens a recording row into the full transcript detail and retires it on ba
             ...outcome,
             value: {
               ...outcome.value,
-              items: [{...item, locked: true, discarded: true}],
+              items: [
+                {...item, locked: true, discarded: true, capturedAtMs: 0},
+              ],
             },
           }}
           loading={false}
@@ -324,6 +327,9 @@ test('opens a recording row into the full transcript detail and retires it on ba
         />,
       );
     });
+    expect(textOf(renderer)).toContain('Captured (device time)');
+    expect(textOf(renderer)).toContain('Started ·');
+    expect(textOf(renderer)).toContain('Finished ·');
     expect(textOf(renderer)).toContain('Locked');
     expect(textOf(renderer)).toContain('Discarded');
     expect(

@@ -29,6 +29,9 @@ const mockBackend = {
       mockRecords.length + 1,
     ).padStart(12, '0')}`;
     const journal: RecordingJournal = {
+      ...(input.capturedAtMs === undefined
+        ? {}
+        : {capturedAtMs: input.capturedAtMs}),
       handle: id,
       captureId: id,
       sessionId: null,
@@ -71,6 +74,9 @@ const mockBackend = {
         status: 200,
         body: JSON.stringify({
           session: {
+            ...(record.journal.capturedAtMs === undefined
+              ? {}
+              : {capturedAtMs: record.journal.capturedAtMs}),
             id: record.journal.sessionId,
             deviceId: record.journal.deviceId,
             deviceName: record.journal.deviceName,
@@ -298,11 +304,14 @@ test.each(['maxSessionBytes', 'maxChunks'] as const)(
     });
     const view = await render();
     try {
-      await emit(audio(65534, 0));
-      await emit(audio(65535, 1));
+      await emit({...audio(65534, 0), capturedAtMs: 1000});
+      await emit({...audio(65535, 1), capturedAtMs: 1500});
       expect(mockRecords).toHaveLength(1);
-      await emit(audio(0, 0));
+      await emit({...audio(0, 0), capturedAtMs: 2000});
       expect(mockRecords).toHaveLength(2);
+      expect(mockRecords.map(record => record.journal.capturedAtMs)).toEqual([
+        1000, 2000,
+      ]);
       expect(mockRecords[0]!.complete).toBe(true);
       expect(mockRecords[0]!.packets).toEqual([
         audio(65534, 0).payloadBase64,
@@ -375,6 +384,27 @@ test('automatic rollover retains the global budget while the preceding upload dr
     Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {
       value: pending,
     });
+    await ReactTestRenderer.act(async () => view.unmount());
+  }
+});
+
+test('recording rotation preserves the actual first native packet time for each journal and open', async () => {
+  const view = await render();
+  try {
+    await emit({...audio(10, 0), capturedAtMs: 1000});
+    await emit({...audio(11, 1), capturedAtMs: 1500});
+    await emit(press);
+    await emit({...audio(12, 0), capturedAtMs: 2000});
+    expect(mockRecords.map(record => record.journal.capturedAtMs)).toEqual([
+      1000, 2000,
+    ]);
+    const opens = mockBackend.requestRecordingJournal.mock.calls.filter(
+      ([, request]) => request.path === '/v1/device-sessions',
+    );
+    expect(
+      opens.map(([, request]) => JSON.parse(request.body!).capturedAtMs),
+    ).toEqual([1000, 2000]);
+  } finally {
     await ReactTestRenderer.act(async () => view.unmount());
   }
 });
