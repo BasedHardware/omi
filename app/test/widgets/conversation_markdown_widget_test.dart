@@ -54,4 +54,40 @@ final answer = 42;
     expect(find.text('quoted text'), findsOneWidget);
     expect(find.text('final answer = 42;'), findsOneWidget);
   });
+
+  testWidgets('conversation markdown headers keep vertical breathing room', (tester) async {
+    const content = '''Intro paragraph.
+
+## Iran conflict
+
+Body under h2.
+
+### Strait of Hormuz
+
+Body under h3.
+
+#### Drones and mines
+
+Body under h4.
+''';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: const Scaffold(
+          body: CustomScrollView(slivers: [ConversationMarkdownSliver(content: content)]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final title in ['Iran conflict', 'Strait of Hormuz', 'Drones and mines']) {
+      final padding = tester.widgetList<Padding>(find.ancestor(of: find.text(title), matching: find.byType(Padding)));
+      expect(
+        padding.any((widget) => widget.padding == conversationMarkdownHeaderPadding),
+        isTrue,
+        reason: 'expected header padding on "$title"',
+      );
+    }
+  });
 }
