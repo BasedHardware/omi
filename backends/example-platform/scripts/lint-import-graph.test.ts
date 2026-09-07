@@ -709,3 +709,13 @@ test("migration fence rejects drivers/ importing migration/", () => {
     rmSync(fixture, { force: true });
   }
 });
+
+
+test("rule 17 recognizes the production memory process used by identity acceptance", () => {
+  withWirePathFixture([
+    'import { createPostgresFirebaseAuthorizedMemoryServiceProcess } from "../drivers/postgres/firebase-authorized-memory-service-process";',
+    'const process = createPostgresFirebaseAuthorizedMemoryServiceProcess(options);',
+    'const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => process.fetch(request) });',
+    'await fetch(new URL("/v1/memories", server.url));',
+  ].join("\n"), result => expect(result.status).toBe(0));
+});

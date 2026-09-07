@@ -11,11 +11,14 @@
  * `bun run test:postgres:preserve`.
  */
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 
+import type { TreeInputSnapshot } from "../core/retrieve/index";
+import { buildDeterministicAnchors } from "../core/retrieve/tree";
+import { renderStructuralTree } from "../core/retrieve/render";
 import { InvalidMcpCursorError } from "../apps/mcp/cursor";
 import { createServedCounter } from "../apps/service/observability/served-count";
 import { createFirebaseAdminIdTokenAdapter } from "../drivers/firebase/admin-id-token";
@@ -27,7 +30,11 @@ import { createPostgresProductionRuntimeReadiness } from
 import {
   AUTH_EMULATOR_PORT,
   FIREBASE_AUTH_EMULATOR_HOST_VALUE,
-  IDENTITY_FIREBASE_JSON,
+  IDENTITY_PID_FILE,
+  IDENTITY_LOG_FILE,
+  mintEmulatorIdentity,
+  portHeld,
+  withIdentityLease,
 } from "./prod-local-identity";
 import {
   LOCAL_APPLICATION_ID,
@@ -42,55 +49,59 @@ import {
 } from "./postgres-test-lifecycle";
 
 const PROJECT_ROOT = realpathSync(resolve(import.meta.dir, ".."));
-const LISTEN_PORT = 4851;
 
-const fail = (message: string): never => {
-  process.stderr.write(`\n${message}\n\n`);
-  process.exit(1);
-};
 
-const run = (
-  args: readonly string[],
-  env: NodeJS.ProcessEnv = process.env,
-): { readonly status: number | null; readonly out: string } => {
-  const result = spawnSync("bun", ["run", ...args], {
-    cwd: PROJECT_ROOT,
-    encoding: "utf8",
-    env,
+const fail = (message: string): never => { throw new Error(message); };
+
+const run = (args: readonly string[], env: NodeJS.ProcessEnv): void => {
+  const result = spawnSync(process.execPath, ["run", ...args], {
+    cwd: PROJECT_ROOT, encoding: "utf8", env, timeout: 90_000,
   });
-  return { status: result.status, out: `${result.stdout}${result.stderr}` };
+  if (result.status !== 0 || result.error) throw new Error(`identity acceptance command failed: ${args[0]} (exit=${result.status ?? "none"}, signal=${result.signal ?? "none"}, error=${result.error ? "spawn_or_timeout" : "none"}); emulator log: ${IDENTITY_LOG_FILE}`);
 };
 
-const listeners = (port: number): string => {
-  const result = spawnSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], {
-    encoding: "utf8",
-  });
-  return result.stdout ?? "";
+export const assertIdentityAcceptance = (statuses: { health: number; ready: number; authorized: number; denied: number }): void => {
+  if (statuses.health !== 200 || statuses.ready !== 200 || statuses.authorized !== 200 || statuses.denied !== 403)
+    throw new Error(`identity acceptance requires health200, ready200, authorized200 and unseeded403; received ${JSON.stringify(statuses)}`);
 };
 
-const ownedEmulatorPids = (): string => {
-  const result = spawnSync("pgrep", ["-f", IDENTITY_FIREBASE_JSON], { encoding: "utf8" });
-  return (result.stdout ?? "").trim();
-};
-
-const curl = async (
-  path: string,
-  headers: Readonly<Record<string, string>> = {},
-): Promise<{ readonly status: number; readonly body: string }> => {
-  const response = await fetch(`http://127.0.0.1:${LISTEN_PORT}${path}`, { headers });
-  return { status: response.status, body: await response.text() };
-};
-
-const waitFor = async (probe: () => Promise<boolean>, timeoutMs: number): Promise<boolean> => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await probe()) return true;
-    await Bun.sleep(200);
+export const runOwnedIdentityAcceptance = async (
+  start: () => Promise<void>, prove: () => Promise<void>, stop: () => Promise<void>,
+): Promise<void> => {
+  let failed = false;
+  try { await start(); await prove(); } catch (cause) { failed = true; throw cause; }
+  finally {
+    try { await stop(); } catch (cause) { if (!failed) throw cause; }
   }
-  return probe();
 };
 
-const proveViaProcessFetch = async (
+export const closeIdentityAcceptance = async (
+  stopServer: () => unknown | Promise<unknown>,
+  stopProcess: () => Promise<{ kind: string; drained?: boolean } | undefined>,
+  closeIdentity: () => unknown | Promise<unknown>, closePool: () => unknown | Promise<unknown>,
+): Promise<void> => {
+  let failed = false;
+  try { await stopServer(); } catch { failed = true; }
+  try {
+    const outcome = await stopProcess();
+    if (outcome && (outcome.kind !== "stopped" || outcome.drained !== true)) failed = true;
+  } catch { failed = true; }
+  const closed = await Promise.allSettled([
+    Promise.resolve().then(closeIdentity), Promise.resolve().then(closePool),
+  ]);
+  if (failed || closed.some(result => result.status === "rejected"))
+    throw new Error("identity acceptance resource cleanup failed");
+};
+
+export const produceIdentityAcceptanceRenders = async (projected: TreeInputSnapshot) => {
+            if (projected.claims.length !== 0) throw new Error("identity acceptance requires an empty account");
+            return renderStructuralTree(buildDeterministicAnchors(projected), projected, {
+              render: async () => { throw new Error("identity acceptance must not invoke a model"); },
+            }, { strategy: "application-memory-render", model_version: "identity-acceptance-no-model",
+              prompt_version: "grounded-memory-v1", policy_version: "authorized-claims-v1", schema_version: "summary-citations-v1" });
+};
+
+const proveViaOwnedHttp = async (
   seededToken: string,
   unseededToken: string,
 ): Promise<{
@@ -133,12 +144,17 @@ const proveViaProcessFetch = async (
     tryWithSessionAdvisoryLock: ownerPool.tryWithSessionAdvisoryLock.bind(ownerPool),
     close: () => ownerPool.close(),
   });
-  const identity = await createFirebaseAdminIdTokenAdapter({
+  let identity: Awaited<ReturnType<typeof createFirebaseAdminIdTokenAdapter>> | undefined;
+  let memoryProcess: ReturnType<typeof createPostgresFirebaseAuthorizedMemoryServiceProcess> | undefined;
+  let server: ReturnType<typeof Bun.serve> | undefined;
+  let failed = false;
+  try {
+  identity = await createFirebaseAdminIdTokenAdapter({
     project_id: LOCAL_FIREBASE_PROJECT_ID,
     app_name: `omi-prod-local-e2e-${process.pid}`,
     runtime_mode: "local_test",
   });
-  const memoryProcess = createPostgresFirebaseAuthorizedMemoryServiceProcess({
+  memoryProcess = createPostgresFirebaseAuthorizedMemoryServiceProcess({
     pool,
     service_options: {
       mcp_handler: async () => new Response(JSON.stringify({ status: "unavailable" }), { status: 503 }),
@@ -155,7 +171,7 @@ const proveViaProcessFetch = async (
         product: {
           account_timezone: "UTC",
           codec_root_secret: randomBytes(32),
-          produce_renders: async () => [],
+          produce_renders: produceIdentityAcceptanceRenders,
           verify_cursor: () => { throw new InvalidMcpCursorError(); },
           issue_cursor: () => { throw new InvalidMcpCursorError(); },
           trace_sink: () => undefined,
@@ -172,12 +188,14 @@ const proveViaProcessFetch = async (
     ),
     graceful_shutdown_ms: 4_000,
   });
-  try {
     await memoryProcess.start();
+    server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => memoryProcess!.fetch(request) });
+    const origin = `http://127.0.0.1:${server.port}`;
     const read = async (path: string, token?: string) => {
-      const response = await memoryProcess.fetch(new Request(`http://127.0.0.1${path}`, {
+      const response = await fetch(`${origin}${path}`, {
+        signal: AbortSignal.timeout(10_000),
         headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
-      }));
+      });
       return { status: response.status, body: await response.text() };
     };
     return {
@@ -186,115 +204,48 @@ const proveViaProcessFetch = async (
       authorized: await read("/v1/memories?limit=5", seededToken),
       denied: await read("/v1/memories?limit=5", unseededToken),
     };
-  } finally {
-    await memoryProcess.stop();
-    try { await identity.close(); } catch { /* closed failure stays closed */ }
-    await ownerPool.close();
+  } catch (cause) { failed = true; throw cause; } finally {
+    try {
+      await closeIdentityAcceptance(() => server?.stop(true), async () => memoryProcess?.stop(),
+        () => identity?.close(), () => ownerPool.close());
+    } catch (cause) { if (!failed) throw cause; }
+
   }
 };
 
-const main = async (): Promise<void> => {
-  const portLease = listeners(LISTEN_PORT);
-  const started = run(["scripts/prod-local-identity.ts", "--start"]);
-  if (started.status !== 0) return fail(started.out);
-  process.stdout.write(started.out);
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    FIREBASE_AUTH_EMULATOR_HOST: FIREBASE_AUTH_EMULATOR_HOST_VALUE,
-  };
-  let server: ReturnType<typeof spawn> | null = null;
+const main = async (): Promise<void> => withIdentityLease(async lease => {
+  if (existsSync(IDENTITY_PID_FILE) || portHeld(AUTH_EMULATOR_PORT))
+    throw new Error("identity acceptance requires an unused owned emulator slot; existing services were not changed");
+  const previousHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  process.env.FIREBASE_AUTH_EMULATOR_HOST = FIREBASE_AUTH_EMULATOR_HOST_VALUE;
+  const env = { ...process.env, OMI_IDENTITY_LIFECYCLE_LEASE: lease };
   try {
-    const seededMint = run(["scripts/prod-local-identity.ts", "--mint"], env);
-    if (seededMint.status !== 0) return fail(seededMint.out);
-    process.stdout.write(seededMint.out);
-    const seededUid = /uid\s+(\S+)/.exec(seededMint.out)?.[1];
-    const seededToken = /Authorization: Bearer (\S+)/.exec(seededMint.out)?.[1];
-    if (!seededUid || !seededToken) return fail("omi prod-local-identity-e2e: mint did not print uid and bearer.");
-
-    const unseededMint = run(["scripts/prod-local-identity.ts", "--mint"], env);
-    if (unseededMint.status !== 0) return fail(unseededMint.out);
-    const unseededUid = /uid\s+(\S+)/.exec(unseededMint.out)?.[1];
-    const unseededToken = /Authorization: Bearer (\S+)/.exec(unseededMint.out)?.[1];
-    if (!unseededUid || !unseededToken) {
-      return fail("omi prod-local-identity-e2e: second mint did not print uid and bearer.");
-    }
-
-    const seeded = run(["scripts/prod-local-identity-seed.ts", "--uid", seededUid], env);
-    if (seeded.status !== 0) return fail(seeded.out);
-    process.stdout.write(seeded.out);
-
-    let health: { readonly status: number; readonly body: string };
-    let ready: { readonly status: number; readonly body: string };
-    let authorized: { readonly status: number; readonly body: string };
-    let denied: { readonly status: number; readonly body: string };
-
-    if (portLease.includes("(LISTEN)")) {
-      process.stdout.write(
-        `omi prod-local-identity-e2e: port ${LISTEN_PORT} is leased; proving via the same fetch handler prod-local serves.\n`
-        + portLease
-        + `  Find it: lsof -nP -iTCP:${LISTEN_PORT} -sTCP:LISTEN\n`,
-      );
-      const proof = await proveViaProcessFetch(seededToken, unseededToken);
-      health = proof.health;
-      ready = proof.ready;
-      authorized = proof.authorized;
-      denied = proof.denied;
-    } else {
-      server = spawn("bun", ["run", "scripts/prod-local.ts", "--local-identity"], {
-        cwd: PROJECT_ROOT,
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      let boot = "";
-      server.stdout?.on("data", (chunk: Buffer | string) => { boot += chunk.toString(); });
-      server.stderr?.on("data", (chunk: Buffer | string) => { boot += chunk.toString(); });
-      const booted = await waitFor(async () => boot.includes("omi prod-local is up"), 20_000);
-      if (!booted) return fail(`omi prod-local-identity-e2e: prod-local did not boot.\n${boot}`);
-      process.stdout.write(boot);
-      health = await curl("/health");
-      ready = await curl("/ready");
-      authorized = await curl("/v1/memories?limit=5", {
-        authorization: `Bearer ${seededToken}`,
-      });
-      denied = await curl("/v1/memories?limit=5", {
-        authorization: `Bearer ${unseededToken}`,
-      });
-    }
-
-    process.stdout.write(
-      `\nE2E_HEALTH ${health.status} ${health.body}\n`
-      + `E2E_READY ${ready.status} ${ready.body}\n`
-      + `E2E_SEEDED_UID ${seededUid} ${authorized.status} ${authorized.body}\n`
-      + `E2E_UNSEEDED_UID ${unseededUid} ${denied.status} ${denied.body}\n`,
+    await runOwnedIdentityAcceptance(
+      async () => run(["scripts/prod-local-identity.ts", "--start"], env),
+      async () => {
+        const seeded = await mintEmulatorIdentity();
+        const unseeded = await mintEmulatorIdentity();
+        run(["scripts/prod-local-identity-seed.ts", "--uid", seeded.uid], env);
+        const proof = await proveViaOwnedHttp(seeded.idToken, unseeded.idToken);
+        const statuses = { health: proof.health.status, ready: proof.ready.status,
+          authorized: proof.authorized.status, denied: proof.denied.status };
+        assertIdentityAcceptance(statuses);
+        process.stdout.write(`${JSON.stringify({ proof: "local-emulator-identity-admission-only", ...statuses })}\n`);
+      },
+      async () => run(["scripts/prod-local-identity.ts", "--stop"], env),
     );
-
-    if (authorized.status !== 200) {
-      return fail(`omi prod-local-identity-e2e: seeded uid did not return 200 (${authorized.status}).`);
-    }
-    if (denied.status === 200) {
-      return fail("omi prod-local-identity-e2e: unseeded uid was not denied.");
-    }
+    if (portHeld(AUTH_EMULATOR_PORT) || existsSync(IDENTITY_PID_FILE))
+      throw new Error("identity acceptance emulator cleanup incomplete");
+    process.stdout.write("identity acceptance owned emulator cleanup passed\n");
   } finally {
-    if (server?.pid) {
-      try { process.kill(server.pid, "SIGTERM"); } catch { /* already exited */ }
-      await waitFor(async () => !listeners(LISTEN_PORT).includes("(LISTEN)"), 8_000);
-    }
-    const stopped = run(["scripts/prod-local-identity.ts", "--stop"]);
-    process.stdout.write(stopped.out);
+    if (previousHost === undefined) delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
+    else process.env.FIREBASE_AUTH_EMULATOR_HOST = previousHost;
   }
-
-  const leftoverPorts = listeners(AUTH_EMULATOR_PORT);
-  const leftoverPids = ownedEmulatorPids();
-  process.stdout.write(
-    `E2E_TEARDOWN_LSOF ${leftoverPorts.trim() || "none"}\n`
-    + `E2E_TEARDOWN_PGREP ${leftoverPids || "none"}\n`,
-  );
-  if (leftoverPorts.includes("(LISTEN)") || leftoverPids.length > 0) {
-    return fail("omi prod-local-identity-e2e: owned emulator leaked after --stop.");
-  }
-};
+});
 
 if (import.meta.main) {
-  await main();
+  try { await main(); } catch (cause) {
+    process.stderr.write(`${cause instanceof Error ? cause.message : "identity acceptance failed"}\n`);
+    process.exitCode = 1;
+  }
 }

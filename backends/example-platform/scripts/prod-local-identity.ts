@@ -17,9 +17,11 @@
  */
 
 import {
-  existsSync, mkdirSync, readFileSync, rmSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync, openSync, closeSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { spawn, spawnSync } from "node:child_process";
 
 export const LOCAL_FIREBASE_PROJECT_ID = "omi-local-pg";
 export const AUTH_EMULATOR_HOST = "127.0.0.1";
@@ -27,7 +29,8 @@ export const AUTH_EMULATOR_PORT = 19_099;
 export const AUTH_EMULATOR_HUB_PORT = 14_400;
 export const AUTH_EMULATOR_LOGGING_PORT = 14_500;
 export const FIREBASE_AUTH_EMULATOR_HOST_VALUE = `${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`;
-export const IDENTITY_STATE_ROOT = "/Volumes/Ephemeral/scratch/omi-prod-local-identity";
+export const IDENTITY_STATE_ROOT = join(tmpdir(), "omi-prod-local-identity");
+export const FIREBASE_TOOLS_VERSION = "15.25.1";
 export const IDENTITY_PID_FILE = `${IDENTITY_STATE_ROOT}/emulator.pid`;
 export const IDENTITY_LOG_FILE = `${IDENTITY_STATE_ROOT}/emulator.log`;
 export const IDENTITY_FIREBASE_JSON = `${IDENTITY_STATE_ROOT}/firebase.json`;
@@ -79,24 +82,67 @@ export const firebaseEmulatorConfig = (): Readonly<{
   }),
 });
 
-const fail = (message: string): never => {
-  process.stderr.write(`\n${message}\n\n`);
-  process.exit(1);
+export const withIdentityLease = async <Result>(
+  callback: (token: string) => Promise<Result>, inheritedToken?: string, stateRoot = IDENTITY_STATE_ROOT,
+): Promise<Result> => {
+  mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
+  const leasePath = join(stateRoot, "lifecycle.lease");
+  if (inheritedToken !== undefined) {
+    if (!/^[a-f0-9-]{36}$/.test(inheritedToken) || !existsSync(leasePath)
+      || readFileSync(leasePath, "utf8") !== inheritedToken)
+      throw new Error("omi prod-local-identity: invalid inherited lifecycle lease.");
+    return callback(inheritedToken);
+  }
+  const token = crypto.randomUUID();
+  const descriptor = openSync(leasePath, "wx", 0o600);
+  try {
+    writeFileSync(descriptor, token);
+    return await callback(token);
+  } finally { closeSync(descriptor); rmSync(leasePath, { force: true }); }
 };
 
-const portListeners = (port: number): string => {
-  const result = Bun.spawnSync(["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return result.stdout.toString();
-};
+const fail = (message: string): never => { throw new Error(message); };
 
-const portHeld = (port: number): boolean => portListeners(port).includes("(LISTEN)");
+export const portHeld = (port: number): boolean => {
+  try {
+    const probe = Bun.serve({ hostname: AUTH_EMULATOR_HOST, port, fetch: () => new Response(null, { status: 503 }) });
+    probe.stop(true);
+    return false;
+  } catch (cause) {
+    if ((cause as { code?: string }).code === "EADDRINUSE") return true;
+    throw cause;
+  }
+};
 
 const processAlive = (pid: number): boolean => {
-  const result = Bun.spawnSync(["kill", "-0", String(pid)], { stdout: "pipe", stderr: "pipe" });
-  return result.exitCode === 0;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+};
+
+export const ownedPidMatches = (record: OwnedEmulatorPid, command: string): boolean =>
+  command.includes(IDENTITY_FIREBASE_JSON) && command.includes("emulators:start")
+    && command.includes("firebase") && record.configPath === IDENTITY_FIREBASE_JSON
+    && record.authPort === AUTH_EMULATOR_PORT;
+
+const verifiedOwnedPid = (record: OwnedEmulatorPid): boolean => {
+  const result = spawnSync("ps", ["-p", String(record.pid), "-o", "pgid=", "-o", "command="], { encoding: "utf8", timeout: 2000 });
+  if (result.error) throw new Error("omi prod-local-identity: cannot verify process ownership.");
+  const row = /^\s*(\d+)\s+(.+)$/s.exec(result.stdout.trim());
+  return result.status === 0 && row !== null && Number(row[1]) === record.pid && ownedPidMatches(record, row[2]!);
+};
+
+export const signalOwnedEmulator = (record: OwnedEmulatorPid, signal: "SIGTERM" | "SIGKILL"): void => {
+  if (!verifiedOwnedPid(record)) throw new Error("omi prod-local-identity: recorded PID is not the owned emulator; refusing to signal it.");
+  process.kill(-record.pid, signal);
+};
+
+export const installedFirebaseCli = (): string => {
+  const binary = Bun.which("firebase");
+  if (!binary) throw new Error("omi prod-local-identity: install firebase-tools 15.25.1 before running.");
+  const path = realpathSync(binary);
+  const manifest = JSON.parse(readFileSync(join(dirname(path), "../../package.json"), "utf8"));
+  if (manifest.name !== "firebase-tools" || manifest.version !== FIREBASE_TOOLS_VERSION)
+    throw new Error("omi prod-local-identity: installed firebase-tools version must be 15.25.1.");
+  return path;
 };
 
 const parsePidFile = (raw: string): OwnedEmulatorPid | null => {
@@ -122,16 +168,9 @@ const loadPidFile = (): OwnedEmulatorPid | null => {
   return parsePidFile(readFileSync(IDENTITY_PID_FILE, "utf8"));
 };
 
-const ownedProcesses = (): readonly number[] => {
-  const result = Bun.spawnSync(["pgrep", "-f", IDENTITY_FIREBASE_JSON], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (result.exitCode !== 0) return [];
-  return result.stdout.toString().split("\n")
-    .map((line) => Number(line.trim()))
-    .filter((pid) => Number.isSafeInteger(pid) && pid > 1);
-};
+export const emulatorChildEnvironment = (env: NodeJS.ProcessEnv, executable = process.execPath): NodeJS.ProcessEnv => ({
+  ...env, PATH: dirname(executable), FIREBASE_AUTH_EMULATOR_HOST: FIREBASE_AUTH_EMULATOR_HOST_VALUE,
+});
 
 const writeOwnedConfig = (): void => {
   mkdirSync(IDENTITY_STATE_ROOT, { recursive: true, mode: 0o700 });
@@ -147,7 +186,7 @@ const writeOwnedConfig = (): void => {
 
 const emulatorReady = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`http://${FIREBASE_AUTH_EMULATOR_HOST_VALUE}/`);
+    const response = await fetch(`http://${FIREBASE_AUTH_EMULATOR_HOST_VALUE}/`, { signal: AbortSignal.timeout(2000) });
     return response.status >= 200 && response.status < 500;
   } catch {
     return false;
@@ -163,9 +202,18 @@ const waitUntil = async (probe: () => Promise<boolean>, timeoutMs: number): Prom
   return probe();
 };
 
+export const assertIdentityRuntime = (version = Bun.version): void => {
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  if (manifest.packageManager !== `bun@${version}`)
+    throw new Error(`omi prod-local-identity: emulator startup requires the project-pinned ${manifest.packageManager}; received bun@${version}. Run this command with the pinned Bun binary.`);
+};
+
 const startOwned = async (): Promise<void> => {
+  assertIdentityRuntime();
   const existing = loadPidFile();
-  if (existing !== null && processAlive(existing.pid) && portHeld(AUTH_EMULATOR_PORT)
+  if (existing !== null && processAlive(existing.pid) && !verifiedOwnedPid(existing))
+    throw new Error("omi prod-local-identity: existing PID is not owned.");
+  if (existing !== null && verifiedOwnedPid(existing) && processAlive(existing.pid) && portHeld(AUTH_EMULATOR_PORT)
     && await emulatorReady()) {
     process.stdout.write(
       `omi prod-local-identity: reusing owned Auth emulator on ${FIREBASE_AUTH_EMULATOR_HOST_VALUE}\n`
@@ -173,11 +221,12 @@ const startOwned = async (): Promise<void> => {
     );
     return;
   }
+  if (existing !== null && processAlive(existing.pid))
+    throw new Error("omi prod-local-identity: owned emulator is still starting or unhealthy.");
   if (portHeld(AUTH_EMULATOR_PORT)) {
     return fail(
       `${PROD_LOCAL_IDENTITY_PORT_HELD}\n`
-      + `  ${portListeners(AUTH_EMULATOR_PORT).trim()}\n`
-      + `  Find it: lsof -nP -iTCP:${AUTH_EMULATOR_PORT} -sTCP:LISTEN`,
+      + `  Port ${AUTH_EMULATOR_PORT} is unavailable.`,
     );
   }
   if (portHeld(AUTH_EMULATOR_HUB_PORT) || portHeld(AUTH_EMULATOR_LOGGING_PORT)) {
@@ -189,44 +238,34 @@ const startOwned = async (): Promise<void> => {
 
   writeOwnedConfig();
   mkdirSync(dirname(IDENTITY_LOG_FILE), { recursive: true, mode: 0o700 });
-  const started = Bun.spawnSync(["sh", "-c", [
-    "nohup npx --yes firebase-tools emulators:start",
-    "--only auth",
-    `--project ${LOCAL_FIREBASE_PROJECT_ID}`,
-    `--config ${IDENTITY_FIREBASE_JSON}`,
-    `>> ${IDENTITY_LOG_FILE} 2>&1 &`,
-    "echo $!",
-  ].join(" ")], {
-    cwd: IDENTITY_STATE_ROOT,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      FIREBASE_AUTH_EMULATOR_HOST: FIREBASE_AUTH_EMULATOR_HOST_VALUE,
-    },
-  });
-  const pid = Number(started.stdout.toString().trim().split("\n").at(-1));
-  if (started.exitCode !== 0 || !Number.isSafeInteger(pid) || pid < 1) {
-    return fail(
-      "omi prod-local-identity: failed to spawn firebase-tools.\n"
-      + `  log: ${IDENTITY_LOG_FILE}`,
-    );
-  }
-  writeFileSync(IDENTITY_PID_FILE, `${JSON.stringify({
-    version: "omi-prod-local-identity-v1",
-    pid,
-    authPort: AUTH_EMULATOR_PORT,
-    configPath: IDENTITY_FIREBASE_JSON,
-  }, null, 2)}\n`, { mode: 0o600 });
-
-  const ready = await waitUntil(emulatorReady, READY_TIMEOUT_MS);
-  if (!ready) {
-    await stopOwned();
-    return fail(
-      "omi prod-local-identity: Auth emulator did not become ready.\n"
-      + `  log: ${IDENTITY_LOG_FILE}`,
-    );
-  }
+  const log = openSync(IDENTITY_LOG_FILE, "a", 0o600);
+  let started: ReturnType<typeof spawn> | undefined;
+  let record: OwnedEmulatorPid | undefined;
+  try {
+    started = spawn(process.execPath, [installedFirebaseCli(), "emulators:start", "--only", "auth",
+      "--project", LOCAL_FIREBASE_PROJECT_ID, "--config", IDENTITY_FIREBASE_JSON], {
+      cwd: IDENTITY_STATE_ROOT, detached: true, stdio: ["ignore", log, log],
+      env: emulatorChildEnvironment(process.env),
+    });
+    await new Promise<void>((resolve, reject) => { started!.once("spawn", resolve); started!.once("error", reject); });
+    record = { version: "omi-prod-local-identity-v1", pid: started.pid!,
+      authPort: AUTH_EMULATOR_PORT, configPath: IDENTITY_FIREBASE_JSON };
+    writeFileSync(IDENTITY_PID_FILE, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    const ready = await waitUntil(emulatorReady, READY_TIMEOUT_MS);
+    if (!ready) throw new Error("omi prod-local-identity: Auth emulator did not become ready.");
+    started.unref();
+  } catch (cause) {
+    if (started?.pid && started.exitCode === null && started.signalCode === null) {
+      process.kill(-started.pid, "SIGTERM");
+      if (!await waitUntil(async () => started!.exitCode !== null || started!.signalCode !== null, STOP_TIMEOUT_MS)) {
+        if (record !== undefined) signalOwnedEmulator(record, "SIGKILL");
+        await waitUntil(async () => started!.exitCode !== null || started!.signalCode !== null, 2000);
+      }
+    }
+    if (record !== undefined && existsSync(IDENTITY_PID_FILE) && loadPidFile()?.pid === record.pid)
+      rmSync(IDENTITY_PID_FILE);
+    throw cause;
+  } finally { closeSync(log); }
   process.stdout.write(
     `omi prod-local-identity: Auth emulator started on ${FIREBASE_AUTH_EMULATOR_HOST_VALUE}\n`
     + `  project ${LOCAL_FIREBASE_PROJECT_ID} (auth only; ui disabled)\n`
@@ -234,28 +273,23 @@ const startOwned = async (): Promise<void> => {
   );
 };
 
-const killPid = (pid: number): void => {
-  Bun.spawnSync(["kill", "-TERM", String(pid)], { stdout: "pipe", stderr: "pipe" });
-};
-
-const stopOwned = async (): Promise<void> => {
+export const stopOwned = async (): Promise<void> => {
   const recorded = loadPidFile();
-  const pids = new Set<number>(ownedProcesses());
-  if (recorded !== null) pids.add(recorded.pid);
-  for (const pid of pids) {
-    if (processAlive(pid)) killPid(pid);
+  if (recorded === null) {
+    if (portHeld(AUTH_EMULATOR_PORT)) throw new Error(PROD_LOCAL_IDENTITY_PORT_HELD);
+    return;
   }
-  const gone = await waitUntil(async () => !portHeld(AUTH_EMULATOR_PORT)
-    && ownedProcesses().every((pid) => !processAlive(pid)), STOP_TIMEOUT_MS);
-  if (!gone) {
-    for (const pid of [...ownedProcesses(), recorded?.pid].filter((pid): pid is number => pid !== undefined)) {
-      if (processAlive(pid)) {
-        Bun.spawnSync(["kill", "-KILL", String(pid)], { stdout: "pipe", stderr: "pipe" });
-      }
+  if (processAlive(recorded.pid)) {
+    signalOwnedEmulator(recorded, "SIGTERM");
+    const gone = await waitUntil(async () => !processAlive(recorded.pid), STOP_TIMEOUT_MS);
+    if (!gone) {
+      signalOwnedEmulator(recorded, "SIGKILL");
+      await waitUntil(async () => !processAlive(recorded.pid), 2000);
     }
-    await waitUntil(async () => !portHeld(AUTH_EMULATOR_PORT), 2_000);
   }
-  if (existsSync(IDENTITY_PID_FILE)) rmSync(IDENTITY_PID_FILE);
+  if (portHeld(AUTH_EMULATOR_PORT) || processAlive(recorded.pid))
+    throw new Error("omi prod-local-identity: emulator teardown incomplete.");
+  rmSync(IDENTITY_PID_FILE, { force: true });
   process.stdout.write("omi prod-local-identity: stopped owned Auth emulator.\n");
 };
 
@@ -288,6 +322,7 @@ export const mintEmulatorIdentity = async (
     `http://${emulatorHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake-api-key`,
     {
       method: "POST",
+      signal: AbortSignal.timeout(5000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, password, returnSecureToken: true }),
     },
@@ -339,5 +374,8 @@ const main = async (): Promise<void> => {
 };
 
 if (import.meta.main) {
-  await main();
+  try { await withIdentityLease(async () => main(), process.env.OMI_IDENTITY_LIFECYCLE_LEASE); } catch (cause) {
+    process.stderr.write(`${cause instanceof Error ? cause.message : "identity operation failed"}\n`);
+    process.exitCode = 1;
+  }
 }

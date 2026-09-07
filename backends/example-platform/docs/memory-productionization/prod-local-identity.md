@@ -1,97 +1,97 @@
-# Prod-local emulator identity
+# Local Auth-emulator identity acceptance
 
-Opt-in only. The default `bun run prod-local` path is unchanged: deployed
-Firebase identity, no Auth emulator, and the verbatim banner
+This opt-in workflow proves official Firebase Admin Auth-emulator verification and
+PostgreSQL account/grant admission through the mounted production memory process.
+It is **not** model-rendering, production Firebase, DEV deployment, or full app
+acceptance. The account is explicitly required to be empty. The actual structural renderer
+runs; its model port throws if any inference is requested.
+Normal `bun run prod-local` rendering behavior is unchanged and still needs its
+separate rendering qualification.
 
-`omi prod-local: Firebase identity cannot be minted locally.`
-
-`--local-identity` (or `OMI_PROD_LOCAL_IDENTITY=emulator`) is the one local
-exception. It requires `FIREBASE_AUTH_EMULATOR_HOST`, composes
-`runtime_mode=local_test` with the official Admin verifier, and prints
-
-`omi prod-local: emulator identity — not production.`
-
-Without the flag, a present emulator env still fails with
-`PROD_LOCAL_EMULATOR_FORBIDDEN`. Production paths are not weakened.
-
-The minted `idToken` is an emulator JWT, worthless off this machine.
+Without explicit `--local-identity` (or `OMI_PROD_LOCAL_IDENTITY=emulator`),
+`prod-local` rejects an ambient emulator host. The identity acceptance process
+uses `runtime_mode=local_test`; deployed authentication remains unchanged.
 
 ## Prerequisites
 
-1. Managed PostgreSQL harness up:
-
-   ```sh
-   bun run test:postgres:setup
-   bun run test:postgres:status
-   ```
-
-2. Qualification generation **released**, not faked. Readiness 503 has a second
-   cause besides identity: `drivers/postgres/production-runtime-readiness.ts`
-   requires the released generation digest. Release it by running the real-PG
-   gate against the preserved volume:
-
-   ```sh
-   bun run test:postgres:preserve
-   ```
-
-   The seed script refuses if that digest is absent. It will not insert a fake
-   restore-admission row.
-
-3. Loopback port **4851** free for `bun run prod-local` itself. If bind fails,
-   believe `lsof` first. `scripts/prod-local-identity-e2e.ts` still proves the
-   same fetch handler when 4851 is already leased:
-
-   ```sh
-   lsof -nP -iTCP:4851 -sTCP:LISTEN
-   ```
-
-## Recipe (this is the acceptance test)
+Use the managed local PostgreSQL harness exclusively. Coordinate with any other
+real-PG test run first:
 
 ```sh
-# 1. Owned Auth emulator for project omi-local-pg (auth only, fixed port 19099).
-bun run scripts/prod-local-identity.ts --start
-export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:19099
-
-# 2. Mint an emulator user. The printed bearer is an emulator artifact.
-bun run scripts/prod-local-identity.ts --mint
-# copy uid and Authorization: Bearer …
-
-# 3. Seed revision+head authorization rows for that uid / app:omi-local-pg.
-bun run scripts/prod-local-identity-seed.ts --uid <uid>
-
-# 4. Boot the production process in local-identity mode.
-bun run prod-local --local-identity
-
-# 5. Authorized memories.read (expect 200). Unseeded uid (mint a second user,
-#    do not seed it) is denied.
-curl -s -H "Authorization: Bearer <idToken>" "http://127.0.0.1:4851/v1/memories?limit=5"
-curl -s http://127.0.0.1:4851/health
-curl -s http://127.0.0.1:4851/ready
+bun run test:postgres:setup
+bun run test:postgres:preserve
 ```
 
-One-shot proof of the same recipe, including teardown:
+The preserved real gate must release the qualification generation through its
+existing controlled flow. The seed refuses an unreleased generation and never
+inserts a fabricated restore-admission record. No DEV database is used.
+
+Use the project-pinned **Bun 1.3.14**. Emulator startup rejects a different Bun
+version before spawning a child. Install Firebase CLI **15.25.1** locally and expose `firebase` on PATH. The script
+resolves its installed entry and validates the package version before running it
+with Bun; it does not download a CLI at execution time. The Auth-only child gets
+only Bun's directory on PATH, leaving the parent environment unchanged. This
+keeps the optional macOS `lsof` probe unavailable, so the official CLI uses its
+real `node:net` bind probe; no executable shim or synthetic probe result is used. Auth-only emulator ports
+19099, 14400 and 14500 must be unused. It binds loopback only.
+
+## Acceptance
 
 ```sh
 bun run scripts/prod-local-identity-e2e.ts
 ```
 
-Stop the owned emulator (no orphans):
+The command owns a new emulator, creates two synthetic identities, seeds only
+one, and serves the actual production process on an OS-assigned loopback HTTP
+port. It requires health 200, readiness 200, authorized empty memories 200, and
+unseeded identity 403. An unavailable backend is a failure, never proof of denial.
+Bearer values are retained in memory and omitted from acceptance output.
+
+Startup, HTTP probes and child commands have deadlines. Failure unwinds service
+and emulator cleanup before the command exits unsuccessfully. An exclusive private lifecycle lease spans startup, proof and shutdown. Existing emulator
+state is refused rather than adopted or stopped by the acceptance command.
+There is no port-4851 fallback and no process-enumeration dependency for socket
+checks. The direct `prod-local` launcher still uses its fixed port and is outside
+this bounded acceptance repair.
+
+The standalone lifecycle commands remain available:
 
 ```sh
+bun run scripts/prod-local-identity.ts --status
+bun run scripts/prod-local-identity.ts --start
+bun run scripts/prod-local-identity.ts --mint
 bun run scripts/prod-local-identity.ts --stop
-lsof -nP -iTCP:19099 -sTCP:LISTEN
-pgrep -f /Volumes/Ephemeral/scratch/omi-prod-local-identity/firebase.json
 ```
 
-Port **19099** is the owned Auth emulator. 9099 is the Firebase default and is
-often already leased on this machine by an unrelated harness; this script does
-not take it.
+State and private logs live in `omi-prod-local-identity` beneath the OS temporary
+directory. Shutdown verifies the recorded PID command matches the owned emulator
+before signaling its process group. A stale record pointing to an unrelated
+process fails closed and leaves that process untouched.
 
-## What the seed writes
+After acceptance, dispose only the managed test PostgreSQL lifecycle:
 
-The seed is the same SQL surface as `postgresjs.real.test.ts`: `platform_accounts`,
-`account_control_revisions` + `account_control_heads` (lifecycle `active`),
-firebase credential (`strength` `firebase-id-token`), grant `memories.read`,
-`firebase_identity_bindings`, and `firebase_application_credential_bindings`
-for application `app:omi-local-pg`. Idempotent on those primary keys. Owner
-role inserts; lookup is verified as `omi_platform_application`.
+```sh
+bun run test:postgres:destroy
+```
+
+## Seed scope
+
+The seed writes local `platform_accounts`, account revision/head authorization,
+Firebase application credentials, the `memories.read` grant, and Firebase identity
+and application-credential bindings for `app:omi-local-pg`. Application-role
+lookup verifies the seeded ownership. No live account, DEV grant, model output,
+or subscription entitlement is manufactured.
+
+## Verified local acceptance
+
+The repaired workflow passed on macOS with the installed Firebase CLI
+15.25.1: health 200, readiness 200, seeded identity 200, unseeded identity 403,
+and owned emulator teardown. The managed PostgreSQL 18.4 gate passed 28 tests
+with 11,182 assertions, a 53-migration/120-table logical restore, and both pinned
+Bun and Node runtime parity before this acceptance. This evidence covers local
+emulator identity/admission only; it is not a live Firebase or deployment proof.
+
+Bun 1.3.14 completed four consecutive owned emulator start/stop cycles. Bun 1.4.0
+had an intermittent upstream emulator-startup timeout after its socket probes;
+this path therefore enforces the existing project runtime pin. This observation
+does not attribute a broader application failure to Bun 1.4.0.
