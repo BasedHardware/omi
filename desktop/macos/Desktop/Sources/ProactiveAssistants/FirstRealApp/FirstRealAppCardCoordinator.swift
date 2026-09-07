@@ -151,52 +151,45 @@ final class FirstRealAppCardCoordinator {
       // holds the draft until a composer mounts, so this works whether or not
       // the main window exists yet — and it never sends.
       //
-      // The card names the app that was frontmost when it fired, but the chat
-      // window it summons becomes "the screen" the moment it lands. Capture
-      // the screen live *now* — the tap still happens while the named app is
-      // frontmost, so the pixels are the referent — falling back to the
-      // newest stored frame if the capture is unavailable (and to nothing
-      // beyond the freshness bound). Done *before* the request: the store's
-      // notification is consumed synchronously on composer mount, so an
-      // attachment staged after `request` would miss the composer that takes
-      // the draft.
+      // **The window opens now.** The tap is the activation moment, and an
+      // order that captures and encodes a full-screen JPEG *before* summoning
+      // leaves the user staring at a dead click for hundreds of milliseconds.
+      // The summon itself records the boundary capture — the pre-summon
+      // pixels, which is exactly the named app's screen — so the referent
+      // comes from that boundary instead of a second capture this tap would
+      // otherwise race against its own opening window.
       //
-      // The reservation is taken synchronously at tap time: the capture and
-      // frame decode below can be overtaken by any other open-chat request
-      // (floating bar, a second card), and a stale handoff must not
-      // overwrite the newer request's draft and attachment.
+      // The reservation is taken synchronously at tap time: the boundary
+      // encode below can be overtaken by any other open-chat request
+      // (floating bar, a second card), and a stale handoff must not attach
+      // its frame to the newer request's composer.
       let generation = MainChatNavigationRequestStore.shared.reserve()
+      let tappedAt = Date()
+      guard let target = AppDelegate.summonWindowTarget() else { return }
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: nil)
       Task { @MainActor in
-        var attachment: ChatAttachment?
-        if CGPreflightScreenCaptureAccess() {
-          let frontAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
-          let jpeg = await Task.detached(priority: .userInitiated) {
-            ScreenCaptureManager.captureScreenJPEG()
-          }.value
-          if let jpeg, !jpeg.isEmpty {
-            attachment = RecentScreenFrameStaging.attachment(
-              appName: frontAppName,
-              jpegData: jpeg,
-              capturedAt: Date()
-            )
-          }
-        }
-        if attachment == nil {
-          attachment = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+        // The boundary's JPEG encode runs detached; wait for it to publish.
+        // If Omi was already frontmost when the card was tapped, no boundary
+        // was recorded for this tap — fall back to the newest stored frame,
+        // whose loader excludes Omi and capture-excluded apps, so the
+        // referent can never be Omi's own window either way.
+        var frame = await RewindFrameLoader.shared.awaitSummonBoundary(recordedAfter: tappedAt)
+        if frame == nil {
+          frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
             maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
-          ).flatMap { frame in
-            RecentScreenFrameStaging.attachment(
-              appName: frame.appName,
-              jpegData: frame.data,
-              capturedAt: frame.timestamp
-            )
-          }
+          )
         }
-        guard
-          let target = AppDelegate.summonWindowTarget(),
+        guard let frame,
           generation == MainChatNavigationRequestStore.shared.currentGeneration
         else { return }
-        target.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
+        guard
+          let attachment = RecentScreenFrameStaging.attachment(
+            appName: frame.appName,
+            jpegData: frame.data,
+            capturedAt: frame.timestamp
+          )
+        else { return }
+        ChatProvider.mainInstance?.addAttachments([attachment])
       }
     },
     scheduler: any FirstRealAppCardScheduling = FirstRealAppCardMainQueueScheduler()

@@ -12,8 +12,14 @@ import AppKit
 enum PasteboardAttachmentStaging {
   /// Reads and stages everything attachable, in board order, and returns what
   /// landed. `ChatProvider.addAttachments` owns the attachment-count cap.
+  ///
+  /// A board holding copied files stages those and never reads its image
+  /// flavors: a copied image file carries both a file URL and image data
+  /// AppKit can instantiate, and reading both would paste the same picture
+  /// twice. The JPEG encode for pasted bytes runs off main — a multi-
+  /// megapixel screenshot must not freeze the composer mid-paste.
   @MainActor
-  static func stageAttachments(from pasteboard: NSPasteboard = .general) -> [ChatAttachment] {
+  static func stageAttachments(from pasteboard: NSPasteboard = .general) async -> [ChatAttachment] {
     var staged: [ChatAttachment] = []
 
     let fileURLs =
@@ -25,13 +31,17 @@ enum PasteboardAttachmentStaging {
         staged.append(attachment)
       }
     }
+    guard staged.isEmpty else { return staged }
 
-    let images = pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage] ?? []
-    for image in images {
-      guard let jpeg = flattenedJPEGData(from: image),
-        let attachment = appOwnedAttachment(jpegData: jpeg)
-      else { continue }
-      staged.append(attachment)
+    let tiffs = (pasteboard.readObjects(forClasses: [NSImage.self]) as? [NSImage] ?? [])
+      .compactMap { $0.tiffRepresentation }
+    let jpegs = await Task.detached(priority: .userInitiated) { () -> [Data] in
+      tiffs.compactMap { Self.flattenedJPEGData(tiffData: $0) }
+    }.value
+    for jpeg in jpegs {
+      if let attachment = appOwnedAttachment(jpegData: jpeg) {
+        staged.append(attachment)
+      }
     }
 
     return staged
@@ -39,10 +49,13 @@ enum PasteboardAttachmentStaging {
 
   /// JPEG bytes for a pasted image, flattened onto white first: JPEG has no
   /// alpha, and a pasted PNG's transparency encoded without a ground becomes
-  /// black mud.
-  static func flattenedJPEGData(from image: NSImage, quality: CGFloat = 0.85) -> Data? {
+  /// black mud. Runs off main (see `stageAttachments`).
+  static func flattenedJPEGData(tiffData: Data, quality: CGFloat = 0.85) -> Data? {
     guard
-      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+      let rep = NSBitmapImageRep(data: tiffData),
+      let cgImage = rep.cgImage
+    else { return nil }
+    guard
       let context = CGContext(
         data: nil, width: cgImage.width, height: cgImage.height,
         bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
@@ -60,6 +73,7 @@ enum PasteboardAttachmentStaging {
   /// paste outliving its file behaves exactly like a user attachment whose
   /// source file has since moved.
   static func appOwnedAttachment(jpegData: Data) -> ChatAttachment? {
+    sweepStaleStagedFiles()
     let url =
       imagesDirectory
       .appendingPathComponent("Pasted image \(fileNameFormatter.string(from: Date())) \(UUID().uuidString).jpg")
@@ -71,6 +85,12 @@ enum PasteboardAttachmentStaging {
     guard var attachment = ChatAttachment.from(url: url) else { return nil }
     attachment.appOwnedFileURL = url
     return attachment
+  }
+
+  /// The one week-bounded sweep of this directory (see
+  /// `RecentFrameStagingLifecycle.sweepStaleStagedFiles`).
+  private static func sweepStaleStagedFiles(now: Date = Date()) {
+    RecentFrameStagingLifecycle.sweepStaleStagedFiles(in: imagesDirectory, now: now)
   }
 
   private static var imagesDirectory: URL {

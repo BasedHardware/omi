@@ -148,58 +148,44 @@ extension DesktopAutomationActionRegistry {
       let trimmedPrompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let prompt = trimmedPrompt.isEmpty ? FirstRealAppCardPolicy.prompt : trimmedPrompt
       // The exact chain the card tap's default closure runs, in the same
-      // order: capture the live referent first (the pixels the outgoing app
-      // still owns), fall back to the newest stored frame, and stage before
-      // the request — the store's notification is consumed synchronously on
-      // composer mount.
-      var frameSource = ""
-      var frameAppName = ""
-      var frameAgeSeconds = 0
-      var attachment: ChatAttachment?
-      if CGPreflightScreenCaptureAccess() {
-        frameAppName = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
-        let jpeg = await Task.detached(priority: .userInitiated) {
-          ScreenCaptureManager.captureScreenJPEG()
-        }.value
-        if let jpeg, !jpeg.isEmpty {
-          attachment = RecentScreenFrameStaging.attachment(
-            appName: frameAppName,
-            jpegData: jpeg,
-            capturedAt: Date()
-          )
-          frameSource = "tap_live_capture"
-          frameAgeSeconds = 0
-        }
+      // order: summon the chat with the draft first (the window opens now),
+      // take the referent from the summon boundary the summon itself
+      // recorded, and fall back to the newest stored non-Omi frame when this
+      // tap recorded no boundary. The staged frame lands through
+      // `ChatProvider.addAttachments` after the composer is up.
+      let tappedAt = Date()
+      guard let target = AppDelegate.summonWindowTarget() else {
+        return ["error": "no window target"]
       }
-      if attachment == nil,
-        let frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: nil)
+      let boundary = await RewindFrameLoader.shared.awaitSummonBoundary(recordedAfter: tappedAt)
+      var frame = boundary
+      if frame == nil {
+        frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
           maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
         )
-      {
-        attachment = RecentScreenFrameStaging.attachment(
+      }
+      guard let frame else {
+        return [
+          "error": "no screen referent available (no summon boundary, no fresh frame)",
+          "staged": "false",
+        ]
+      }
+      guard
+        let attachment = RecentScreenFrameStaging.attachment(
           appName: frame.appName,
           jpegData: frame.data,
           capturedAt: frame.timestamp
         )
-        frameSource = "last_external_frame"
-        frameAppName = frame.appName
-        frameAgeSeconds = Int(Date().timeIntervalSince(frame.timestamp))
+      else {
+        return ["error": "frame staging failed", "staged": "false"]
       }
-      guard let attachment else {
-        return [
-          "error": "no screen referent available (capture unavailable, no fresh frame)",
-          "staged": "false",
-        ]
-      }
-      guard let target = AppDelegate.summonWindowTarget() else {
-        return ["error": "no window target"]
-      }
-      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: attachment)
+      ChatProvider.mainInstance?.addAttachments([attachment])
       return [
         "staged": "true",
-        "frameSource": frameSource,
-        "frameAppName": frameAppName,
-        "frameAgeSeconds": String(frameAgeSeconds),
+        "frameSource": boundary == nil ? "last_external_frame" : "summon_boundary",
+        "frameAppName": frame.appName,
+        "frameAgeSeconds": String(Int(Date().timeIntervalSince(frame.timestamp))),
         "attachmentBytes": String(attachment.data?.count ?? 0),
       ]
     }
@@ -273,7 +259,7 @@ extension DesktopAutomationActionRegistry {
         return ["error": "no window target"]
       }
       target.openMainAppChat(prefilledDraft: "")
-      let staged = PasteboardAttachmentStaging.stageAttachments(from: pasteboard)
+      let staged = await PasteboardAttachmentStaging.stageAttachments(from: pasteboard)
       if let main = ChatProvider.mainInstance {
         main.addAttachments(staged)
       }

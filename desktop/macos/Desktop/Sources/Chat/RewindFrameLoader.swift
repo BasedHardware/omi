@@ -134,6 +134,27 @@ final class RewindFrameLoader {
     return summonBoundary
   }
 
+  /// Waits — bounded — for a boundary recorded at or after `date` to finish
+  /// publishing. The summon that captures the boundary encodes its JPEG off
+  /// main, so a summoner that immediately wants the referent pixels (the
+  /// first-real-app card) polls here instead of taking a second, racy capture
+  /// of a screen its own summon is about to cover. A boundary older than
+  /// `date` belongs to an earlier summon and is never returned; when the wait
+  /// expires — Omi already frontmost, capture denied, encode failed — the
+  /// caller falls back like the send-time policy does.
+  @MainActor
+  func awaitSummonBoundary(
+    recordedAfter date: Date,
+    timeoutNanoseconds: UInt64 = 2_000_000_000
+  ) async -> LoadedRewindFrame? {
+    let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+    while DispatchTime.now().uptimeNanoseconds <= deadline {
+      if let boundary = currentSummonBoundary(), boundary.timestamp >= date { return boundary }
+      try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    return nil
+  }
+
   /// Whether a row may ever be surfaced: not Omi itself, not a capture-excluded
   /// app (privacy — exclusion is not retroactive), and not a frame inside the
   /// video chunk still being written.

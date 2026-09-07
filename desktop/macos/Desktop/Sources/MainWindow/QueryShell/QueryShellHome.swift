@@ -418,12 +418,17 @@ struct QueryShellHome: View {
 
   /// ⌘V in the composer: file URLs and image bytes on the pasteboard stage as
   /// attachments through the same provider path as every other pick. The
-  /// staging is synchronous — a pasteboard read and a JPEG encode — so no
-  /// in-flight marker is needed against a concurrent send.
+  /// staging rides the same in-flight marker as the frame picker — a
+  /// pasteboard read is quick, but its JPEG encode is off main and a
+  /// send that races the paste must not miss it.
   private func stagePasteboardAttachments() {
-    let staged = PasteboardAttachmentStaging.stageAttachments()
-    guard !staged.isEmpty else { return }
-    chatProvider.addAttachments(staged)
+    chatProvider.beginRecentFrameStaging()
+    Task { @MainActor in
+      defer { chatProvider.endRecentFrameStaging() }
+      let staged = await PasteboardAttachmentStaging.stageAttachments()
+      guard !staged.isEmpty else { return }
+      chatProvider.addAttachments(staged)
+    }
   }
 
   /// The paperclip menu's "recent screens" rows land in the same staging path
@@ -436,14 +441,22 @@ struct QueryShellHome: View {
     chatProvider.beginRecentFrameStaging()
     Task { @MainActor in
       defer { chatProvider.endRecentFrameStaging() }
-      guard let data = await RewindFrameLoader.shared.loadData(forRowID: row.id) else { return }
+      // Silence here would read as "the click did nothing". Every nil on this
+      // path (bytes unreadable, row excluded mid-decode, write failed) says so.
+      guard let data = await RewindFrameLoader.shared.loadData(forRowID: row.id) else {
+        chatProvider.errorMessage = "Couldn't load that screen frame. Try another one, or paste a screenshot with ⌘V."
+        return
+      }
       guard
         let attachment = RecentScreenFrameStaging.attachment(
           appName: row.appName,
           jpegData: data,
           capturedAt: row.timestamp
         )
-      else { return }
+      else {
+        chatProvider.errorMessage = "Couldn't stage that screen frame. Try another one, or paste a screenshot with ⌘V."
+        return
+      }
       chatProvider.addAttachments([attachment])
     }
   }

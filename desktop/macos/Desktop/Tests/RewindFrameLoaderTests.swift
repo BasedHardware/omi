@@ -222,4 +222,31 @@ final class RewindFrameLoaderTests: XCTestCase {
     // App-owned: staged frames are cleaned up by the attachment lifecycle.
     XCTAssertEqual(attachment?.appOwnedFileURL, url)
   }
+
+  func testAwaitSummonBoundaryReturnsABoundaryRecordedAfterTheCutoff() async {
+    let loader = loader(rows: [])
+    let cutoff = Date()
+    loader.storeSummonBoundary(
+      LoadedRewindFrame(data: omiJPEG, appName: "ChatGPT", windowTitle: nil, timestamp: cutoff.addingTimeInterval(0.05))
+    )
+    let frame = await loader.awaitSummonBoundary(
+      recordedAfter: cutoff, timeoutNanoseconds: 100_000_000)
+    XCTAssertEqual(frame?.appName, "ChatGPT")
+  }
+
+  func testAwaitSummonBoundaryNeverReturnsAnOlderSummon() async {
+    // A boundary from an earlier summon must not pass itself off as this
+    // tap's referent: an expired wait falls back to nil so the caller uses
+    // the store-frame fallback, whose loader excludes Omi.
+    let loader = loader(rows: [])
+    let cutoff = Date()
+    loader.storeSummonBoundary(
+      LoadedRewindFrame(
+        data: omiJPEG, appName: "ChatGPT", windowTitle: nil,
+        timestamp: cutoff.addingTimeInterval(-60))
+    )
+    let frame = await loader.awaitSummonBoundary(
+      recordedAfter: cutoff, timeoutNanoseconds: 60_000_000)
+    XCTAssertNil(frame)
+  }
 }

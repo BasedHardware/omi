@@ -17,22 +17,27 @@ struct RecentScreenFrameRow: Identifiable, Equatable {
     self.timestamp = screenshot.timestamp
   }
 
-  /// App first — that is what the user recognizes; then a compact clock time.
-  /// Frames younger than a minute read as "just now" rather than "0:00 ago".
+  /// App first — that is what the user recognizes; then an age the reader can
+  /// act on. A bare clock time reads "14:32" whether the frame is twenty
+  /// minutes or a day old, and the send-time policy refuses frames past the
+  /// freshness bound — a person picking from this menu needs to see that
+  /// distance, not compute it.
   func menuTitle(now: Date = Date()) -> String {
-    let when: String
-    if now.timeIntervalSince(timestamp) < 60 {
-      when = "just now"
-    } else {
-      when = Self.timeFormatter.string(from: timestamp)
-    }
-    return "\(appName) — \(when)"
+    return "\(appName) — \(Self.ageDescription(from: timestamp, to: now))"
   }
 
-  private static let timeFormatter: DateFormatter = {
+  static func ageDescription(from date: Date, to now: Date) -> String {
+    let age = now.timeIntervalSince(date)
+    if age < 60 { return "just now" }
+    if age < 3_600 { return "\(Int(age / 60))m ago" }
+    if age < 86_400 { return "\(Int(age / 3_600))h ago" }
+    return dayFormatter.string(from: date)
+  }
+
+  private static let dayFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.timeStyle = .short
-    formatter.dateStyle = .none
+    formatter.dateStyle = .medium
     return formatter
   }()
 }
@@ -77,6 +82,7 @@ enum RecentScreenFrameStaging {
       URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("OmiScreenFrames", isDirectory: true)
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    RecentFrameStagingLifecycle.sweepStaleStagedFiles(in: url)
     return url
   }
 

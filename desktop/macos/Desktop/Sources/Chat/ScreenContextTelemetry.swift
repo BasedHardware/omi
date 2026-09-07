@@ -605,6 +605,20 @@ enum ScreenContextWorkContextBuilder {
       stalenessNote =
         " The most recent frame of another app is \(ageSeconds) seconds old, past the freshness limit."
     }
+    // The recovery matches the failure. A missing frame usually means the
+    // user has been in Omi for a while, and the honest way out is handing the
+    // model fresh pixels from inside Omi — the picker and ⌘V both exist —
+    // while a too-stale frame means they may simply have taken a while to
+    // send. The switch-apps round trip stays as the fallback in both.
+    let recovery: String
+    switch reason {
+    case .noAttachableFrame:
+      recovery =
+        "START your reply by asking the user to switch to the app they want summarized and ask again from there. You can also mention they can attach a recent screen from the paperclip's menu or paste a screenshot with ⌘V."
+    case .frameTooStale:
+      recovery =
+        "START your reply by telling the user the frame on file is too old to answer from, and offer the ways to hand you fresh pixels without leaving Omi: attach a recent screen from the paperclip's menu, or paste a screenshot with ⌘V. If they would rather switch to the app they want summarized and ask again from there, that works too."
+    }
     return [
       "ok": false,
       "name": "get_work_context",
@@ -612,7 +626,7 @@ enum ScreenContextWorkContextBuilder {
       "screen_now": screenNow,
       "timeline": [],
       "guidance":
-        "This question was asked from Omi's own window, so a live capture would show Omi itself, and no recent frame of another app is available to stand in for the screen.\(stalenessNote) START your reply by asking the user to switch to the app they want summarized and ask again from there. Do not describe Omi's own window or interface, and do not answer from stored history.",
+        "This question was asked from Omi's own window, so a live capture would show Omi itself, and no recent frame of another app is available to stand in for the screen.\(stalenessNote) \(recovery) Do not describe Omi's own window or interface, and do not answer from stored history.",
     ]
   }
 

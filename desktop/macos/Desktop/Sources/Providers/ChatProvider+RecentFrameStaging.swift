@@ -20,6 +20,46 @@ enum RecentFrameStagingLifecycle {
       try? FileManager.default.removeItem(at: url)
     }
   }
+
+  /// Writes fresh bytes next to the other staged screens' files, for an
+  /// attachment whose original file is about to be deleted (the failed turn's
+  /// exit cleanup). Returns nil when the write fails; the caller then falls
+  /// back to the attachment's in-memory bytes alone.
+  nonisolated static func writeAppOwnedFile(data: Data, fileName: String) -> URL? {
+    let directory =
+      URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("OmiScreenFrames", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appendingPathComponent("Retried \(fileName)")
+    do {
+      try data.write(to: url, options: .atomic)
+    } catch {
+      return nil
+    }
+    return url
+  }
+
+  /// Deletes staged screen files older than a week. Staging writes private
+  /// full-screen captures here on every pick and paste, and a file whose app
+  /// quit before its cleanup runs is one the OS may not reap for days — the
+  /// sweep bounds that exposure to the lifetime of the staging flow itself.
+  nonisolated static func sweepStaleStagedFiles(
+    in directory: URL, olderThanDays days: Int = 7, now: Date = Date()
+  ) {
+    let cutoff = now.addingTimeInterval(-TimeInterval(days) * 86_400)
+    guard
+      let enumerator = FileManager.default.enumerator(
+        at: directory, includingPropertiesForKeys: [.contentModificationDateKey])
+    else { return }
+    for case let url as URL in enumerator {
+      guard
+        let modified = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+          .contentModificationDate,
+        modified < cutoff
+      else { continue }
+      try? FileManager.default.removeItem(at: url)
+    }
+  }
 }
 
 /// Counts in-flight async frame stagings (store decode → temp JPEG →
@@ -55,5 +95,26 @@ extension ChatProvider {
 
   func endRecentFrameStaging() {
     recentFrameStagingGate.end()
+  }
+
+  /// Puts a failed turn's attachments back in the composer, so "Try again"
+  /// re-sends the same pixels instead of a caption for files that are gone.
+  /// The failed turn's exit cleanup deletes app-owned staged files, so each of
+  /// those is re-staged into a fresh app-owned file from its in-memory bytes;
+  /// user-picked files still exist and are re-added as they are.
+  func restoreFailedTurnAttachments(_ attachments: [ChatAttachment], turnOwner: ChatTurnOwner) {
+    guard turnOwner == .mainChat, !attachments.isEmpty else { return }
+    let restored = attachments.map { attachment in
+      guard attachment.appOwnedFileURL != nil, let data = attachment.data, !data.isEmpty
+      else { return attachment }
+      var fresh = attachment
+      if let url = RecentFrameStagingLifecycle.writeAppOwnedFile(
+        data: data, fileName: attachment.fileName)
+      {
+        fresh.appOwnedFileURL = url
+      }
+      return fresh
+    }
+    addAttachments(restored)
   }
 }

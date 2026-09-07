@@ -51,11 +51,11 @@ final class PasteboardAttachmentStagingTests: XCTestCase {
 
   // MARK: - Staging (pasteboard content → staged attachments)
 
-  func testPastedScreenshotStagesAsAppOwnedJPEG() throws {
+  func testPastedScreenshotStagesAsAppOwnedJPEG() async throws {
     let board = makeBoard()
     board.setData(twoByTwoTIFF(), forType: .tiff)
 
-    let staged = PasteboardAttachmentStaging.stageAttachments(from: board)
+    let staged = await PasteboardAttachmentStaging.stageAttachments(from: board)
 
     XCTAssertEqual(staged.count, 1)
     let attachment = try XCTUnwrap(staged.first)
@@ -71,12 +71,12 @@ final class PasteboardAttachmentStagingTests: XCTestCase {
     try? FileManager.default.removeItem(at: ownedURL)
   }
 
-  func testCopiedFileStagesAsUserFileWithoutAppOwnership() throws {
+  func testCopiedFileStagesAsUserFileWithoutAppOwnership() async throws {
     let sourceURL = tempJPEGURL()
     let board = makeBoard()
     board.setData(sourceURL.dataRepresentation, forType: .fileURL)
 
-    let staged = PasteboardAttachmentStaging.stageAttachments(from: board)
+    let staged = await PasteboardAttachmentStaging.stageAttachments(from: board)
 
     XCTAssertEqual(staged.count, 1)
     let attachment = try XCTUnwrap(staged.first)
@@ -86,9 +86,25 @@ final class PasteboardAttachmentStagingTests: XCTestCase {
     XCTAssertEqual(attachment.localFileURL, sourceURL)
   }
 
-  func testUnreadableBoardStagesNothing() {
-    let staged = PasteboardAttachmentStaging.stageAttachments(from: makeBoard())
+  func testUnreadableBoardStagesNothing() async {
+    let staged = await PasteboardAttachmentStaging.stageAttachments(from: makeBoard())
     XCTAssertTrue(staged.isEmpty)
+  }
+
+  func testCopiedImageFileDoesNotDoubleStage() async throws {
+    // A copied image file carries its file URL *and* image flavors; staging
+    // both would paste the same picture twice — once as a user file, once as
+    // an app-owned copy.
+    let sourceURL = tempJPEGURL()
+    let board = makeBoard()
+    board.setData(sourceURL.dataRepresentation, forType: .fileURL)
+    board.setData(twoByTwoTIFF(), forType: .tiff)
+
+    let staged = await PasteboardAttachmentStaging.stageAttachments(from: board)
+
+    XCTAssertEqual(staged.count, 1)
+    let attachment = try XCTUnwrap(staged.first)
+    XCTAssertNil(attachment.appOwnedFileURL, "the file flavor wins; no app-owned copy beside it")
   }
 
   // MARK: - Fixtures
