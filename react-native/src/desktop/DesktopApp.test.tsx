@@ -2460,6 +2460,28 @@ test('actual desktop Home Load more memories stays memories-only when conversati
   expect(onLoadMoreMemories).toHaveBeenCalledTimes(1);
 });
 
+test('nested non-retryable later conversation pages omit more-available on Home', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedConversationOutcomes(),
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More conversations are available.');
+});
+
+test('nested non-retryable later task pages omit more-available on Home', () => {
+  const renderer = renderDesktop({
+    taskNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedTaskOutcomes(),
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
 test('nested non-retryable later memory pages keep rows and omit Load more', () => {
   const renderer = renderDesktop({
     memoryNotice: desktopBackendUnavailableCopy,

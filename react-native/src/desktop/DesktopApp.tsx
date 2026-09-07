@@ -183,6 +183,8 @@ export function DesktopApp({
             hasOlderChat={hasOlderChat}
             loadingOlderChat={loadingOlderChat}
             memoryNotice={memoryNotice}
+            conversationNotice={conversationNotice}
+            taskNotice={taskNotice}
             memoriesLoadingMore={memoriesLoadingMore}
             messages={messages}
             onOpenRewind={() => setRoute('Rewind')}

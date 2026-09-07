@@ -28,6 +28,7 @@ import {desktopTokens as token} from './tokens';
 
 type Props = {
   chatBusy: boolean;
+  conversationNotice?: string | null;
   draft: string;
   hasOlderChat: boolean;
   loadingOlderChat: boolean;
@@ -41,6 +42,7 @@ type Props = {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
+  taskNotice?: string | null;
 };
 
 export function DesktopReadBanner({
@@ -145,6 +147,7 @@ function AskExchange({
 
 export function DesktopHome({
   chatBusy,
+  conversationNotice = null,
   draft,
   hasOlderChat,
   loadingOlderChat,
@@ -158,6 +161,7 @@ export function DesktopHome({
   outcomes,
   reads,
   readsPhase,
+  taskNotice = null,
 }: Props) {
   const chatScrollRef = useRef<ScrollView>(null);
   const shouldFollowChat = useRef(true);
@@ -276,7 +280,17 @@ export function DesktopHome({
             <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
           {tasksOutcome?.status === 'success' && visibleTasks.length > 0 ? (
-            <ReadStatus label="Tasks" mac page={tasksOutcome.value.page} />
+            <ReadStatus
+              continueUnavailable={taskNotice === desktopBackendUnavailableCopy}
+              label="Tasks"
+              mac
+              page={tasksOutcome.value.page}
+            />
+          ) : null}
+          {taskNotice === desktopBackendUnavailableCopy ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {taskNotice}
+            </Text>
           ) : null}
         </View>
         <View
@@ -296,6 +310,9 @@ export function DesktopHome({
           )}
           {conversationsOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
+              continueUnavailable={
+                conversationNotice === desktopBackendUnavailableCopy
+              }
               label="Conversations"
               mac
               page={conversationsOutcome.value.page}
@@ -310,6 +327,11 @@ export function DesktopHome({
               mac
               page={memoriesOutcome.value.page}
             />
+          ) : null}
+          {conversationNotice === desktopBackendUnavailableCopy ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {conversationNotice}
+            </Text>
           ) : null}
           {memoryNotice !== null ? (
             <Text accessibilityRole="alert" style={styles.rowMeta}>
