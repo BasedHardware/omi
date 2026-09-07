@@ -93,6 +93,7 @@ QA services. It does not alter rollout enrollment or open either maintenance job
 
 The shared reserved QA target selector pins
 `OMI_FORCE_BUCKET_CANDIDATES=0` and `OMI_FORCE_BUCKET_WORKSTREAMS=0`;
-both wrapper and direct `run.sh` launches forward them through `open`. This isolates JIT qualification from
+both wrapper and direct `run.sh` launches forward them through `open` and
+persist them in the bundle environment for cold reopen. This isolates JIT qualification from
 sibling candidate/workstream calls outside its budget. Ordinary named dev
 bundles retain their defaults; use a separately named bundle for those experiments.

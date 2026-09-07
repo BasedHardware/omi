@@ -443,12 +443,17 @@ omi_write_jit_qa_bundle_env() {
     omi_jit_qa_write_env_value "$env_file" OMI_AUTH_API_URL "$OMI_AUTH_API_URL"
     omi_jit_qa_write_env_value "$env_file" OMI_ENV_STAGE "$OMI_ENV_STAGE"
     omi_jit_qa_write_env_value "$env_file" FIREBASE_API_KEY "$FIREBASE_API_KEY"
+    # Finder/LaunchServices cold reopen has no launcher environment.
+    omi_jit_qa_write_env_value "$env_file" OMI_FORCE_BUCKET_CANDIDATES 0
+    omi_jit_qa_write_env_value "$env_file" OMI_FORCE_BUCKET_WORKSTREAMS 0
 
     omi_jit_qa_assert_env_value "$env_file" OMI_PYTHON_API_URL "$OMI_PYTHON_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_DESKTOP_API_URL "$OMI_DESKTOP_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_AUTH_API_URL "$OMI_AUTH_API_URL"
     omi_jit_qa_assert_env_value "$env_file" OMI_ENV_STAGE "$OMI_ENV_STAGE"
     omi_jit_qa_assert_env_value "$env_file" FIREBASE_API_KEY "$FIREBASE_API_KEY"
+    omi_jit_qa_assert_env_value "$env_file" OMI_FORCE_BUCKET_CANDIDATES 0
+    omi_jit_qa_assert_env_value "$env_file" OMI_FORCE_BUCKET_WORKSTREAMS 0
 
     if grep -Eq '(^|[=/])api\.omi\.me([/:]|$)' "$env_file"; then
         omi_jit_qa_fail "$env_file contains the prohibited production API host"

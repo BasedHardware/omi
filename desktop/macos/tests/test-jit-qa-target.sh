@@ -102,7 +102,10 @@ printf '%s\n' \
 expect_failure omi_preflight_jit_qa_config_file "$duplicate_config"
 
 printf '%s\n' 'OMI_PYTHON_API_URL=https://api.omi.me' 'OMI_AUTH_API_URL=https://api.omi.me' > "$local_env"
+printf 'OMI_FORCE_BUCKET_CANDIDATES=1\nOMI_FORCE_BUCKET_WORKSTREAMS=1\n' >> "$local_env"
 omi_write_jit_qa_bundle_env "$local_env"
+omi_jit_qa_assert_env_value "$local_env" OMI_FORCE_BUCKET_CANDIDATES 0
+omi_jit_qa_assert_env_value "$local_env" OMI_FORCE_BUCKET_WORKSTREAMS 0
 grep -Fqx 'OMI_PYTHON_API_URL=http://127.0.0.1:18080' "$local_env"
 grep -Fqx 'OMI_DESKTOP_API_URL=http://127.0.0.1:18081' "$local_env"
 grep -Fqx 'OMI_AUTH_API_URL=http://127.0.0.1:18080' "$local_env"
