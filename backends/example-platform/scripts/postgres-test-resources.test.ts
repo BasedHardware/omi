@@ -4,6 +4,7 @@ import { createPostgresTestState } from "./postgres-test-lifecycle";
 import {
   ensureOwnedVolume,
   isLinuxAmd64Image,
+  postgresTestCommandExitCode,
   removeOwnedContainer,
   removeOwnedVolume,
   verifyOwnedContainerConfiguration,
@@ -11,6 +12,23 @@ import {
 } from "./postgres-test-resources";
 
 const state = createPostgresTestState("/workspace", () => Uint8Array.from({ length: 12 }, () => 0xcd));
+
+test.each([
+  ["process.exit(0)", 0, undefined],
+  ["process.exit(7)", 7, undefined],
+  ['process.kill(process.pid,"SIGINT")', 1, "SIGINT"],
+  ['process.kill(process.pid,"SIGTERM")', 1, "SIGTERM"],
+] as const)("preserves child failure when propagating %s", (source, expected, signal) => {
+  const child = Bun.spawnSync([process.execPath, "-e", source]);
+  expect(child.signalCode).toBe(signal);
+  expect(postgresTestCommandExitCode(child)).toBe(expected);
+  const parent = Bun.spawnSync([process.execPath, "-e", `
+    import {postgresTestCommandExitCode} from ${JSON.stringify(new URL("./postgres-test-resources.ts", import.meta.url).pathname)};
+    const child = Bun.spawnSync([process.execPath,"-e",${JSON.stringify(source)}]);
+    process.exitCode = postgresTestCommandExitCode(child);
+  `]);
+  expect(parent.exitCode).toBe(expected);
+});
 
 describe("executable PostgreSQL resource lifecycle", () => {
   test("creates, verifies, preserves, then explicitly removes only the exact labelled volume", () => {
