@@ -70,3 +70,7 @@ steps:
   - id: S6
     name: Permission skips survive automatic lifecycle work
     do: "Finish onboarding, switch to another app and back, then quit and reopen Omi. Confirm no microphone, system-audio, screen-recording, notification, or Files & Folders consent UI appears. Trigger an automatic file rescan without Full Disk Access and confirm existing indexed rows under Documents, Desktop, and Downloads remain present."
+
+  - id: S7
+    name: A skip does not read as denied in the sidebar
+    do: "With onboarding finished and Screen Recording and Accessibility both skipped, open the sidebar permission rows. Confirm neither is shown as denied: a skip is a deliberate choice, not macOS refusing, and flagging it red asks the user to undo a decision they just made. Then grant Screen Recording from the sidebar and confirm the row stops offering it."

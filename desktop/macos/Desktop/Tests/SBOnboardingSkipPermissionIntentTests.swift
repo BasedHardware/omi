@@ -176,7 +176,10 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
 
     XCTAssertEqual(scanCalls, 0)
     XCTAssertNil(model.localFileScanTask)
-    XCTAssertNotEqual(model.step, .files)
+    // answerFiles guards on fdaState == .on and otherwise advances to .accessibility.
+    // Asserting only that the step changed would pass on a wrong destination, or on a
+    // restart back at .promise.
+    XCTAssertEqual(model.step, .accessibility)
   }
 
   // MARK: - Accessibility skip marker

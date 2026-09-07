@@ -195,10 +195,13 @@ actor FileIndexerService {
     // For incremental scans, load existing index for O(1) lookup
     let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
     var scannedPaths = Set<String>()
-    // ~-relative prefixes of directories whose enumeration FAILED (permission
-    // revoked, transient I/O). Files under these were not scanned, but that is
-    // a read error — not deletion — so they must be excluded from the retention
-    // diff (otherwise a single unreadable folder purges its whole index subtree).
+    // ~-relative prefixes of subtrees that were NOT scanned, for either of two
+    // reasons: enumeration failed (permission revoked, transient I/O), or the
+    // caller deliberately omitted a TCC-protected root it has no access to and
+    // passed it in as `retentionProtectedPrefixes`. Neither is deletion, so both
+    // must be excluded from the retention diff — otherwise one unreadable folder,
+    // or one root left out for want of Full Disk Access, purges its whole index
+    // subtree.
     var failedDirectories = retentionProtectedPrefixes
 
     if incremental {

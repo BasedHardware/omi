@@ -862,10 +862,16 @@ final class SBOnboardingModel: ObservableObject {
         Self.screenAnalysisIntentAtCompletion(
           intentEnabled: AssistantSettings.shared.screenAnalysisEnabled,
           screenRecordingGranted: screenGranted)
-      if AssistantSettings.shared.screenAnalysisEnabled,
-        !ProactiveAssistantsPlugin.shared.isMonitoring
-      {
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+      if AssistantSettings.shared.screenAnalysisEnabled {
+        if !ProactiveAssistantsPlugin.shared.isMonitoring {
+          ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+        }
+      } else if ProactiveAssistantsPlugin.shared.isMonitoring {
+        // Unreachable today: monitoring needs the screen grant, and a skip leaves
+        // no grant to have started the demo with. Stopping anyway makes "a
+        // resolved-off intent is not capturing" a property of this line rather
+        // than of that argument, which a later demo change could quietly break.
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .userToggle)
       }
     }
     Task { [appState] in

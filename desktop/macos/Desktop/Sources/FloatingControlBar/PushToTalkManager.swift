@@ -2001,7 +2001,11 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: currentPTTMode(),
       committed: false,
-      transcriptLength: 0)
+      // Nothing was ever captured, so there is no transcript to measure. `0` would
+      // report an empty transcript and drag the transcript-length distribution
+      // down with attempts that never reached STT; `floatingBarPTTEnded` omits the
+      // property entirely when this is nil.
+      transcriptLength: nil)
     pttLifecycle.terminate(
       disposition: .permissionDenied,
       source: "permission_gate",

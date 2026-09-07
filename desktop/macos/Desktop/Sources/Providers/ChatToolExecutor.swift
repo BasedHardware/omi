@@ -2295,6 +2295,10 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
       if !granted, preStatus == .notDetermined {
+        // The user just answered the system prompt with No, so the real TCC state
+        // is now .denied. Without this the cache still reads .notDetermined and a
+        // later caller treats a spent authorization as still askable.
+        appState?.notificationAuthorizationStatus = .denied
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)

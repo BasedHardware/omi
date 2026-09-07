@@ -46,7 +46,10 @@ import XCTest
 
     func testPermissionDenialClosesAttemptWithItsOwnTerminalClass() {
       let recorder = makeRecorder()
-      begin(recorder)
+      // Not the shared `begin` helper: that seeds micPermissionGranted: true, which
+      // would emit tcc_microphone_granted: true on the snapshot for an attempt the
+      // microphone permission is what refused.
+      recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: false)
 
       let snap = recorder.terminate(
         disposition: .permissionDenied,
