@@ -224,19 +224,21 @@ class BaseBatchAudioWriter {
     /// The sidecar is written atomically so a native crash cannot leave a partial
     /// JSON file for the Dart scanner to ingest. True confirms a saved/existing
     /// snapshot; false lets callers retry missing metadata or a failed write.
+    /// The existing-snapshot check deliberately runs before input validation: a
+    /// reopened recording keeps its original location even when the current
+    /// preference is missing or has become invalid.
     @discardableResult
     func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) -> Bool {
-        guard let rawGeolocation,
-              let data = rawGeolocation.data(using: .utf8),
-              !data.isEmpty,
-              data.count <= 4_096,
-              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return false }
-
         let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
         // A same-name part file can be reopened after a native restart. Its
         // location belongs to that recording, so never replace an existing
         // snapshot with the next session's config.
         if FileManager.default.fileExists(atPath: sidecarURL.path) { return true }
+        guard let rawGeolocation,
+              let data = rawGeolocation.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return false }
         do {
             try data.write(to: sidecarURL, options: .atomic)
             return true

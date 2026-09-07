@@ -76,6 +76,7 @@ struct BatchAudioEnergyTests {
                 precondition(!FileManager.default.fileExists(atPath: dir.appendingPathComponent(name + ".part").path))
             }
             // Failure in the first frame leaves no ingestable placeholder.
+            tearAt = 5 // inject the failure explicitly; don't rely on loop leftovers
             precondition(writer.openLocked(dirPath: dir.path, fileName: "test_empty.bin.part", startSec: 3, nowMs: 0))
             precondition(!writer.writeFramesLocked([Data([1, 2])]))
             precondition(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("test_empty.bin").path))
@@ -199,6 +200,10 @@ struct BatchAudioEnergyTests {
             // Existing snapshots are immutable, and failed writes remain retryable.
             let base = BaseBatchAudioWriter(tag: "test", queueLabel: "unused", recoveryPrefix: "test_")
             precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: "{\"latitude\":9}", audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
+            // An existing snapshot wins even when the current preference is invalid:
+            // the caller must latch instead of rereading defaults on every append.
+            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: "broken", audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
+            precondition(base.persistRecordingGeolocationSidecar(rawGeolocation: nil, audioURL: URL(fileURLWithPath: String(sidecars[0].path.dropLast(".geolocation.json".count)))))
             check(try String(contentsOf: sidecars[0], encoding: .utf8) == location)
             let missingDir = dir.appendingPathComponent("missing")
             let audio = missingDir.appendingPathComponent("recording.bin")
