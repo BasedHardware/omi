@@ -530,6 +530,13 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(chatHistoryErrorCopy(new Error('socket hang up'))).toBe(
     'Chat history could not be loaded. Check your connection and try again.',
   );
+  expect(chatHistoryErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(chatHistoryCanReload({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    false,
+  );
+  expect(chatHistoryCanReload({code: 'OMI_HTTP_TRANSPORT'})).toBe(true);
 });
 
 test('classifies string and nested chat 404 without retrying send', async () => {

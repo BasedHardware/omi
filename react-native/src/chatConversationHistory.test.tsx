@@ -211,6 +211,36 @@ test('shows typed chat grant denial instead of an empty message list', async () 
   expect(textOf(renderer)).not.toContain('You ·');
 });
 
+test('native unsupported chat history does not claim a connection blip', async () => {
+  mockRequest.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {
+      code: 'OMI_DEV_BACKEND_UNSUPPORTED',
+    }),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload chat messages',
+    ),
+  ).toHaveLength(0);
+});
+
 test('nested non-retryable chat history 503s do not offer Check again', async () => {
   mockRequest.mockRejectedValue(
     new ChatBackendError(

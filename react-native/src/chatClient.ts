@@ -122,10 +122,10 @@ export function chatSessionLost(error: unknown): boolean {
 }
 
 export function chatHistoryErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Chat history is not available on this backend yet.';
+  }
   if (error instanceof ChatBackendError) {
-    if (chatWriteDoorUnavailable(error)) {
-      return 'Chat history is not available on this backend yet.';
-    }
     return chatErrorCopy(error);
   }
   const code = nativeErrorCode(error);
@@ -148,6 +148,9 @@ export function chatHistoryErrorCopy(error: unknown): string {
 }
 
 export function chatHistoryCanReload(error: unknown): boolean {
+  if (chatWriteDoorUnavailable(error)) {
+    return false;
+  }
   if (!(error instanceof ChatBackendError)) {
     return true;
   }
