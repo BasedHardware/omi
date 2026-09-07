@@ -243,6 +243,67 @@ test("web generation streaming reconnects with the last event id", async () => {
   );
 });
 
+test("web generation streaming does not retry nested non-retryable 503", async () => {
+  let connections = 0;
+  const previousFetch = globalThis.fetch;
+  const body = JSON.stringify({
+    error: {
+      code: "development_backend_unsupported",
+      retryable: false,
+      action: "none",
+    },
+  });
+  globalThis.fetch = (async () => {
+    connections += 1;
+    return new Response(body, { status: 503 });
+  }) as typeof globalThis.fetch;
+
+  try {
+    await expect(
+      omiBackend.generationEvents("generation-unsupported", null)
+    ).resolves.toMatchObject({
+      body,
+      id: "generation-unsupported",
+      status: 503,
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  expect(connections).toBe(1);
+});
+
+test("web generation streaming retries nested retryable 503 until exhausted", async () => {
+  let connections = 0;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    connections += 1;
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: "service_unavailable",
+          retryable: true,
+          action: "retry",
+        },
+      }),
+      { status: 503 }
+    );
+  }) as typeof globalThis.fetch;
+
+  try {
+    await expect(
+      omiBackend.generationEvents("generation-unavailable", null)
+    ).rejects.toMatchObject({
+      attempts: 4,
+      code: "OMI_HTTP_STREAM_RECOVERY_EXHAUSTED",
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  expect(connections).toBe(4);
+});
+
 test("web generation streaming reports exhausted recovery without a fake terminal", async () => {
   const calls: Array<{ headers: Headers }> = [];
   const previousFetch = globalThis.fetch;

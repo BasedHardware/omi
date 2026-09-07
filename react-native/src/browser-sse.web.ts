@@ -72,6 +72,26 @@ function isTransientStatus(status: number): boolean {
   );
 }
 
+function nestedRetryable(body: string): boolean | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: {retryable?: unknown};
+    };
+    if (
+      parsed.error !== null &&
+      typeof parsed.error === 'object' &&
+      typeof parsed.error.retryable === 'boolean'
+    ) {
+      return parsed.error.retryable;
+    }
+  } catch {}
+  return null;
+}
+
+function isTransientFailure(status: number, body: string): boolean {
+  return isTransientStatus(status) && nestedRetryable(body) !== false;
+}
+
 function eventKind(data: string): string | null {
   try {
     const value: unknown = JSON.parse(data);
@@ -266,15 +286,14 @@ export async function readBrowserGenerationEvents(
       const response = await options.open(lastEventId, options.signal);
       lastResponse = response;
       if (response.status !== 200) {
-        if (!isTransientStatus(response.status)) {
-          const responseBody = await response.text();
+        const responseBody = await response.text();
+        if (!isTransientFailure(response.status, responseBody)) {
           return {
             body: responseBody === '' ? null : responseBody,
             retryAfterSeconds: retryAfterSeconds(response),
             status: response.status,
           };
         }
-        await response.text();
         if (attempt === maxAttempts) {
           throw new BrowserGenerationRecoveryError(maxAttempts);
         }
