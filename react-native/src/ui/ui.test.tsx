@@ -78,6 +78,7 @@ jest.mock('../app/useReduceMotion', () => ({
 import {Animated} from 'react-native';
 import {Button} from './Button';
 import {
+  OutcomeStatus,
   ReadStatus,
   coverageStatusCopy,
   emptyLibraryCopy,
@@ -538,6 +539,20 @@ test('legacy unknown completeness is not presented as a known incomplete read', 
   expect(JSON.stringify(renderer.toJSON())).toContain(
     'Memories are a partial view.',
   );
+});
+
+test('OutcomeStatus uses mapped library copy instead of a generic unavailable claim', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  const renderer = render(
+    <OutcomeStatus
+      label="Conversations"
+      outcome={{status: 'error', error: mapped}}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain(mapped);
+  expect(tree).not.toContain('Conversations are unavailable.');
 });
 
 test('empty library copy keeps completeness instead of claiming emptiness', () => {

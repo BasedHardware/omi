@@ -110,7 +110,7 @@ export function OutcomeStatus({
   return outcome.status === 'error' ? (
     <View style={[styles.readStatus, mac && styles.macReadStatus]}>
       <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>
-        {label} are unavailable.
+        {outcome.error}
       </Text>
     </View>
   ) : (
