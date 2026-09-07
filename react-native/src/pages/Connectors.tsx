@@ -54,6 +54,7 @@ export function ConnectorsPage({
   const [snapshot, setSnapshot] = useState<ConnectorsSnapshot | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [writesAvailable, setWritesAvailable] = useState(true);
 
   const reload = useCallback(async () => {
     if (Platform.OS === 'web') {
@@ -164,6 +165,9 @@ export function ConnectorsPage({
       await reload();
     } catch (reason) {
       setActionError(desktopReadErrorCopy(reason));
+      if (!cloudErrorCanRetry(reason)) {
+        setWritesAvailable(false);
+      }
     } finally {
       setPendingId(null);
     }
@@ -263,7 +267,7 @@ export function ConnectorsPage({
                             : `Install ${app.name}`
                         }
                         accessibilityRole="button"
-                        disabled={pendingId !== null}
+                        disabled={pendingId !== null || !writesAvailable}
                         onPress={() => {
                           setEnabled(app, !app.enabled).catch(() => undefined);
                         }}

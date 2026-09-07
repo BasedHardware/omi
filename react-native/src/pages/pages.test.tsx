@@ -582,6 +582,66 @@ test('successful empty Apps enabled reads still report catalogue apps as not ins
   expect(labelsOf(renderer)).toContain('Install Owned app');
 });
 
+test('nested non-retryable Apps enable writes latch Install', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: false},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    if (
+      request.method === 'POST' &&
+      typeof request.path === 'string' &&
+      request.path.startsWith('/v1/apps/enable')
+    ) {
+      return {
+        id: request.id,
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'development_backend_unsupported',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(labelsOf(renderer)).toContain('Install Owned app');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Install Owned app')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(textOf(renderer)).toContain(
+    'Apps are not available from the selected Omi service yet.',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Install Owned app',
+    ).props.disabled,
+  ).toBe(true);
+});
+
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
   const previous = Platform.OS;
   Object.defineProperty(Platform, 'OS', {value: 'web', configurable: true});
