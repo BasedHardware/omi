@@ -148,6 +148,16 @@ int main(void)
     assert(received_count == 2 && received[0] == BUTTON_INPUT_DOUBLE && received[1] == BUTTON_INPUT_RELEASE);
     expect_idle();
 
+    /* A hold already past 3s is delivered immediately when contention clears. */
+    reset(false);
+    fake_now = 1000;
+    button_input_edge(true);
+    fake_now = 4100;
+    input_work.due = INT64_MAX;
+    input_work.handler(&input_work.work);
+    assert(received_count == 1 && received[0] == BUTTON_INPUT_LONG);
+    expect_idle();
+
     /* A delayed worker must not turn a completed 2999ms press into power-off. */
     reset(false);
     fake_now = 0;
