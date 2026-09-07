@@ -145,12 +145,22 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       const SizedBox(height: 8),
 
                       // Continue button
-                      provider.isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
+                      // The loading state keeps the button's footprint: swapping in
+                      // a bare spinner changed the block height mid-tap, which
+                      // reflowed the tiles (and re-fit their text) for one frame
+                      // right before the page switched — a visible flash.
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: provider.isLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                ),
+                              )
+                            : ElevatedButton(
                                 onPressed: () async {
                                   provider.setLoading(true);
                                   if (Platform.isAndroid) {
@@ -188,7 +198,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   ),
                                 ),
                               ),
-                            ),
+                      ),
                     ],
                   ),
                 ),

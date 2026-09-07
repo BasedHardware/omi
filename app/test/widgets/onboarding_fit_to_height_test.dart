@@ -64,4 +64,13 @@ void main() {
     // Nothing scrolls: no scroll view is part of the fit.
     expect(find.byType(SingleChildScrollView), findsNothing);
   });
+
+  testWidgets('copy grows back toward its natural size when it is given more height', (tester) async {
+    await _pump(tester, maxHeight: 120, copy: _longCopy);
+    final shrunk = _scaleOf(tester);
+    expect(shrunk, lessThan(1.0));
+
+    await _pump(tester, maxHeight: 2000, copy: _longCopy);
+    expect(_scaleOf(tester), 1.0);
+  });
 }

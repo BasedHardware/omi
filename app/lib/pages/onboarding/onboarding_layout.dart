@@ -34,14 +34,15 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
   final GlobalKey _contentKey = GlobalKey();
   double _textScale = 1.0;
   double? _fittedWidth;
-  double? _fittedMaxHeight;
 
   void _measure(double maxHeight) {
     if (!mounted) return;
     final box = _contentKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return;
     final height = box.size.height;
-    if (height <= maxHeight + 0.5 || _textScale <= _minTextScale) return;
+    final overflows = height > maxHeight + 0.5;
+    final hasSlack = _textScale < 1.0 && height < maxHeight - 0.5;
+    if (!overflows && !hasSlack) return;
     final next = (_textScale * maxHeight / height).clamp(_minTextScale, 1.0);
     if ((next - _textScale).abs() < 0.005) return;
     setState(() => _textScale = next);
@@ -53,11 +54,13 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final maxHeight = constraints.maxHeight;
-        // New constraints (keyboard, rotation, first layout): start again from
-        // the natural size so the copy can grow back, not only shrink.
-        if (_fittedWidth != width || _fittedMaxHeight != maxHeight) {
+        // A new width (rotation, first layout) restarts from the natural size
+        // because wrapping changes. A height-only change (a button swapping to
+        // its loading state, the keyboard) keeps the current scale and lets the
+        // measurement below shrink or grow it — restarting at 1.0 there showed
+        // one frame of oversized copy before the fit caught up.
+        if (_fittedWidth != width) {
           _fittedWidth = width;
-          _fittedMaxHeight = maxHeight;
           _textScale = 1.0;
         }
         if (maxHeight.isFinite) {
