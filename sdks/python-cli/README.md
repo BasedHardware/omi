@@ -85,8 +85,11 @@ omi auth refresh                # force a Firebase refresh (no-op for API keys)
 omi auth logout                 # wipe the credential
 ```
 
-You can also set `OMI_API_KEY` in the environment to bypass on-disk config
-entirely — handy in containers and CI:
+You can also set a non-empty `OMI_API_KEY` in the environment to override the
+saved authentication for that invocation - handy in containers and CI. The
+key is validated even when the selected profile already has credentials;
+an invalid override fails before any API request. Saved credentials are not
+changed, and profile settings such as the API base URL still apply:
 
 ```bash
 export OMI_API_KEY=omi_dev_...
