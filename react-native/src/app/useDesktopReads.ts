@@ -4,6 +4,7 @@ import {
   loadTasks,
   loadConversations,
   ConversationCursorExpiredError,
+  TaskCursorExpiredError,
   type TaskRead,
   projectionTimestamp,
   desktopBackendConfigurationCopy,
@@ -52,6 +53,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     null,
   );
   const conversationPagePendingRef = useRef(false);
+  const taskPagePendingRef = useRef(false);
+  const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
+  const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const refreshPendingRef = useRef(false);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   // Monotonic refresh sequence. Every gate transition and every new refresh
@@ -69,6 +73,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     refreshSeqRef.current += 1;
     refreshPendingRef.current = false;
     conversationPagePendingRef.current = false;
+    taskPagePendingRef.current = false;
+    setTasksLoadingMore(false);
+    setTaskNotice(null);
     setConversationsLoadingMore(false);
     setConversationNotice(null);
     readOutcomesRef.current = null;
@@ -112,6 +119,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       }
       const seq = ++refreshSeqRef.current;
       conversationPagePendingRef.current = false;
+      taskPagePendingRef.current = false;
+      setTasksLoadingMore(false);
+      setTaskNotice(null);
       setConversationsLoadingMore(false);
       setConversationNotice(null);
       refreshPendingRef.current = true;
@@ -274,13 +284,91 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     }
   }, [enabled]);
 
+  const loadMoreTasks = useCallback(async () => {
+    const previous = readOutcomesRef.current;
+    if (
+      !enabled ||
+      omiBackend == null ||
+      taskPagePendingRef.current ||
+      refreshPendingRef.current ||
+      previous?.tasks.status !== 'success' ||
+      !previous.tasks.value.page.hasMore ||
+      previous.tasks.value.page.nextCursor === null
+    ) {
+      return;
+    }
+    const cursor = previous.tasks.value.page.nextCursor;
+    const sequence = refreshSeqRef.current;
+    taskPagePendingRef.current = true;
+    setTasksLoadingMore(true);
+    setTaskNotice(null);
+    try {
+      let replace = false;
+      let next;
+      try {
+        next = await loadTasks(omiBackend, cursor);
+      } catch (error) {
+        if (
+          !(error instanceof TaskCursorExpiredError) ||
+          sequence !== refreshSeqRef.current
+        ) {
+          throw error;
+        }
+        replace = true;
+        next = await loadTasks(omiBackend);
+      }
+      if (sequence !== refreshSeqRef.current) {
+        return;
+      }
+      const current = readOutcomesRef.current;
+      if (current === null || current.tasks.status !== 'success') {
+        return;
+      }
+      if (!replace && next.accountEpoch !== current.tasks.value.accountEpoch)
+        throw new Error('Task account epoch changed');
+      const items = replace
+        ? next.items
+        : [...current.tasks.value.items, ...next.items];
+      if (items.length > 10000) {
+        throw new Error('Task list is too large');
+      }
+      if (
+        new Set(items.map(item => item.id)).size !== items.length ||
+        (!replace && next.page.hasMore && next.page.nextCursor === cursor)
+      ) {
+        throw new Error('Task page did not advance');
+      }
+      const merged = {
+        ...current,
+        tasks: {status: 'success' as const, value: {...next, items}},
+      };
+      readOutcomesRef.current = merged;
+      setReadOutcomes(merged);
+      if (replace) {
+        setTaskNotice('Tasks changed. The list has been refreshed.');
+      }
+    } catch {
+      if (sequence === refreshSeqRef.current) {
+        setTaskNotice('More tasks could not be loaded. Try again.');
+      }
+    } finally {
+      if (sequence === refreshSeqRef.current) {
+        taskPagePendingRef.current = false;
+        setTasksLoadingMore(false);
+      }
+    }
+  }, [enabled]);
+
   const refreshTasks = useCallback(async (): Promise<TaskRead | null> => {
     if (!enabled || omiBackend == null) {
       return null;
     }
     const sequence = ++refreshSeqRef.current;
     conversationPagePendingRef.current = false;
-    refreshPendingRef.current = false;
+    taskPagePendingRef.current = false;
+    setTasksLoadingMore(false);
+    setTaskNotice(null);
+    refreshPendingRef.current = true;
     setConversationsLoadingMore(false);
     try {
       const tasks = await loadTasks(omiBackend);
@@ -304,6 +392,8 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       return tasks;
     } catch {
       return null;
+    } finally {
+      if (sequence === refreshSeqRef.current) refreshPendingRef.current = false;
     }
   }, [enabled]);
 
@@ -329,6 +419,7 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     () => () => {
       refreshSeqRef.current += 1;
       conversationPagePendingRef.current = false;
+      taskPagePendingRef.current = false;
       refreshPendingRef.current = false;
     },
     [],
@@ -361,6 +452,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     readOutcomes.memories.status === 'error';
 
   return {
+    tasksLoadingMore,
+    taskNotice,
+    loadMoreTasks,
     conversationsLoadingMore,
     conversationNotice,
     loadMoreConversations,

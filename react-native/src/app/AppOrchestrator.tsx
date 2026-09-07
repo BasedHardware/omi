@@ -46,6 +46,7 @@ import {FocusPressable} from '../ui/Pressable';
 import {ConversationsPage} from '../pages/Conversations';
 import {MemoriesPage} from '../pages/Memories';
 import {TasksPage} from '../pages/Tasks';
+import {TaskPagination} from '../ui/TaskPagination';
 import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
@@ -146,6 +147,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   } = useOnboarding(nativeSessionRequired, refreshReadsViaRef);
   const {
     allHomeReadsUnavailable,
+    tasksLoadingMore,
+    taskNotice,
+    loadMoreTasks,
     readOutcomes,
     reads,
     readsPhase,
@@ -164,6 +168,22 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     refreshTasks,
     revalidateSession,
   });
+  const taskPagination = (
+    <TaskPagination
+      hasMore={
+        readOutcomes?.tasks.status === 'success' &&
+        readOutcomes.tasks.value.page.hasMore
+      }
+      busy={
+        tasksLoadingMore ||
+        readsPhase === 'refreshing' ||
+        taskMutations.busyTaskId !== null
+      }
+      notice={taskNotice}
+      onLoadMore={loadMoreTasks}
+    />
+  );
+
   useEffect(() => {
     refreshReadsRef.current = refreshReads;
   }, [refreshReads]);
@@ -796,6 +816,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp
+          taskPagination={taskPagination}
           {...taskMutations}
           activeGenerationId={activeGenerationId}
           authError={authError}
@@ -922,6 +943,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         : 'home';
     return (
       <MobileAppSurface
+        taskPagination={taskPagination}
         {...taskMutations}
         activeRoute={activeMobileRoute}
         conversationContent={
@@ -1403,6 +1425,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   />
                 ) : route === 'Tasks' ? (
                   <TasksPage
+                    taskPagination={taskPagination}
                     {...taskMutations}
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}

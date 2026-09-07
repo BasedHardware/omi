@@ -36,6 +36,7 @@ export function DesktopSessionProbe() {
 }
 
 type Props = TaskMutationProps & {
+  taskPagination?: React.ReactNode;
   deviceContent?: React.ReactNode;
   activeGenerationId: string | null;
   authError: string | null;

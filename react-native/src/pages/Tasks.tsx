@@ -41,6 +41,7 @@ function formatTaskDue(dueAt: number | null): string {
 export function TasksPage({
   outcome,
   loading,
+  taskPagination,
   onTaskToggle,
   onTaskEdit,
   busyTaskId = null,
@@ -51,6 +52,7 @@ export function TasksPage({
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
+  taskPagination?: React.ReactNode;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -235,6 +237,7 @@ export function TasksPage({
           )}
         </ScrollView>
       )}
+      {taskPagination}
       <View
         accessibilityLabel="Task keyboard shortcuts"
         style={styles.taskShortcuts}>
