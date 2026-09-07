@@ -721,6 +721,75 @@ def test_qa_cloud_run_renders_typesense_host_and_key_into_both_http_services():
     assert "GEMINI_API_KEY=GEMINI_API_KEY:latest" in text
 
 
+def test_qa_cloud_run_service_secret_rendering_is_scoped_per_service():
+    """Run the deploy shell with a fake gcloud and inspect each rendered binding."""
+
+    text = WORKFLOW.read_text(encoding="utf-8")
+    marker = "      - name: Deploy QA HTTP services with gateway-only routing\n"
+    start = text.index("        run: |\n", text.index(marker)) + len("        run: |\n")
+    end = text.index("\n      - name: Deploy gates-closed maintenance jobs", start)
+    rendered = textwrap.dedent(text[start:end]).replace("${{ needs.admit.outputs.source_sha }}", "b" * 40)
+    env = {
+        "QA_PROJECT": "based-hardware-dev",
+        "QA_REGION": "us-central1",
+        "QA_FIRESTORE_DATABASE": "jit-qa",
+        "QA_AUTH_PROJECT": "based-hardware",
+        "QA_NETWORK": "default",
+        "QA_SERVICE": "backend-jit-qa",
+        "QA_DESKTOP_SERVICE": "desktop-backend-jit-qa",
+        "QA_RUNTIME_SERVICE_ACCOUNT": "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com",
+        "QA_UID": CONTRACT.QA_UID,
+        "QA_TYPESENSE_COLLECTION": CONTRACT.TYPESENSE_COLLECTION,
+        "QA_TYPESENSE_READINESS_COLLECTION": CONTRACT.TYPESENSE_READINESS_COLLECTION,
+        "QA_REDIS_SECRET": "jit-qa-redis-password",
+        "QA_GATEWAY_TOKEN_SECRET": "jit-qa-gateway-token",
+        "QA_TYPESENSE_SECRET": "jit-qa-typesense-api-key",
+        "BACKEND_IMAGE": "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "a" * 64,
+        "DESKTOP_IMAGE": "gcr.io/based-hardware-dev/desktop-backend-jit-qa@sha256:" + "b" * 64,
+        "GATEWAY_URL": "https://llm-gateway-jit-qa-abc.run.app",
+        "REDIS_HOST": "10.0.0.10",
+        "TYPESENSE_HOST": "typesense-jit-qa-1031333818730.us-central1.run.app",
+        "SOURCE_SHA": "b" * 40,
+    }
+
+    with tempfile.TemporaryDirectory() as directory:
+        directory_path = Path(directory)
+        log_path = directory_path / "gcloud-args.log"
+        fake_gcloud = directory_path / "gcloud"
+        fake_gcloud.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\034' \"$@\" >> \"$GCLOUD_LOG\"\n"
+            "printf '\\035' >> \"$GCLOUD_LOG\"\n",
+            encoding="utf-8",
+        )
+        fake_gcloud.chmod(0o755)
+        result = subprocess.run(
+            ["bash", "-c", rendered],
+            env={**os.environ, **env, "PATH": f"{directory}:{os.environ['PATH']}", "GCLOUD_LOG": str(log_path)},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        records = log_path.read_bytes().split(b"\035")
+        calls = [record.decode().split("\034")[:-1] for record in records if record]
+        deploys = {call[2]: call for call in calls if call[:2] == ["run", "deploy"]}
+        assert set(deploys) == {"backend-jit-qa", "desktop-backend-jit-qa"}
+
+        def secrets_for(service):
+            call = deploys[service]
+            value = call[call.index("--set-secrets") + 1]
+            return dict(item.split("=", 1) for item in value.split(","))
+
+        backend_secrets = secrets_for("backend-jit-qa")
+        desktop_secrets = secrets_for("desktop-backend-jit-qa")
+        assert backend_secrets["TYPESENSE_API_KEY"] == "jit-qa-typesense-api-key:latest"
+        assert desktop_secrets["TYPESENSE_API_KEY"] == "jit-qa-typesense-api-key:latest"
+        assert "GEMINI_API_KEY" not in backend_secrets
+        assert desktop_secrets["GEMINI_API_KEY"] == "GEMINI_API_KEY:latest"
+
+
 def test_typesense_entrypoint_uses_environment_key_without_secret_argument():
     entrypoint = (BACKEND_ROOT / "scripts" / "jit_qa_typesense_entrypoint.sh").read_text(encoding="utf-8")
     assert "TYPESENSE_API_KEY" in entrypoint
