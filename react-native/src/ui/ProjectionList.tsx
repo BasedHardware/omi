@@ -6,19 +6,31 @@ import {
   View,
   type ViewProps,
 } from 'react-native';
-import type {DesktopReadProjection} from '../desktopReadClient';
+import {
+  conversationDisplaySummary,
+  conversationDisplayTitle,
+  type DesktopReadProjection,
+} from '../desktopReadClient';
 import {styles} from './styles';
 
 function displayTitle(item: DesktopReadProjection): string {
-  return item.kind === 'memory'
-    ? item.title.replace(/^entity:[^\s]+\s+/, '')
-    : item.title;
+  if (item.kind === 'memory') {
+    return item.title.replace(/^entity:[^\s]+\s+/, '');
+  }
+  if (item.kind === 'conversation') {
+    return conversationDisplayTitle(item);
+  }
+  return item.title;
 }
 
 function displaySummary(item: DesktopReadProjection): string {
-  return item.kind === 'memory'
-    ? 'Synthesized memory with source citations'
-    : item.summary;
+  if (item.kind === 'memory') {
+    return 'Synthesized memory with source citations';
+  }
+  if (item.kind === 'conversation') {
+    return conversationDisplaySummary(item);
+  }
+  return item.summary;
 }
 
 export const ProjectionRow = memo(function ProjectionRow({

@@ -192,7 +192,9 @@ Cloud Linux after `27126e8ac6`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `51aa6489e7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Wide Home search no longer says "Showing saved data. Could not refresh." when conversation and memory doors both failed just because tasks still have rows. That parent line uses the mapped conversation/memory copy. Mixed library failures still keep the generic refresh parent. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the wide Home search matching-tasks slice: wide Home search no longer claims "No results" over tasks that match the query. Matching task rows join the conversation and memory results. A task page that did not load still omits those rows. This does not invent a task producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `9a64d9027f`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Wide Home search no longer claims "No results" over tasks that match the query. Matching task rows join the conversation and memory results. A task page that did not load still omits those rows. This does not invent a task producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the wide Home search conversation-fallback slice: wide Home search no longer renders untitled processing Listen/recording rows or empty summaries as blank gaps. Those rows use the same visible title and summary fallbacks as Conversations, compact Daily Recaps, and macOS Home. Search still indexes those fallbacks. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

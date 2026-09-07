@@ -89,6 +89,7 @@ import {
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
+import {ProjectionRow} from './ProjectionList';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
 import {
@@ -890,4 +891,92 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain("readStatusCopy(\n                'Recaps'");
   expect(orchestrator).toContain("readStatusCopy(\n                'Tasks'");
   expect(orchestrator).toContain('mindMapCoverageCopy=');
+});
+
+test('wide Home search rows keep untitled processing conversations visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:processing-home-search',
+        title: '',
+        summary: '',
+        searchableText:
+          'Processing conversation…\nConversation summary is not ready yet.',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'processing',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Processing conversation…');
+  expect(tree).toContain('Conversation summary is not ready yet.');
+});
+
+test('wide Home search rows keep empty completed conversation copy visible', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:completed-home-search',
+        title: '',
+        summary: '',
+        searchableText:
+          'Conversation title unavailable\nConversation summary unavailable',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Conversation title unavailable');
+  expect(tree).toContain('Conversation summary unavailable');
+});
+
+test('wide Home search rows keep supplied conversation title and summary', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:named-home-search',
+        title: 'Morning walk',
+        summary: 'Discussed the launch.',
+        searchableText: 'Morning walk\nDiscussed the launch.',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: '2026-09-07T00:01:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Morning walk');
+  expect(tree).toContain('Discussed the launch.');
+  expect(tree).not.toContain('Processing conversation…');
+  expect(tree).not.toContain('Conversation title unavailable');
 });
