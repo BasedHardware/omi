@@ -425,13 +425,13 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   /// contract is that the draft is there to be taken exactly once.
   func testThePrefilledDraftIsHandedOverExactlyOnceAndUnsent() {
     let store = MainChatNavigationRequestStore.shared
-    _ = store.consumeDraft()
+    _ = store.consumeDraft(existingDraft: "")
 
     store.request(draft: FirstRealAppCardPolicy.prompt)
 
     XCTAssertTrue(store.isPending)
-    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
-    XCTAssertNil(store.consumeDraft(), "a second composer must not re-take the draft")
+    XCTAssertEqual(store.consumeDraft(existingDraft: ""), "Summarize what's on my screen")
+    XCTAssertNil(store.consumeDraft(existingDraft: ""), "a second composer must not re-take the draft")
     XCTAssertTrue(store.consume())
   }
 

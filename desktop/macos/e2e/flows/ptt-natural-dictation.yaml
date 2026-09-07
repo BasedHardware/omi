@@ -1,0 +1,38 @@
+version: 2
+name: ptt-natural-dictation
+tier: manual
+description: Natural microphone PTT, exact-opening dictation routing, guarded editor insertion and recovery controls
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeOpeningDecoder.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRecoveryActions.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
+preconditions:
+  - auth_ready
+  - named_non_production_bundle_ui_lane
+  - microphone_permission_granted
+  - accessibility_permission_granted
+steps:
+  - id: S1
+    name: Natural question and closing opening check
+    do: "On a named omi-* bundle, hold PTT and speak a harmless question for at least four seconds, then release. Verify the final opening check commits the question, one answer completes, and no dictation is inserted. Inspect this bundle's closing-decode diagnostics. Repeat with a shorter hold so release has a different opening from the mid-hold probe."
+    verify: true
+  - id: S2
+    name: Dictation and guarded undo in a scratch editor
+    do: "In a new disposable TextEdit document type Original, keeping the caret at its end. Hold PTT, say 'type Hello', then release. Verify exactly 'Original Hello' appears. Without editing or moving the caret, use the named app's status-menu Undo Last Dictation and verify only 'Original' remains. Repeat but edit the document before invoking Undo; Undo must be disabled and the edit preserved."
+    verify: true
+  - id: S3
+    name: Changed target copies instead of writing
+    do: "Dictate into one scratch field and move to another field while closing transcription runs. Verify neither field receives the dictation, the copied-text hint appears, and the clipboard contains the dictation. Use only disposable documents and clipboard contents for this test."
+    verify: true
+  - id: S4
+    name: Persistent hands-free send control
+    do: "Enable double-tap locking in the named app. Double-tap PTT, verify the notch retains a lock icon and SEND control while speaking, then click SEND. Verify capture ends once and the turn completes. Repeat with ordinary hold/release."
+    verify: true
+  - id: S5
+    name: Offline question review and copy UI
+    do: "With the named app configured for its offline test route, ask a question without the type prefix. Verify Question kept offers Review and Copy. Review must open an unsent composer and preserve an existing draft. Repeat and use Copy from the banner or bar context menu; no question may be sent automatically."
+    verify: true
