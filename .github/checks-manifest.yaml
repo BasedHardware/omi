@@ -64,7 +64,6 @@ checks:
     command: ["python3", ".github/scripts/test_preflight_runner.py"]
     triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_preflight_runner.py", ".github/scripts/run_checks.py", ".github/scripts/test_run_checks.py", "scripts/pre-push-singleflight", "scripts/pre-push", "scripts/pr-preflight", ".github/workflows/windows-preflight-portability.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    platforms: ["windows"]
     reason: "the single-flight pre-push gate must manage child processes and launch Bash checks on native Windows and POSIX hosts"
   - id: context-for-claude-build-identity
     command: ["bash", "desktop/context-for-claude/scripts/test-build-identity.sh"]
