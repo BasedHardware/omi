@@ -361,3 +361,12 @@ test("chat routes cannot use a pool outside the process readiness proof", () => 
     } },
   })).toThrow("invalid PostgreSQL Firebase memory service process options");
 });
+
+test("settings routes cannot use a pool outside the process readiness proof", () => {
+  const base = fixture();
+  expect(() => createPostgresFirebaseAuthorizedMemoryServiceProcess({ ...base.options,
+    service_options: { ...base.service_options, settings: {
+      authorization: { ...base.service_options.memory_read.authorization, pool: fixture().pool },
+    } },
+  })).toThrow("invalid PostgreSQL Firebase memory service process options");
+});

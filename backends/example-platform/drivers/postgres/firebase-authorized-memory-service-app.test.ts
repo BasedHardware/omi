@@ -170,3 +170,20 @@ test("deployed chat history shares Firebase admission and does not mount writes"
   expect(await (await app.request("/v1/chat-messages", { method: "POST", body: "{}" })).text())
     .toBe('{"error":"not_found"}');
 });
+
+test("deployed settings verify identity without inventing a signed-in profile", async () => {
+  const base = options();
+  const app = createPostgresFirebaseAuthorizedMemoryServiceApp({
+    ...base,
+    settings: { authorization: base.memory_read.authorization },
+  });
+  const signedOut = await app.request("/v1/settings");
+  expect(signedOut.status).toBe(200);
+  expect(await signedOut.json()).toEqual({ identity: null, entitlement: null });
+  const denied = await app.request("/v1/settings", {
+    headers: { authorization: "Bearer invalid.token" },
+  });
+  expect(denied.status).toBe(401);
+  expect(await denied.text()).toBe('{"error":"unauthorized"}');
+  expect((await app.request("/v1/settings", { method: "PATCH", body: "{}" })).status).toBe(404);
+});
