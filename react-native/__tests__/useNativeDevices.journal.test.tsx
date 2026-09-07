@@ -462,3 +462,79 @@ test.each([undefined, 0, 1700000000000])(
     }
   },
 );
+
+test.each(['new capture', 'recovered capture'] as const)(
+  '%s retains its absent name when discovery changes before open',
+  async scenario => {
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    if (scenario === 'new capture') {
+      const create =
+        mockBackend.createRecordingJournal.getMockImplementation()!;
+      mockBackend.createRecordingJournal.mockImplementationOnce(async input => {
+        const journal = await create(input);
+        await blocked;
+        return journal;
+      });
+    } else {
+      mockSaved = {
+        handle: mockCapture,
+        captureId: mockCapture,
+        deviceId: 'omi-1',
+        deviceName: null,
+        codec: 21,
+        sessionId: null,
+        entries: [JSON.stringify(['p', 'AAAB'])],
+      };
+      const read = mockBackend.readRecordingJournal.getMockImplementation()!;
+      mockBackend.readRecordingJournal.mockImplementationOnce(async () => {
+        await blocked;
+        return read();
+      });
+    }
+    const view = await render();
+    try {
+      if (scenario === 'new capture') {
+        await emit(packet);
+      }
+      await emit({
+        type: 'snapshot',
+        snapshot: {
+          ...mockSnapshot,
+          connectedDeviceId: 'omi-1',
+          phase: 'connected',
+          capture: 'recording',
+          devices: [{id: 'omi-1', name: 'Discovered later', connected: true}],
+        },
+      });
+      expect(mockBackend.requestRecordingJournal).not.toHaveBeenCalled();
+      await ReactTestRenderer.act(async () => {
+        release();
+        for (let index = 0; index < 100; index++) {
+          await Promise.resolve();
+        }
+      });
+      const open = mockBackend.requestRecordingJournal.mock.calls.find(
+        call => call[1].path === '/v1/device-sessions',
+      )!;
+      expect(JSON.parse(open[1].body!)).not.toHaveProperty('deviceName');
+      await emit({type: 'snapshot', snapshot: mockSnapshot});
+      expect(
+        mockBackend.requestRecordingJournal.mock.calls.map(
+          call => call[1].path,
+        ),
+      ).toEqual([
+        '/v1/device-sessions',
+        `/v1/device-sessions/${mockSession}/audio`,
+        `/v1/device-sessions/${mockSession}/complete`,
+        `/v1/device-sessions/${mockSession}/transcribe`,
+      ]);
+      expect(mockBackend.removeRecordingJournal).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      await ReactTestRenderer.act(async () => view.unmount());
+    }
+  },
+);
