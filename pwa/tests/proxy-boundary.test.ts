@@ -195,16 +195,44 @@ test("example platform permits candidate reads and task operations", () => {
   expect(
     isExamplePlatformRequestSupported("POST", "/__omi/api/v1/tasks/ops")
   ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/chat-messages?limit=50"
+    )
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/chat-messages?limit=50&olderCursor=older-1"
+    )
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript"
+    )
+  ).toBe(true);
   for (const [method, path] of [
     ["DELETE", "/__omi/api/v1/tasks/ops"],
     ["POST", "/__omi/api/v1/tasks"],
-    ["GET", "/__omi/api/v1/chat-messages?limit=50"],
+    ["POST", "/__omi/api/v1/chat-messages"],
     ["POST", "/__omi/api/v1/settings"],
     ["POST", "/__omi/api/v1/chat-attachments"],
     ["GET", "/__omi/api/v1/chat-generations/one/events"],
     ["DELETE", "/__omi/api/v1/chat-generations/one"],
     ["POST", "/__omi/api/v1/conversations"],
     ["GET", "/__omi/api/v1/conversations/one"],
+    ["GET", "/__omi/api/v1/device-sessions/ownership"],
+    ["GET", "/__omi/api/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170"],
+    [
+      "GET",
+      "/__omi/api/v1/device-sessions/ad99598c-36a8-1e12-a428-63d0a3e06170/transcript",
+    ],
+    [
+      "POST",
+      "/__omi/api/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe",
+    ],
   ]) {
     expect(isExamplePlatformRequestSupported(method, path)).toBe(false);
   }
@@ -257,6 +285,11 @@ test.each([
   ["GET", "/__omi/api/v1/memories?limit=50"],
   ["GET", "/__omi/api/v1/tasks?limit=50"],
   ["POST", "/__omi/api/v1/tasks/ops"],
+  ["GET", "/__omi/api/v1/chat-messages?limit=50"],
+  [
+    "GET",
+    "/__omi/api/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcript",
+  ],
 ])("vite forwards supported example platform request %s %s", (method, url) => {
   const config = viteConfig({
     command: "serve",
