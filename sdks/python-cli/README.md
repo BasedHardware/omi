@@ -251,10 +251,17 @@ omi
 5  not found (404)
 ```
 
-Connection failures, timeouts, and transport protocol errors are retried
-automatically. If all attempts fail, the CLI exits with code `3` and emits a
-safe error message on stderr (JSON when `--json` is set), without raw transport
-exception details.
+For requests through the shared Omi API client, including post-login credential
+verification, connection failures, timeouts, and transport protocol errors are
+retried automatically. If all attempts fail, the CLI exits with code `3` and
+emits a safe error message on stderr (JSON when `--json` is set), without raw
+transport exception details. This guarantee does not cover separate OAuth HTTP
+requests (token exchange, refresh, or API-key minting) or local companion API
+requests.
+
+The shared client requires a valid absolute `http://` or `https://` API base URL.
+Invalid API base configuration is reported as a usage error (exit `1`) before
+the client attempts a request or refreshes credentials.
 
 ## For agents
 
