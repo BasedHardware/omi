@@ -3358,12 +3358,19 @@ class PushToTalkManager: ObservableObject {
             area: "voice_typing", from: "llm_polish", to: "local_format", reason: "policy", outcome: .degraded)
         }
       } catch {
+        // Observed live: every polish "failed" within 200ms and nothing said
+        // why. It was the plan gate — the same wall that stops live notes —
+        // so the reason is named and the gate lands in the "quota" bucket
+        // (a closed set; an unknown reason would be filed as "other").
         let timedOut = (error as? DictationPolisher.PolishError) == .timedOut
+        var planGated = false
+        if case GeminiClient.GeminiClientError.planGated = error { planGated = true }
         log(
-          "PushToTalkManager: dictation polish \(timedOut ? "timed out" : "failed") — keeping the formatted transcript")
+          "PushToTalkManager: dictation polish \(timedOut ? "timed out" : "failed") — "
+            + "keeping the formatted transcript (\(error.localizedDescription))")
         DesktopDiagnosticsManager.shared.recordFallback(
           area: "voice_typing", from: "llm_polish", to: "local_format",
-          reason: timedOut ? "timeout" : "other", outcome: .degraded)
+          reason: timedOut ? "timeout" : (planGated ? "quota" : "other"), outcome: .degraded)
       }
       guard isCurrent() else {
         run.abandoned = true
