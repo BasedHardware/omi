@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  conversationDisplayTitle,
   conversationGroupLabel,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -67,7 +68,7 @@ const ConversationRow = memo(function ConversationRow({
 }) {
   return (
     <FocusPressable
-      accessibilityLabel={`Open conversation ${item.title}`}
+      accessibilityLabel={`Open conversation ${conversationDisplayTitle(item)}`}
       accessibilityRole="button"
       accessibilityState={{selected}}
       onPress={onPress}
@@ -89,7 +90,7 @@ const ConversationRow = memo(function ConversationRow({
         </Text>
       </View>
       <Text numberOfLines={1} style={styles.resultTitle}>
-        {item.title}
+        {conversationDisplayTitle(item)}
       </Text>
       <Text numberOfLines={2} style={styles.resultSummary}>
         {item.summary}
@@ -142,6 +143,9 @@ export function ConversationsPage({
         (!starredOnly || item.starred) &&
         (normalized === '' ||
           item.title.toLocaleLowerCase().includes(normalized) ||
+          conversationDisplayTitle(item)
+            .toLocaleLowerCase()
+            .includes(normalized) ||
           item.summary.toLocaleLowerCase().includes(normalized)),
     );
   }, [conversations, query, starredOnly]);
@@ -346,7 +350,7 @@ export function ConversationsPage({
                   </FocusPressable>
                 )}
                 <Text style={styles.conversationDetailTitle}>
-                  {selected.title}
+                  {conversationDisplayTitle(selected)}
                 </Text>
                 <Text style={styles.conversationDetailSummary}>
                   {selected.summary}

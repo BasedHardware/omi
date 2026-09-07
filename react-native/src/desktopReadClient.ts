@@ -26,6 +26,18 @@ export type ConversationProjection = {
   discarded: boolean;
 };
 
+export function conversationDisplayTitle(item: {
+  title: string;
+  status: string;
+}): string {
+  if (item.title !== '') {
+    return item.title;
+  }
+  return item.status === 'processing'
+    ? 'Processing conversation…'
+    : 'Conversation title unavailable';
+}
+
 export function conversationGroupLabel(
   value: string,
   nowEpochMilliseconds: number,
@@ -612,7 +624,7 @@ export async function loadConversations(
       id,
       title,
       summary,
-      searchableText: `${title}\n${summary}`,
+      searchableText: `${conversationDisplayTitle({title, status})}\n${summary}`,
       createdAt,
       updatedAt,
       startedAt,

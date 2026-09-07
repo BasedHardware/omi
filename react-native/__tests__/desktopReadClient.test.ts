@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {
+  conversationDisplayTitle,
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -487,10 +488,23 @@ test('keeps processing conversations whose title and overview are not ready yet'
           title: '',
           summary: '',
           status: 'processing',
+          searchableText: 'Processing conversation…\n',
         }),
       ],
     }),
   );
+});
+
+test('empty conversation titles stay visible instead of a blank row', () => {
+  expect(conversationDisplayTitle({title: '', status: 'processing'})).toBe(
+    'Processing conversation…',
+  );
+  expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
+  expect(
+    conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
+  ).toBe('Morning walk');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {
