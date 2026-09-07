@@ -2,8 +2,8 @@
 
 Run `bash omi/firmware/omi/tests/host/run.sh` from the repository root for the
 button edge/deadline controller and SD worker queue/wait contract tests. They
-compile production code against a controllable host kernel seam with ASan and
-UBSan, requiring a C compiler; the existing checks manifest runs them locally
+compile production code as C99 (matching the NCS 2.9.0 target flags) against a
+controllable host kernel seam with ASan and UBSan, requiring a C compiler; the existing checks manifest runs them locally
 and in CI. This verifies timing, idle scheduling, and queue wakeup behavior,
 not Zephyr integration or physical battery consumption.
 

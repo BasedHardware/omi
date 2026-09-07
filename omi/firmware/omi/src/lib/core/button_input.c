@@ -15,7 +15,7 @@ struct button_edge {
     bool pressed;
 };
 
-static struct {
+struct button_gesture {
     bool raw_pressed;
     bool pressed;
     bool tap_pending;
@@ -25,7 +25,9 @@ static struct {
     int64_t pressed_at;
     int64_t last_tap_at;
     int64_t release_at;
-} gesture;
+};
+
+static struct button_gesture gesture;
 
 static struct k_spinlock input_lock;
 static struct button_edge edges[EDGE_CAPACITY];
@@ -101,7 +103,7 @@ static void advance(int64_t now)
 
 static void reset_gesture(bool pressed, int64_t now)
 {
-    gesture = (typeof(gesture)) {.raw_pressed = pressed, .raw_since = now};
+    gesture = (struct button_gesture) {.raw_pressed = pressed, .raw_since = now};
 }
 
 static void process_input(struct k_work *work);
