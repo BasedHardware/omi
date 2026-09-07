@@ -56,6 +56,7 @@ export function LibraryPage({
 
 export function TasksPage({
   outcomes,
+  taskPagination,
   onTaskToggle,
   onTaskEdit,
   busyTaskId = null,
@@ -63,7 +64,10 @@ export function TasksPage({
   taskMutationError = null,
   onRetryTaskMutation,
   onDismissTaskMutation,
-}: TaskMutationProps & {outcomes: DesktopReadOutcomes | null}) {
+}: TaskMutationProps & {
+  outcomes: DesktopReadOutcomes | null;
+  taskPagination?: React.ReactNode;
+}) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const outcome = outcomes?.tasks ?? null;
   const tasks = outcome?.status === 'success' ? outcome.value.items : [];
@@ -141,6 +145,7 @@ export function TasksPage({
         ) : (
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
+        {taskPagination}
         {outcome?.status === 'success' ? (
           <ReadStatus label="Tasks" mac page={outcome.value.page} />
         ) : null}

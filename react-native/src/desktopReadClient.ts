@@ -210,6 +210,7 @@ export function desktopRecoveryCopy(
 
 class DesktopProjectionUnavailableError extends Error {}
 export class ConversationCursorExpiredError extends Error {}
+export class TaskCursorExpiredError extends Error {}
 
 function nativeErrorCode(value: unknown): string | null {
   if (value === null || typeof value !== 'object') {
@@ -320,6 +321,13 @@ async function read(
 ): Promise<unknown> {
   const response = await backend.request({id, method: 'GET', path});
   if (response.status !== 200) {
+    if (
+      response.status === 400 &&
+      id === 'desktop-tasks-read' &&
+      path.includes('?cursor=')
+    ) {
+      throw new TaskCursorExpiredError('Tasks changed. Refresh the list.');
+    }
     if (
       response.status === 400 &&
       id === 'desktop-conversations-read' &&
@@ -600,8 +608,19 @@ export async function loadMemories(
   return {items, page: validated.page};
 }
 
-export async function loadTasks(backend: OmiBackend): Promise<TaskRead> {
-  const value = await read(backend, 'desktop-tasks-read', '/v1/tasks');
+export async function loadTasks(
+  backend: OmiBackend,
+  cursor: string | null = null,
+): Promise<TaskRead> {
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 16384))
+    throw new Error('Task cursor is malformed');
+  const value = await read(
+    backend,
+    'desktop-tasks-read',
+    `/v1/tasks${
+      cursor === null ? '' : `?cursor=${encodeURIComponent(cursor)}`
+    }`,
+  );
   const accountEpochValue = object(value, 'Tasks response').accountEpoch;
   const accountEpoch =
     accountEpochValue === undefined
@@ -661,6 +680,8 @@ export async function loadTasks(backend: OmiBackend): Promise<TaskRead> {
       revision,
     };
   });
+  if (new Set(items.map(item => item.id)).size !== items.length)
+    throw new Error('Task IDs are duplicated');
   return {items, page: validated.page, accountEpoch};
 }
 

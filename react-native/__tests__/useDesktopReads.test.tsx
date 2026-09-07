@@ -25,6 +25,7 @@ import {
   loadTasks,
   loadConversations,
   ConversationCursorExpiredError,
+  TaskCursorExpiredError,
 } from '../src/desktopReadClient';
 
 const readsMock = loadDesktopReads as jest.Mock;
@@ -618,5 +619,136 @@ test('failed cursor recovery retains loaded rows and allows explicit retry', asy
   expect(reads.latest().readOutcomes?.conversations).toMatchObject({
     value: {items: [{title: 'Old page'}]},
   });
+  reads.unmount();
+});
+
+function taskOutcomes(
+  start = 0,
+  count = 25,
+  hasMore = true,
+  accountEpoch = 7,
+): DesktopReadOutcomes {
+  const result = successOutcomes([]);
+  if (result.tasks.status !== 'success') throw Error('fixture');
+  result.tasks.value.accountEpoch = accountEpoch;
+  result.tasks.value.page = {
+    ...result.tasks.value.page,
+    hasMore,
+    nextCursor: hasMore ? 'tasks-next' : null,
+    complete: !hasMore,
+    windowStatus: hasMore ? 'more' : 'complete',
+  };
+  result.tasks.value.items = Array.from({length: count}, (_, index) => ({
+    kind: 'task',
+    id: `task-${start + index}`,
+    title: `Task ${start + index}`,
+    summary: 'Pending',
+    searchableText: '',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'assistant',
+    provenance: [],
+    sortOrder: index,
+    indentLevel: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 'revision',
+  }));
+  return result;
+}
+function taskValue(outcomes: DesktopReadOutcomes) {
+  if (outcomes.tasks.status !== 'success') throw Error('fixture');
+  return outcomes.tasks.value;
+}
+
+test('task pagination exposes the 26th task and prevents duplicate in-flight pages', async () => {
+  readsMock.mockResolvedValue(taskOutcomes());
+  const reads = await renderReads({enabled: true});
+  let release!: (value: unknown) => void;
+  (loadTasks as jest.Mock).mockReturnValueOnce(
+    new Promise(resolve => {
+      release = resolve;
+    }),
+  );
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().loadMoreTasks();
+    void reads.latest().loadMoreTasks();
+  });
+  expect(loadTasks).toHaveBeenCalledTimes(1);
+  expect(loadTasks).toHaveBeenCalledWith(expect.anything(), 'tasks-next');
+  await ReactTestRenderer.act(async () => {
+    release(taskValue(taskOutcomes(25, 1, false)));
+    await pending;
+  });
+  expect(taskValue(reads.latest().readOutcomes!).items).toHaveLength(26);
+  expect(taskValue(reads.latest().readOutcomes!).page.hasMore).toBe(false);
+  reads.unmount();
+});
+
+test.each(['refresh', 'disable', 'mutation'])(
+  'late task page cannot survive %s',
+  async action => {
+    readsMock.mockResolvedValue(taskOutcomes());
+    const reads = await renderReads({enabled: true});
+    let release!: (value: unknown) => void;
+    (loadTasks as jest.Mock).mockReturnValueOnce(
+      new Promise(resolve => {
+        release = resolve;
+      }),
+    );
+    let pending!: Promise<void>;
+    await ReactTestRenderer.act(async () => {
+      pending = reads.latest().loadMoreTasks();
+    });
+    if (action === 'disable') await reads.rerender({enabled: false});
+    else if (action === 'mutation') {
+      (loadTasks as jest.Mock).mockResolvedValueOnce(
+        taskValue(taskOutcomes(100, 1, false)),
+      );
+      await ReactTestRenderer.act(async () => {
+        await reads.latest().refreshTasks();
+      });
+    } else {
+      readsMock.mockResolvedValue(taskOutcomes(100, 1, false));
+      await ReactTestRenderer.act(async () => {
+        await reads.latest().refreshReads(false);
+      });
+    }
+    await ReactTestRenderer.act(async () => {
+      release(taskValue(taskOutcomes(25, 1, false)));
+      await pending;
+    });
+    expect(JSON.stringify(reads.latest().readOutcomes)).not.toContain(
+      'task-25',
+    );
+    expect(reads.latest().tasksLoadingMore).toBe(false);
+    reads.unmount();
+  },
+);
+
+test('task cursor expiry resets once and changed-account pages never append', async () => {
+  readsMock.mockResolvedValue(taskOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadTasks as jest.Mock).mockResolvedValueOnce(
+    taskValue(taskOutcomes(25, 1, false, 8)),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreTasks();
+  });
+  expect(taskValue(reads.latest().readOutcomes!).items).toHaveLength(25);
+  expect(reads.latest().taskNotice).toContain('Try again');
+  (loadTasks as jest.Mock)
+    .mockRejectedValueOnce(new TaskCursorExpiredError())
+    .mockResolvedValueOnce(taskValue(taskOutcomes(100, 1, false)));
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreTasks();
+  });
+  expect(
+    taskValue(reads.latest().readOutcomes!).items.map(item => item.id),
+  ).toEqual(['task-100']);
+  expect(reads.latest().taskNotice).toContain('refreshed');
   reads.unmount();
 });

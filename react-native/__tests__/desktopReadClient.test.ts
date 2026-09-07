@@ -1028,3 +1028,15 @@ test('groups canonical task millisecond timestamps without converting them twice
     {label: 'Today', items: [item]},
   ]);
 });
+
+test('task reads forward opaque cursors and classify stale cursor responses', async () => {
+  const paths: string[] = [];
+  const backend = backendFor(request => {
+    paths.push(request.path);
+    return {status: 400, body: null};
+  });
+  await expect(loadTasks(backend, 'opaque+/=')).rejects.toThrow(
+    'Tasks changed',
+  );
+  expect(paths).toEqual(['/v1/tasks?cursor=opaque%2B%2F%3D']);
+});

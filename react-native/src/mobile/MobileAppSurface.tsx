@@ -62,6 +62,7 @@ export type MobileCaptureState = {
 };
 
 export type MobileAppSurfaceProps = TaskMutationProps & {
+  taskPagination?: React.ReactNode;
   activeRoute: MobileRoute;
   capture: MobileCaptureState;
   device: MobileDeviceState;
@@ -239,6 +240,7 @@ function SectionHeader({
 }
 
 export function MobileAppSurface({
+  taskPagination,
   activeRoute,
   askValue,
   capture,
@@ -481,6 +483,7 @@ export function MobileAppSurface({
                 contentContainerStyle={styles.secondaryList}
                 data={tasks}
                 keyExtractor={task => task.id}
+                ListFooterComponent={<>{taskPagination}</>}
                 ListHeaderComponent={taskFeedback}
                 ListEmptyComponent={<StatePanel noun="tasks" status="empty" />}
                 renderItem={({item}) => (
@@ -499,6 +502,7 @@ export function MobileAppSurface({
             ) : (
               <View style={styles.secondaryList}>
                 <StatePanel noun="tasks" status={taskStatus} />
+                {taskPagination}
               </View>
             )
           ) : activeRoute === 'chat' ? (

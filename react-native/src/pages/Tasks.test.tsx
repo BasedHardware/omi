@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {TasksPage} from './Tasks';
+import {TaskPagination} from '../ui/TaskPagination';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import type {TaskProjection} from '../desktopReadClient';
 
@@ -167,4 +168,28 @@ test('conflict refresh preserves dirty description while untouched descriptions 
   expect(control(renderer, 'Task description').props.value).toBe(
     'My unsaved description',
   );
+});
+
+test('task pagination stays available when loaded task search has no matches', () => {
+  const onLoadMore = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{...outcome, value: {...outcome.value, items: []}}}
+        loading={false}
+        taskPagination={
+          <TaskPagination
+            hasMore
+            busy={false}
+            notice={null}
+            onLoadMore={onLoadMore}
+          />
+        }
+      />,
+    );
+  });
+  act(() => control(renderer, 'Load more tasks')!.props.onPress());
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() => renderer.unmount());
 });
