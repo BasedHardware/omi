@@ -46,6 +46,9 @@ type Props = TaskMutationProps & {
   conversationNotice?: string | null;
   conversationsLoadingMore?: boolean;
   onLoadMoreConversations?: () => void;
+  memoryNotice?: string | null;
+  memoriesLoadingMore?: boolean;
+  onLoadMoreMemories?: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
@@ -81,9 +84,12 @@ export function DesktopApp({
   draft,
   hasOlderChat,
   loadingOlderChat,
+  memoryNotice = null,
+  memoriesLoadingMore = false,
   messages,
   onDraftChange,
   onLoadMoreConversations,
+  onLoadMoreMemories,
   onLoadOlderChat,
   onRefresh,
   onSend,
@@ -174,8 +180,11 @@ export function DesktopApp({
             draft={draft}
             hasOlderChat={hasOlderChat}
             loadingOlderChat={loadingOlderChat}
+            memoryNotice={memoryNotice}
+            memoriesLoadingMore={memoriesLoadingMore}
             messages={messages}
             onOpenRewind={() => setRoute('Rewind')}
+            onLoadMoreMemories={onLoadMoreMemories}
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}

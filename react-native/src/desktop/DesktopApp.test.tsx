@@ -1558,6 +1558,91 @@ test('generic later-page conversation failures keep Load more', () => {
   ).toBeTruthy();
 });
 
+const homeMemory = {
+  kind: 'memory' as const,
+  id: 'memory-page-1',
+  title: 'Prefers concise release notes',
+  summary: 'Release notes should lead with the outcome.',
+  searchableText: 'prefers concise release notes',
+  citations: [] as string[],
+  timestamp: 1788492408,
+  provenance: {
+    label: null,
+    synthesisVersion: 'v1',
+    inputDigest: 'input',
+    outputDigest: 'output',
+  },
+};
+
+function pagedMemoryOutcomes() {
+  return {
+    ...outcomes,
+    memories: {
+      status: 'success' as const,
+      value: {
+        items: [homeMemory],
+        page: {
+          ...outcomes.memories.value.page,
+          hasMore: true,
+          nextCursor: 'memories-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop Home exposes Load more when more memories exist', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreMemories,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  expect(renderedText(renderer)).toContain('More memories are available.');
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more memories')
+      .props.onPress(),
+  );
+  expect(onLoadMoreMemories).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later memory pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    memoryNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more memories',
+    ),
+  ).toHaveLength(0);
+});
+
+test('generic later-page memory failures keep Load more', () => {
+  const onLoadMoreMemories = jest.fn();
+  const renderer = renderDesktop({
+    memoryNotice: 'More memories could not be loaded.',
+    onLoadMoreMemories,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  expect(renderedText(renderer)).toContain(
+    'More memories could not be loaded.',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Load more memories',
+    ),
+  ).toBeTruthy();
+});
+
 test('Settings does not inherit unrelated chat and history failures', async () => {
   const renderer = renderDesktop({
     chatError: 'This request cannot be completed.',

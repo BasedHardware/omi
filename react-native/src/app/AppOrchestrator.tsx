@@ -177,6 +177,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     conversationNotice,
     loadMoreConversations,
     conversationsPageRetryable,
+    memoriesLoadingMore,
+    memoryNotice,
+    loadMoreMemories,
+    memoriesPageRetryable,
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
@@ -997,6 +1001,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             conversationsPageRetryable
               ? () => {
                   void loadMoreConversations();
+                }
+              : undefined
+          }
+          memoryNotice={memoryNotice}
+          memoriesLoadingMore={memoriesLoadingMore}
+          onLoadMoreMemories={
+            memoriesPageRetryable
+              ? () => {
+                  void loadMoreMemories();
                 }
               : undefined
           }

@@ -30,6 +30,9 @@ type Props = {
   draft: string;
   hasOlderChat: boolean;
   loadingOlderChat: boolean;
+  memoryNotice?: string | null;
+  memoriesLoadingMore?: boolean;
+  onLoadMoreMemories?: () => void;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
   onRefresh: () => void;
@@ -146,7 +149,10 @@ export function DesktopHome({
   draft,
   hasOlderChat,
   loadingOlderChat,
+  memoryNotice = null,
+  memoriesLoadingMore = false,
   messages,
+  onLoadMoreMemories,
   onLoadOlderChat,
   onRefresh,
   onOpenRewind,
@@ -303,6 +309,25 @@ export function DesktopHome({
               page={memoriesOutcome.value.page}
             />
           ) : null}
+          {memoryNotice !== null ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {memoryNotice}
+            </Text>
+          ) : null}
+          {memoriesOutcome?.status === 'success' &&
+          memoriesOutcome.value.page.hasMore &&
+          onLoadMoreMemories ? (
+            <FocusPressable
+              accessibilityLabel="Load more memories"
+              accessibilityRole="button"
+              disabled={memoriesLoadingMore}
+              onPress={onLoadMoreMemories}
+              style={styles.pageAction}>
+              <Text style={styles.bannerAction}>
+                {memoriesLoadingMore ? 'Loading…' : 'Load more'}
+              </Text>
+            </FocusPressable>
+          ) : null}
         </View>
         <View accessibilityLabel="Home rewind" style={styles.section}>
           <SectionTitle>Screen history</SectionTitle>
@@ -367,4 +392,5 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.title,
   },
+  pageAction: {minHeight: 44, justifyContent: 'center'},
 });

@@ -8,6 +8,7 @@ jest.mock('../src/desktopReadClient', () => {
     loadDesktopReads: jest.fn(),
     loadTasks: jest.fn(),
     loadConversations: jest.fn(),
+    loadMemories: jest.fn(),
   };
 });
 
@@ -25,6 +26,7 @@ import {
   loadDesktopReads,
   loadTasks,
   loadConversations,
+  loadMemories,
   ConversationCursorExpiredError,
   TaskCursorExpiredError,
 } from '../src/desktopReadClient';
@@ -151,6 +153,7 @@ async function renderReads(props: {enabled: boolean}) {
 beforeEach(() => {
   readsMock.mockReset();
   (loadConversations as jest.Mock).mockReset();
+  (loadMemories as jest.Mock).mockReset();
   (loadTasks as jest.Mock).mockReset();
 });
 
@@ -632,13 +635,129 @@ test('nested non-retryable conversation pages omit Load more Try again', async (
   await ReactTestRenderer.act(async () => {
     await reads.latest().loadMoreConversations();
   });
-  expect(reads.latest().conversationNotice).toBe(
-    desktopBackendUnavailableCopy,
-  );
+  expect(reads.latest().conversationNotice).toBe(desktopBackendUnavailableCopy);
   expect(reads.latest().conversationNotice).not.toContain('Try again');
   expect(reads.latest().conversationsPageRetryable).toBe(false);
   expect(reads.latest().readOutcomes?.conversations).toMatchObject({
     value: {items: [{title: 'Old page'}]},
+  });
+  reads.unmount();
+});
+
+function pagedMemoryOutcomes() {
+  const result = successOutcomes(['Kept conversation']);
+  if (result.memories.status !== 'success') {
+    throw Error('fixture');
+  }
+  result.memories.value.items = [
+    {
+      kind: 'memory',
+      id: 'memory-old',
+      title: 'Old memory',
+      summary: 'Old memory',
+      searchableText: 'Old memory',
+      citations: [],
+      timestamp: 1,
+      provenance: {
+        label: null,
+        synthesisVersion: 'v1',
+        inputDigest: 'a',
+        outputDigest: 'b',
+      },
+    },
+  ];
+  result.memories.value.page = {
+    ...result.memories.value.page,
+    hasMore: true,
+    complete: false,
+    windowStatus: 'more',
+    nextCursor: 'memory-cursor-one',
+  };
+  return result;
+}
+
+test('memory pagination appends one page and ignores duplicate presses', async () => {
+  readsMock.mockResolvedValue(pagedMemoryOutcomes());
+  const reads = await renderReads({enabled: true});
+  let release!: (value: unknown) => void;
+  (loadMemories as jest.Mock).mockReturnValue(
+    new Promise(resolve => (release = resolve)),
+  );
+  let pending!: Promise<void>;
+  await ReactTestRenderer.act(async () => {
+    pending = reads.latest().loadMoreMemories();
+    void reads.latest().loadMoreMemories();
+  });
+  expect(loadMemories).toHaveBeenCalledTimes(1);
+  expect(reads.latest().memoriesLoadingMore).toBe(true);
+  await ReactTestRenderer.act(async () => {
+    release({
+      items: [
+        {
+          kind: 'memory',
+          id: 'memory-next',
+          title: 'Next memory',
+          summary: 'Next memory',
+          searchableText: 'Next memory',
+          citations: [],
+          timestamp: 2,
+          provenance: {
+            label: null,
+            synthesisVersion: 'v1',
+            inputDigest: 'a',
+            outputDigest: 'b',
+          },
+        },
+      ],
+      page: {
+        windowStatus: 'complete',
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+        completenessStatus: 'complete',
+        reasons: [],
+      },
+    });
+    await pending;
+  });
+  expect(reads.latest().readOutcomes?.memories).toMatchObject({
+    value: {items: [{title: 'Old memory'}, {title: 'Next memory'}]},
+  });
+  expect(reads.latest().memoriesLoadingMore).toBe(false);
+  reads.unmount();
+});
+
+test('nested non-retryable memory pages omit Load more Try again', async () => {
+  readsMock.mockResolvedValue(pagedMemoryOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadMemories as jest.Mock).mockRejectedValue(
+    new Error(desktopBackendUnavailableCopy),
+  );
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreMemories();
+  });
+  expect(reads.latest().memoryNotice).toBe(desktopBackendUnavailableCopy);
+  expect(reads.latest().memoryNotice).not.toContain('Try again');
+  expect(reads.latest().memoriesPageRetryable).toBe(false);
+  expect(reads.latest().readOutcomes?.memories).toMatchObject({
+    value: {items: [{title: 'Old memory'}]},
+  });
+  reads.unmount();
+});
+
+test('generic later-page memory failures keep loaded rows and allow retry', async () => {
+  readsMock.mockResolvedValue(pagedMemoryOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadMemories as jest.Mock).mockRejectedValue(new Error('blip'));
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreMemories();
+  });
+  expect(reads.latest().memoryNotice).toBe(
+    'More memories could not be loaded.',
+  );
+  expect(reads.latest().memoriesPageRetryable).toBe(true);
+  expect(reads.latest().readOutcomes?.memories).toMatchObject({
+    value: {items: [{title: 'Old memory'}]},
   });
   reads.unmount();
 });

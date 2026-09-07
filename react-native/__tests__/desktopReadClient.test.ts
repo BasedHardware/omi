@@ -78,6 +78,9 @@ test('macOS mounts DesktopApp only for a ready session', () => {
   expect(orchestrator).toMatch(
     /<DesktopApp[\s\S]*onLoadMoreConversations=\{\s*conversationsPageRetryable/,
   );
+  expect(orchestrator).toMatch(
+    /<DesktopApp[\s\S]*onLoadMoreMemories=\{\s*memoriesPageRetryable/,
+  );
   expect(orchestrator).toContain('onboardingRequired !== false');
   expect(orchestrator).not.toMatch(
     /onboardingRequired === false\s*\?\s*macDesktopNav\s*:\s*null/,
