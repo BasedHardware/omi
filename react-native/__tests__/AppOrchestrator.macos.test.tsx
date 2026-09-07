@@ -147,6 +147,8 @@ beforeEach(() => {
   mockBackend.getApiContract.mockReset();
   mockBackend.sendOmiChat.mockReset();
   mockBackend.cancelOmiChat.mockClear();
+  mockBackend.cancelGenerationEvents.mockReset();
+  mockBackend.cancelGenerationEvents.mockImplementation(async () => undefined);
   mockNative.getSnapshot.mockClear();
   mockNative.startScan.mockClear();
   mockScanPermission.mockClear();
@@ -778,6 +780,77 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
   expect(textOf(renderer)).toContain(
     'Response interrupted. It may still complete.',
   );
+});
+
+test('nested non-retryable generation cancel is not a transient stop failure', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(
+    async (value: {id: string; body?: string}) => {
+      if (value.id === 'chat-history') {
+        return {id: value.id, status: 200, body: historyBody([])};
+      }
+      if (value.id.startsWith('admit-')) {
+        const body = JSON.parse(value.body ?? '{}') as {
+          id: string;
+          text: string;
+          at: number;
+        };
+        return {
+          id: value.id,
+          status: 201,
+          body: admissionBody(
+            {
+              id: body.id,
+              text: body.text,
+              sender: 'human',
+              createdAt: body.at,
+              generationOutcome: null,
+            },
+            'generation-unstoppable',
+          ),
+        };
+      }
+      return {id: value.id, status: 501, body: null};
+    },
+  );
+  mockBackend.generationEvents.mockReturnValue(new Promise(() => undefined));
+  mockBackend.cancelGenerationEvents.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {
+      code: 'OMI_DEV_BACKEND_UNSUPPORTED',
+    }),
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('unstoppable question');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(labelsOf(renderer)).toContain('Stop');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(mockBackend.cancelGenerationEvents).toHaveBeenCalledWith(
+    'generation-unstoppable',
+  );
+  expect(textOf(renderer)).toContain(
+    'Stopping the response is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Could not stop the response.');
 });
 
 test('a send during the initial history load still receives the transcript', async () => {

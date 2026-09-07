@@ -51,6 +51,9 @@ export class ChatBackendError extends Error {
 }
 
 export function chatWriteDoorUnavailable(error: unknown): boolean {
+  if (nativeErrorCode(error) === 'OMI_DEV_BACKEND_UNSUPPORTED') {
+    return true;
+  }
   return (
     error instanceof ChatBackendError &&
     (error.status === 404 ||
@@ -152,6 +155,13 @@ export function chatHistoryCanReload(error: unknown): boolean {
     return true;
   }
   return error.retryable;
+}
+
+export function chatCancelErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Stopping the response is not available on this backend yet.';
+  }
+  return 'Could not stop the response.';
 }
 
 let messageSequence = 0;

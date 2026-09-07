@@ -27,6 +27,12 @@ int main() {
     require(!OmiRecordingRetryableOwnershipFailure(503, @"{\"error\":{\"code\":\"capture_ownership_unavailable\",\"retryable\":false,\"action\":\"none\"}}"));
     require(!OmiRecordingRetryableOwnershipFailure(408, @"{\"error\":{\"retryable\":false}}"));
     require(!OmiRecordingRetryableOwnershipFailure(403, @"{\"error\":{\"retryable\":true}}"));
+    require(OmiNestedNonRetryableHttpFailure(404, nil));
+    require(OmiNestedNonRetryableHttpFailure(404, @"{\"error\":{\"retryable\":true}}"));
+    require(OmiNestedNonRetryableHttpFailure(503, @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}"));
+    require(!OmiNestedNonRetryableHttpFailure(503, nil));
+    require(!OmiNestedNonRetryableHttpFailure(503, @"{\"error\":\"service_unavailable\"}"));
+    require(!OmiNestedNonRetryableHttpFailure(500, nil));
     NSDictionary *beforeForget = @{@"idToken":@"new-token", @"rememberedDevice":@{@"id":@"old-device"}};
     require(OmiRememberedRefreshSession(beforeForget, @{})[@"rememberedDevice"] == nil);
     NSDictionary *replacement = @{@"rememberedDevice":@{@"id":@"new-device"}};

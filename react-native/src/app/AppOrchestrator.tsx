@@ -23,6 +23,7 @@ import {
   chatHistoryErrorCopy,
   chatSessionLost,
   chatHistoryHasOlder,
+  chatCancelErrorCopy,
   chatWriteDoorUnavailable,
   createLocalChatMessage,
   loadNewestChatHistory,
@@ -729,9 +730,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       } else if (generationId !== null)
         await cancelChatGeneration(backend, generationId);
-    } catch {
+    } catch (error) {
       if (chatSessionEpochRef.current === session) {
-        setChatError('Could not stop the response.');
+        setChatError(chatCancelErrorCopy(error));
       }
     }
   };

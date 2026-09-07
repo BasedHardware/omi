@@ -30,6 +30,10 @@ final class OmiRecordingPolicy {
     if (nestedRetryable != null && !nestedRetryable.booleanValue()) return false;
     return retryableOwnershipStatus(status);
   }
+  static boolean nestedNonRetryableHttpFailure(int status, Boolean nestedRetryable) {
+    if (nestedRetryable != null && !nestedRetryable.booleanValue()) return true;
+    return status == 404;
+  }
   static boolean offline(Throwable error) {
     return error instanceof ConnectException || error instanceof NoRouteToHostException
       || error instanceof SocketTimeoutException || error instanceof UnknownHostException;

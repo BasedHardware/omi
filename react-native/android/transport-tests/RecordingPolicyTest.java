@@ -33,6 +33,12 @@ public final class RecordingPolicyTest {
     assert !OmiRecordingPolicy.retryableOwnershipFailure(503, Boolean.FALSE);
     assert !OmiRecordingPolicy.retryableOwnershipFailure(408, Boolean.FALSE);
     assert !OmiRecordingPolicy.retryableOwnershipFailure(403, Boolean.TRUE);
+    assert OmiRecordingPolicy.nestedNonRetryableHttpFailure(404, null);
+    assert OmiRecordingPolicy.nestedNonRetryableHttpFailure(404, Boolean.TRUE);
+    assert OmiRecordingPolicy.nestedNonRetryableHttpFailure(503, Boolean.FALSE);
+    assert !OmiRecordingPolicy.nestedNonRetryableHttpFailure(503, null);
+    assert !OmiRecordingPolicy.nestedNonRetryableHttpFailure(503, Boolean.TRUE);
+    assert !OmiRecordingPolicy.nestedNonRetryableHttpFailure(500, null);
     assert OmiRecordingPolicy.offline(new java.net.SocketTimeoutException());
     assert OmiRecordingPolicy.offline(new java.net.ConnectException());
     assert OmiRecordingPolicy.offline(new java.net.UnknownHostException());

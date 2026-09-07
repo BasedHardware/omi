@@ -1315,7 +1315,16 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
       if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
       if (OmiClearUnauthorizedCloudSession(policy, status)) [self emitSessionInvalidated];
     }
-    if (error != nil || (status != 202 && status != 204)) {
+    if (error != nil) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
+      return;
+    }
+    if (status != 202 && status != 204) {
+      NSString *responseBody = data.length > 0 ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+      if (OmiNestedNonRetryableHttpFailure(status, responseBody)) {
+        reject(@"OMI_DEV_BACKEND_UNSUPPORTED", @"Generation cancellation is unsupported by the selected development backend", nil);
+        return;
+      }
       reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
       return;
     }

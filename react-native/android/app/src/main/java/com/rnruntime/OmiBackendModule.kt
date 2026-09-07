@@ -392,12 +392,21 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     val active = generations["canonical:$generationId"]
     submit(promise) {
       try {
+        val policy = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native generation cancellation is unavailable")
+        if (policy.kind == CredentialKind.ExamplePlatform) throw TransportException("OMI_DEV_BACKEND_UNSUPPORTED", "Generation cancellation is unsupported by the selected development backend")
         val response = performRequest(Arguments.createMap().apply {
           putString("id", generationId)
           putString("method", "DELETE")
           putString("path", path)
-        })
-        if (response.getInt("status") !in setOf(202, 204)) throw TransportException("OMI_HTTP_TRANSPORT", "Generation cancellation was not accepted")
+        }, policy)
+        val status = response.getInt("status")
+        if (status !in setOf(202, 204)) {
+          val nestedRetryable = runCatching { JSONObject(response.getString("body").orEmpty()).optJSONObject("error") }.getOrNull()
+            ?.takeIf { it.has("retryable") && !it.isNull("retryable") }?.opt("retryable") as? Boolean
+          if (OmiRecordingPolicy.nestedNonRetryableHttpFailure(status, nestedRetryable))
+            throw TransportException("OMI_DEV_BACKEND_UNSUPPORTED", "Generation cancellation is unsupported by the selected development backend")
+          throw TransportException("OMI_HTTP_TRANSPORT", "Generation cancellation was not accepted")
+        }
         if (active != null && generations.remove("canonical:$generationId", active)) cancelGeneration(active)
         promise.resolve(null)
       } catch (error: Exception) {
