@@ -21,13 +21,6 @@ class AudioPollingConfig {
   // mono PCM (32000 B/s); oldest frames are dropped past this to keep memory
   // bounded during a long outage instead of buffering forever.
   final int maxBufferBytes;
-  // Upper bound on a single transcribe() call. A flush holds the socket's
-  // processing flag until the provider answers, so a provider that never
-  // does (observed with a native on-device recognizer that never reported a
-  // final result) would otherwise freeze transcription for the rest of the
-  // session with no error. Past this, the attempt is treated as a failed
-  // flush: frames are requeued and the next tick retries.
-  final Duration transcribeTimeout;
 
   const AudioPollingConfig({
     this.bufferDuration = const Duration(seconds: 3),
@@ -35,7 +28,6 @@ class AudioPollingConfig {
     this.serviceId,
     this.transcoder,
     this.maxBufferBytes = 19200000,
-    this.transcribeTimeout = const Duration(seconds: 30),
   });
 }
 
@@ -77,6 +69,7 @@ class PurePollingSocket implements IPureSocket {
 
   final List<Uint8List> _audioFrames = [];
   bool _isProcessing = false;
+  int _connectionGeneration = 0;
   double _audioOffsetSeconds = 0;
 
   // Local buffering state, exposed so the recording UI can
@@ -148,6 +141,7 @@ class PurePollingSocket implements IPureSocket {
     }
 
     _isProcessing = true;
+    final generation = _connectionGeneration;
 
     final frames = List<Uint8List>.from(_audioFrames);
     _audioFrames.clear();
@@ -175,9 +169,11 @@ class PurePollingSocket implements IPureSocket {
 
     final serviceId = config.serviceId ?? 'Polling';
     try {
-      final result = await sttProvider
-          .transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds)
-          .timeout(config.transcribeTimeout);
+      // Providers own deadlines and resource cleanup. Timing out only this
+      // Future would release the processing flag while recognition is still
+      // running, allowing the next flush to submit the same audio again.
+      final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
+      if (generation != _connectionGeneration) return;
       _bufferingSince = null;
       _consecutiveFailures = 0;
       if (result != null && result.isNotEmpty) {
@@ -191,6 +187,7 @@ class PurePollingSocket implements IPureSocket {
         }
       }
     } catch (e, trace) {
+      if (generation != _connectionGeneration) return;
       CustomSttLogService.instance.error(serviceId, 'Transcription error: $e');
       DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {'service_id': serviceId});
       _consecutiveFailures++;
@@ -243,6 +240,7 @@ class PurePollingSocket implements IPureSocket {
       await _flushBuffer();
     }
 
+    _connectionGeneration++;
     _status = PurePollingStatus.disconnected;
     CustomSttLogService.instance.info(config.serviceId ?? 'Polling', 'Disconnected');
     onClosed();

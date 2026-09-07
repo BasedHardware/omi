@@ -668,15 +668,16 @@ extension AppDelegate: WCSessionDelegate {
 /// app installs itself through AssetInventory. Used first on iOS 26; the
 /// SFSpeechRecognizer path below remains for older systems and as a fallback.
 @available(iOS 26, *)
+@MainActor
 enum SpeechAnalyzerTranscription {
     enum TranscriptionError: Error {
         case unsupportedLanguage(String)
+        case timedOut
     }
 
     /// In-flight model downloads keyed by BCP-47 locale, so the pre-flight
     /// probe and the first transcribe() share one download.
     private static var installTasks: [String: Task<Void, Error>] = [:]
-    private static let installLock = NSLock()
 
     static func requestedLanguage(_ language: String) -> String {
         let requested = language.isEmpty || language == "multi" ? "en" : language
@@ -706,7 +707,6 @@ enum SpeechAnalyzerTranscription {
     static func ensureModel(for locale: Locale) async throws {
         if await isInstalled(locale) { return }
         let key = locale.identifier(.bcp47)
-        installLock.lock()
         let task: Task<Void, Error>
         if let existing = installTasks[key] {
             task = existing
@@ -721,11 +721,8 @@ enum SpeechAnalyzerTranscription {
             }
             installTasks[key] = task
         }
-        installLock.unlock()
         defer {
-            installLock.lock()
             if installTasks[key] == task { installTasks[key] = nil }
-            installLock.unlock()
         }
         try await task.value
     }
@@ -741,24 +738,19 @@ enum SpeechAnalyzerTranscription {
             return false
         }
         if await isInstalled(locale) { return true }
-        return await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                do {
-                    try await ensureModel(for: locale)
-                    return true
-                } catch {
-                    NSLog("[SpeechAnalyzer] model install failed for %@: %@", locale.identifier(.bcp47), error.localizedDescription)
-                    return false
-                }
-            }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(installWait))
+        return await SpeechDeadline.run(seconds: installWait, operation: {
+            do {
+                try await ensureModel(for: locale)
                 return true
+            } catch {
+                NSLog("[SpeechAnalyzer] model install failed for %@: %@", locale.identifier(.bcp47), error.localizedDescription)
+                return false
             }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
-        }
+        }, onTimeout: {
+            // The shared download keeps running; only this availability waiter
+            // has a deadline. A later transcription shares the same download.
+            true
+        })
     }
 
     /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
@@ -767,7 +759,15 @@ enum SpeechAnalyzerTranscription {
         guard let locale = await locale(for: language) else {
             throw TranscriptionError.unsupportedLanguage(language)
         }
-        try await ensureModel(for: locale)
+        let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
+            do {
+                try await ensureModel(for: locale)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }, onTimeout: { .failure(TranscriptionError.timedOut) })
+        try installed.get()
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
@@ -784,19 +784,26 @@ enum SpeechAnalyzerTranscription {
             }
             return finalText.isEmpty ? volatileText : finalText
         }
-        do {
-            let file = try AVAudioFile(forReading: fileURL)
-            if let lastSample = try await analyzer.analyzeSequence(from: file) {
-                try await analyzer.finalizeAndFinish(through: lastSample)
-            } else {
+        let outcome: Result<String, Error> = await SpeechDeadline.run(seconds: 20, operation: {
+            do {
+                let file = try AVAudioFile(forReading: fileURL)
+                if let lastSample = try await analyzer.analyzeSequence(from: file) {
+                    try await analyzer.finalizeAndFinish(through: lastSample)
+                } else {
+                    await analyzer.cancelAndFinishNow()
+                }
+                return .success(try await collector.value.trimmingCharacters(in: .whitespacesAndNewlines))
+            } catch {
                 await analyzer.cancelAndFinishNow()
+                collector.cancel()
+                return .failure(error)
             }
-        } catch {
-            await analyzer.cancelAndFinishNow()
+        }, onTimeout: {
             collector.cancel()
-            throw error
-        }
-        return try await collector.value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            await analyzer.cancelAndFinishNow()
+            return .failure(TranscriptionError.timedOut)
+        })
+        return try outcome.get()
     }
 }
 
@@ -903,9 +910,11 @@ class SpeechRecognitionHandler: NSObject {
         }
 
         var finished = false
+        var task: SFSpeechRecognitionTask?
         let finish: (Bool) -> Void = { value in
             guard !finished else { return }
             finished = true
+            task?.cancel()
             try? FileManager.default.removeItem(at: silence)
             result(value)
         }
@@ -913,24 +922,24 @@ class SpeechRecognitionHandler: NSObject {
         let request = SFSpeechURLRecognitionRequest(url: silence)
         request.shouldReportPartialResults = false
         request.requiresOnDeviceRecognition = true
-        var task: SFSpeechRecognitionTask?
         task = recognizer.recognitionTask(with: request) { recognitionResult, error in
-            if let error = error {
-                let nsError = error as NSError
-                let noSpeech = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110
-                if !noSpeech {
-                    NSLog("[SpeechRecognition] on-device probe failed: %@ %ld %@", nsError.domain, nsError.code, error.localizedDescription)
+            DispatchQueue.main.async {
+                if let error = error {
+                    let nsError = error as NSError
+                    let noSpeech = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110
+                    if !noSpeech {
+                        NSLog("[SpeechRecognition] on-device probe failed: %@ %ld %@", nsError.domain, nsError.code, error.localizedDescription)
+                    }
+                    finish(noSpeech)
+                    return
                 }
-                finish(noSpeech)
-                return
-            }
-            if recognitionResult?.isFinal == true {
-                finish(true)
+                if recognitionResult?.isFinal == true {
+                    finish(true)
+                }
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             guard !finished else { return }
-            task?.cancel()
             finish(true) // Slow but not failing; let the real request decide.
         }
     }
@@ -963,70 +972,78 @@ class SpeechRecognitionHandler: NSObject {
     private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
         // Request authorization first
         SFSpeechRecognizer.requestAuthorization { authStatus in
-            if authStatus != .authorized {
-                result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
-                return
-            }
+            DispatchQueue.main.async {
+                if authStatus != .authorized {
+                    result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
+                    return
+                }
 
-            let fileUrl = URL(fileURLWithPath: filePath)
+                let fileUrl = URL(fileURLWithPath: filePath)
 
-            guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
-                result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
-                return
-            }
+                guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
+                    result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
+                    return
+                }
 
-            let request = SFSpeechURLRecognitionRequest(url: fileUrl)
-            // Partial results are kept so a task that never reports `isFinal`
-            // (observed with on-device recognition on short clips) still
-            // yields its best transcription instead of hanging the caller.
-            request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = true // Force on-device
-            request.taskHint = .dictation
-            if #available(iOS 16, *) {
-                request.addsPunctuation = true
-            }
+                let request = SFSpeechURLRecognitionRequest(url: fileUrl)
+                // Partial results are kept so a task that never reports `isFinal`
+                // (observed with on-device recognition on short clips) still
+                // yields its best transcription instead of hanging the caller.
+                request.shouldReportPartialResults = true
+                request.requiresOnDeviceRecognition = true // Force on-device
+                request.taskHint = .dictation
+                if #available(iOS 16, *) {
+                    request.addsPunctuation = true
+                }
 
-            // The Dart caller awaits exactly one reply per clip, and its polling
-            // loop stays busy until that reply arrives — a task that never
-            // completes would silently stop all further transcription. Reply
-            // once, on the first of: final result, error, or timeout.
-            var finished = false
-            var latestText = ""
-            var task: SFSpeechRecognitionTask?
-            let finish: (Any?) -> Void = { value in
-                guard !finished else { return }
-                finished = true
-                result(value)
-            }
+                // The Dart caller awaits exactly one reply per clip, and its polling
+                // loop stays busy until that reply arrives — a task that never
+                // completes would silently stop all further transcription. Reply
+                // once, on the first of: final result, error, or timeout.
+                var finished = false
+                var latestText = ""
+                var task: SFSpeechRecognitionTask?
+                let finish: (Any?) -> Void = { value in
+                    guard !finished else { return }
+                    finished = true
+                    task?.cancel()
+                    result(value)
+                }
 
-            task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
-                if let recognitionResult = recognitionResult {
-                    latestText = recognitionResult.bestTranscription.formattedString
-                    if recognitionResult.isFinal {
-                        finish(latestText)
-                        return
+                task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
+                    DispatchQueue.main.async {
+                        if let recognitionResult = recognitionResult {
+                            latestText = recognitionResult.bestTranscription.formattedString
+                            if recognitionResult.isFinal {
+                                finish(latestText)
+                                return
+                            }
+                        }
+                        if let error = error {
+                            let nsError = error as NSError
+                            // 1110 = no speech in the clip; a partial transcription before the
+                            // error is still the best answer for that clip. Only a failure that
+                            // produced nothing is reported as an error.
+                            if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
+                                finish(latestText)
+                            } else {
+                                finish(FlutterError(
+                                    code: "RECOGNITION_ERROR",
+                                    message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
+                                    details: nil))
+                            }
+                        }
                     }
                 }
-                if let error = error {
-                    let nsError = error as NSError
-                    // 1110 = no speech in the clip; a partial transcription before the
-                    // error is still the best answer for that clip. Only a failure that
-                    // produced nothing is reported as an error.
-                    if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
-                        finish(latestText)
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                    guard !finished else { return }
+                    if latestText.isEmpty {
+                        finish(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
                     } else {
-                        finish(FlutterError(
-                            code: "RECOGNITION_ERROR",
-                            message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
-                            details: nil))
+                        finish(latestText)
                     }
                 }
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
-                guard !finished else { return }
-                task?.cancel()
-                finish(latestText)
             }
         }
     }

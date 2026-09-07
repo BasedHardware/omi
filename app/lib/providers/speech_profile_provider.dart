@@ -79,6 +79,11 @@ class SpeechProfileProvider extends ChangeNotifier
   Timer? forceCompletionTimer;
   Timer? _reconnectTimer;
   bool _reconnecting = false;
+  int _sessionGeneration = 0;
+  int? _fallbackGeneration;
+  bool _disposed = false;
+
+  bool _isCurrentSession(int generation) => !_disposed && generation == _sessionGeneration;
 
   /// Consecutive closes with code 1011 (server-side STT failure) while no
   /// user speech has been captured yet. This combination means the STT
@@ -347,8 +352,10 @@ class SpeechProfileProvider extends ChangeNotifier
   /// Whisper model). Safe to call before initialise() (pre-flight) or while a
   /// session is live (the next socket attempt picks the new mode up).
   Future<bool> enableLocalStt() async {
+    final generation = _sessionGeneration;
+    if (_disposed) return false;
     final config = await resolveLocalSttConfig();
-    if (config == null) return false;
+    if (!_isCurrentSession(generation) || config == null) return false;
     _localSttConfig = config;
     usingLocalStt = true;
     notifyListeners();
@@ -376,13 +383,27 @@ class SpeechProfileProvider extends ChangeNotifier
   /// Backend STT is down mid-session: keep the flow alive on on-device
   /// transcription instead of dead-ending in STT_UNAVAILABLE, when we can.
   void _fallBackToLocalStt() {
+    final generation = _sessionGeneration;
+    if (_disposed || _fallbackGeneration == generation) return;
+    _fallbackGeneration = generation;
     unawaited(() async {
-      if (await enableLocalStt()) {
-        _sttUnavailableCloseCount = 0;
-        notifyInfo('LOCAL_STT_FALLBACK');
-        _scheduleReconnect();
-      } else {
-        notifyError('STT_UNAVAILABLE');
+      try {
+        final enabled = await enableLocalStt();
+        if (!_isCurrentSession(generation) || !startedRecording || profileCompleted || uploadingProfile) return;
+        if (enabled) {
+          _sttUnavailableCloseCount = 0;
+          notifyInfo('LOCAL_STT_FALLBACK');
+          _scheduleReconnect();
+        } else {
+          notifyError('STT_UNAVAILABLE');
+        }
+      } catch (e) {
+        if (_isCurrentSession(generation) && startedRecording && !profileCompleted && !uploadingProfile) {
+          Logger.debug('Speech profile local STT availability failed: $e');
+          notifyError('STT_UNAVAILABLE');
+        }
+      } finally {
+        if (_fallbackGeneration == generation) _fallbackGeneration = null;
       }
     }());
   }
@@ -609,6 +630,7 @@ class SpeechProfileProvider extends ChangeNotifier
   /// instead of showing and counting what was said last time. Does not touch
   /// audio storage, which initialise() recreates.
   void resetTranscript() {
+    _sessionGeneration++;
     _cancelCompletionTimers();
     _completionFired = false;
     segments.clear();
@@ -630,6 +652,7 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future close() async {
+    _sessionGeneration++;
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
@@ -663,6 +686,8 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    _disposed = true;
+    _sessionGeneration++;
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();

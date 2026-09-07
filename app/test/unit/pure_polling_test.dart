@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/stt_result.dart';
@@ -49,39 +50,57 @@ void main() {
     expect(socket.bufferingSince, isNull);
   });
 
-  // Regression coverage: a transcribe() that never completed left
-  // _isProcessing set forever, so every later flush returned early and
-  // transcription silently stopped for the rest of the session with no error
-  // (seen with the native on-device recognizer never reporting a final result).
-  test('a transcribe that never returns times out, keeps the audio, and lets the next flush proceed', () async {
-    final provider = _HangingSttProvider();
-    final socket = PurePollingSocket(
-      config: const AudioPollingConfig(minBufferSizeBytes: 1, transcribeTimeout: Duration(milliseconds: 50)),
-      sttProvider: provider,
-    );
-    final listener = _FakeListener();
-    socket.setListener(listener);
-    await socket.connect();
+  test('a slow provider stays single-flight beyond the former polling timeout', () {
+    fakeAsync((async) {
+      final provider = _HangingSttProvider();
+      final socket = PurePollingSocket(
+        config: const AudioPollingConfig(minBufferSizeBytes: 1),
+        sttProvider: provider,
+      );
+      final listener = _FakeListener();
+      socket.setListener(listener);
+      socket.connect();
+      async.flushMicrotasks();
+      socket.send(Uint8List.fromList([1, 2, 3]));
+      socket.flushNow();
+      async.elapse(const Duration(seconds: 65));
+      expect(provider.calls, 1, reason: 'timer ticks cannot overlap an active provider operation');
+      socket.send(Uint8List.fromList([4]));
+      // A provider deadline reports failure only after it has stopped its work.
+      provider.pending.completeError(TimeoutException('native work cancelled'));
+      async.flushMicrotasks();
+      expect(socket.isBuffering, isTrue);
+      expect(socket.bufferedBytes, 4);
+      provider.hang = false;
+      socket.flushNow();
+      async.flushMicrotasks();
+      expect(provider.calls, 2);
+      expect(provider.lastAudio, [1, 2, 3, 4]);
+      expect(listener.messages, hasLength(1));
+      expect(socket.isBuffering, isFalse);
+      socket.stop();
+      async.flushMicrotasks();
+    });
+  });
 
-    socket.send(Uint8List.fromList([1, 2, 3]));
-    await socket.flushNow(); // hangs until the timeout, then must return
-
-    expect(provider.calls, 1);
-    expect(socket.isBuffering, isTrue, reason: 'a timed-out attempt is a failed flush, not a success');
-    expect(socket.bufferedBytes, 3, reason: 'audio from the timed-out attempt must be requeued, not lost');
-    expect(listener.errors, isEmpty);
-    expect(socket.status, PureSocketStatus.connected);
-
-    // The provider recovers: the next flush must actually run (the processing
-    // flag was released) and deliver the transcript for the retained audio.
-    provider.hang = false;
-    socket.send(Uint8List.fromList([4]));
-    await socket.flushNow();
-
-    expect(provider.calls, 2);
-    expect(provider.lastAudio, [1, 2, 3, 4]);
-    expect(listener.messages, hasLength(1));
-    expect(socket.isBuffering, isFalse);
+  test('a late provider result cannot publish into a stopped socket', () {
+    fakeAsync((async) {
+      final provider = _HangingSttProvider();
+      final socket = PurePollingSocket(config: const AudioPollingConfig(minBufferSizeBytes: 1), sttProvider: provider);
+      final listener = _FakeListener();
+      socket.setListener(listener);
+      socket.connect();
+      async.flushMicrotasks();
+      socket.send(Uint8List.fromList([1]));
+      socket.flushNow();
+      socket.stop();
+      async.flushMicrotasks();
+      provider.pending.complete(SttTranscriptionResult(segments: [SttSegment(text: 'late', start: 0, end: 1)]));
+      async.flushMicrotasks();
+      expect(listener.messages, isEmpty);
+      expect(socket.bufferedBytes, 0);
+      expect(socket.audioOffset, 0);
+    });
   });
 
   test('keeps retrying on every subsequent flush while the endpoint stays down', () async {
@@ -129,6 +148,7 @@ void main() {
 
 /// Never completes while [hang] is true; answers with a fixed segment once it is false.
 class _HangingSttProvider implements ISttProvider {
+  final pending = Completer<SttTranscriptionResult?>();
   bool hang = true;
   int calls = 0;
   List<int>? lastAudio;
@@ -137,7 +157,7 @@ class _HangingSttProvider implements ISttProvider {
   Future<SttTranscriptionResult?> transcribe(Uint8List audioData, {double audioOffsetSeconds = 0}) {
     calls++;
     lastAudio = audioData.toList();
-    if (hang) return Completer<SttTranscriptionResult?>().future;
+    if (hang) return pending.future;
     return Future.value(SttTranscriptionResult(segments: [SttSegment(text: 'hi', start: 0, end: 1)]));
   }
 

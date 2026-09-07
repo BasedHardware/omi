@@ -61,6 +61,8 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
+On-device speech deadlines, cleanup, and tests: [speech contract](../.github/agent-docs/on-device-speech.md).
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |

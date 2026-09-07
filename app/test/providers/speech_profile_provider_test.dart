@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
@@ -85,9 +86,14 @@ class _CountingSpeechProfileProvider extends SpeechProfileProvider {
   /// What resolveLocalSttConfig() returns: null means "no on-device model on
   /// this platform" (the default, matching the pre-fallback behavior).
   CustomSttConfig? localSttConfig;
+  Completer<CustomSttConfig?>? pendingLocalConfig;
+  int resolveCalls = 0;
 
   @override
-  Future<CustomSttConfig?> resolveLocalSttConfig() async => localSttConfig;
+  Future<CustomSttConfig?> resolveLocalSttConfig() async {
+    resolveCalls++;
+    return pendingLocalConfig == null ? localSttConfig : await pendingLocalConfig!.future;
+  }
 
   @override
   Future<TranscriptSegmentSocketService?> openSpeechProfileSocket({
@@ -392,6 +398,57 @@ void main() {
         async.elapse(const Duration(seconds: 5));
         expect(provider.lastCustomSttConfig, same(localConfig));
 
+        provider.dispose();
+      });
+    });
+
+    for (final endSession in ['close', 'dispose', 'restart']) {
+      test('late local availability is ignored after $endSession', () {
+        fakeAsync((async) {
+          final pending = Completer<CustomSttConfig?>();
+          final provider = _CountingSpeechProfileProvider()..pendingLocalConfig = pending;
+          provider.usePhoneMic = true;
+          provider.updateStartedRecording(true);
+          for (var i = 0; i < 3; i++) {
+            provider.onClosed(1011);
+          }
+          async.flushMicrotasks();
+          if (endSession == 'dispose') {
+            provider.dispose();
+          } else {
+            provider.close();
+            async.flushMicrotasks();
+            if (endSession == 'restart') {
+              provider.resetTranscript();
+              provider.usePhoneMic = true;
+              provider.updateStartedRecording(true);
+            }
+          }
+          pending.complete(localConfig);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 10));
+          expect(provider.usingLocalStt, isFalse);
+          expect(provider.openCalls, 0);
+          if (endSession != 'dispose') provider.dispose();
+        });
+      });
+    }
+
+    test('repeated close callbacks share one pending availability check', () {
+      fakeAsync((async) {
+        final pending = Completer<CustomSttConfig?>();
+        final provider = _CountingSpeechProfileProvider()..pendingLocalConfig = pending;
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+        for (var i = 0; i < 6; i++) {
+          provider.onClosed(1011);
+        }
+        async.flushMicrotasks();
+        expect(provider.resolveCalls, 1);
+        pending.complete(localConfig);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 5));
+        expect(provider.openCalls, 1);
         provider.dispose();
       });
     });

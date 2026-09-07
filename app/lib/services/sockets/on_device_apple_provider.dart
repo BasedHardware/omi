@@ -88,7 +88,7 @@ class OnDeviceAppleProvider implements ISttProvider {
       }
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
-      return null;
+      rethrow; // Keep failed/timed-out audio in the polling buffer for retry.
     }
   }
 
