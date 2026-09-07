@@ -2,6 +2,7 @@ package stt
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -149,6 +150,10 @@ func extractText(msg map[string]any) string {
 	return ""
 }
 
+// ErrWhisperPendingAudio means AppendPCM did not accept its input because a
+// previous flush failed. Retry Stop successfully before submitting new PCM.
+var ErrWhisperPendingAudio = errors.New("whisper has pending audio; retry Stop before appending")
+
 // NewWhisper is feature-gated: requires injected runner.
 func NewWhisper(runner func(pcm []byte) (string, error), onTranscript Handler) (StreamingTranscriber, error) {
 	if runner == nil {
@@ -162,9 +167,13 @@ type whisperBatch struct {
 	onTranscript Handler
 	buf          []byte
 	batch        int
+	flushErr     error
 }
 
 func (w *whisperBatch) AppendPCM(pcm []byte) error {
+	if w.flushErr != nil {
+		return fmt.Errorf("%w: %v", ErrWhisperPendingAudio, w.flushErr)
+	}
 	w.buf = append(w.buf, pcm...)
 	if len(w.buf) < w.batch {
 		return nil
@@ -177,6 +186,7 @@ func (w *whisperBatch) Stop() error {
 		return nil
 	}
 	text, err := w.runner(w.buf)
+	w.flushErr = err
 	if err != nil {
 		return err
 	}

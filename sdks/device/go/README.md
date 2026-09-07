@@ -38,8 +38,13 @@ Mirrors Python `print_devices` / `listen_to_omi` in `sdks/python/omi/bluetooth.p
 
 `NewWhisper` accepts a runner and buffers PCM until a full batch or `Stop()`.
 If the runner returns an error, the buffered audio is retained. Retry with
-`Stop()` (or continue appending new PCM); do not append the failed audio again.
+`Stop()`; do not append the audio from that failed flush again. Until `Stop()`
+succeeds, `AppendPCM` rejects new chunks without buffering them or invoking the
+runner. Those rejections match `errors.Is(err, stt.ErrWhisperPendingAudio)`;
+the caller owns the rejected chunks and can submit them after recovery. Pause
+the source while retrying so a persistent failure does not accumulate audio.
 A successful flush clears the buffer and emits the non-empty transcript once.
 
-The Go Device SDK pull-request workflow runs `go test -race ./...` for this
+The Go Device SDK pull-request workflow checks `gofmt`, runs `go vet ./...`,
+and runs `go test -race ./...` for this
 module without BLE hardware or live transcription services.

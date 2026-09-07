@@ -54,3 +54,64 @@ func TestWhisperRetriesFailedAudio(t *testing.T) {
 		})
 	}
 }
+
+func TestWhisperRejectsNewAudioUntilFailedFlushRecovers(t *testing.T) {
+	for name, size := range map[string]int{"partial": 32, "full": 16000 * 2 * 5} {
+		t.Run(name, func(t *testing.T) {
+			original := bytes.Repeat([]byte{1}, size)
+			next := []byte{2, 3}
+			failure := errors.New("runner unavailable")
+			fail := true
+			var chunks [][]byte
+			transcriber, err := NewWhisper(func(pcm []byte) (string, error) {
+				chunks = append(chunks, append([]byte(nil), pcm...))
+				if fail {
+					return "", failure
+				}
+				return "", nil
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = transcriber.AppendPCM(original)
+			if size < 16000*2*5 {
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = transcriber.Stop()
+			}
+			if !errors.Is(err, failure) {
+				t.Fatalf("initial flush: %v", err)
+			}
+			for i := 0; i < 100; i++ {
+				if err := transcriber.AppendPCM(next); !errors.Is(err, ErrWhisperPendingAudio) {
+					t.Fatalf("append after failed flush: got %v, want ErrWhisperPendingAudio", err)
+				}
+			}
+			if len(chunks) != 1 {
+				t.Fatalf("rejected appends invoked runner: %d calls", len(chunks))
+			}
+			if err := transcriber.Stop(); !errors.Is(err, failure) {
+				t.Fatalf("retry: %v", err)
+			}
+			fail = false
+			if err := transcriber.Stop(); err != nil {
+				t.Fatal(err)
+			}
+			for _, pcm := range chunks {
+				if !bytes.Equal(pcm, original) {
+					t.Fatalf("retained audio changed: got %d bytes, want %d", len(pcm), size)
+				}
+			}
+			if err := transcriber.AppendPCM(next); err != nil {
+				t.Fatal(err)
+			}
+			if err := transcriber.Stop(); err != nil {
+				t.Fatal(err)
+			}
+			if len(chunks) != 4 || !bytes.Equal(chunks[3], next) {
+				t.Fatalf("new audio was not accepted exactly once: %v", chunks[len(chunks)-1])
+			}
+		})
+	}
+}
