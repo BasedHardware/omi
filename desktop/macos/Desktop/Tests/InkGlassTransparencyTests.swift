@@ -133,45 +133,46 @@ final class InkGlassTransparencyTests: XCTestCase {
     XCTAssertTrue(view.material.isHidden)
   }
 
-  /// The SwiftUI panel — the one every content page wears — follows the object it observes
-  /// without being rebuilt: the same modifier instance renders a solid sheet at 0 and a much
-  /// thinner ground at 1, over the same black backdrop. This is the path a slider in Settings
-  /// drives while its thumb is down.
+  /// The SwiftUI panel — the one every content page wears — follows the object it observes without
+  /// being rebuilt: one modifier value, and the ground it resolves moves with every write to the
+  /// settings object it was handed. This is the path a slider in Settings drives while its thumb is
+  /// down.
+  ///
+  /// Read at the modifier's own seam, not sampled from pixels: the panel mounts two representables
+  /// (the material and the hit-region reporter) and neither renders offscreen — `ImageRenderer`
+  /// paints a representable as an opaque placeholder, and an unhosted `NSVisualEffectView` draws a
+  /// solid stand-in — so a bitmap of the panel reads the same white at every transparency.
   func testTheSwiftUIPanelFollowsTheSettingsObjectItObserves() throws {
     let settings = InkGlassTransparencySettings(defaults: try suite(), notificationCenter: NotificationCenter())
-    let size = CGSize(width: 120, height: 60)
-    let panel = Color.clear
-      .frame(width: size.width, height: size.height)
-      .modifier(
-        InkGlassPanelModifier(
-          cornerRadius: 0, shadow: nil, reduceTransparency: false, transparency: settings))
-    let host = NSHostingView(rootView: panel)
-    host.appearance = InkGlass.appearance
-    host.frame = NSRect(origin: .zero, size: size)
-    let ground = NSView(frame: host.frame)
-    ground.wantsLayer = true
-    ground.layer?.backgroundColor = NSColor.black.cgColor
-    ground.addSubview(host)
-
-    func centreTone() throws -> CGFloat {
-      ground.layoutSubtreeIfNeeded()
-      let rep = try XCTUnwrap(ground.bitmapImageRepForCachingDisplay(in: ground.bounds))
-      ground.cacheDisplay(in: ground.bounds, to: rep)
-      let colour = try XCTUnwrap(rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)?.usingColorSpace(.sRGB))
-      return colour.redComponent
-    }
+    let panel = InkGlassPanelModifier(
+      cornerRadius: 0, shadow: nil, reduceTransparency: false, transparency: settings)
 
     settings.transparency = 0
-    let solid = try centreTone()
+    let solid = panel.resolvedGroundAlpha
     settings.transparency = 1
-    let clear = try centreTone()
+    let clear = panel.resolvedGroundAlpha
     settings.transparency = InkGlass.defaultTransparency
-    let shipped = try centreTone()
+    let shipped = panel.resolvedGroundAlpha
 
-    XCTAssertGreaterThan(solid, 0.95, "at 0 the panel is an opaque sheet over black")
-    XCTAssertLessThan(clear, shipped, "at 1 more black comes through than at the shipped scrim")
+    XCTAssertEqual(solid, 1, accuracy: 0.0001, "at 0 the panel is an opaque sheet")
+    XCTAssertLessThan(clear, shipped, "at 1 more of the desktop comes through than at the shipped scrim")
     XCTAssertLessThan(shipped, solid, "the shipped scrim is not opaque")
     XCTAssertGreaterThan(solid - clear, 0.25, "the slider has to make a visible difference, not a nominal one")
+
+    // One glass, two hosts: the SwiftUI panel resolves exactly the alpha the AppKit panel paints.
+    for transparency in [CGFloat(0), 0.25, InkGlass.defaultTransparency, 0.9, 1] {
+      settings.transparency = transparency
+      XCTAssertEqual(
+        panel.resolvedGroundAlpha, InkGlass.scrim(forTransparency: transparency), accuracy: 0.0001,
+        "at transparency \(transparency) the SwiftUI panel and the AppKit panel disagree on the ground")
+    }
+
+    // Reduce Transparency, requested on the panel, wins over the object it observes.
+    let sheet = InkGlassPanelModifier(
+      cornerRadius: 0, shadow: nil, reduceTransparency: true, transparency: settings)
+    settings.transparency = 1
+    XCTAssertEqual(
+      sheet.resolvedGroundAlpha, 1, accuracy: 0.0001, "the slider at its clearest still yields a solid sheet")
   }
 
   /// The row is in Settings search, so the setting is reachable by name.

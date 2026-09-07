@@ -783,11 +783,24 @@ package struct InkGlassPanelModifier: ViewModifier {
     _transparencySettings = ObservedObject(wrappedValue: transparency)
   }
 
+  /// Whether this panel draws as an opaque sheet: the caller's override, else the system setting.
+  private var reduceTransparency: Bool {
+    requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
+  }
+
+  /// The alpha of the `Ink.surface` ground this panel paints, resolved from what it observes right
+  /// now. `body` reads this and so do the tests: the panel mounts two representables (the material
+  /// and the hit-region reporter) and neither renders offscreen, so "the glass follows the slider" is
+  /// checked on the value the panel paints rather than on a bitmap of it.
+  package var resolvedGroundAlpha: CGFloat {
+    InkGlass.groundAlpha(
+      reduceTransparency: reduceTransparency, transparency: transparencySettings.transparency)
+  }
+
   @ViewBuilder
   package func body(content: Content) -> some View {
-    let reduceTransparency = requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
-    let groundAlpha = InkGlass.groundAlpha(
-      reduceTransparency: reduceTransparency, transparency: transparencySettings.transparency)
+    let reduceTransparency = reduceTransparency
+    let groundAlpha = resolvedGroundAlpha
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
     // Clip the caller's returned tree before adding the glass background. This keeps content and
