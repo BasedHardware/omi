@@ -229,13 +229,26 @@ describe("device session request validators", () => {
       bindings
     );
     expect(completed.status).toBe(200);
-    expect(await completed.json()).toMatchObject({
+    const completedBody = (await completed.json()) as object;
+    expect(completedBody).toEqual({
       transcription: {
         sessionId: session.id,
         state: "completed",
         text: "Recorded speech",
+        segments: [{ start: 0, end: 0.1, text: "Recorded speech" }],
+        language: null,
+        errorCode: null,
+        updatedAt: expect.any(Number),
+        discardedLeadingPackets: 0,
       },
     });
+    const fetched = await fetchWorker(
+      `/v1/device-sessions/${session.id}/transcript`,
+      { headers: authenticatedHeaders },
+      bindings
+    );
+    expect(fetched.status).toBe(200);
+    expect((await fetched.json()) as object).toEqual(completedBody);
     expect(
       (
         await fetchWorker(
@@ -246,6 +259,24 @@ describe("device session request validators", () => {
       ).status
     ).toBe(200);
     expect(calls).toBe(1);
+    await bindings.DB.prepare(
+      "UPDATE device_transcriptions SET segments = '{' WHERE session_id = ?"
+    )
+      .bind(session.id)
+      .run();
+    const unreadable = await fetchWorker(
+      `/v1/device-sessions/${session.id}/transcript`,
+      { headers: authenticatedHeaders },
+      bindings
+    );
+    expect(unreadable.status).toBe(503);
+    expect((await unreadable.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
