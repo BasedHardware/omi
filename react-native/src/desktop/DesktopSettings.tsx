@@ -406,9 +406,15 @@ export function DesktopSettings({
     <>
       <Row
         copy={
-          session === 'ready'
-            ? account?.profile?.email ?? 'Signed in to Omi'
-            : 'Sign in to load conversations and memories.'
+          session !== 'ready'
+            ? 'Sign in to load conversations and memories.'
+            : account?.profile?.email ??
+              account?.profileError ??
+              (account?.profile != null
+                ? 'Signed in to Omi'
+                : account === null
+                ? 'Loading account…'
+                : 'Account profile is unavailable.')
         }
         title="Account"
         action={

@@ -124,7 +124,9 @@ Cloud Linux after `2360277217`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `fc56024139`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversations, Memories, and Rewind Load more controls now name what they load, matching Home memories and Tasks. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Load older messages label slice: conversation-detail and mobile Home Load older controls are labeled Load older messages, matching desktop Home Load earlier messages. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `96328b6ff9`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation-detail and mobile Home Load older controls are labeled Load older messages, matching desktop Home Load earlier messages. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the desktop Settings profile copy slice: a nested non-retryable `/v1/users/profile` read shows account-setting unavailable copy instead of "Signed in to Omi." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
