@@ -37,6 +37,7 @@ abstract class BaseBatchAudioWriter(
 
     protected val lock = Any()
     private var raf: RandomAccessFile? = null
+    private val frameEncoder = BatchFrameEncoder()
     private var currentFile: File? = null
 
     protected var currentStartSec: Long = 0
@@ -121,25 +122,12 @@ abstract class BaseBatchAudioWriter(
         val out = raf ?: return false
         return try {
             for (frame in frames) {
-                val len = frame.size
-                val header = byteArrayOf(
-                    (len and 0xFF).toByte(),
-                    ((len shr 8) and 0xFF).toByte(),
-                    ((len shr 16) and 0xFF).toByte(),
-                    ((len shr 24) and 0xFF).toByte(),
-                )
-                out.write(header)
-                out.write(frame)
-                currentBytes += 4 + len
+                currentBytes += frameEncoder.write(out, frame, currentBytes)
                 currentFrames++
             }
             true
         } catch (e: Exception) {
             Log.e(tag, "write failed: ${e.message}")
-            try {
-                out.setLength(currentBytes) // drop a torn frame tail; keep only complete frames
-            } catch (_: Exception) {
-            }
             closeCurrentLocked("write_error")
             false
         }
@@ -265,19 +253,11 @@ abstract class BaseBatchAudioWriter(
 
     protected fun prefs() = context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
 
-    private fun prefValue(key: String): Any? = prefs().all["flutter.$key"]
+    private val preferenceValues by lazy { SharedPreferencesValues(prefs()) }
 
     protected fun stringPref(key: String, defaultValue: String = ""): String =
-        when (val value = prefValue(key)) {
-            is String -> value
-            null -> defaultValue
-            else -> value.toString()
-        }
+        preferenceValues.string(key, defaultValue)
 
     protected fun boolPref(key: String, defaultValue: Boolean): Boolean =
-        when (val value = prefValue(key)) {
-            is Boolean -> value
-            is String -> value.toBooleanStrictOrNull() ?: defaultValue
-            else -> defaultValue
-        }
+        preferenceValues.boolean(key, defaultValue)
 }

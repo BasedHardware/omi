@@ -1,6 +1,6 @@
 # App (Flutter) — Operational Playbook
 
-Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
+Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 
 ## Build Bootstrap
 
@@ -89,11 +89,13 @@ Android has 26 total permissions in AndroidManifest.xml. iOS has 11 background m
 bash test.sh           # runs all tests
 flutter test           # same thing
 flutter test test/unit/  # specific directory
+# Android native tests: JDK 21, SDK 36, Flutter bootstrap
+(cd android && ./gradlew :app:testDevDebugUnitTest)
 ```
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
 
-PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
+CI runs `flutter test` and `app/scripts/analyze_ratchet.sh`: errors fail; new info/warning occurrences above `app/analysis_baseline.json` fail. Run the ratchet before committing Dart changes. Update intentional baselines with `--update-baseline` in that PR.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable

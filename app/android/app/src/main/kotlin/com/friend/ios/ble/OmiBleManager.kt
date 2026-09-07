@@ -39,7 +39,6 @@ class OmiBleManager private constructor(private val application: Application) {
         private const val RSSI_HISTORY_LIMIT = 10
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
         private const val PREFS_BATTERY = "battery_history"
-        private const val MAX_BATTERY_HISTORY = 2000
         private const val BATTERY_RETENTION_MS = 7L * 24 * 3600 * 1000
         private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
 
@@ -569,29 +568,16 @@ class OmiBleManager private constructor(private val application: Application) {
 
     private fun batteryHistoryKey(address: String) = "battery_history_${address.uppercase()}"
 
-    private fun persistBatteryReading(address: String, level: Int) {
+    private val batteryHistoryRecorder by lazy {
         val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
-        val key = batteryHistoryKey(address)
-        val historyJson = prefs.getString(key, "[]") ?: "[]"
-        val history = try { org.json.JSONArray(historyJson) } catch (_: Exception) { org.json.JSONArray() }
+        BatteryHistoryRecorder(
+            read = { key -> prefs.getString(key, "[]") ?: "[]" },
+            write = { key, value -> prefs.edit().putString(key, value).apply() },
+        )
+    }
 
-        val now = System.currentTimeMillis()
-        val cutoff = now - BATTERY_RETENTION_MS
-
-        val pruned = org.json.JSONArray()
-        for (i in 0 until history.length()) {
-            val obj = history.getJSONObject(i)
-            if (obj.getLong("ts") >= cutoff) pruned.put(obj)
-        }
-
-        pruned.put(org.json.JSONObject().apply {
-            put("ts", now)
-            put("level", level)
-        })
-
-        while (pruned.length() > MAX_BATTERY_HISTORY) pruned.remove(0)
-
-        prefs.edit().putString(key, pruned.toString()).apply()
+    private fun persistBatteryReading(address: String, level: Int) {
+        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis())
     }
 
     fun getBatteryHistory(address: String): List<BleBatteryPoint> {
