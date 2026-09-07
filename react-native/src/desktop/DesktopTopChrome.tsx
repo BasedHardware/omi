@@ -5,6 +5,7 @@ import MessageCircle from 'lucide-react-native/icons/message-circle';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Search from 'lucide-react-native/icons/search';
+import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
@@ -29,6 +30,7 @@ export type DesktopRoute = DesktopNavItem | 'Settings';
 const navIcons: Record<DesktopNavItem, typeof Search> = {
   Home: House,
   Conversations: MessageCircle,
+  Rewind: History,
   Tasks: ListFilter,
   Apps: Puzzle,
 };

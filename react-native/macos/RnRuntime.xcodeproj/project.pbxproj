@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10512060000000000000001 = {isa = PBXBuildFile; fileRef = A10512060000000000000002; };
+		A10512050000000000000001 = {isa = PBXBuildFile; fileRef = A10512050000000000000002; };
+		A10512040000000000000001 = {isa = PBXBuildFile; fileRef = A10512040000000000000002; };
+		A10512030000000000000001 = {isa = PBXBuildFile; fileRef = A10512030000000000000002; };
+		A10512020000000000000001 = {isa = PBXBuildFile; fileRef = A10512020000000000000002; };
+		A10512010000000000000001 = {isa = PBXBuildFile; fileRef = A10512010000000000000002; };
+		A10512000000000000000001 = {isa = PBXBuildFile; fileRef = A10512000000000000000002; };
+		A10511000000000000000001 = {isa = PBXBuildFile; fileRef = A10511000000000000000002; };
+		A10510000000000000000001 = {isa = PBXBuildFile; fileRef = A10510000000000000000002; };
+		A10510000000000000000003 = {isa = PBXBuildFile; fileRef = A10510000000000000000004; };
 		5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5142014C2437B4B30078DB4F /* AppDelegate.mm */; };
 		514201522437B4B40078DB4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 514201512437B4B40078DB4F /* Assets.xcassets */; };
 		514201552437B4B40078DB4F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 514201532437B4B40078DB4F /* Main.storyboard */; };
@@ -28,6 +38,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A10512060000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		A10512050000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		A10512040000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		A10512030000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
+		A10512020000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
+		A10512010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
+		A10512000000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
+		A10511000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "../../apple/OmiRewindCapture.mm"; sourceTree = "<group>"; };
+		A10510000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiRewindModule.mm; sourceTree = "<group>"; };
+		A10510000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		01637F3961E6C48E5172DB1E /* Pods-RnRuntime-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime-macOS.debug.xcconfig"; path = "Target Support Files/Pods-RnRuntime-macOS/Pods-RnRuntime-macOS.debug.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* RnRuntime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RnRuntime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -77,6 +97,14 @@
 				A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */,
 				A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */,
 				A1040A000000000000000001 /* AVFoundation.framework in Frameworks */,
+				A10510000000000000000003,
+				A10512060000000000000001,
+				A10512050000000000000001,
+				A10512040000000000000001,
+				A10512030000000000000001,
+				A10512020000000000000001,
+				A10512010000000000000001,
+				A10512000000000000000001,
 				A1040B000000000000000001 /* UserNotifications.framework in Frameworks */,
 				DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */,
 			);
@@ -92,6 +120,14 @@
 				A10407000000000000000002 /* LocalAuthentication.framework */,
 				A10409000000000000000002 /* CoreBluetooth.framework */,
 				A1040A000000000000000002 /* AVFoundation.framework */,
+				A10510000000000000000004,
+				A10512060000000000000002,
+				A10512050000000000000002,
+				A10512040000000000000002,
+				A10512030000000000000002,
+				A10512020000000000000002,
+				A10512010000000000000002,
+				A10512000000000000000002,
 				A1040B000000000000000002 /* UserNotifications.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */,
@@ -123,6 +159,8 @@
 				A10401000000000000000002 /* OmiBackendModule.mm */,
 				A10402000000000000000003 /* OmiDesktopCommandsModule.h */,
 				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
+				A10510000000000000000002,
+				A10511000000000000000002,
 				A10403000000000000000003 /* OmiGlassPanelView.h */,
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
 				A10404000000000000000003 /* OmiSFSymbolView.h */,
@@ -365,6 +403,8 @@
 				5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */,
 				A10401000000000000000001 /* OmiBackendModule.mm in Sources */,
 				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
+				A10510000000000000000001,
+				A10511000000000000000001,
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
 				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
 				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,
