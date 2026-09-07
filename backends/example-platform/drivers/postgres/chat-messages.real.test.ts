@@ -173,6 +173,23 @@ realTest("real chat reads require chat.read and never invent empty success", asy
       [humanId, "human", null],
       [aiId, "ai", "completed"],
     ]);
+    const namedId = "33333333-3333-4333-8333-333333333333";
+    await owner.unsafe(
+      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',3000,3000,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
+      [account, namedId],
+    );
+    const defaultPage = await call();
+    expect(defaultPage.status).toBe(200);
+    expect(
+      ((await defaultPage.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([humanId, aiId]);
+    const named = await call("?limit=50&chatSessionId=session-alpha");
+    expect(named.status).toBe(200);
+    expect(
+      ((await named.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
+    ).toEqual([namedId]);
+    expect((await call("?limit=50&appId=other")).status).toBe(400);
+    expect((await call("?limit=50&chatSessionId=")).status).toBe(400);
     expect((await call("", "other.payload.signature")).status).toBe(200);
     expect(await (await call("", "other.payload.signature")).json()).toEqual({
       messages: [],

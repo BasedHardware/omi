@@ -196,25 +196,42 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
   }
 
   listHistory(accountId: string, query: ChatHistoryQuery): ChatHistoryStorePage {
+    const chatSessionId = query.chatSessionId ?? null;
     const rows = query.olderThan === null
       ? this.db.query(`
           SELECT ${SELECT_FIELDS}
           FROM service_chat_messages
-          WHERE account_id = ? AND app_id IS NULL AND chat_session_id IS NULL
+          WHERE account_id = ? AND app_id IS NULL
+            AND CASE WHEN ? IS NULL
+              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0)
+              ELSE chat_session_id = ?
+            END
             AND sequence <= ?
           ORDER BY created_at DESC, id DESC
           LIMIT ?
-        `).all(accountId, query.snapshotSequence, query.limit + 1) as StoredRow[]
+        `).all(
+          accountId,
+          chatSessionId,
+          chatSessionId,
+          query.snapshotSequence,
+          query.limit + 1,
+        ) as StoredRow[]
       : this.db.query(`
           SELECT ${SELECT_FIELDS}
           FROM service_chat_messages
-          WHERE account_id = ? AND app_id IS NULL AND chat_session_id IS NULL
+          WHERE account_id = ? AND app_id IS NULL
+            AND CASE WHEN ? IS NULL
+              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0)
+              ELSE chat_session_id = ?
+            END
             AND sequence <= ?
             AND (created_at < ? OR (created_at = ? AND id < ?))
           ORDER BY created_at DESC, id DESC
           LIMIT ?
         `).all(
           accountId,
+          chatSessionId,
+          chatSessionId,
           query.snapshotSequence,
           query.olderThan.createdAt,
           query.olderThan.createdAt,

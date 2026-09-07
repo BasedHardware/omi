@@ -313,3 +313,37 @@ test("SQLite chat message, quota, and event records survive adapter restart", ()
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("SQLite chat history stays on the main session unless chatSessionId is requested", () => {
+  const db = new Database(":memory:");
+  const messages = new SqliteChatMessagesStore(db);
+  expect(messages.admitHuman("account", message({ id: "main" }), "generation-main").kind)
+    .toBe("created");
+  expect(messages.admitHuman("account", message({
+    id: "named",
+    createdAt: 200,
+    updatedAt: 200,
+    chatSessionId: "session-alpha",
+    payloadHash: "sha256:named",
+    revision: "revision-named",
+  }), "generation-named").kind).toBe("created");
+  const snapshotSequence = messages.readSnapshotSequence("account");
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence,
+    olderThan: null,
+  }).messages.map((stored) => stored.id)).toEqual(["main"]);
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence,
+    olderThan: null,
+    chatSessionId: "session-alpha",
+  }).messages.map((stored) => stored.id)).toEqual(["named"]);
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence,
+    olderThan: null,
+    chatSessionId: "session-missing",
+  }).messages).toEqual([]);
+  db.close();
+});

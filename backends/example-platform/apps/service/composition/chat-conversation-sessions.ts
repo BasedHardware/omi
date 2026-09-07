@@ -1,7 +1,7 @@
 export const MAIN_CHAT_CONVERSATION_ID = "chat:chat-main";
 
 export type ChatConversationSessionItem = {
-  readonly id: typeof MAIN_CHAT_CONVERSATION_ID;
+  readonly id: string;
   readonly title: string;
   readonly overview: string;
   readonly createdAt: number;

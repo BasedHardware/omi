@@ -26,6 +26,7 @@ test("chat history cursor binds account epoch, account, scope, direction, snapsh
     snapshotSequence: 9,
     olderThan: { createdAt: 123, id: "message-3" },
     issuedAtEpochSeconds: 1_000,
+    chatSessionId: null,
   });
   expect(() => codec.verify(cursor, {
     accountId: "account-b", accountEpoch: 7, nowEpochSeconds: 1_010,
@@ -44,4 +45,36 @@ test("chat history cursor binds account epoch, account, scope, direction, snapsh
     accountId: "account-a", accountEpoch: 7, nowEpochSeconds: 1_060,
   }))
     .toThrow(ExpiredChatHistoryCursorError);
+});
+
+test("chat history cursor binds the requested chat session and rejects a mismatched session", () => {
+  const named = codec.issue({
+    accountId: "account-a",
+    accountEpoch: 7,
+    snapshotSequence: 9,
+    olderThan: { createdAt: 123, id: "message-3" },
+    issuedAtEpochSeconds: 1_000,
+    ttlSeconds: 60,
+    chatSessionId: "session-alpha",
+  });
+  expect(codec.verify(named, {
+    accountId: "account-a", accountEpoch: 7, nowEpochSeconds: 1_010,
+  })).toEqual({
+    snapshotSequence: 9,
+    olderThan: { createdAt: 123, id: "message-3" },
+    issuedAtEpochSeconds: 1_000,
+    chatSessionId: "session-alpha",
+  });
+  const main = codec.issue({
+    accountId: "account-a",
+    accountEpoch: 7,
+    snapshotSequence: 9,
+    olderThan: { createdAt: 123, id: "message-3" },
+    issuedAtEpochSeconds: 1_000,
+    ttlSeconds: 60,
+  });
+  expect(codec.verify(main, {
+    accountId: "account-a", accountEpoch: 7, nowEpochSeconds: 1_010,
+  }).chatSessionId).toBeNull();
+  expect(named).not.toBe(main);
 });

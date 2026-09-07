@@ -45,11 +45,12 @@ Migration 0053 removes the old whole-account function and introduces a distinct
 metadata read; an old process calling the retired function fails unavailable rather
 than returning an empty successful history during a mixed-revision rollout.
 
-This is the persisted Listen/recording list, plus granted main-chat sessions.
+This is the persisted Listen/recording list, plus granted chat sessions.
 First-page envelope reads that also hold `chat.read` include `chat:chat-main` when
-that account actually has main-session messages. Missing `chat.read`, revoked
-grants, and empty chat history never invent that row. Later cursor pages keep the
-Listen sequence and do not repeat the chat session. Chat writes, editable
+that account actually has main-session messages, and named `chat:` rows when those
+sessions have messages. Missing `chat.read`, revoked grants, and empty chat history
+never invent `chat:chat-main`. Later cursor pages keep the
+Listen sequence and do not repeat the chat sessions. Chat writes, editable
 metadata, folders and star mutations still need their own persisted domain
 composition. Full recording transcript data remains on the existing
 account-scoped device-session transcript route.

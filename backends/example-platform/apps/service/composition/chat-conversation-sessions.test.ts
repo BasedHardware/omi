@@ -92,4 +92,24 @@ describe("chat conversation composition", () => {
       [session()],
     )).toBeNull();
   });
+
+  test("merges a named chat session beside chat:chat-main without inventing extra rows", () => {
+    const named = session({
+      id: "chat:session-alpha",
+      title: "named prompt",
+      overview: "named answer",
+      createdAt: 1500,
+      updatedAt: 3500,
+      startedAt: 1500,
+    });
+    const composed = composeChatSessionsIntoConversationPage(
+      page([{ id: "recording:one", updatedAt: 3000, title: "Recording" }]),
+      [session(), named],
+    );
+    expect(composed?.items.map((item) => item.id)).toEqual([
+      named.id,
+      "recording:one",
+      MAIN_CHAT_CONVERSATION_ID,
+    ]);
+  });
 });

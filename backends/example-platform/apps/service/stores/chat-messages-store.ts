@@ -57,7 +57,19 @@ export interface ChatHistoryQuery {
   readonly snapshotSequence: number;
   /** Strict older-than boundary. Null means the newest page. */
   readonly olderThan: ChatHistoryKey | null;
+  readonly chatSessionId?: string | null;
 }
+
+export const historySessionMatches = (
+  rowChatSessionId: string | null,
+  queryChatSessionId: string | null | undefined,
+): boolean => {
+  const wanted = queryChatSessionId ?? null;
+  if (wanted === null) {
+    return rowChatSessionId === null || rowChatSessionId.length === 0;
+  }
+  return rowChatSessionId === wanted;
+};
 
 export interface ChatHistoryStorePage {
   readonly messages: readonly ChatMessageRecord[];
@@ -269,7 +281,8 @@ export const createInMemoryChatMessagesStore = (
     listHistory(accountId: string, query: ChatHistoryQuery): ChatHistoryStorePage {
       const rows = [...(accounts.get(accountId)?.values() ?? [])]
         .filter((row) => row.sequence <= query.snapshotSequence)
-        .filter((row) => row.message.appId === null && row.message.chatSessionId === null)
+        .filter((row) => row.message.appId === null)
+        .filter((row) => historySessionMatches(row.message.chatSessionId, query.chatSessionId))
         .filter((row) => query.olderThan === null || compareChatHistoryKeys(
           { createdAt: row.message.createdAt, id: row.message.id },
           query.olderThan,

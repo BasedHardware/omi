@@ -123,20 +123,82 @@ describe("ratified /v1/chat-messages route", () => {
     db.close();
   });
 
-  test("history GET rejects chatSessionId instead of returning main history", async () => {
+  test("history GET filters one optional chatSessionId and keeps unknown keys at 400", async () => {
     expect(parseHistoryQuery(new Request(
       "https://service.example/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+    ))).toEqual({
+      limit: 50,
+      olderCursor: null,
+      chatSessionId: "session-alpha",
+    });
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&appId=other",
     ))).toBeNull();
-    const { db, local } = bootInMemory();
+    expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?chatSessionId=",
+    ))).toBeNull();
+    expect(parseHistoryQuery(new Request(
+      `https://service.example/v1/chat-messages?chatSessionId=${"s".repeat(129)}`,
+    ))).toBeNull();
+    const { db, local, stores } = bootInMemory();
     expect((await post(local, payload("main-only", 1))).status).toBe(201);
-    const response = await local.app.request(
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "named-human",
+      text: "named prompt",
+      sender: "human",
+      type: "text",
+      createdAt: 2,
+      updatedAt: 2,
+      chatSessionId: "session-alpha",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"a".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-named",
+      attachments: [],
+    }, "gen-named").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "named-older",
+      text: "older named",
+      sender: "human",
+      type: "text",
+      createdAt: 0,
+      updatedAt: 0,
+      chatSessionId: "session-alpha",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"b".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-named-older",
+      attachments: [],
+    }, "gen-named-older").kind).toBe("created");
+    const unknown = await local.app.request(
+      "/v1/chat-messages?limit=50&appId=other",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    const emptySession = await local.app.request(
+      "/v1/chat-messages?limit=50&chatSessionId=",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(emptySession.status).toBe(400);
+    const named = await local.app.request(
       "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
       { headers: AUTHORIZATION(local.devToken) },
     );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "bad_request", retryable: false, action: "edit_request" },
-    });
+    expect(named.status).toBe(200);
+    expect(
+      ((await named.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["named-older", "named-human"]);
     const main = await local.app.request("/v1/chat-messages?limit=50", {
       headers: AUTHORIZATION(local.devToken),
     });
@@ -146,6 +208,32 @@ describe("ratified /v1/chat-messages route", () => {
         (message) => message.id,
       ),
     ).toEqual(["main-only"]);
+    const namedPage = await local.app.request(
+      "/v1/chat-messages?limit=1&chatSessionId=session-alpha",
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    const namedBody = await namedPage.json() as {
+      messages: Array<{ id: string }>;
+      page: { olderCursor: string | null; hasOlder: boolean };
+    };
+    expect(namedBody.messages.map((message) => message.id)).toEqual(["named-human"]);
+    expect(namedBody.page.hasOlder).toBe(true);
+    expect(namedBody.page.olderCursor).not.toBeNull();
+    const mismatched = await local.app.request(
+      `/v1/chat-messages?limit=1&olderCursor=${encodeURIComponent(namedBody.page.olderCursor!)}`,
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(mismatched.status).toBe(400);
+    const continued = await local.app.request(
+      `/v1/chat-messages?limit=1&chatSessionId=session-alpha&olderCursor=${encodeURIComponent(namedBody.page.olderCursor!)}`,
+      { headers: AUTHORIZATION(local.devToken) },
+    );
+    expect(continued.status).toBe(200);
+    expect(
+      ((await continued.json()) as { messages: Array<{ id: string }> }).messages.map(
+        (message) => message.id,
+      ),
+    ).toEqual(["named-older"]);
     db.close();
   });
 

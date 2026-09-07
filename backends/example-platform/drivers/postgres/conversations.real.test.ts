@@ -565,11 +565,19 @@ realTest(
       expect(ids(secondPage)).not.toContain("chat:chat-main");
       expect(secondPage.items).toHaveLength(1);
       await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'named prompt','human','text',4000,4000,'session-alpha',NULL,0,'sha256:named','desktop_chat',NULL,false,'rev-named','[]'::jsonb,'gen_named')`,
+        [account, "22222222-2222-4222-8222-222222222222"]
+      );
+      const namedPage = (await (await call()).json()) as { items: Array<{ id: string }> };
+      expect(ids(namedPage)).toContain("chat:chat-main");
+      expect(ids(namedPage)).toContain("chat:session-alpha");
+      await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
       );
       const revoked = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
       expect(ids(revoked)).not.toContain("chat:chat-main");
+      expect(ids(revoked)).not.toContain("chat:session-alpha");
       expect(revoked.items).toHaveLength(1);
     } finally {
       await pool.close();

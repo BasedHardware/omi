@@ -116,12 +116,16 @@ export function createPostgresFirebaseChatReadRuntime(
                 accountEpoch,
                 nowEpochSeconds,
               });
+              if (claims !== null && claims.chatSessionId !== query.chatSessionId) {
+                throw new InvalidChatHistoryCursorError();
+              }
               const snapshotSequence = claims?.snapshotSequence
                 ?? await storage.readSnapshotSequence();
               const page = await storage.listHistory({
                 limit: query.limit,
                 snapshotSequence,
                 olderThan: claims?.olderThan ?? null,
+                chatSessionId: query.chatSessionId,
               });
               const messages = [];
               for (const message of page.messages) {
@@ -142,6 +146,7 @@ export function createPostgresFirebaseChatReadRuntime(
                     olderThan: { createdAt: oldest.createdAt, id: oldest.id },
                     issuedAtEpochSeconds: claims?.issuedAtEpochSeconds ?? nowEpochSeconds,
                     ttlSeconds: CHAT_CURSOR_TTL_SECONDS,
+                    chatSessionId: query.chatSessionId,
                   })
                 : null;
               counter.recordDomainRead("served");
