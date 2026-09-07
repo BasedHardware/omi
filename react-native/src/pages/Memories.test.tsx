@@ -292,6 +292,7 @@ test('generic later-page memory failures still offer Load more', async () => {
       button(view).props.onPress();
     });
     expect(textOf(view)).toContain('More memories could not be loaded.');
+    expect(textOf(view)).toContain('Load more memories');
     expect(textOf(view)).not.toContain(desktopBackendUnavailableCopy);
     expect(ids(view)).toEqual(['kept-first']);
     expect(button(view)).toBeDefined();

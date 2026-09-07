@@ -309,7 +309,7 @@ export function DesktopRewind({
               disabled={busy}
               onPress={() => void more()}
               style={styles.button}>
-              <Text style={styles.text}>Load more</Text>
+              <Text style={styles.text}>Load more history</Text>
             </FocusPressable>
           ) : null}
         </ScrollView>

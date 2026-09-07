@@ -210,6 +210,21 @@ function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
+function visibleButtonCopy(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  accessibilityLabel: string,
+): string[] {
+  return renderer.root
+    .find(node => node.props.accessibilityLabel === accessibilityLabel)
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter((value): value is string => typeof value === 'string');
+}
+
 function pressText(
   renderer: ReactTestRenderer.ReactTestRenderer,
   label: string,
@@ -1569,6 +1584,9 @@ test('actual desktop conversation page exposes Load more when more pages exist',
       .props.onPress(),
   );
   expect(renderedText(renderer)).toContain('More conversations are available.');
+  expect(visibleButtonCopy(renderer, 'Load more conversations')).toEqual([
+    'Load more conversations',
+  ]);
   act(() =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load more conversations')
@@ -1612,11 +1630,9 @@ test('generic later-page conversation failures keep Load more', () => {
   expect(renderedText(renderer)).toContain(
     'More conversations could not be loaded. Try again.',
   );
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Load more conversations',
-    ),
-  ).toBeTruthy();
+  expect(visibleButtonCopy(renderer, 'Load more conversations')).toEqual([
+    'Load more conversations',
+  ]);
 });
 
 const homeMemory = {
@@ -1652,21 +1668,6 @@ function pagedMemoryOutcomes() {
       },
     },
   };
-}
-
-function visibleButtonCopy(
-  renderer: ReactTestRenderer.ReactTestRenderer,
-  accessibilityLabel: string,
-): string[] {
-  return renderer.root
-    .find(node => node.props.accessibilityLabel === accessibilityLabel)
-    .findAllByType(Text)
-    .flatMap(node =>
-      Array.isArray(node.props.children)
-        ? node.props.children
-        : [node.props.children],
-    )
-    .filter((value): value is string => typeof value === 'string');
 }
 
 test('actual desktop Home exposes Load more memories when more memories exist', () => {

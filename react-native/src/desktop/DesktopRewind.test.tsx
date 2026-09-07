@@ -84,6 +84,7 @@ test('loads native history, advances its cursor and opens the chosen stored fram
   await act(async () =>
     first.resolve({frames: [frame('one')], nextCursor: 'page-two'}),
   );
+  expect(content(view)).toContain('Load more history');
   mockRewind.listFrames.mockResolvedValueOnce({
     frames: [frame('two')],
     nextCursor: null,

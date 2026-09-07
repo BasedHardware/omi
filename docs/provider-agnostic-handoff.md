@@ -120,7 +120,9 @@ Cloud Linux after `78ede54213`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `9e4e6316f2`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Desktop Home Load more in Conversations & memories is labeled Load more memories, including when conversation pages also have more. It still only pages memories; Conversations keeps its own pager. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the account-setting read unavailable copy slice: nested non-retryable `/v1/users/*` GETs, including example-platform `development_backend_unsupported`, say the account setting is unavailable instead of "This saved data is not available." Writes already did. Local preference failures still say Try again. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2360277217`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested non-retryable `/v1/users/*` GETs, including example-platform `development_backend_unsupported`, say the account setting is unavailable instead of "This saved data is not available." Writes already did. Local preference failures still say Try again. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the pager visible-label slice: Conversations, Memories, and Rewind Load more controls now name what they load, matching Home memories and Tasks. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

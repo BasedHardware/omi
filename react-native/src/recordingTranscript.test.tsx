@@ -409,6 +409,7 @@ test('conversation list exposes refresh and load more with truthful pending acti
   });
   expect(onRefresh).toHaveBeenCalledTimes(1);
   expect(onLoadMore).toHaveBeenCalledTimes(1);
+  expect(textOf(renderer)).toContain('Load more conversations');
   await act(async () => {
     renderer.update(
       <ConversationsPage

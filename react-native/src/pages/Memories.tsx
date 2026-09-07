@@ -219,7 +219,7 @@ export function MemoriesPage({
                         pressed && styles.pressed,
                       ]}>
                       <Text style={styles.loadOlderText}>
-                        {loadingMore ? 'Loading more…' : 'Load more'}
+                        {loadingMore ? 'Loading more…' : 'Load more memories'}
                       </Text>
                     </FocusPressable>
                   )}

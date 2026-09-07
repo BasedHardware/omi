@@ -316,7 +316,7 @@ export function ConversationsPage({
                   onPress={onLoadMore}
                   style={mobileStyles.pageAction}>
                   <Text style={styles.projectionEmptyCopy}>
-                    {loadingMore ? 'Loading…' : 'Load more'}
+                    {loadingMore ? 'Loading…' : 'Load more conversations'}
                   </Text>
                 </FocusPressable>
               )}

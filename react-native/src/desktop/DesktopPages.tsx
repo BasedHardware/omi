@@ -77,7 +77,9 @@ export function LibraryPage({
             onPress={onLoadMoreConversations}
             style={styles.pageAction}>
             <Text style={styles.rowMeta}>
-              {conversationsLoadingMore ? 'Loading…' : 'Load more'}
+              {conversationsLoadingMore
+                ? 'Loading…'
+                : 'Load more conversations'}
             </Text>
           </FocusPressable>
         ) : null}
