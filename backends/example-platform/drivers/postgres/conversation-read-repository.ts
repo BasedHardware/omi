@@ -194,7 +194,7 @@ export async function withAuthorizedConversationRead<Result>(
           ) {
             await connection.query({
               name: "conversations.save_union_cursor",
-              text: "SELECT omi_memory.save_conversation_union_cursor($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+              text: "SELECT omi_memory.save_conversation_union_cursor($1,$2,$3::bigint,$4::bigint,$5::timestamptz,$6::bigint,$7,$8,$9::bigint)",
               values: [
                 cursorHash,
                 bindingDigest,

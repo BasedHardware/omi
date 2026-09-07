@@ -122,6 +122,57 @@ test("read responses remain private until final clock and cancellation checks pa
     expect(committed).toBe(mode === "success");
   }
 });
+test("union cursor saves bind epoch milliseconds as bigint the same way listen capture already does", async () => {
+  const saved: string[] = [];
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      saved.push(statement.text);
+      const rows =
+        statement.name === "authority.lock_and_revalidate"
+          ? [authorityRow()]
+          : statement.name === "conversations.read_snapshot"
+          ? [{ snapshot: { revision: 1, records: [] } }]
+          : statement.name === "conversations.save_union_cursor"
+          ? [{}]
+          : statement.name === "conversations.final_clock"
+          ? [{ now: 100 }]
+          : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await withAuthorizedConversationRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    async (_snapshot, _now, storage) => {
+      await storage.saveUnion(
+        hash("a"),
+        hash("b"),
+        1,
+        0,
+        "2026-09-07T13:50:44.000Z",
+        1_757_250_000_000,
+        "recording:11111111-2222-4333-8444-555555555555",
+        "listen",
+        1000
+      );
+      return "ok";
+    }
+  );
+  expect(saved.some((text) =>
+    text.includes("$5::timestamptz") && text.includes("$6::bigint")
+  )).toBe(true);
+});
+
 test("an unrelated capability never checks out a conversation connection", async () => {
   const pool: PostgresTransactionPool = {
     async withTransaction() {

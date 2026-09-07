@@ -551,7 +551,9 @@ realTest(
           ]
         );
       }
-      const firstPage = (await (await call("?limit=1")).json()) as {
+      const firstResponse = await call("?limit=1");
+      expect(firstResponse.status).toBe(200);
+      const firstPage = (await firstResponse.json()) as {
         items: Array<{ id: string }>;
         window: { nextCursor: string | null; hasMore: boolean };
       };
