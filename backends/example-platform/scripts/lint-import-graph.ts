@@ -352,7 +352,7 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
   {
     wirePath: "/v1/memories",
     servedBy: "apps/service/routes/memories.ts",
-    boundVia: ["routes/memories", "app-facing"],
+    boundVia: ["routes/memories", "app-facing", "firebase-authorized-memory-service-process"],
     reason:
       "The integration harness served this path from a hand-rolled handler that minted "
       + "public item ids from raw fixture row ids, while the registered route minted "
