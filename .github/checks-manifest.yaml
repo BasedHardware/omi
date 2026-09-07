@@ -314,6 +314,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-batch-audio-energy
+    command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
+    triggers: ["app/ios/Runner/Batch/*.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "c04b703719 writes each native batch frame in two calls; 370b1045a0 rereads saved phone location each append; exercise those production writers while preserving frame durability and metadata freshness"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]

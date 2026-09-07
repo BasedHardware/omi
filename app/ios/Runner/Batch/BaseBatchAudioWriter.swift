@@ -19,6 +19,7 @@ class BaseBatchAudioWriter {
     let queue: DispatchQueue
     private let tag: String
     private let recoveryPrefix: String
+    private let writeData: (FileHandle, Data) throws -> Void
 
     // Active-file state (only touched on `queue`).
     private var fileHandle: FileHandle?
@@ -39,10 +40,14 @@ class BaseBatchAudioWriter {
     /// the phone-mic writer runs on the controller's audio queue so encode+write
     /// stay on a single queue and `audioQueue.sync {}` genuinely drains pending
     /// writes. When nil (the BLE subclasses) the writer creates its own.
-    init(tag: String, queueLabel: String, recoveryPrefix: String, queue: DispatchQueue? = nil) {
+    init(
+        tag: String, queueLabel: String, recoveryPrefix: String, queue: DispatchQueue? = nil,
+        writeData: @escaping (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) }
+    ) {
         self.tag = tag
         self.queue = queue ?? DispatchQueue(label: queueLabel)
         self.recoveryPrefix = recoveryPrefix
+        self.writeData = writeData
     }
 
     /// Whether a part file is currently open (only meaningful on `queue`).
@@ -111,9 +116,12 @@ class BaseBatchAudioWriter {
         do {
             for frame in frames {
                 var len = UInt32(frame.count).littleEndian
-                let header = Data(bytes: &len, count: 4)
-                try fh.write(contentsOf: header)
-                try fh.write(contentsOf: frame)
+                // Keep the existing per-frame commit boundary while issuing one
+                // write for bytes already available. Never buffer across callbacks.
+                var record = Data(capacity: 4 + frame.count)
+                withUnsafeBytes(of: &len) { record.append(contentsOf: $0) }
+                record.append(frame)
+                try writeData(fh, record)
                 currentBytes += Int64(4 + frame.count)
                 currentFrames += 1
             }
@@ -214,24 +222,28 @@ class BaseBatchAudioWriter {
 
     /// Persist a bounded recording-owned location snapshot beside the audio file.
     /// The sidecar is written atomically so a native crash cannot leave a partial
-    /// JSON file for the Dart scanner to ingest.
-    func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) {
+    /// JSON file for the Dart scanner to ingest. True confirms a saved/existing
+    /// snapshot; false lets callers retry missing metadata or a failed write.
+    @discardableResult
+    func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) -> Bool {
         guard let rawGeolocation,
               let data = rawGeolocation.data(using: .utf8),
               !data.isEmpty,
               data.count <= 4_096,
-              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return }
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return false }
 
         let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
         // A same-name part file can be reopened after a native restart. Its
         // location belongs to that recording, so never replace an existing
         // snapshot with the next session's config.
-        if FileManager.default.fileExists(atPath: sidecarURL.path) { return }
+        if FileManager.default.fileExists(atPath: sidecarURL.path) { return true }
         do {
             try data.write(to: sidecarURL, options: .atomic)
+            return true
         } catch {
             // Location is optional: never interrupt or discard audio capture.
             NSLog("[\(tag)] failed to persist bounded recording location sidecar: \(type(of: error))")
+            return false
         }
     }
 
