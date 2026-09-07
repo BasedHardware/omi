@@ -1,3 +1,4 @@
+import 'package:omi/pages/onboarding/onboarding_layout.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -131,17 +132,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 10),
-                Text(
-                  context.l10n.whereDidYouHearAboutOmi,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                OnboardingStepTitle(context.l10n.whereDidYouHearAboutOmi),
                 const SizedBox(height: 20),
                 _sourceGrid(context),
                 AnimatedSize(

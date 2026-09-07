@@ -84,3 +84,31 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
     );
   }
 }
+
+/// Step heading that always renders on one line: 28px bold Manrope, scaled
+/// down (never wrapped) when a locale or narrow screen would otherwise break
+/// it across two lines.
+class OnboardingStepTitle extends StatelessWidget {
+  final String text;
+
+  const OnboardingStepTitle(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        maxLines: 1,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 28,
+          fontWeight: FontWeight.bold,
+          height: 1.2,
+          fontFamily: 'Manrope',
+        ),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}

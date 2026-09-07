@@ -51,21 +51,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               const SizedBox(height: 12),
 
                               // Main title — always a single line.
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  context.l10n.grantPermissions,
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.2,
-                                    fontFamily: 'Manrope',
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
+                              OnboardingStepTitle(context.l10n.grantPermissions),
 
                               const SizedBox(height: 16),
 

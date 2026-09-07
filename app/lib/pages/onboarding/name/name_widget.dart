@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/pages/onboarding/onboarding_layout.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -55,17 +56,7 @@ class _NameWidgetState extends State<NameWidget> {
                 const SizedBox(height: 16),
 
                 // Main title
-                Text(
-                  context.l10n.whatsYourName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                OnboardingStepTitle(context.l10n.whatsYourName),
 
                 const SizedBox(height: 8),
 
