@@ -481,14 +481,7 @@ struct TopNavigationDestinationRow: View {
     }
 
     private func segment(_ item: TopNavigationItem, isSelected: Bool) -> some View {
-      Label(TopNavigationSegmentSelection.title(for: item, badges: badges), systemImage: item.icon)
-        .labelStyle(.titleAndIcon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
-        .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
-        .frame(height: TopNavigationGlassSegmentMetrics.height)
+      TopNavigationGlassSegmentLabel(item: item, badges: badges, isSelected: isSelected)
         .frame(maxWidth: .infinity)
         .help(item.tooltip)
         .accessibilityElement(children: .ignore)
@@ -499,6 +492,30 @@ struct TopNavigationDestinationRow: View {
             tag: item.index, selectedIndex: selectedIndex, onSelect: onSelect)
         }
         .accessibilityIdentifier("top-navigation-\(item.index)")
+    }
+  }
+
+  /// One segment's content: the glyph and the word (with its `+N`), at the segment's fixed height.
+  ///
+  /// Its own type so the layout test can measure a segment on its own: `EqualWidthSegments` makes
+  /// the row exactly `count × widest segment`, and that is what proves every destination is still
+  /// drawn. Selection only changes the ink, never the size, so the widest segment is the same
+  /// whichever one is selected.
+  @available(macOS 26.0, *)
+  struct TopNavigationGlassSegmentLabel: View {
+    let item: TopNavigationItem
+    let badges: TopNavigationDestinationBadges
+    let isSelected: Bool
+
+    var body: some View {
+      Label(TopNavigationSegmentSelection.title(for: item, badges: badges), systemImage: item.icon)
+        .labelStyle(.titleAndIcon)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .lineLimit(1)
+        .fixedSize()
+        .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
+        .padding(.horizontal, TopNavigationGlassSegmentMetrics.horizontalPadding)
+        .frame(height: TopNavigationGlassSegmentMetrics.height)
     }
   }
 

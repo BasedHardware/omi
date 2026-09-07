@@ -444,25 +444,53 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     guard let navigation = recorder.frame(of: .expanded) else {
       return XCTFail("the expanded destination row was never placed")
     }
-    // **Fitting only means something if what fitted is still a tab bar of named segments.**
+    // **Fitting only means something if what fitted is still a tab bar of every named segment.**
     // `ViewThatFits` is satisfied by anything narrow enough, so a control that had quietly stopped
-    // drawing segments — or had been emptied down to one — would pass the check above and prove
-    // nothing. Deleting a segment makes this test *easier*, which is exactly when a floor is worth
-    // having: two destinations were removed from this row (`Insights` here, `Chat` earlier) and the
-    // assertion did not notice either.
-    //
-    // The floor is the HIG minimum control width per segment. Real segments are wider than that —
-    // they carry a word, and two carry a count — so this is a strict lower bound that still fails
-    // the moment a segment stops being rendered.
-    let segments = CGFloat(TopNavigationRoutes.primaryItems.count)
-    let floor = segments * TopNavigationSegmentMetrics.minimumSegmentWidth
-    XCTAssertGreaterThan(
-      navigation.width, floor,
-      """
-      the row fitted by drawing fewer segments than `TopNavigationRoutes.primaryItems` has, so \
-      `ViewThatFits` chose it for the wrong reason
-      """)
+    // drawing a segment would pass the check above and prove nothing. Deleting a segment makes this
+    // test *easier*, which is exactly when a guard is worth having: two destinations were removed
+    // from this row (`Insights` here, `Chat` earlier) and the assertion did not notice either. A
+    // width floor did not notice either — three real segments are wider than four minimum ones —
+    // so this counts what was rendered.
+    assertEveryDestinationIsRendered(in: host, rowWidth: navigation.width)
     XCTAssertLessThanOrEqual(navigation.width, lane - inset * 2)
+  }
+
+  /// The rendered segment count, from the renderer that is actually on screen. Against the macOS 26
+  /// SDK on macOS 26 the row is `EqualWidthSegments`, whose width is exactly `count × widest
+  /// segment` plus the track inset, so a segment measured on its own gives the width four of them
+  /// must add up to — a row missing one is a whole segment short. Everywhere else the row is the
+  /// system segmented control, which says how many segments it has.
+  private func assertEveryDestinationIsRendered(in host: NSView, rowWidth: CGFloat) {
+    let items = TopNavigationRoutes.primaryItems
+    #if compiler(>=6.2)
+      if #available(macOS 26.0, *) {
+        let badges = TopNavigationDestinationBadges(library: 99, tasks: 99)
+        let widest =
+          items.map { item in
+            NSHostingView(
+              rootView: TopNavigationGlassSegmentLabel(item: item, badges: badges, isSelected: false)
+            ).fittingSize.width
+          }.max() ?? 0
+        XCTAssertGreaterThan(widest, TopNavigationSegmentMetrics.minimumSegmentWidth)
+        XCTAssertEqual(
+          rowWidth, widest * CGFloat(items.count) + TopNavigationGlassSegmentMetrics.trackInset * 2,
+          accuracy: 1,
+          "the row is not `\(items.count)` equal segments wide, so a destination is not being drawn")
+        return
+      }
+    #endif
+    let controls = segmentedControls(in: host)
+    XCTAssertEqual(controls.count, 1, "the fallback row must be one system segmented control")
+    XCTAssertEqual(
+      controls.first?.segmentCount, items.count,
+      "the system segmented control draws fewer segments than `TopNavigationRoutes.primaryItems`")
+  }
+
+  private func segmentedControls(in view: NSView) -> [NSSegmentedControl] {
+    var found: [NSSegmentedControl] = []
+    if let control = view as? NSSegmentedControl { found.append(control) }
+    for subview in view.subviews { found += segmentedControls(in: subview) }
+    return found
   }
 
   /// The native tab bar shows one selected segment or none. Any Brain page lights the `Memories`
