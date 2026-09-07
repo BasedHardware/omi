@@ -1,6 +1,6 @@
 """Request, response and upstream dictionary data contracts."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class WordRequest(BaseModel):
@@ -24,6 +24,12 @@ class DefinitionRequest(WordRequest):
 class ChatToolResponse(BaseModel):
     result: str | None = None
     error: str | None = None
+
+    @model_validator(mode="after")
+    def require_one_outcome(self):
+        if (self.result is None) == (self.error is None):
+            raise ValueError("Exactly one of result or error must be provided.")
+        return self
 
 
 class License(BaseModel):

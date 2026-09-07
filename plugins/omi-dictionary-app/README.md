@@ -29,7 +29,7 @@ From this directory, with Python 3.11:
 ```sh
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 uvicorn main:app --host 127.0.0.1 --port 8080
 ```
 
@@ -42,8 +42,9 @@ curl http://127.0.0.1:8080/tools/get_word_pronunciation \
 ```
 
 Tool responses follow Omi's `{"result": "...", "error": null}` contract. Invalid
-requests, missing words and provider failures return HTTP 200 with a non-null
-`error` and null `result`, so the assistant can explain the failure.
+requests, missing words, unavailable definitions/pronunciation and provider
+failures return HTTP 200 with a non-null `error` and null `result`, so the assistant
+can explain the failure.
 
 ## Verification
 
@@ -53,13 +54,22 @@ responses. From the repository root, run the same command registered for CI:
 
 ```sh
 uv run --isolated --no-project --python 3.11 \
-  --with-requirements plugins/omi-dictionary-app/requirements.txt \
+  --with-requirements plugins/omi-dictionary-app/requirements.lock \
   python -m unittest discover -s plugins/omi-dictionary-app -p test_main.py
 ```
 
 For a live check, start the server and run the curl examples above. Also look up
 a nonexistent word and confirm it returns a clear error. Live provider checks
 are deliberately separate from the hermetic test suite.
+
+The committed `requirements.lock` pins and hashes the complete dependency tree
+for tests and deployment. When changing `requirements.txt`, regenerate it from
+the repository root with:
+
+```sh
+uv pip compile plugins/omi-dictionary-app/requirements.txt --python-version 3.11 \
+  --universal --generate-hashes --output-file plugins/omi-dictionary-app/requirements.lock
+```
 
 ## Deployment and Omi setup
 

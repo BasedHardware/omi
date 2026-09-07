@@ -1,12 +1,15 @@
 """Hermetic HTTP contract tests; the dictionary provider is replaced by MockTransport."""
 
 import unittest
+from copy import deepcopy
 from unittest.mock import patch
 
 import httpx
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from main import API_BASE, app
+from models import ChatToolResponse
 
 # Small synthetic entries follow the provider's documented response shape:
 # https://dictionaryapi.dev/ and its entries/en/hello example.
@@ -96,11 +99,36 @@ class DictionaryToolsTest(unittest.TestCase):
 
     def test_missing_pronunciation_is_reported_without_inventing_it(self):
         self.response = httpx.Response(200, json=[{"word": "example"}])
-        self.assertIn("No phonetic spelling or audio", self.call_tool("get_word_pronunciation")["result"])
+        self.assertIn("No phonetic spelling or audio", self.call_tool("get_word_pronunciation")["error"])
 
     def test_non_http_audio_is_not_returned(self):
         self.response = httpx.Response(200, json=[{"word": "example", "phonetics": [{"audio": "javascript:alert(1)"}]}])
-        self.assertNotIn("javascript:", self.call_tool("get_word_pronunciation")["result"])
+        self.assertNotIn("javascript:", self.call_tool("get_word_pronunciation")["error"])
+
+    def test_urls_with_userinfo_are_not_returned(self):
+        for url in [
+            "https://:private-password@example.org/audio",
+            "https://user@example.org/audio",
+            "https://@example.org/audio",
+        ]:
+            with self.subTest(url=url):
+                entries = deepcopy(ENTRIES)
+                entries[0]["sourceUrls"] = [url]
+                entries[0]["license"]["url"] = url
+                phonetic = entries[0]["phonetics"][0]
+                phonetic["audio"] = phonetic["sourceUrl"] = phonetic["license"]["url"] = url
+                self.response = httpx.Response(200, json=entries)
+                for tool in ["get_word_definition", "get_word_pronunciation"]:
+                    result = self.call_tool(tool)["result"]
+                    self.assertNotIn(url, result)
+                    self.assertNotIn("private-password", result)
+
+    def test_response_requires_exactly_one_outcome(self):
+        for fields in [{}, {"result": "found", "error": "failed"}]:
+            with self.subTest(fields=fields), self.assertRaises(ValidationError):
+                ChatToolResponse(**fields)
+        self.assertEqual(ChatToolResponse(result="found").result, "found")
+        self.assertEqual(ChatToolResponse(error="failed").error, "failed")
 
     def test_provider_errors_use_the_tool_error_contract(self):
         for status, message in [(404, "No entry found"), (429, "too many requests"), (503, "unavailable")]:
@@ -110,7 +138,9 @@ class DictionaryToolsTest(unittest.TestCase):
                 self.assertIn(message, data["error"])
                 self.assertNotIn("private upstream details", data["error"])
         self.failure = httpx.ReadTimeout("private transport details")
-        self.assertIn("timed out", self.call_tool()["error"])
+        error = self.call_tool()["error"]
+        self.assertIn("timed out", error)
+        self.assertNotIn("private transport details", error)
 
     def test_malformed_provider_data_does_not_become_a_definition(self):
         for content in [b"not json", b"{}", b"[{}]", b"[]"]:

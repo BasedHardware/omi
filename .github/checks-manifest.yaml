@@ -5,7 +5,7 @@
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
   - id: dictionary-plugin-tests
-    command: ["uv", "run", "--isolated", "--no-project", "--python", "3.11", "--with-requirements", "plugins/omi-dictionary-app/requirements.txt", "python", "-m", "unittest", "discover", "-s", "plugins/omi-dictionary-app", "-p", "test_main.py"]
+    command: ["uv", "run", "--isolated", "--no-project", "--python", "3.11", "--with-requirements", "plugins/omi-dictionary-app/requirements.lock", "python", "-m", "unittest", "discover", "-s", "plugins/omi-dictionary-app", "-p", "test_main.py"]
     triggers: ["plugins/omi-dictionary-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the dictionary integration's tool responses, provider failures and request validation must be exercised without live network calls"

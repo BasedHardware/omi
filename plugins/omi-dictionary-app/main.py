@@ -62,7 +62,12 @@ def public_url(value: str) -> str:
         value = "https:" + value
     try:
         parsed = urlsplit(value)
-        if parsed.scheme in ("https", "http") and parsed.hostname and not parsed.username:
+        if (
+            parsed.scheme in ("https", "http")
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+        ):
             return value
     except ValueError:
         pass
@@ -186,6 +191,6 @@ async def get_word_pronunciation(request: WordRequest) -> ChatToolResponse:
                 if phonetic.license and (license_url := public_url(phonetic.license.url)):
                     pronunciations.append(f"Audio license: {text(phonetic.license.name, 80)} — {license_url}")
     if not pronunciations:
-        return ChatToolResponse(result=f"No phonetic spelling or audio is available for '{request.word}'.")
+        return ChatToolResponse(error=f"No phonetic spelling or audio is available for '{request.word}'.")
     lines = [f"{request.word} — English pronunciation"] + list(dict.fromkeys(pronunciations))
     return ChatToolResponse(result="\n".join(lines + attribution(entries)))
