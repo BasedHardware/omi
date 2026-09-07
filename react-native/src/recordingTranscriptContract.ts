@@ -2,6 +2,7 @@ export type RecordingTranscript = {
   sessionId: string;
   state: 'queued' | 'running' | 'completed' | 'failed';
   text: string | null;
+  errorCode: string | null;
   discardedLeadingPackets: number;
 };
 
@@ -43,6 +44,7 @@ export function parseRecordingTranscript(
       sessionId,
       state: value.state as RecordingTranscript['state'],
       text: value.text as string | null,
+      errorCode: value.errorCode as string | null,
       discardedLeadingPackets: value.discardedLeadingPackets as number,
     };
   } catch {

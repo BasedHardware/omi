@@ -19,6 +19,9 @@ jest.mock('./omiNative', () => ({
   },
 }));
 
+const {
+  deviceTranscriptionProjection,
+} = require('../../backends/example-platform/apps/service/listen/device-transcription');
 const {RecordingTranscript} = require('./ui/RecordingTranscript');
 const {parseRecordingTranscript} = require('./recordingTranscriptContract');
 
@@ -84,28 +87,36 @@ test('loads full recording text through native transport without truncating to o
   expect(text?.props.selectable).toBe(true);
 });
 
-test('shows pending state truthfully and reloads a completed result', async () => {
-  mockRequest.mockResolvedValueOnce(response('session-one', 'queued'));
-  const renderer = await render('session-one');
-  expect(textOf(renderer)).toContain('Transcription is queued.');
-  expect(textOf(renderer)).not.toContain('The transcript is empty.');
-  mockRequest.mockResolvedValueOnce(
-    response('session-one', 'completed', 'Persisted transcript'),
-  );
-  await act(async () =>
-    renderer.root
-      .findAll(
-        node => node.props.accessibilityLabel === 'Reload recording transcript',
-      )[0]!
-      .props.onPress(),
-  );
-  expect(textOf(renderer)).toContain('Persisted transcript');
-  expect(mockRequest).toHaveBeenLastCalledWith({
-    id: expect.any(String),
-    method: 'POST',
-    path: '/v1/device-sessions/session-one/transcribe',
-  });
-});
+test.each(['queued', 'running'])(
+  'shows %s state truthfully and resumes a completed result',
+  async state => {
+    mockRequest.mockResolvedValueOnce(response('session-one', state));
+    const renderer = await render('session-one');
+    expect(textOf(renderer)).toContain(
+      state === 'queued'
+        ? 'Transcription is queued.'
+        : 'Transcription is in progress.',
+    );
+    expect(textOf(renderer)).not.toContain('The transcript is empty.');
+    mockRequest.mockResolvedValueOnce(
+      response('session-one', 'completed', 'Persisted transcript'),
+    );
+    await act(async () =>
+      renderer.root
+        .findAll(
+          node =>
+            node.props.accessibilityLabel === 'Reload recording transcript',
+        )[0]!
+        .props.onPress(),
+    );
+    expect(textOf(renderer)).toContain('Persisted transcript');
+    expect(mockRequest).toHaveBeenLastCalledWith({
+      id: expect.any(String),
+      method: 'POST',
+      path: '/v1/device-sessions/session-one/transcribe',
+    });
+  },
+);
 
 test('keeps failed processing and failed reads distinct without showing internal errors', async () => {
   mockRequest.mockResolvedValue(response('session-one', 'failed'));
@@ -438,3 +449,53 @@ test('a failed historical transcript read retries GET without requiring capture 
   });
   expect(textOf(renderer)).toContain('Historical transcript');
 });
+
+test.each([
+  'attempt_limit',
+  'invalid_audio',
+  'private unknown upstream detail',
+])(
+  'terminal backend failure %s remains a read-only refresh',
+  async errorCode => {
+    const transcription = deviceTranscriptionProjection({
+      sessionId: 'session-one',
+      state: 'failed',
+      providerResult: null,
+      discardedLeadingPackets: 0,
+      errorCode,
+      updatedAt: 123,
+      startedAt: '2026-09-07T00:00:00Z',
+      codec: 21,
+      chunkCount: 1,
+      byteCount: 3,
+    });
+    const body = JSON.stringify({transcription});
+    expect(parseRecordingTranscript(body, 'session-one')?.errorCode).toBe(
+      errorCode,
+    );
+    mockRequest.mockResolvedValue({id: 'terminal', status: 200, body});
+    const renderer = await render('session-one');
+    expect(textOf(renderer)).toContain('cannot be retried');
+    expect(textOf(renderer)).not.toContain('private unknown upstream detail');
+    mockRequest.mockImplementation(async request =>
+      request.method === 'GET'
+        ? {id: 'terminal', status: 200, body}
+        : {id: 'denied', status: 409, body: null},
+    );
+    await act(async () =>
+      renderer.root
+        .findAll(
+          node =>
+            node.props.accessibilityLabel === 'Reload recording transcript',
+        )[0]!
+        .props.onPress(),
+    );
+    expect(mockRequest).toHaveBeenLastCalledWith({
+      id: expect.any(String),
+      method: 'GET',
+      path: '/v1/device-sessions/session-one/transcript',
+    });
+    expect(textOf(renderer)).toContain('cannot be retried');
+    expect(textOf(renderer)).not.toContain('Transcript could not be loaded.');
+  },
+);
