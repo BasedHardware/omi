@@ -81,6 +81,14 @@ enum ScreenContextInterestDetector {
     let wordSet = Set(words)
     return contextualVerbs.contains(where: wordSet.contains) && visualReferences.contains(where: wordSet.contains)
   }
+
+  /// The narrow reading used when the message carries attachments: only a message that names the
+  /// screen itself is about the screen. "Look at this page" beside a PDF is about the PDF; the
+  /// deictic cues `isScreenContextRequest` accepts ("this", "look", "page") are exactly the words
+  /// people use to point at the file they just attached.
+  static func namesTheScreen(_ text: String) -> Bool {
+    text.lowercased().contains("screen")
+  }
 }
 
 enum ScreenContextAutoIncludeReason: Equatable {
@@ -93,12 +101,20 @@ enum ScreenContextAutoIncludeReason: Equatable {
 }
 
 enum ScreenContextAutoIncludePolicy {
+  /// `hasAttachments`: the message carries files or conversation references the user chose to
+  /// attach. Those are the message's subject, so no ambient screen context is added alongside
+  /// them and a capture is taken only when the text names the screen outright — otherwise the
+  /// model is handed a desktop to describe next to the file it was asked about.
   static func reason(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
     turnOwner: ChatTurnOwner,
-    onboardingActive: Bool = false
+    onboardingActive: Bool = false,
+    hasAttachments: Bool = false
   ) -> ScreenContextAutoIncludeReason? {
+    if hasAttachments {
+      return ScreenContextInterestDetector.namesTheScreen(userText) ? .explicitScreenRequest : nil
+    }
     if ScreenContextInterestDetector.isScreenContextRequest(userText) {
       return .explicitScreenRequest
     }
@@ -120,9 +136,12 @@ enum ScreenContextAutoIncludePolicy {
   static func shouldInclude(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
-    turnOwner: ChatTurnOwner
+    turnOwner: ChatTurnOwner,
+    hasAttachments: Bool = false
   ) -> Bool {
-    reason(userText: userText, systemPromptStyle: systemPromptStyle, turnOwner: turnOwner) != nil
+    reason(
+      userText: userText, systemPromptStyle: systemPromptStyle, turnOwner: turnOwner,
+      hasAttachments: hasAttachments) != nil
   }
 }
 

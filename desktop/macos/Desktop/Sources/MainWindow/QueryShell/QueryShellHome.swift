@@ -419,7 +419,9 @@ struct QueryShellHome: View {
   /// Resolved by `QueryShellSubmission` rather than restated here, so the trim, the empty guard and
   /// the mode change cannot drift away from the value that defines them.
   private func submit() {
-    let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
+    let submission = QueryShellSubmission.resolve(
+      text: chatProvider.draftText,
+      hasAttachments: !chatProvider.pendingAttachments.isEmpty || !chatProvider.pendingComposerReferences.isEmpty)
     // Plan before mutating anything: a busy provider rejects the send, so
     // Return during an active turn must leave the typed draft intact and
     // neither dispatch nor advance the rating-prompt count.

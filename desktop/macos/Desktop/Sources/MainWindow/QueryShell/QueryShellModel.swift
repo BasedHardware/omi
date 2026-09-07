@@ -212,8 +212,11 @@ enum QueryShellSubmit: Equatable, Sendable {
 
   /// No `commandHeld`. Which key was pressed stopped being information the moment both keys meant
   /// the same thing; a parameter nothing branches on is the next thing to grow a branch back.
-  static func resolve(text: String) -> QueryShellSubmit {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .none : .ask
+  ///
+  /// `hasAttachments`: a file or conversation staged with no words is a message — `⏎` sends it, and
+  /// the provider asks the model about what was attached. Only a bare, empty composer is inert.
+  static func resolve(text: String, hasAttachments: Bool = false) -> QueryShellSubmit {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !hasAttachments ? .none : .ask
   }
 }
 
@@ -233,7 +236,8 @@ enum QueryShellSubmit: Equatable, Sendable {
 /// which is why there is no longer a `commandHeld` to disambiguate.
 struct QueryShellSubmission: Equatable, Sendable {
   let action: QueryShellSubmit
-  /// The trimmed question to send. Non-nil only for `.ask`.
+  /// The trimmed question to send. Non-nil only for `.ask` — and empty for an attachment-only send,
+  /// where the staged items are the message.
   let question: String?
   /// What the field holds afterwards.
   let text: String
@@ -241,8 +245,8 @@ struct QueryShellSubmission: Equatable, Sendable {
   /// inert key must never move the reader.
   let mode: QueryShellMode?
 
-  static func resolve(text: String) -> Self {
-    switch QueryShellSubmit.resolve(text: text) {
+  static func resolve(text: String, hasAttachments: Bool = false) -> Self {
+    switch QueryShellSubmit.resolve(text: text, hasAttachments: hasAttachments) {
     case .none:
       return Self(action: .none, question: nil, text: text, mode: nil)
     case .ask:
@@ -277,8 +281,12 @@ struct QueryShellSendLedger: Equatable, Sendable {
   /// (nor overwrite the question 'Try again' would re-send). Planning mutates
   /// nothing — only `recordAccepted` commits state, so a send ChatProvider
   /// rejects asynchronously leaves the ledger exactly as it was.
+  ///
+  /// An empty question is a resolved attachment-only send, not a blank field:
+  /// `QueryShellSubmission` already turned a bare empty composer into no
+  /// question at all, so it is admitted and counts like any other.
   func planSubmit(_ question: String?, providerBusy: Bool = false) -> Plan? {
-    guard !providerBusy, let question, !question.isEmpty else { return nil }
+    guard !providerBusy, let question else { return nil }
     return Plan(question: question, countsAsQuestion: true)
   }
 
