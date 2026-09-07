@@ -77,14 +77,14 @@ function mobile_build_mode_flag() {
   esac
 }
 
-# Printed when a debug build is about to land on a physical iPhone, so the
-# "works under flutter run, crashes from the Home Screen" symptom is explained
+# Printed when a dev debug build is about to land on a physical iPhone, so the
+# "works under flutter run, dead from the Home Screen" symptom is explained
 # before the developer walks away from the Mac with it.
 function warn_ios_debug_build_untethered() {
   echo "⚠️  Installing a DEBUG build on a physical iPhone. iOS only lets Flutter tooling" >&2
-  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached" >&2
-  echo "   and crashes on launch as soon as you open it from the Home Screen without it." >&2
-  echo "   For a build that opens on its own (no hot reload):" >&2
+  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached;" >&2
+  echo "   opened from the Home Screen without it, it shows an engine-unavailable notice" >&2
+  echo "   instead of running. For a build that opens on its own (no hot reload):" >&2
   echo "     OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios" >&2
 }
 
@@ -505,7 +505,7 @@ function run_build_ios() {
     echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
     echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
   fi
-  if [[ -z "$mode_flag" && "$physical_device" == 1 ]]; then
+  if [[ "$flavor" == "dev" && -z "$mode_flag" && "$physical_device" == 1 ]]; then
     warn_ios_debug_build_untethered
   fi
   flutter pub get \

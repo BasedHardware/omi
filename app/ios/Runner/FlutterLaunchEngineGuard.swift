@@ -23,8 +23,8 @@ enum FlutterLaunchEngineGuard {
             return """
             \(bundleDisplayName) is a debug build, and iOS only lets Flutter tooling start a debug Dart VM on a device.
 
-            Launch it again with flutter run, or install a build that opens on its own:
-            OMI_MOBILE_BUILD_MODE=profile bash app/setup.sh ios
+            Launch it again with flutter run, or install a build that opens on its own (from app/):
+            OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios
             """
         }
         return "\(bundleDisplayName) could not start its Flutter engine. Reinstall the app."

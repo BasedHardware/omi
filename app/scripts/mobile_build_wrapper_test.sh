@@ -89,6 +89,13 @@ log_file="$fixture_dir/flutter.log"
     echo 'FAIL: profile build still warned about the untethered debug crash' >&2
     exit 1
   fi
+  # The remedy builds the dev flavor, so a beta (prod-flavor) build must not
+  # be pointed at it.
+  run_build_ios prod 2>"$warning_file"
+  if grep -F 'OMI_MOBILE_BUILD_MODE=profile' "$warning_file" >/dev/null; then
+    echo 'FAIL: prod-flavor build was given the dev-only untethered remedy' >&2
+    exit 1
+  fi
 )
 
 echo 'mobile build wrapper injects one required profile, rejects conflicts, and honors OMI_MOBILE_BUILD_MODE'
