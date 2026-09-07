@@ -43,6 +43,9 @@ type Props = TaskMutationProps & {
   deviceContent?: React.ReactNode;
   activeGenerationId: string | null;
   authError: string | null;
+  conversationNotice?: string | null;
+  conversationsLoadingMore?: boolean;
+  onLoadMoreConversations?: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
@@ -69,6 +72,8 @@ type Props = TaskMutationProps & {
 export function DesktopApp({
   activeGenerationId,
   authError,
+  conversationNotice = null,
+  conversationsLoadingMore = false,
   deviceContent,
   chatBusy,
   chatError,
@@ -78,6 +83,7 @@ export function DesktopApp({
   loadingOlderChat,
   messages,
   onDraftChange,
+  onLoadMoreConversations,
   onLoadOlderChat,
   onRefresh,
   onSend,
@@ -177,7 +183,12 @@ export function DesktopApp({
             readsPhase={readsPhase}
           />
         ) : route === 'Conversations' ? (
-          <LibraryPage outcomes={outcomes} />
+          <LibraryPage
+            conversationNotice={conversationNotice}
+            conversationsLoadingMore={conversationsLoadingMore}
+            onLoadMoreConversations={onLoadMoreConversations}
+            outcomes={outcomes}
+          />
         ) : route === 'Rewind' ? (
           <DesktopRewind capture={capture} captureRevision={captureRevision} />
         ) : route === 'Tasks' ? (

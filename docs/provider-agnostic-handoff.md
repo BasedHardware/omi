@@ -100,7 +100,9 @@ Cloud Linux after `b3470ebc06`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e7944a829`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Later Rewind pages that fail with `OMI_REWIND_UNAVAILABLE` or `OMI_REWIND_AUTH` keep already loaded frames, show that unavailable copy, and omit Load more. Generic later-page failures keep Load more. An incomplete empty first page that then hits that capability failure still does not claim "No captures saved yet."
 
-Cloud Linux after the backend plane-switch workspace reload: switching Old/New drops a stale chat-write latch and reloads chat history and saved-data reads so the previous plane cannot keep Ask disabled or keep its transcript. A failed plane persist does not reload. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `8a6bc1b61e`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Switching Old/New drops a stale chat-write latch and reloads chat history and saved-data reads so the previous plane cannot keep Ask disabled or keep its transcript. A failed plane persist does not reload. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the desktop Conversations pager slice: macOS Conversations showed "More conversations are available" without a Load more control. `LibraryPage` now pages through the same `loadMoreConversations` path as mobile. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load more. Generic later-page failures keep Load more. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

@@ -991,6 +991,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             return signOutAndRefresh();
           }}
           onWorkspaceReload={reloadWorkspace}
+          conversationNotice={conversationNotice}
+          conversationsLoadingMore={conversationsLoadingMore}
+          onLoadMoreConversations={
+            conversationsPageRetryable
+              ? () => {
+                  void loadMoreConversations();
+                }
+              : undefined
+          }
           outcomes={readOutcomes}
           reads={reads}
           readsPhase={readsPhase}

@@ -21,8 +21,14 @@ import type {DesktopSession} from './desktopChrome';
 import {desktopTokens as token} from './tokens';
 
 export function LibraryPage({
+  conversationNotice = null,
+  conversationsLoadingMore = false,
+  onLoadMoreConversations,
   outcomes,
 }: {
+  conversationNotice?: string | null;
+  conversationsLoadingMore?: boolean;
+  onLoadMoreConversations?: () => void;
   outcomes: DesktopReadOutcomes | null;
 }) {
   const outcome = outcomes?.conversations ?? null;
@@ -56,6 +62,25 @@ export function LibraryPage({
         ) : (
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
+        {conversationNotice !== null ? (
+          <Text accessibilityRole="alert" style={styles.rowMeta}>
+            {conversationNotice}
+          </Text>
+        ) : null}
+        {outcome?.status === 'success' &&
+        outcome.value.page.hasMore &&
+        onLoadMoreConversations ? (
+          <FocusPressable
+            accessibilityLabel="Load more conversations"
+            accessibilityRole="button"
+            disabled={conversationsLoadingMore}
+            onPress={onLoadMoreConversations}
+            style={styles.pageAction}>
+            <Text style={styles.rowMeta}>
+              {conversationsLoadingMore ? 'Loading…' : 'Load more'}
+            </Text>
+          </FocusPressable>
+        ) : null}
         {outcome?.status === 'success' && conversations.length > 0 ? (
           <ReadStatus label="Conversations" mac page={outcome.value.page} />
         ) : null}
@@ -283,6 +308,7 @@ export function AppsPage({session}: {session: DesktopSession}) {
 
 const styles = StyleSheet.create({
   page: {flex: 1},
+  pageAction: {minHeight: 44, justifyContent: 'center'},
   taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   taskToggle: {flex: 1, minHeight: 44},
   taskEdit: {

@@ -1477,6 +1477,87 @@ test('actual desktop task page exposes the shared pagination action', () => {
   expect(onLoadMore).toHaveBeenCalledTimes(1);
 });
 
+function pagedConversationOutcomes() {
+  return {
+    ...outcomes,
+    conversations: {
+      ...outcomes.conversations,
+      value: {
+        ...outcomes.conversations.value,
+        page: {
+          ...outcomes.conversations.value.page,
+          hasMore: true,
+          nextCursor: 'conversations-next',
+          complete: false,
+          windowStatus: 'more' as const,
+        },
+      },
+    },
+  };
+}
+
+test('actual desktop conversation page exposes Load more when more pages exist', () => {
+  const onLoadMoreConversations = jest.fn();
+  const renderer = renderDesktop({
+    onLoadMoreConversations,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('More conversations are available.');
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load more conversations')
+      .props.onPress(),
+  );
+  expect(onLoadMoreConversations).toHaveBeenCalledTimes(1);
+});
+
+test('nested non-retryable later conversation pages keep rows and omit Load more', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    ),
+  ).toHaveLength(0);
+});
+
+test('generic later-page conversation failures keep Load more', () => {
+  const onLoadMoreConversations = jest.fn();
+  const renderer = renderDesktop({
+    conversationNotice: 'More conversations could not be loaded. Try again.',
+    onLoadMoreConversations,
+    outcomes: pagedConversationOutcomes(),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Conversations')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain(
+    'More conversations could not be loaded. Try again.',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Load more conversations',
+    ),
+  ).toBeTruthy();
+});
+
 test('Settings does not inherit unrelated chat and history failures', async () => {
   const renderer = renderDesktop({
     chatError: 'This request cannot be completed.',
