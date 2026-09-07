@@ -4,6 +4,7 @@ import CheckCircle2 from 'lucide-react-native/icons/circle-check';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
+  conversationDisplaySummary,
   conversationDisplayTitle,
   projectionTimestamp,
   type ConversationProjection,
@@ -53,7 +54,7 @@ export const ReadRow = memo(function ReadRow({
 }) {
   const meta =
     item.kind === 'conversation'
-      ? [timeLabel(item), item.summary]
+      ? [timeLabel(item), conversationDisplaySummary(item)]
       : item.kind === 'memory'
       ? [timeLabel(item), 'Memory']
       : [timeLabel(item)];
@@ -87,7 +88,7 @@ export const ConversationRow = memo(function ConversationRow({
           {conversationDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
-          {[timeLabel(item), item.summary]
+          {[timeLabel(item), conversationDisplaySummary(item)]
             .filter(part => part !== '')
             .join(' · ')}
         </Text>

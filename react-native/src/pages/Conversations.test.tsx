@@ -132,5 +132,6 @@ test('untitled processing conversations stay visible instead of a blank row', ()
     );
   });
   expect(textOf(renderer)).toContain('Processing conversation…');
+  expect(textOf(renderer)).toContain('Conversation summary is not ready yet.');
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });

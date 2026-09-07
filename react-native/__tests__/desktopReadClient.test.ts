@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {
+  conversationDisplaySummary,
   conversationDisplayTitle,
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
@@ -264,9 +265,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopReadErrorCopy(new Error(desktopBackendForbiddenCopy))).toBe(
     desktopBackendForbiddenCopy,
   );
-  expect(
-    desktopReadErrorCopy(new Error(desktopBackendUnavailableCopy)),
-  ).toBe(desktopBackendUnavailableCopy);
+  expect(desktopReadErrorCopy(new Error(desktopBackendUnavailableCopy))).toBe(
+    desktopBackendUnavailableCopy,
+  );
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -349,7 +350,7 @@ describe('desktopReadsCanRetry', () => {
     ({
       status: 'error' as const,
       error: message,
-    }) as const;
+    } as const);
 
   test('omits retry when every failed library door is nested non-retryable', () => {
     expect(desktopReadsCanRetry(null)).toBe(true);
@@ -505,6 +506,27 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
   ).toBe('Morning walk');
+});
+
+test('empty conversation summaries stay visible instead of a blank subtitle', () => {
+  expect(
+    conversationDisplaySummary({
+      summary: '',
+      status: 'processing',
+    }),
+  ).toBe('Conversation summary is not ready yet.');
+  expect(
+    conversationDisplaySummary({
+      summary: '',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: 'Walked to the market.',
+      status: 'processing',
+    }),
+  ).toBe('Walked to the market.');
 });
 
 test('groups validated UTC conversation timestamps by local calendar day', () => {

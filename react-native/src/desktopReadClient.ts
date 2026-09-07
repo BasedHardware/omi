@@ -38,6 +38,18 @@ export function conversationDisplayTitle(item: {
     : 'Conversation title unavailable';
 }
 
+export function conversationDisplaySummary(item: {
+  summary: string;
+  status: string;
+}): string {
+  if (item.summary !== '') {
+    return item.summary;
+  }
+  return item.status === 'processing'
+    ? 'Conversation summary is not ready yet.'
+    : 'Conversation summary unavailable';
+}
+
 export function conversationGroupLabel(
   value: string,
   nowEpochMilliseconds: number,
@@ -624,7 +636,10 @@ export async function loadConversations(
       id,
       title,
       summary,
-      searchableText: `${conversationDisplayTitle({title, status})}\n${summary}`,
+      searchableText: `${conversationDisplayTitle({
+        title,
+        status,
+      })}\n${summary}`,
       createdAt,
       updatedAt,
       startedAt,

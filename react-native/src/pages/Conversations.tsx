@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  conversationDisplaySummary,
   conversationDisplayTitle,
   conversationGroupLabel,
   type ConversationProjection,
@@ -93,7 +94,7 @@ const ConversationRow = memo(function ConversationRow({
         {conversationDisplayTitle(item)}
       </Text>
       <Text numberOfLines={2} style={styles.resultSummary}>
-        {item.summary}
+        {conversationDisplaySummary(item)}
       </Text>
       <Text style={styles.conversationRowDuration}>
         {formatConversationDuration(item.startedAt, item.finishedAt)}
@@ -144,6 +145,9 @@ export function ConversationsPage({
         (normalized === '' ||
           item.title.toLocaleLowerCase().includes(normalized) ||
           conversationDisplayTitle(item)
+            .toLocaleLowerCase()
+            .includes(normalized) ||
+          conversationDisplaySummary(item)
             .toLocaleLowerCase()
             .includes(normalized) ||
           item.summary.toLocaleLowerCase().includes(normalized)),
@@ -353,7 +357,7 @@ export function ConversationsPage({
                   {conversationDisplayTitle(selected)}
                 </Text>
                 <Text style={styles.conversationDetailSummary}>
-                  {selected.summary}
+                  {conversationDisplaySummary(selected)}
                 </Text>
                 <View style={styles.conversationDetailFields}>
                   {selected.capturedAtMs !== undefined && (
