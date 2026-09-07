@@ -475,6 +475,32 @@ test('nested non-retryable transcript 503s do not offer Check again', async () =
   ).toHaveLength(0);
 });
 
+test('native unsupported transcript throws do not offer Check again', async () => {
+  mockRequest.mockRejectedValue({code: 'OMI_DEV_BACKEND_UNSUPPORTED'});
+  const renderer = await render('unsupported-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Transcript could not be loaded.');
+  expect(textOf(renderer)).not.toContain('Check again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Reload recording transcript',
+    ),
+  ).toHaveLength(0);
+});
+
+test('thrown nested non-retryable transcript failures do not offer Check again', async () => {
+  mockRequest.mockRejectedValue(
+    Object.assign(new Error('unsupported'), {retryable: false}),
+  );
+  const renderer = await render('nested-throw-session');
+  expect(textOf(renderer)).toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('Check again');
+});
+
 test.each([
   'attempt_limit',
   'invalid_audio',

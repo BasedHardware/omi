@@ -12,7 +12,10 @@ type TranscriptRead =
   | {status: 'error'; sessionId: string; retryable: boolean}
   | {status: 'loaded'; sessionId: string; value: RecordingTranscript};
 
-function transcriptErrorRetryable(status: number, body: string | null): boolean {
+function transcriptErrorRetryable(
+  status: number,
+  body: string | null,
+): boolean {
   if (body !== null) {
     try {
       const parsed = JSON.parse(body) as {
@@ -28,6 +31,18 @@ function transcriptErrorRetryable(status: number, body: string | null): boolean 
     } catch {}
   }
   return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+function transcriptThrowRetryable(error: unknown): boolean {
+  if (error !== null && typeof error === 'object') {
+    if ('code' in error && error.code === 'OMI_DEV_BACKEND_UNSUPPORTED') {
+      return false;
+    }
+    if ('retryable' in error && error.retryable === false) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function useRecordingTranscript(
@@ -96,9 +111,13 @@ export function useRecordingTranscript(
               }
             : {status: 'loaded', sessionId, value},
         );
-      } catch {
+      } catch (error) {
         if (active && epoch.current === current) {
-          setResult({status: 'error', sessionId, retryable: true});
+          setResult({
+            status: 'error',
+            sessionId,
+            retryable: transcriptThrowRetryable(error),
+          });
         }
       }
     };
