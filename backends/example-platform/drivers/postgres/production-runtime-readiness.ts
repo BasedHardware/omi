@@ -90,6 +90,7 @@ const inspect = async (
 export const createPostgresProductionRuntimeReadiness = (
   pool: PostgresTransactionPool,
   expectedDatabaseGenerationDigest: string,
+  signal?: AbortSignal,
 ): PostgresProductionRuntimeReadiness => {
   if (pool === null || typeof pool !== "object" || isProxy(pool)
     || !DIGEST.test(expectedDatabaseGenerationDigest)) fail();
@@ -98,7 +99,7 @@ export const createPostgresProductionRuntimeReadiness = (
   const check = async (): Promise<boolean> => {
     try {
       return await withTransaction(
-        { isolationLevel: "serializable", accessMode: "read only" },
+        { isolationLevel: "serializable", accessMode: "read only", ...(signal ? { signal } : {}) },
         (connection) => inspect(connection, expectedDatabaseGenerationDigest),
       );
     } catch {
