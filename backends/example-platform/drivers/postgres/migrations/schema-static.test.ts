@@ -1244,4 +1244,14 @@ describe("static PostgreSQL schema contract", () => {
     );
     expect(migrationRuntime).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE)[^;]*memory_(?:legacy_proposition|migration_item)/s);
   });
+
+  test("POSIX regex repetition counts stay at or below 255", () => {
+    for (const match of allSql.matchAll(/\{(\d+)(?:,(\d+))?\}/g)) {
+      expect(Number(match[1]), match[0]).toBeLessThanOrEqual(255);
+      if (match[2] !== undefined) expect(Number(match[2]), match[0]).toBeLessThanOrEqual(255);
+    }
+    const unionSql = migrationSql.find((migration) => migration.version === 58)!.sql;
+    expect(unionSql).toContain("length(last_id) BETWEEN 1 AND 256 AND last_id ~ '^[!-~]+$'");
+    expect(unionSql).toContain("length(p_last_id) NOT BETWEEN 1 AND 256 OR p_last_id !~ '^[!-~]+$'");
+  });
 });

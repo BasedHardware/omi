@@ -6,7 +6,7 @@ CREATE TABLE omi_memory.conversation_union_cursor_positions (
   chat_snapshot_sequence bigint NOT NULL CHECK(chat_snapshot_sequence >= 0),
   last_updated_at timestamptz NOT NULL,
   last_updated_at_ms bigint NOT NULL CHECK(last_updated_at_ms >= 0),
-  last_id text NOT NULL CHECK(last_id ~ '^[!-~]{1,256}$'),
+  last_id text NOT NULL CHECK(length(last_id) BETWEEN 1 AND 256 AND last_id ~ '^[!-~]+$'),
   last_kind text NOT NULL CHECK(last_kind IN ('listen','chat')),
   expires_at bigint NOT NULL CHECK(expires_at >= 0),
   PRIMARY KEY(account_id,cursor_hash)
@@ -103,7 +103,7 @@ BEGIN
   IF p_cursor_hash IS NULL OR p_cursor_hash !~ '^[a-f0-9]{64}$' OR p_binding_digest IS NULL OR p_binding_digest !~ '^[a-f0-9]{64}$'
     OR p_chat_snapshot_sequence IS NULL OR p_chat_snapshot_sequence<0
     OR p_last_updated_at IS NULL OR p_last_updated_at_ms IS NULL OR p_last_updated_at_ms<0
-    OR p_last_id IS NULL OR p_last_id !~ '^[!-~]{1,256}$'
+    OR p_last_id IS NULL OR length(p_last_id) NOT BETWEEN 1 AND 256 OR p_last_id !~ '^[!-~]+$'
     OR p_last_kind IS DISTINCT FROM 'listen' AND p_last_kind IS DISTINCT FROM 'chat'
     OR (p_last_kind='chat' AND (p_last_id NOT LIKE 'chat:%' OR length(p_last_id)<=5))
     OR (p_last_kind='listen' AND p_last_id LIKE 'chat:%')
