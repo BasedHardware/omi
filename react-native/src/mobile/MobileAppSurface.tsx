@@ -168,7 +168,7 @@ const TaskRow = memo(function TaskRow({
               : 'Complete'
             : task.completed
             ? 'Completed'
-            : 'Open'
+            : 'Task'
         } ${task.title}`}
         accessibilityRole={onToggle ? 'checkbox' : 'text'}
         accessibilityState={{

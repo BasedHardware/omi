@@ -184,7 +184,7 @@ export function TasksPage({
                                 : 'Complete'
                               : task.completed
                               ? 'Completed'
-                              : 'Open'
+                              : 'Task'
                           } ${task.title}`}
                           accessibilityRole={
                             writesAvailable && onTaskToggle
@@ -217,9 +217,13 @@ export function TasksPage({
                           </View>
                         </FocusPressable>
                         <FocusPressable
-                          accessibilityLabel={`${
-                            task.completed ? 'Completed' : 'Open'
-                          } task: ${task.title}`}
+                          accessibilityLabel={
+                            task.completed
+                              ? `Completed task: ${task.title}`
+                              : writesAvailable && onTaskEdit
+                              ? `Open task: ${task.title}`
+                              : `Task: ${task.title}`
+                          }
                           accessibilityRole="button"
                           accessibilityState={{selected}}
                           onPress={() => setSelectedId(task.id)}

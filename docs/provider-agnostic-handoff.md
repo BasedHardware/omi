@@ -200,7 +200,9 @@ Cloud Linux after `b90ec9df4e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2d65d843c1`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Memories page, macOS memory rows, and wide Home search no longer render empty memory bodies as blank gaps, and old `/v3/memories` namespaced `entity:` prefixes stay out of visible copy. Home list titles stay on the memory title; cards use the body. Search indexes that visible text. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact Home calls-door slice: compact Home no longer offers Open calls that opens Conversations in place of a phone-calls producer. Conversations stays on its tab. This does not invent a calls producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `c61c54164b`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer offers Open calls that opens Conversations in place of a phone-calls producer. Conversations stays on its tab. This does not invent a calls producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the compact Home/Tasks Open-label slice: compact Home and the Tasks page no longer label a disabled read-only task control Open. Incomplete read-only rows stay Task; completed read-only rows stay Completed; Complete/Reopen stay when writes are available. Tasks page Open task still opens the editor when writes and an edit handler are present. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

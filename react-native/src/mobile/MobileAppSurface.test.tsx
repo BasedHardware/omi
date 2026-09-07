@@ -196,10 +196,15 @@ test('shows recording failures and keeps tasks read-only without a mutation hand
     'Recording upload failed. Reconnect your device.',
   );
   const task = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Open Prepare product demo',
+    node => node.props.accessibilityLabel === 'Task Prepare product demo',
   );
   expect(task.props.disabled).toBe(true);
   expect(task.props.accessibilityRole).toBe('text');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open Prepare product demo',
+    ),
+  ).toHaveLength(0);
 });
 
 test('missing conversation content reports unavailable instead of rendering noninteractive recap cards', () => {

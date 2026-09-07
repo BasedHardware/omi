@@ -63,8 +63,10 @@ test('task page remains read-only without write authority', () => {
     onTaskToggle: jest.fn(),
     onTaskEdit: jest.fn(),
   });
-  expect(control(renderer, 'Open Prepare demo').props.disabled).toBe(true);
-  act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
+  expect(control(renderer, 'Task Prepare demo').props.disabled).toBe(true);
+  expect(control(renderer, 'Open Prepare demo')).toBeUndefined();
+  expect(control(renderer, 'Open task: Prepare demo')).toBeUndefined();
+  act(() => control(renderer, 'Task: Prepare demo').props.onPress());
   expect(control(renderer, 'Task description')).toBeUndefined();
   const copy = renderer.root
     .findAllByType(Text)
