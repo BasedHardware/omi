@@ -22,6 +22,7 @@ import {
   chatHistoryCanReload,
   chatHistoryErrorCopy,
   chatSessionLost,
+  chatHistoryHasOlder,
   chatWriteDoorUnavailable,
   createLocalChatMessage,
   loadNewestChatHistory,
@@ -740,6 +741,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return true;
   };
 
+  const olderChatAvailable = chatHistoryHasOlder(hasOlderChat, olderChatCursor);
+  const chatResting = messages.length === 0 && !chatBusy && !olderChatAvailable;
+
   const composer = (
     <Composer
       activeGenerationId={activeGenerationId ?? activeOmiRequestId}
@@ -1408,14 +1412,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       style={
                         compact
                           ? [
-                              messages.length === 0 && !chatBusy
-                                ? styles.home
-                                : styles.chatHistory,
-                              messages.length === 0 && !chatBusy
+                              chatResting ? styles.home : styles.chatHistory,
+                              chatResting
                                 ? styles.homeCompact
                                 : styles.chatHistoryCompact,
                             ]
-                          : messages.length === 0 && !chatBusy
+                          : chatResting
                           ? styles.home
                           : styles.chatHistory
                       }>
@@ -1434,7 +1436,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         />
                         <Text style={styles.backButtonText}>Home</Text>
                       </FocusPressable>
-                      {messages.length === 0 && !chatBusy ? (
+                      {chatResting ? (
                         <Animated.View
                           accessibilityLabel="Chat resting stage"
                           style={[
@@ -1489,7 +1491,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         <View style={styles.currents}>
                           <Text style={styles.sectionLabel}>CURRENTS</Text>
                           <View style={styles.transcript}>
-                            {hasOlderChat && olderChatCursor !== null && (
+                            {olderChatAvailable && (
                               <FocusPressable
                                 accessibilityLabel="Load older messages"
                                 accessibilityRole="button"

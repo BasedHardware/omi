@@ -45,11 +45,16 @@ export function Composer({
         ]}>
         <TextInput
           accessibilityLabel="Ask Omi"
+          editable={!sendBlocked}
           multiline
           onBlur={() => onFocusChange(false)}
           onChangeText={onDraftChange}
           onFocus={() => onFocusChange(true)}
-          placeholder="Ask anything..."
+          placeholder={
+            sendBlocked
+              ? 'Sending messages is not available on this backend yet.'
+              : 'Ask anything...'
+          }
           placeholderTextColor="#888888"
           ref={composerRef}
           style={styles.composerInput}

@@ -59,6 +59,13 @@ export function chatWriteDoorUnavailable(error: unknown): boolean {
   );
 }
 
+export function chatHistoryHasOlder(
+  hasOlder: boolean,
+  olderCursor: string | null,
+): boolean {
+  return hasOlder && olderCursor !== null;
+}
+
 export function chatErrorCopy(error: unknown): string {
   if (!(error instanceof ChatBackendError)) {
     return 'Message not sent. Check your connection and try again.';

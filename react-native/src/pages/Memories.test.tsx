@@ -238,3 +238,33 @@ test('degraded empty memories do not claim a complete library', () => {
   expect(textOf(view)).toContain('Memories may be temporarily incomplete.');
   expect(textOf(view)).not.toContain('No memories yet.');
 });
+
+test('an incomplete empty memory search does not claim a complete miss', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {items: [], page: incompletePage},
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    act(() => {
+      view.root
+        .find(
+          node => node.props.accessibilityLabel === 'Search loaded memories',
+        )
+        .props.onChangeText('nomatch');
+    });
+    expect(textOf(view)).toContain('Memories are incomplete.');
+    expect(textOf(view)).not.toContain('No loaded memories match.');
+  } finally {
+    act(() => {
+      view.unmount();
+    });
+  }
+});

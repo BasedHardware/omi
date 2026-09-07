@@ -228,6 +228,36 @@ test('incomplete empty tasks do not claim a complete library', () => {
   expect(copy).not.toContain('No tasks yet.');
 });
 
+test('an incomplete empty task search does not claim a complete miss', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [],
+            page: incompletePage,
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('nomatch');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Tasks are incomplete.');
+  expect(copy).not.toContain('No loaded tasks match.');
+});
+
 test('task pagination stays available when loaded task search has no matches', () => {
   const onLoadMore = jest.fn();
   let renderer!: ReactTestRenderer.ReactTestRenderer;

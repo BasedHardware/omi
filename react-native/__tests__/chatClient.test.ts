@@ -4,6 +4,7 @@ import {
   chatErrorCopy,
   chatHistoryCanReload,
   chatHistoryErrorCopy,
+  chatHistoryHasOlder,
   chatWriteDoorUnavailable,
   loadChatHistory,
   loadNewestChatHistory,
@@ -443,6 +444,10 @@ test('maps ratified public recovery without automatically retrying', () => {
       new ChatBackendError(503, 'service_unavailable', true, 'retry', 2),
     ),
   ).toBe(false);
+  expect(chatHistoryHasOlder(false, null)).toBe(false);
+  expect(chatHistoryHasOlder(true, null)).toBe(false);
+  expect(chatHistoryHasOlder(false, 'older-1')).toBe(false);
+  expect(chatHistoryHasOlder(true, 'older-1')).toBe(true);
   expect(
     chatHistoryErrorCopy(
       new ChatBackendError(404, 'not_found', false, 'none', null),

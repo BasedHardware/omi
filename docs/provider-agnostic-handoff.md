@@ -72,6 +72,8 @@ Cloud Linux after `5e90b3d7e6`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after the unusable-send latch: nested `not_found` / `development_backend_unsupported` write doors disable desktop Ask, mobile Ask, and composer Send instead of leaving a live CTA. Conversations/Memories/Tasks empty-search titles prefer completeness copy over a complete miss, matching Home. Chat writes still need a source-owned producer. Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after `9c231cb7ca`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Composer now uses the same unusable-send placeholder and non-editable input as mobile Ask. An empty chat page with a remaining older cursor offers Load older instead of "No messages in this chat yet," matching Rewind's terminal-page empty claim. Memories and Tasks empty-search pages keep completeness copy the same way Conversations already did.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

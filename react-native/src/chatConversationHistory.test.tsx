@@ -258,6 +258,46 @@ test('keeps an honest empty chat page instead of inventing a completed answer', 
   expect(textOf(renderer)).not.toContain('Omi ·');
 });
 
+test('an empty chat page with older history does not claim the chat is empty', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse([], {olderCursor: 'older-1', hasOlder: true}),
+    )
+    .mockResolvedValueOnce(
+      historyResponse(
+        [{id: 'human-1', text: 'older prompt', sender: 'human'}],
+        {
+          olderCursor: null,
+          hasOlder: false,
+        },
+      ),
+    );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ).length,
+  ).toBeGreaterThan(0);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · older prompt');
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+});
+
 test('loads older main-chat pages instead of dropping persisted history', async () => {
   mockRequest
     .mockResolvedValueOnce(

@@ -392,6 +392,7 @@ test('desktop chat renders a truthful failed terminal state', () => {
 test('desktop chat can load earlier messages', () => {
   const onLoadOlderChat = jest.fn();
   const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
+  expect(renderedText(renderer)).not.toContain("I'm ready.");
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')

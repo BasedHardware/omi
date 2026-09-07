@@ -1,5 +1,6 @@
 import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
+import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -40,13 +41,9 @@ export function ChatConversationHistory({
             </FocusPressable>
           )}
         </>
-      ) : result.messages.length === 0 ? (
-        <Text style={styles.conversationDetailSummary}>
-          No messages in this chat yet.
-        </Text>
       ) : (
         <>
-          {result.hasOlder && result.olderCursor !== null && (
+          {chatHistoryHasOlder(result.hasOlder, result.olderCursor) && (
             <FocusPressable
               accessibilityLabel="Load older messages"
               accessibilityRole="button"
@@ -60,16 +57,24 @@ export function ChatConversationHistory({
               </Text>
             </FocusPressable>
           )}
-          {result.messages.map(message => (
-            <Text
-              key={message.id}
-              selectable
-              style={styles.conversationTranscriptText}>
-              {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
-                message.text
-              }`}
-            </Text>
-          ))}
+          {result.messages.length === 0 ? (
+            chatHistoryHasOlder(result.hasOlder, result.olderCursor) ? null : (
+              <Text style={styles.conversationDetailSummary}>
+                No messages in this chat yet.
+              </Text>
+            )
+          ) : (
+            result.messages.map(message => (
+              <Text
+                key={message.id}
+                selectable
+                style={styles.conversationTranscriptText}>
+                {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
+                  message.text
+                }`}
+              </Text>
+            ))
+          )}
         </>
       )}
     </View>
