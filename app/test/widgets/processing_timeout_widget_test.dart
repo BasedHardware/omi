@@ -23,7 +23,7 @@ ServerConversation _processingConversation({
 }
 
 String _processingTakingLonger(WidgetTester tester) {
-  return AppLocalizations.of(tester.element(find.byType(Scaffold)))!.processingTakingLonger;
+  return AppLocalizations.of(tester.element(find.byType(Scaffold))).processingTakingLonger;
 }
 
 void main() {
@@ -155,7 +155,7 @@ void main() {
               ),
               now: () => now,
               reprocess: (id) async {
-                throw FormatException('malformed reprocess body');
+                throw const FormatException('malformed reprocess body');
               },
             ),
           ),
@@ -170,7 +170,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(
-      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold)))!.somethingWentWrong),
+      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
       findsOneWidget,
     );
   });
