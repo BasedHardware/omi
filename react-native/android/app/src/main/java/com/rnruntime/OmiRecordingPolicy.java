@@ -23,6 +23,9 @@ final class OmiRecordingPolicy {
   static boolean rememberedCurrent(long ticket, long generation, String expectedLogin, String currentLogin, boolean ready) {
     return ticket == generation && ready && expectedLogin != null && !expectedLogin.isEmpty() && expectedLogin.equals(currentLogin);
   }
+  static boolean retryableOwnershipStatus(int status) {
+    return status == 408 || status == 429 || (status >= 500 && status <= 599);
+  }
   static boolean offline(Throwable error) {
     return error instanceof ConnectException || error instanceof NoRouteToHostException
       || error instanceof SocketTimeoutException || error instanceof UnknownHostException;

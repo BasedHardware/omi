@@ -538,3 +538,273 @@ test.each(['new capture', 'recovered capture'] as const)(
     }
   },
 );
+
+test.each(['open', 'audio', 'complete'] as const)(
+  'sealed journal automatically resumes after transient %s admission recovers',
+  async stage => {
+    jest.useFakeTimers();
+    const limit = DEVICE_UPLOAD_LIMITS.maxPendingBytes;
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {value: 3});
+    const original =
+      mockBackend.requestRecordingJournal.getMockImplementation()!;
+    let healthy = false;
+    const blocked = (path: string) =>
+      stage === 'open'
+        ? path === '/v1/device-sessions'
+        : path.endsWith(`/${stage}`);
+    mockBackend.requestRecordingJournal.mockImplementation(
+      async (handle, request) =>
+        !healthy && blocked(request.path)
+          ? {id: request.id, status: 503, body: '{}'}
+          : original(handle, request),
+    );
+    const view = await render();
+    try {
+      await emit(packet);
+      await emit({type: 'snapshot', snapshot: mockSnapshot});
+      for (const delay of [500, 1000, 2000]) {
+        await ReactTestRenderer.act(async () => {
+          await jest.advanceTimersByTimeAsync(delay);
+        });
+      }
+      expect(
+        mockBackend.requestRecordingJournal.mock.calls.filter(call =>
+          blocked(call[1].path),
+        ),
+      ).toHaveLength(4);
+      expect(mockBackend.removeRecordingJournal).not.toHaveBeenCalled();
+      expect(state.deviceScanMessage).toContain('retry automatically');
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(5000 + 3500);
+      });
+      expect(
+        mockBackend.requestRecordingJournal.mock.calls.filter(call =>
+          blocked(call[1].path),
+        ),
+      ).toHaveLength(8);
+      healthy = true;
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(10000);
+      });
+      expect(mockBackend.readRecordingJournal).toHaveBeenCalledWith(
+        mockCapture,
+      );
+      expect(
+        mockBackend.requestRecordingJournal.mock.calls.at(-2)?.[1].path,
+      ).toBe(`/v1/device-sessions/${mockSession}/complete`);
+      expect(mockBackend.removeRecordingJournal).toHaveBeenCalledTimes(1);
+      expect(mockSaved).toBeNull();
+      const calls = mockBackend.requestRecordingJournal.mock.calls.length;
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(120000);
+      });
+      expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(calls);
+    } finally {
+      await ReactTestRenderer.act(async () => view.unmount());
+      mockBackend.requestRecordingJournal.mockImplementation(original);
+      Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {
+        value: limit,
+      });
+      jest.useRealTimers();
+    }
+  },
+);
+
+test.each(['unmount', 'disable', 'permanent'] as const)(
+  '%s does not restart a paused journal upload automatically',
+  async mode => {
+    jest.useFakeTimers();
+    const original =
+      mockBackend.requestRecordingJournal.getMockImplementation()!;
+    mockBackend.requestRecordingJournal.mockImplementation(
+      async (_handle, request) => ({
+        id: request.id,
+        status: mode === 'permanent' ? 409 : 503,
+        body: '{}',
+      }),
+    );
+    function Enabled({enabled}: {enabled: boolean}) {
+      state = useNativeDevices({enabled});
+      return null;
+    }
+    let releaseRead: (() => void) | undefined;
+    let view!: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      view = ReactTestRenderer.create(<Enabled enabled />);
+    });
+    try {
+      await emit(packet);
+      for (const delay of [500, 1000, 2000]) {
+        await ReactTestRenderer.act(async () => {
+          await jest.advanceTimersByTimeAsync(delay);
+        });
+      }
+      const calls = mockBackend.requestRecordingJournal.mock.calls.length;
+      expect(calls).toBe(mode === 'permanent' ? 1 : 4);
+      if (mode !== 'permanent') {
+        const read = mockBackend.readRecordingJournal.getMockImplementation()!;
+        mockBackend.readRecordingJournal.mockImplementationOnce(async () => {
+          const saved = await read();
+          await new Promise<void>(resolve => {
+            releaseRead = resolve;
+          });
+          return saved;
+        });
+        await emit({type: 'snapshot', snapshot: mockSnapshot});
+        await ReactTestRenderer.act(async () => {
+          await jest.advanceTimersByTimeAsync(5000);
+        });
+        expect(releaseRead).toBeDefined();
+      }
+      if (mode === 'unmount')
+        await ReactTestRenderer.act(async () => view.unmount());
+      if (mode === 'disable')
+        await ReactTestRenderer.act(async () =>
+          view.update(<Enabled enabled={false} />),
+        );
+      await ReactTestRenderer.act(async () => {
+        releaseRead?.();
+        await jest.advanceTimersByTimeAsync(120000);
+      });
+      expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(calls);
+      expect(mockBackend.removeRecordingJournal).not.toHaveBeenCalled();
+    } finally {
+      releaseRead?.();
+      await ReactTestRenderer.act(async () => view.unmount());
+      mockBackend.requestRecordingJournal.mockImplementation(original);
+      jest.useRealTimers();
+    }
+  },
+);
+
+test('active capture resumes without another packet and sustained failures use one capped backoff', async () => {
+  jest.useFakeTimers();
+  const original = mockBackend.requestRecordingJournal.getMockImplementation()!;
+  let healthy = false;
+  mockBackend.requestRecordingJournal.mockImplementation(
+    async (handle, request) =>
+      healthy
+        ? original(handle, request)
+        : {id: request.id, status: 503, body: '{}'},
+  );
+  const view = await render();
+  try {
+    await emit(packet);
+    for (const delay of [500, 1000, 2000]) {
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(delay);
+      });
+    }
+    expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(4);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(4999);
+    });
+    expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(4);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(1 + 3500);
+    });
+    expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(8);
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(9999);
+    });
+    expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(8);
+    healthy = true;
+    await ReactTestRenderer.act(async () => {
+      await jest.advanceTimersByTimeAsync(1);
+    });
+    expect(
+      mockBackend.requestRecordingJournal.mock.calls.at(-1)?.[1].path,
+    ).toBe(`/v1/device-sessions/${mockSession}/audio`);
+    expect(mockBackend.readRecordingJournal).not.toHaveBeenCalled();
+    expect(state.deviceScanMessage).toBeNull();
+    expect(mockSaved!.entries).toEqual([
+      JSON.stringify(['p', 'AAAB']),
+      JSON.stringify(['a', 1]),
+    ]);
+    await emit({type: 'snapshot', snapshot: mockSnapshot});
+    expect(mockBackend.removeRecordingJournal).toHaveBeenCalledTimes(1);
+  } finally {
+    await ReactTestRenderer.act(async () => view.unmount());
+    mockBackend.requestRecordingJournal.mockImplementation(original);
+    jest.useRealTimers();
+  }
+});
+
+test.each([false, true])(
+  'stopped retry waits for stop fsync and released reservation before restoring the journal (failure: %s)',
+  async fails => {
+    jest.useFakeTimers();
+    const limit = DEVICE_UPLOAD_LIMITS.maxPendingBytes;
+    Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {value: 3});
+    const request =
+      mockBackend.requestRecordingJournal.getMockImplementation()!;
+    const append = mockBackend.appendRecordingJournal.getMockImplementation()!;
+    let healthy = false;
+    let releaseStop: (() => void) | undefined;
+    mockBackend.requestRecordingJournal.mockImplementation(
+      async (handle, input) =>
+        healthy
+          ? request(handle, input)
+          : {id: input.id, status: 503, body: '{}'},
+    );
+    mockBackend.appendRecordingJournal.mockImplementation(
+      async (handle, entry) => {
+        if (entry === JSON.stringify(['s'])) {
+          await new Promise<void>(resolve => {
+            releaseStop = resolve;
+          });
+        }
+        if (fails && entry === JSON.stringify(['s'])) {
+          throw new Error('Disk write failed');
+        }
+        return append(handle, entry);
+      },
+    );
+    const view = await render();
+    try {
+      await emit(packet);
+      for (const delay of [500, 1000, 2000]) {
+        await ReactTestRenderer.act(async () => {
+          await jest.advanceTimersByTimeAsync(delay);
+        });
+      }
+      await emit({type: 'snapshot', snapshot: mockSnapshot});
+      healthy = true;
+      await ReactTestRenderer.act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(mockBackend.readRecordingJournal).not.toHaveBeenCalled();
+      await ReactTestRenderer.act(async () => {
+        releaseStop!();
+        for (let index = 0; index < 100; index++) {
+          await Promise.resolve();
+        }
+      });
+      expect(mockBackend.readRecordingJournal).toHaveBeenCalledTimes(
+        fails ? 0 : 1,
+      );
+      expect(mockBackend.removeRecordingJournal).toHaveBeenCalledTimes(
+        fails ? 0 : 1,
+      );
+      if (fails) {
+        expect(state.deviceScanMessage).toContain('Recording storage failed');
+        await ReactTestRenderer.act(async () => {
+          await jest.advanceTimersByTimeAsync(120000);
+        });
+        expect(mockBackend.requestRecordingJournal).toHaveBeenCalledTimes(4);
+        expect(mockSaved).not.toBeNull();
+      } else {
+        expect(mockSaved).toBeNull();
+      }
+    } finally {
+      releaseStop?.();
+      await ReactTestRenderer.act(async () => view.unmount());
+      mockBackend.requestRecordingJournal.mockImplementation(request);
+      mockBackend.appendRecordingJournal.mockImplementation(append);
+      Object.defineProperty(DEVICE_UPLOAD_LIMITS, 'maxPendingBytes', {
+        value: limit,
+      });
+      jest.useRealTimers();
+    }
+  },
+);
