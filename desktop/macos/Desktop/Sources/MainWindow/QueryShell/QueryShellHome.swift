@@ -287,6 +287,7 @@ struct QueryShellHome: View {
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onAttachmentsAdded: stageAttachments,
       onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) },
+      onPasteAttachments: stagePasteboardAttachments,
       recentScreenFrames: recentScreenFrames,
       onStageRecentFrame: stageRecentFrame,
       references: chatProvider.pendingComposerReferences,
@@ -411,6 +412,16 @@ struct QueryShellHome: View {
   /// the bar and the automation bridge all end here rather than each keeping their own list.
   private func stageAttachments(_ urls: [URL]) {
     let staged = urls.compactMap(ChatAttachment.from(url:))
+    guard !staged.isEmpty else { return }
+    chatProvider.addAttachments(staged)
+  }
+
+  /// ⌘V in the composer: file URLs and image bytes on the pasteboard stage as
+  /// attachments through the same provider path as every other pick. The
+  /// staging is synchronous — a pasteboard read and a JPEG encode — so no
+  /// in-flight marker is needed against a concurrent send.
+  private func stagePasteboardAttachments() {
+    let staged = PasteboardAttachmentStaging.stageAttachments()
     guard !staged.isEmpty else { return }
     chatProvider.addAttachments(staged)
   }

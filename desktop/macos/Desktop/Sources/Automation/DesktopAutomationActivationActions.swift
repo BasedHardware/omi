@@ -15,6 +15,7 @@
 
 import AppKit
 import Foundation
+import OmiTheme
 
 extension DesktopAutomationActionRegistry {
 
@@ -221,6 +222,66 @@ extension DesktopAutomationActionRegistry {
         // the send; the count is what a flow asserts (never bytes or content).
         "mainStagedAttachments": String(ChatProvider.mainInstance?.pendingAttachments.count ?? 0),
         "mainStagedFirstAttachment": ChatProvider.mainInstance?.pendingAttachments.first?.fileName ?? "",
+      ]
+    }
+
+    register(
+      name: "paste_clipboard_into_chat",
+      summary:
+        "Run the composer's ⌘V path with a screenshot fixture on the clipboard: pasteboard "
+        + "classifier, staging, and provider staging (non-prod paste harness; replaces the clipboard)",
+      params: [],
+      category: "chat",
+      surfaces: ["main_chat"]
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "paste_clipboard_into_chat is disabled on production bundles"]
+      }
+      // The harness cannot set the system clipboard, so the action stages a
+      // representative screenshot copy itself: 2×2 red pixels as TIFF, the
+      // exact flavor a ⌘⇧⌃4 capture puts on the board. Clobbering the user's
+      // real clipboard is why this stays non-prod.
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      guard
+        let rep = NSBitmapImageRep(
+          bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8,
+          samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+      else {
+        return ["error": "could not build clipboard fixture"]
+      }
+      rep.size = NSSize(width: 2, height: 2)
+      for x in 0..<2 {
+        for y in 0..<2 {
+          rep.setColor(NSColor.red, atX: x, y: y)
+        }
+      }
+      guard let tiff = rep.tiffRepresentation, pasteboard.setData(tiff, forType: .tiff) else {
+        return ["error": "could not write clipboard fixture"]
+      }
+      // The exact chain the composer's paste handler runs: classifier first
+      // (⌘V is a text paste when the board carries readable text), then
+      // staging, then the provider's add path. The main chat is summoned
+      // first so the composer the paste lands on is mounted, exactly as it
+      // is when a person presses ⌘V in it.
+      let classifierAccepted = OmiTextEditor.pasteCarriesAttachments(pasteboard)
+      guard classifierAccepted else {
+        return ["classifierAccepted": "false", "staged": "false"]
+      }
+      guard let target = AppDelegate.summonWindowTarget() else {
+        return ["error": "no window target"]
+      }
+      target.openMainAppChat(prefilledDraft: "")
+      let staged = PasteboardAttachmentStaging.stageAttachments(from: pasteboard)
+      if let main = ChatProvider.mainInstance {
+        main.addAttachments(staged)
+      }
+      return [
+        "classifierAccepted": "true",
+        "staged": staged.isEmpty ? "false" : "true",
+        "stagedCount": String(staged.count),
+        "firstAttachmentName": staged.first?.fileName ?? "",
       ]
     }
 

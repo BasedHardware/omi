@@ -88,6 +88,9 @@ struct QueryHeroBar: View {
   var onStop: () -> Void = {}
   var onAttachmentsAdded: ([URL]) -> Void = { _ in }
   var onAttachmentRemoved: (String) -> Void = { _ in }
+  /// ⌘V with attachable content on the pasteboard: the host stages it the way
+  /// the paperclip stages picks. Any text riding along still reaches the field.
+  var onPasteAttachments: () -> Void = {}
   /// Recent Rewind frames offered as one-click image attachments — the
   /// "paste past screenshots" capability riding the same staging path as the
   /// paperclip. Metadata only; the host owns the loader and the staging.
@@ -378,6 +381,7 @@ struct QueryHeroBar: View {
       focusOnAppear: false,
       onMarkedTextChange: { hasMarkedText = $0 },
       focusRequest: caretClaim,
+      onPasteAttachments: onPasteAttachments,
       minHeight: minEditorHeight,
       maxHeight: maxEditorHeight
     )
