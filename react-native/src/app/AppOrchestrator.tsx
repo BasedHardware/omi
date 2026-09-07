@@ -47,6 +47,7 @@ import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
 import {
   emptyLibraryCopy,
+  homeSearchBannerPhase,
   homeSearchPhaseCopy,
   readStatusCopy,
   savedDataEmptyTitle,
@@ -1384,9 +1385,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       macDesktop && styles.macReadStatusText,
                                     ]}>
                                     {homeSearchPhaseCopy(
-                                      readsPhase === 'ready'
-                                        ? 'unavailable'
-                                        : readsPhase,
+                                      homeSearchBannerPhase(
+                                        readsPhase,
+                                        allHomeReadsUnavailable,
+                                      ),
                                       allHomeReadsUnavailable &&
                                         readOutcomes !== null
                                         ? desktopRecoveryCopy(

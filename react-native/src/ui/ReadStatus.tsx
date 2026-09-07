@@ -136,6 +136,28 @@ export function ReadStatus({
   );
 }
 
+export function homeSearchBannerPhase(
+  phase:
+    | 'initial-loading'
+    | 'refreshing'
+    | 'ready'
+    | 'saved-but-refresh-failed'
+    | 'unavailable',
+  allHomeReadsUnavailable: boolean,
+):
+  | 'initial-loading'
+  | 'refreshing'
+  | 'saved-but-refresh-failed'
+  | 'unavailable' {
+  if (phase === 'ready') {
+    return 'unavailable';
+  }
+  if (allHomeReadsUnavailable && phase === 'saved-but-refresh-failed') {
+    return 'unavailable';
+  }
+  return phase;
+}
+
 export function homeSearchPhaseCopy(
   phase:
     | 'initial-loading'

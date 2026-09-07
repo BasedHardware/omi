@@ -82,6 +82,7 @@ import {
   ReadStatus,
   coverageStatusCopy,
   emptyLibraryCopy,
+  homeSearchBannerPhase,
   homeSearchPhaseCopy,
   savedDataEmptyTitle,
 } from './ReadStatus';
@@ -620,6 +621,32 @@ test('homeSearchPhaseCopy uses mapped copy instead of a generic unavailable clai
   );
 });
 
+test('homeSearchBannerPhase does not claim showing saved data when conversation and memory doors failed', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  expect(homeSearchBannerPhase('saved-but-refresh-failed', true)).toBe(
+    'unavailable',
+  );
+  expect(homeSearchBannerPhase('saved-but-refresh-failed', false)).toBe(
+    'saved-but-refresh-failed',
+  );
+  expect(homeSearchBannerPhase('unavailable', true)).toBe('unavailable');
+  expect(homeSearchBannerPhase('ready', true)).toBe('unavailable');
+  expect(homeSearchBannerPhase('refreshing', true)).toBe('refreshing');
+  expect(
+    homeSearchPhaseCopy(
+      homeSearchBannerPhase('saved-but-refresh-failed', true),
+      mapped,
+    ),
+  ).toBe(mapped);
+  expect(
+    homeSearchPhaseCopy(
+      homeSearchBannerPhase('saved-but-refresh-failed', false),
+      mapped,
+    ),
+  ).toBe('Showing saved data. Could not refresh.');
+});
+
 test('empty library copy keeps completeness instead of claiming emptiness', () => {
   const incomplete = {
     windowStatus: 'incomplete' as const,
@@ -813,6 +840,7 @@ test('coverage copy wins over a complete Home search miss', () => {
   );
   expect(orchestrator).toContain('homeSearchEmptyTitle');
   expect(orchestrator).toContain('savedDataEmptyTitle(');
+  expect(orchestrator).toContain('homeSearchBannerPhase(');
   expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
   expect(orchestrator).toContain(
     'conversations: conversationNotice === desktopBackendUnavailableCopy',
