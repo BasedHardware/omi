@@ -233,6 +233,11 @@ enum FloatingBarNotificationAction: Equatable {
   /// the conversation to share and the calendar-detected recipients a
   /// one-click "Send to …" email would go to (empty = no send button).
   case meetingSummaryShare(conversationID: String, recipients: [ConversationShareRecipient])
+  /// The daily recap's announcement card. The recap never journals a transcript
+  /// turn (INV-CHAT-1), so the generic open-notification-chat fallthrough has no
+  /// stored message to resolve — the card carries its own destination instead:
+  /// the recap page the in-chat recap row opens, by the same route identity.
+  case openDailyRecap(DailyRecapRouteRef)
   /// Open the main chat with `prompt` already in the composer, focused and
   /// **not sent**. Raised by the first-real-app card, whose whole purpose is to
   /// turn a dead-end notch card into the user's first question — they still
@@ -258,6 +263,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// Explicit feedback controls for a planned JIT trigger. This is opaque
   /// provenance only; action labels are rendered by the card.
   let jitFeedbackContext: JITTriggerFeedbackContext?
+  /// Ambient JIT feedback is delivery-scoped and has no standing trigger.
+  let jitAmbientFeedbackContext: JITAmbientFeedbackContext?
   /// Optional opaque proactive-suggestion join keys. No card content or screen
   /// provenance enters notification analytics through this field.
   let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
@@ -280,6 +287,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -296,6 +304,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.context = context
     self.action = action
     self.jitFeedbackContext = jitFeedbackContext
+    self.jitAmbientFeedbackContext = jitAmbientFeedbackContext
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData

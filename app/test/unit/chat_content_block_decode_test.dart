@@ -82,7 +82,12 @@ void main() {
         decode({'type': 'agentSpawn', 'id': 'b6', 'sessionId': 's1', 'runId': 'r1'}),
         isA<AgentSpawnContentBlock>(),
       );
-      expect(decode({'type': 'agentCompletion', 'id': 'b7'}), isA<AgentCompletionContentBlock>());
+      final legacyCompletion = decode({'type': 'agentCompletion', 'id': 'b7'}) as AgentCompletionContentBlock;
+      expect(legacyCompletion, isA<AgentCompletionContentBlock>());
+      // The desktop codec uses the same default for historical blocks that
+      // predate the persisted status field. Explicit timeout/orphan statuses
+      // are tested by the widget contract and must not take this path.
+      expect(legacyCompletion.status, 'completed');
     });
   });
 

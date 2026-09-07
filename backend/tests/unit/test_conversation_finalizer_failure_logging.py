@@ -49,7 +49,7 @@ def finalizer_that_fails_on_geolocation(monkeypatch):
 async def test_dead_letter_log_names_the_bounded_reason(finalizer_that_fails_on_geolocation, caplog, monkeypatch):
     recorded = []
     monkeypatch.setattr(finalizer, 'record_finalization_failure', recorded.append)
-    with caplog.at_level(logging.ERROR, logger=finalizer.logger.name):
+    with caplog.at_level(logging.WARNING, logger=finalizer.logger.name):
         with pytest.raises(ConversationFinalizationError) as raised:
             await finalizer.finalize_persisted_conversation(
                 "user-1",
@@ -60,16 +60,19 @@ async def test_dead_letter_log_names_the_bounded_reason(finalizer_that_fails_on_
             )
 
     assert str(raised.value) == "processing_failed"
-    failures = [record.getMessage() for record in caplog.records if "failure=processing_failed" in record.getMessage()]
+    failures = [record for record in caplog.records if "failure=processing_failed" in record.getMessage()]
     assert len(failures) == 1
-    assert "reason=processing" in failures[0]
+    assert "reason=processing" in failures[0].getMessage()
+    # Per-attempt failure is retryable in-flight work: WARNING, not ERROR.
+    # Terminality is decided and escalated by the pusher-side handler.
+    assert failures[0].levelno == logging.WARNING
     assert recorded == [finalizer.classify_finalization_failure(LookupError())]
 
 
 @pytest.mark.asyncio
 async def test_dead_letter_log_still_withholds_the_exception_message(finalizer_that_fails_on_geolocation, caplog):
     """The class name is safe to log; the message can quote the transcript and must not appear."""
-    with caplog.at_level(logging.ERROR, logger=finalizer.logger.name):
+    with caplog.at_level(logging.WARNING, logger=finalizer.logger.name):
         with pytest.raises(ConversationFinalizationError):
             await finalizer.finalize_persisted_conversation(
                 "user-1",

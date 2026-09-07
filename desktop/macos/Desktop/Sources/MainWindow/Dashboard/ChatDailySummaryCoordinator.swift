@@ -18,7 +18,10 @@ final class ChatDailySummaryCoordinator: ObservableObject {
 
   /// Posts the notch card. Injected so a test can observe the announcement without a notification
   /// centre or a signed-in owner.
-  typealias CardSink = @MainActor (_ ownerID: String, _ title: String, _ body: String) -> Void
+  typealias CardSink =
+    @MainActor (
+      _ ownerID: String, _ title: String, _ body: String, _ action: FloatingBarNotificationAction?
+    ) -> Void
 
   let store: HomeDailySummaryStore
 
@@ -126,12 +129,26 @@ final class ChatDailySummaryCoordinator: ObservableObject {
     // A record whose overview has not filled in yet is not consumed: the id is
     // marked seen only once a card was actually handed to the sink.
     guard let body = ChatDailySummaryPresentation.cardBody(for: record.overview) else { return }
-    cardSink(owner, ChatDailySummaryPresentation.cardTitle(for: record), body)
+    // The card is presentation-only (never journaled — INV-CHAT-1), so its tap
+    // cannot ride the generic journal lookup. It carries the recap route the
+    // in-chat row opens, and the tap handler resolves that instead.
+    cardSink(
+      owner,
+      ChatDailySummaryPresentation.cardTitle(for: record),
+      body,
+      .openDailyRecap(DailyRecapRouteRef(recordID: record.id, date: record.date ?? "")))
     defaults.set(record.id, forKey: key)
     AnalyticsManager.shared.trackDailySummary(.cardShown)
   }
 
-  private static let defaultCardSink: CardSink = { ownerID, title, body in
+  /// The assistant identity the recap announcement presents under, so the floating bar's kind
+  /// derivation (`ProactiveNotificationKind.from(assistantId:)`) lands on `.dailyRecap` —
+  /// presentation-only. The announcement must not journal a transcript turn: the recap is already
+  /// in the thread as the dedicated `ChatDailyRecapRow` day boundary, and a journaled bell card
+  /// rendered a truncated, stat-less copy of it (INV-CHAT-1 — the recap is chrome, not a turn).
+  static let assistantID = "daily_recap"
+
+  private static let defaultCardSink: CardSink = { ownerID, title, body, action in
     // Fenced to the owner the summary was fetched for, not whoever is current now.
     guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else {
       return
@@ -140,6 +157,8 @@ final class ChatDailySummaryCoordinator: ObservableObject {
       ownerID: snapshot.ownerID,
       title: title,
       message: body,
+      assistantId: ChatDailySummaryCoordinator.assistantID,
+      action: action,
       // The summary is a statement about a day that already happened; the frequency budget exists
       // to throttle interruptions the user did not ask for, and this one is at most one per day.
       respectFrequency: false,

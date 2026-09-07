@@ -279,6 +279,9 @@ struct QueryShellHome: View {
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
+    // Chat is the one page with two fields on it. Typing here means talking to Omi, so the composer
+    // outranks the search bar above it; when the composer is unmounted (`.results`) the bar takes over.
+    .straysTypingHere(priority: .primary) { claimCaret() }
     // The footer unit (quota banner + composer) is measured where it is
     // composed, so the bar itself carries no height reporting of its own.
   }
@@ -416,7 +419,9 @@ struct QueryShellHome: View {
   /// Resolved by `QueryShellSubmission` rather than restated here, so the trim, the empty guard and
   /// the mode change cannot drift away from the value that defines them.
   private func submit() {
-    let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
+    let submission = QueryShellSubmission.resolve(
+      text: chatProvider.draftText,
+      hasAttachments: !chatProvider.pendingAttachments.isEmpty || !chatProvider.pendingComposerReferences.isEmpty)
     // Plan before mutating anything: a busy provider rejects the send, so
     // Return during an active turn must leave the typed draft intact and
     // neither dispatch nor advance the rating-prompt count.
@@ -442,10 +447,13 @@ struct QueryShellHome: View {
         plan.question,
         onAccepted: {
           accepted = true
+          sendLedger.recordAccepted(plan)
+        },
+        onAcceptedWithAttemptID: { attemptID in
           AnalyticsManager.shared.chatMessageSent(
             messageLength: plan.question.count, hasSelectedAppContext: false,
-            source: "query_shell", countsAsQuestion: plan.countsAsQuestion)
-          sendLedger.recordAccepted(plan)
+            source: "query_shell", countsAsQuestion: plan.countsAsQuestion,
+            attemptID: attemptID)
         })
       if !accepted, chatProvider.draftText.isEmpty {
         // The provider refused the send — give the typed question back

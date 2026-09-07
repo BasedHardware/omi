@@ -33,6 +33,7 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -802,24 +803,38 @@ class CaptureController extends ChangeNotifier
     String language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
+    final decision = await SttModeResolver.instance.decide(
+      persistedCustomStt: customSttConfig,
+      codec: codec,
+    );
 
-    Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
+    Logger.debug(
+      'STT mode: path=${decision.path.name} reason=${decision.reason} '
+      'custom=${customSttConfig.isEnabled} provider=${customSttConfig.provider}',
+    );
 
-    // Check codec compatibility for custom STT - fallback to default if incompatible
-    CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
+    if (decision.blockSocket) {
+      Logger.warning('[SttMode] Blocking transcription socket (${decision.reason})');
+      await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
+      await _reconcileNativeBackgroundStreamingPolicy();
+      notifyListeners();
+      _startKeepAliveServices();
+      return;
+    }
+
+    // Check codec compatibility for custom STT - fallback to default if incompatible.
+    // On-device allowance never falls back to a billed Omi socket (S17).
+    CustomSttConfig? effectiveConfig = decision.customSttConfig;
     if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
-      if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, effectiveConfig)) {
+      if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(
+        codec,
+        effectiveConfig,
+        allowanceOnDevice: decision.allowanceOnDevice,
+      )) {
         Logger.warning(
-          '[CustomSTT] Codec $codec is unsupported; refusing Omi fallback because raw audio forwarding is disabled',
+          '[CustomSTT] Codec $codec is unsupported; refusing Omi fallback (${decision.reason})',
         );
-        final previousSocket = _socket;
-        _socket = null;
-        _transcriptServiceReady = false;
-        try {
-          await previousSocket?.stop(reason: 'unsupported custom STT codec with raw audio forwarding disabled');
-        } catch (e, stack) {
-          Logger.error('[CustomSTT] Failed to stop the previous socket after blocking Omi fallback: $e\n$stack');
-        }
+        await _abandonTranscriptionSocket(reason: 'unsupported custom STT codec');
         await _reconcileNativeBackgroundStreamingPolicy();
         notifyListeners();
         _startKeepAliveServices();
@@ -1176,7 +1191,15 @@ class CaptureController extends ChangeNotifier
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
-    final sttConfigId = customSttConfig.sttConfigId;
+    final decision = await SttModeResolver.instance.decide(
+      persistedCustomStt: customSttConfig,
+      codec: codec,
+    );
+    if (decision.blockSocket) {
+      await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
+      return;
+    }
+    final sttConfigId = decision.socketIdentity;
 
     if (language != _socket?.language ||
         codec != _socket?.codec ||
@@ -1184,6 +1207,17 @@ class CaptureController extends ChangeNotifier
         _socket?.sttConfigId != sttConfigId ||
         _sessionGeolocationDiffersFromSocket()) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
+    }
+  }
+
+  Future<void> _abandonTranscriptionSocket({required String reason}) async {
+    final previousSocket = _socket;
+    _socket = null;
+    _transcriptServiceReady = false;
+    try {
+      await previousSocket?.stop(reason: reason);
+    } catch (e, stack) {
+      Logger.error('[SttMode] Failed to stop the previous socket after $reason: $e\n$stack');
     }
   }
 

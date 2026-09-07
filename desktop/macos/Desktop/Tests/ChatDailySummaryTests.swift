@@ -11,7 +11,7 @@ final class ChatDailySummaryTests: XCTestCase {
     var calls = 0
     var clock = Date(timeIntervalSince1970: 1_000)
     var records: [DailySummaryRecord] = []
-    var cards: [(title: String, body: String)] = []
+    var cards: [(title: String, body: String, action: FloatingBarNotificationAction?)] = []
     var owner: String? = "owner-a"
   }
 
@@ -205,7 +205,7 @@ final class ChatDailySummaryTests: XCTestCase {
       now: { box.clock })
     return ChatDailySummaryCoordinator(
       store: store, defaults: defaults, ownerID: { box.owner },
-      cardSink: { _, title, body in box.cards.append((title, body)) })
+      cardSink: { _, title, body, action in box.cards.append((title, body, action)) })
   }
 
   @MainActor
@@ -305,6 +305,47 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertEqual(box.cards.last?.title, "🚀 A newer day")
   }
 
+  /// The recap announcement is presentation-only (never journaled — INV-CHAT-1), so its
+  /// tap cannot ride the generic journal lookup in `openNotificationAsChat`: with no
+  /// action, the card was a dead end that opened nothing. The announcement must carry
+  /// the recap route — the same identity the in-chat recap row opens the page with.
+  @MainActor
+  func testAnnouncementCarriesTheRecapPageTapDestination() async throws {
+    let box = Box()
+    box.records = [record(id: "ds_1", date: "2026-09-01")]
+    let coordinator = makeCoordinator(box, defaults: try makeDefaults())
+
+    await coordinator.refresh()
+    XCTAssertEqual(
+      box.cards.first?.action,
+      .openDailyRecap(DailyRecapRouteRef(recordID: "ds_1", date: "2026-09-01")))
+  }
+
+  /// `openNotificationAsChat` early-returns without a live bar window, so a unit
+  /// test cannot drive the tap dispatch. The pinned branches are the wiring from
+  /// the announcement's typed action to the recap route, and the fail-open for
+  /// any other presentation-only card that arrives without one; the route's own
+  /// behavior is covered by `DailyRecapPageTests`.
+  func testNotchCardTapDispatchesTheRecapRoute() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    // omi-test-quality: source-inspection -- static contract: pin the tap-dispatch wiring; see doc comment above.
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    XCTAssertTrue(
+      source.contains("case .openDailyRecap(let ref):"),
+      "the recap announcement's tap must resolve its own action, not the journal fallthrough")
+    XCTAssertTrue(
+      source.contains("ChatFirstShellNavigation.shared.openDailyRecap(ref)"),
+      "the tap must open the recap page, which presents the main window itself")
+    // The boundary guard: a never-journaled kind with no action must fail open
+    // into the app instead of falling through to a journal lookup that cannot resolve.
+    XCTAssertTrue(
+      source.contains("guard notification.kind.isJournaled else {"),
+      "a presentation-only card without an action must fail open, not die silently")
+  }
+
   @MainActor
   func testRefreshIfNeededHonoursTheStoreThrottle() async throws {
     let box = Box()
@@ -397,9 +438,9 @@ final class ChatDailySummaryTests: XCTestCase {
 
   /// The recap lives in history now: a day-boundary row anchored above the
   /// first message on or after the recap's day. `ChatDailyRecapRowPlacement`
-  /// decides, without a view, where that boundary is and when a thread
-  /// deliberately shows none — a marker the transcript cannot back up would be
-  /// a lie about where the day began.
+  /// decides, without a view, where that boundary is, when it waits for older
+  /// history to load, and when it takes the live edge — a marker the transcript
+  /// cannot back up would be a lie about where the day began.
   func testRecapRowPlacement() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
@@ -431,10 +472,21 @@ final class ChatDailySummaryTests: XCTestCase {
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
         in: thread, recapDate: "2026-08-31", hasOlderMessagesAbove: true, calendar: calendar))
-    // A recap newer than everything loaded has no boundary in the window.
+    // A recap newer than everything loaded is the newest thing in the thread:
+    // it takes the live edge, below the last row.
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar),
+      thread[2].id)
+    XCTAssertEqual(
+      ChatDailyRecapRowPlacement.anchorMessageID(
+        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: true, calendar: calendar),
+      thread[2].id,
+      "the live edge does not depend on how much older history is still hidden")
+    // An empty thread renders nothing rather than inventing a row.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(
-        in: thread, recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
+        in: [], recapDate: "2026-09-03", hasOlderMessagesAbove: false, calendar: calendar))
     // A missing or malformed date renders nothing rather than anchoring somewhere.
     XCTAssertNil(
       ChatDailyRecapRowPlacement.anchorMessageID(

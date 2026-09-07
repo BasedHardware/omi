@@ -49,6 +49,7 @@ import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -363,7 +364,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
         ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
             CaptureProvider>(
-          create: (context) => CaptureProvider(),
+          create: (context) => CaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
@@ -372,7 +373,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               usageProvider: usage,
             );
             return (previous?..updateExternalActions(externalActions)) ??
-                CaptureProvider(externalActions: externalActions);
+                CaptureProvider(
+                  externalActions: externalActions,
+                  localSegmentStore: LocalSegmentStore.appSupport(),
+                );
           },
         ),
         ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(

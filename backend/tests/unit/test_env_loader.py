@@ -35,6 +35,30 @@ def test_local_jit_qa_firebase_is_verify_only() -> None:
     assert firebase_verify_only_credential({}) is None
 
 
+def test_cloud_jit_qa_firebase_is_verify_only_without_blocking_firestore_adc() -> None:
+    from google.auth.credentials import AnonymousCredentials
+
+    environment = {
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+    }
+    credential = firebase_verify_only_credential(environment)
+    assert credential is not None
+    assert isinstance(credential.get_credential(), AnonymousCredentials)
+
+
+def test_cloud_jit_qa_verify_only_fence_normalizes_stage_and_project() -> None:
+    credential = firebase_verify_only_credential(
+        {
+            "OMI_JIT_QA_AUTH_ONLY": " TRUE ",
+            "OMI_ENV_STAGE": " DEV ",
+            "GOOGLE_CLOUD_PROJECT": " based-hardware-dev ",
+        }
+    )
+    assert credential is not None
+
+
 def test_local_jit_qa_blocks_firebase_auth_mutations() -> None:
     class FakeAuth:
         pass
@@ -83,6 +107,24 @@ def test_google_adc_guard_is_inert_outside_local_jit() -> None:
     original = FakeGoogleAuth.default
     assert not install_google_adc_guard({}, google_auth_module=FakeGoogleAuth)
     assert FakeGoogleAuth.default is original
+
+
+def test_cloud_qa_auth_only_fence_blocks_auth_mutations_but_keeps_firestore_adc() -> None:
+    class FakeAuth:
+        pass
+
+    fake = FakeAuth()
+    from utils.firebase_admin_runtime import _AUTH_MUTATORS
+
+    for name in _AUTH_MUTATORS:
+        setattr(fake, name, lambda: None)
+    environment = {
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+    }
+    assert install_firebase_auth_mutation_guard(environment, auth_module=fake)
+    assert not install_google_adc_guard(environment, google_auth_module=FakeAuth)
 
 
 def test_stage_from_env_explicit() -> None:

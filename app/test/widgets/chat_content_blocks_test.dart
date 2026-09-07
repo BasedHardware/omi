@@ -70,6 +70,9 @@ class _StubMemoriesProvider extends MemoriesProvider {
 
   @override
   bool get loading => false;
+
+  @override
+  Future<void> loadMemories({int limit = 100}) async {}
 }
 
 class _StubGoalsProvider extends GoalsProvider {

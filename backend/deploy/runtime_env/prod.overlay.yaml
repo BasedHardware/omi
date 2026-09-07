@@ -84,6 +84,15 @@ overlay:
       env:
         MEMORY_ENABLED:
           value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          value: 'false'
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
     config_map:
       name: prod-omi-backend-config
       entries:

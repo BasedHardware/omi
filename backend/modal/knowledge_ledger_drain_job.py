@@ -14,6 +14,7 @@ from utils.memory.knowledge_ledger_drain import (
     ledger_drain_uid_allowlist_from_environment,
     run_knowledge_ledger_drain,
 )
+from utils.env_loader import firebase_admin_options
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def _init_firebase() -> None:
     if service_account_json:
         firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
 
 
 def main() -> None:

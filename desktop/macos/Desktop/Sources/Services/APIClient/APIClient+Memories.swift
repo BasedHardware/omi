@@ -631,7 +631,7 @@ extension APIClient {
 
 extension APIClient {
   /// One transcript segment for the from-segments upload (matches backend DevTranscriptSegment).
-  struct UploadSegment: Encodable {
+  struct UploadSegment: Encodable, Sendable {
     let text: String
     let speaker: String
     // swift-format-ignore
@@ -644,7 +644,7 @@ extension APIClient {
     let end: Double
   }
 
-  struct CreateConversationFromSegmentsRequest: Encodable {
+  struct CreateConversationFromSegmentsRequest: Encodable, Sendable {
     // swift-format-ignore
     let transcript_segments: [UploadSegment]
     let source: String
@@ -659,6 +659,38 @@ extension APIClient {
     let conversation_role: String
     // swift-format-ignore
     let conversation_finalization_reason: String?
+    /// Exact stored S10 JSON bytes. Nil keeps today's segments-only upload.
+    // swift-format-ignore
+    let client_processing: Data?
+
+    enum CodingKeys: String, CodingKey {
+      case transcript_segments
+      case source
+      case started_at
+      case finished_at
+      case language
+      case client_conversation_id
+      case conversation_role
+      case conversation_finalization_reason
+      case client_processing
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(transcript_segments, forKey: .transcript_segments)
+      try container.encode(source, forKey: .source)
+      try container.encodeIfPresent(started_at, forKey: .started_at)
+      try container.encodeIfPresent(finished_at, forKey: .finished_at)
+      try container.encode(language, forKey: .language)
+      try container.encodeIfPresent(client_conversation_id, forKey: .client_conversation_id)
+      try container.encode(conversation_role, forKey: .conversation_role)
+      try container.encodeIfPresent(
+        conversation_finalization_reason, forKey: .conversation_finalization_reason)
+      if let client_processing {
+        let payload = try ClientProcessingContract.decode(client_processing)
+        try container.encode(payload, forKey: .client_processing)
+      }
+    }
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {

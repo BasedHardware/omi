@@ -84,10 +84,40 @@ def test_memory_maintenance_job_entrypoint_calls_cron_runner():
 
 def test_memory_maintenance_job_exits_with_failure_when_cron_reports_outbox_error(monkeypatch, memory_maintenance_job):
     async def failed_cron(**_kwargs):
-        return SimpleNamespace(errors=["uid=test: outbox_delivery_failed"])
+        return SimpleNamespace(errors=["uid=test: outbox_delivery_failed"], flex_deferred=False)
 
     monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
     monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", failed_cron)
+    monkeypatch.setattr(memory_maintenance_job, "run_frame_request_retention_maintenance", lambda **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
+        memory_maintenance_job.main()
+
+
+def test_memory_maintenance_job_exits_zero_when_flex_stop_has_non_outbox_errors(monkeypatch, memory_maintenance_job):
+    async def deferred_cron(**_kwargs):
+        return SimpleNamespace(
+            errors=["uid=test: consolidation_failed:blocked=0:retryable=1:quarantined=0:errors=1"],
+            flex_deferred=True,
+        )
+
+    monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
+    monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", deferred_cron)
+    monkeypatch.setattr(memory_maintenance_job, "run_frame_request_retention_maintenance", lambda **_kwargs: None)
+
+    memory_maintenance_job.main()
+
+
+def test_memory_maintenance_job_still_fails_outbox_errors_after_flex_stop(monkeypatch, memory_maintenance_job):
+    async def deferred_cron(**_kwargs):
+        return SimpleNamespace(
+            errors=["uid=test: outbox_delivery_failed:retryable=1:dead_letter=0:ack=0:errors=0"],
+            flex_deferred=True,
+        )
+
+    monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
+    monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", deferred_cron)
+    monkeypatch.setattr(memory_maintenance_job, "run_frame_request_retention_maintenance", lambda **_kwargs: None)
 
     with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
         memory_maintenance_job.main()

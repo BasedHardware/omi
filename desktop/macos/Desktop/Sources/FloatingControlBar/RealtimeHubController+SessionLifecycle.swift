@@ -109,6 +109,7 @@ extension RealtimeHubController {
     completedAuthorizedRealtimeInvocationIDs.removeAll()
     let terminalStatus = RealtimeExternalRunTerminalPolicy.status(for: reason)
     let errorCode = terminalStatus == .failed ? reason.rawValue : nil
+    let finalText = state.answer.snapshot
     let terminalizationID = UUID()
     let task = Task { @MainActor [weak self] in
       let resolution = await awaitWithTimeout(
@@ -135,7 +136,8 @@ extension RealtimeHubController {
         return await self.terminalizeExternalRun(
           binding: binding,
           terminalStatus: terminalStatus,
-          errorCode: errorCode)
+          errorCode: errorCode,
+          finalText: finalText)
       case .some(.failed(let code)):
         log("RealtimeHub: external run completion failed code=\(code)")
         return ExternalRunTerminalizationResult(
@@ -158,6 +160,7 @@ extension RealtimeHubController {
       ownerID: state.ownerID,
       terminalStatus: terminalStatus,
       errorCode: errorCode,
+      finalText: finalText,
       task: task)
   }
 
@@ -165,6 +168,7 @@ extension RealtimeHubController {
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
     errorCode: String?,
+    finalText: String?,
     cleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async -> ExternalRunTerminalizationResult {
     let effectiveCleanupCapability =
@@ -177,25 +181,30 @@ extension RealtimeHubController {
           try await ownerBoundaryExternalRunCompletion(
             binding,
             terminalStatus,
+            finalText,
             errorCode,
             effectiveCleanupCapability)
         } else {
-          _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+          let completion = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
             clientId: Self.externalRunClientID,
             harnessMode: Self.externalRunHarnessMode,
             binding: binding,
             terminalStatus: terminalStatus,
+            finalText: finalText,
             errorCode: errorCode,
             transitionCleanupCapability: effectiveCleanupCapability)
+          try Self.validateExternalRunCompletion(completion, finalText: finalText)
         }
       #else
-        _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+        let completion = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
           binding: binding,
           terminalStatus: terminalStatus,
+          finalText: finalText,
           errorCode: errorCode,
           transitionCleanupCapability: effectiveCleanupCapability)
+        try Self.validateExternalRunCompletion(completion, finalText: finalText)
       #endif
       return ExternalRunTerminalizationResult(
         binding: binding,
@@ -215,17 +224,35 @@ extension RealtimeHubController {
     }
   }
 
+  nonisolated static func validateExternalRunCompletion(
+    _ completion: ExternalSurfaceRunCompletion,
+    finalText: String?
+  ) throws {
+    // Same normalization the wire uses. Validating on `!= nil` while the wire sent
+    // only non-blank text made a whitespace-only answer demand a persistence receipt
+    // for something that was never sent.
+    guard ExternalSurfaceRunAnswer.normalized(finalText) != nil else { return }
+    if !completion.duplicate && !completion.finalTextPersisted {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_final_text_not_persisted")
+    }
+    if completion.terminalStatus == .completed && !completion.journalMaterialized {
+      throw ExternalSurfaceAuthorityError(code: "external_surface_journal_not_materialized")
+    }
+  }
+
   func trackExternalRunTerminalization(
     id: UUID,
     ownerID: String,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
     errorCode: String?,
+    finalText: String?,
     task: Task<ExternalRunTerminalizationResult, Never>
   ) {
     externalRunTerminalizations[id] = TrackedExternalRunTerminalization(
       ownerID: ownerID,
       terminalStatus: terminalStatus,
       errorCode: errorCode,
+      finalText: finalText,
       task: task)
 
     Task { @MainActor [weak self] in

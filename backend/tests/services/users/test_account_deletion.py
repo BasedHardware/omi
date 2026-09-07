@@ -3,7 +3,7 @@ import importlib.machinery
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1331,6 +1331,49 @@ def test_background_wipe_proceeds_when_subscription_is_already_canceled(monkeypa
     account_deletion.stripe_utils.is_subscription_terminal.assert_called_once_with('sub_123')
     account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_billing_failed.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+
+
+def test_background_wipe_purges_conversation_typesense_index_after_firestore_wipe(monkeypatch):
+    """The post-wipe Typesense conversation purge is best-effort: it runs after
+    delete_user_data and can never change the wipe outcome while the Firebase
+    extension still owns production indexing."""
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
+
+    from utils.conversations import typesense_index
+
+    purge = MagicMock(return_value=7)
+    with patch.object(typesense_index, 'purge_user_conversation_index', purge):
+        assert account_deletion.background_wipe_user_data('uid1') is True
+
+    purge.assert_called_once_with('uid1')
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+
+
+def test_background_wipe_survives_conversation_typesense_purge_failure(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
+
+    from utils.conversations import typesense_index
+
+    with patch.object(typesense_index, 'purge_user_conversation_index', MagicMock(side_effect=Exception('down'))):
+        assert account_deletion.background_wipe_user_data('uid1') is True
+
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
 
 

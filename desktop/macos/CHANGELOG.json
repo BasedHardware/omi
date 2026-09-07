@@ -2,6 +2,133 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.314",
+      "date": "2026-09-07",
+      "changes": [
+        "You can now attach a file, image, or conversation and press Return without typing anything; Omi responds to the attachment directly.",
+        "Attached files, images, and conversations are now treated as the subject of your message, so Omi answers about the attachment instead of describing your screen.",
+        "Voice typing now capitalizes sentence starts and the pronoun \"I\" even when the AI cleanup is unavailable",
+        "Completed realtime voice conversations now keep their final answer in conversation history"
+      ]
+    },
+    {
+      "version": "0.12.313",
+      "date": "2026-09-07",
+      "changes": [
+        "Clicking the daily summary card in the notch now opens the app on that day's recap page; the click previously did nothing, and a plan/permission card that cannot open a conversation now opens the app's chat instead of ignoring the tap"
+      ]
+    },
+    {
+      "version": "0.12.312",
+      "date": "2026-09-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.311",
+      "date": "2026-09-07",
+      "changes": [
+        "Fixed planned reminders not firing when a matching app was on screen but that context was not independently notification-worthy"
+      ]
+    },
+    {
+      "version": "0.12.310",
+      "date": "2026-09-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.309",
+      "date": "2026-09-07",
+      "changes": [
+        "Chat answers no longer run the pre-tool sentence and the post-tool continuation together when Omi pauses to think or search mid-turn (\"...handle it.Capture the context...\" now renders as two properly separated sentences)",
+        "Fixed the remaining scrunched-notch states: closing a conversation over a notification card, a card auto-dismissing under an open chat, card replacements, and the moment a voice hold releases no longer collapse the notch to its resting width while wider content is still showing."
+      ]
+    },
+    {
+      "version": "0.12.308",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.307",
+      "date": "2026-09-06",
+      "changes": [
+        "Voice typing now always copies (or pastes) what you dictated instead of occasionally asking Omi to type it for you when Accessibility access hasn't been granted"
+      ]
+    },
+    {
+      "version": "0.12.306",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.305",
+      "date": "2026-09-06",
+      "changes": [
+        "Fixed the Unlimited plan's fallback description showing the wrong monthly question count",
+        "Typing with no text field focused now starts a search in the page's search bar (or lands in the chat composer on Chat) instead of playing the system alert sound",
+        "Free-plan Pendant recording on Apple Silicon now uses on-device transcription instead of forcing the cloud STT path.",
+        "Settings search field placeholder now reads \"Search\""
+      ]
+    },
+    {
+      "version": "0.12.304",
+      "date": "2026-09-06",
+      "changes": [
+        "Free-plan screen proactivity now stops on the plan gate instead of retrying paid Gemini calls, and a mid-session voice quota close shows the usage-limit prompt."
+      ]
+    },
+    {
+      "version": "0.12.303",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.302",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.301",
+      "date": "2026-09-06",
+      "changes": [
+        "Named test bundles now inherit shortcuts and settings from your installed Omi app — production first, Omi Dev when production is absent — instead of always mirroring a stale Omi Dev; the launch log warns and names the effective hotkey default when the source app has none set, and auth seeding falls back to your production session when Omi Dev's has expired"
+      ]
+    },
+    {
+      "version": "0.12.300",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.299",
+      "date": "2026-09-06",
+      "changes": [
+        "The daily recap in Chat history is now its own card — day, emoji, title, overview, and the day's stats — and the once-a-day announcement no longer adds a generic bell notification on top of it",
+        "Ambient proactive notifications now let you mark a reminder Useful or Not relevant"
+      ]
+    },
+    {
+      "version": "0.12.298",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive knowledge tools and standing notification setup in Chat"
+      ]
+    },
+    {
       "version": "0.12.297",
       "date": "2026-09-05",
       "changes": [

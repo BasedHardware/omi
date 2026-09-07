@@ -15,7 +15,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
   /// `.general` is not reachable from any of them — it is decode-only.
   private static let producerAssistantIDs = [
     "suggestion", "insight", "task", "memory-extraction", "goals", "meeting-notes",
-    "integration_connect", "context-director", "trial", "onboarding",
+    "integration_connect", "context-director", "trial", "onboarding", "daily_recap",
     "notch_receipt", "notch_end", "reach_error", "unknown-future-assistant",
   ]
 
@@ -63,14 +63,30 @@ final class ProactiveNotificationKindTests: XCTestCase {
       "the bare form stays reachable for round-tripping history, never for minting")
   }
 
-  /// Trial messaging and onboarding permission help are cards, not observations.
-  /// They present and dismiss; they must never become chat rows.
+  /// Trial messaging, onboarding permission help, and the daily recap's
+  /// announcement are cards, not observations. They present and dismiss; they
+  /// must never become chat rows.
   func testProductCopyCardsAreExcludedFromJournaling() {
     XCTAssertFalse(ProactiveNotificationKind.trial.isJournaled)
     XCTAssertFalse(ProactiveNotificationKind.onboarding.isJournaled)
-    for kind in ProactiveNotificationKind.allCases where kind != .trial && kind != .onboarding {
+    XCTAssertFalse(ProactiveNotificationKind.dailyRecap.isJournaled)
+    for kind in ProactiveNotificationKind.allCases
+    where kind != .trial && kind != .onboarding && kind != .dailyRecap {
       XCTAssertTrue(kind.isJournaled, "\(kind.rawValue) is something Omi observed")
     }
+  }
+
+  /// The recap announcement must present under the recap identity, never the
+  /// default assistant: the default derives `.functional`, which journals a
+  /// bell card into the transcript — a truncated, stat-less duplicate of the
+  /// dedicated `ChatDailyRecapRow` day boundary the thread already renders.
+  func testTheRecapAnnouncementPresentsUnjournaledUnderItsOwnIdentity() {
+    @MainActor func announcementKind() -> ProactiveNotificationKind {
+      ProactiveNotificationKind.from(assistantId: ChatDailySummaryCoordinator.assistantID)
+    }
+    let kind = MainActor.assumeIsolated(announcementKind)
+    XCTAssertEqual(kind, .dailyRecap)
+    XCTAssertFalse(ProactiveNotificationKind.dailyRecap.isJournaled)
   }
 
   /// The five category toggles gate the five proactive categories and nothing
@@ -91,7 +107,7 @@ final class ProactiveNotificationKindTests: XCTestCase {
     ] {
       XCTAssertFalse(allows(gated), "\(gated.rawValue) must honour its category toggle")
     }
-    for ungated: ProactiveNotificationKind in [.general, .functional, .trial, .onboarding] {
+    for ungated: ProactiveNotificationKind in [.general, .functional, .trial, .onboarding, .dailyRecap] {
       XCTAssertTrue(allows(ungated), "\(ungated.rawValue) sits outside the five-category taxonomy")
     }
   }

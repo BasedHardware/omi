@@ -29,6 +29,11 @@ import {
   type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import { renderAttachmentsSection } from "./attachment-prompt.js";
+import {
+  materializeExternalSurfaceRunJournal,
+  type ExternalSurfaceJournalChange,
+} from "./external-surface-journal.js";
 import {
   bindProducingJournalTurn,
   searchJournalConversation,
@@ -73,7 +78,6 @@ import {
   requiresVerifiedContextDispatch,
   bindingMetadata,
   stableHash,
-  stableJsonStringify,
   stableMcpServerConfig,
   stableJsonHash,
   parseJsonObject,
@@ -665,10 +669,33 @@ export class KernelCore {
     const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
     if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
       if (run.status === persistedStatus && attempt.status === persistedStatus) {
+        // Wrapped, like the first-completion path below. Until the missing-user-turn
+        // repair landed this branch made a single write, so atomicity was free; it now
+        // restores the question and updates the answer, and a partial failure between
+        // them would leave a half-repaired exchange until some later replay finished
+        // the job. Re-entrancy makes that recoverable rather than corrupting, but
+        // recoverable-by-retry is a weaker property than the first write already has,
+        // and there is no reason for the two paths to differ. `withTransaction` tracks
+        // nesting depth, so this composes with the transactions the journal helpers
+        // open themselves.
+        const journal = run.status === "succeeded"
+          ? this.withTransaction(() => materializeExternalSurfaceRunJournal(this.store, {
+            ownerId: input.ownerId,
+            run,
+            attempt,
+            finalText: run.finalText,
+          }))
+          : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
         // First write wins, so a replayed frame's text is deliberately not
         // stored. Say so rather than letting the surface read ok and assume it
         // landed — that silence is the shape of #12731 itself.
-        return { ...input, duplicate: true, finalTextPersisted: false };
+        return {
+          ...input,
+          duplicate: true,
+          finalTextPersisted: false,
+          journalMaterialized: journal.materialized,
+          journalChanges: journal.changes,
+        };
       }
       throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
     }
@@ -699,7 +726,7 @@ export class KernelCore {
     // or sent "" (#12731).
     const trimmed = input.finalText?.trim();
     const finalText = trimmed ? trimmed : null;
-    this.withTransaction(() => {
+    const journal = this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
@@ -709,8 +736,22 @@ export class KernelCore {
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
+      return persistedStatus === "succeeded"
+        ? materializeExternalSurfaceRunJournal(this.store, {
+          ownerId: input.ownerId,
+          run: { ...run, status: persistedStatus, finalText },
+          attempt: { ...attempt, status: persistedStatus },
+          finalText,
+        })
+        : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
     });
-    return { ...input, duplicate: false, finalTextPersisted: finalText !== null };
+    return {
+      ...input,
+      duplicate: false,
+      finalTextPersisted: finalText !== null,
+      journalMaterialized: journal.materialized,
+      journalChanges: journal.changes,
+    };
   }
 
   private assertExternalRunIdentity(
@@ -931,6 +972,9 @@ export class KernelCore {
           contextRendererFingerprint: contextSnapshot.rendererFingerprint,
           contextCapabilityVersion: contextSnapshot.capabilityVersion,
           admittedContextSnapshot: contextSnapshot,
+          ...(input.jitCostEvidenceProjection
+            ? { jitCostEvidenceProjection: input.jitCostEvidenceProjection }
+            : {}),
         }),
         modelProfile: session.modelProfile,
         requestedModelId: session.modelProfile,
@@ -1152,9 +1196,7 @@ export class KernelCore {
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
-        const attachments = input.attachments?.length
-          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
-          : "";
+        const attachments = renderAttachmentsSection(input.attachments);
         const renderedContext = adapterId === "pi-mono" && handle.bindingId
           ? renderContextSnapshotForBinding(
               snapshot,

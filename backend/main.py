@@ -30,6 +30,7 @@ install_firebase_auth_mutation_guard()
 from routers import (
     chat,
     firmware,
+    static_map,
     transcribe,
     omni_relay,
     auto_model,
@@ -43,6 +44,7 @@ from routers import (
     payment,
     integration,
     conversations,
+    conversation_mutations,
     memories,
     api_key_management,
     mcp,
@@ -181,9 +183,11 @@ app.add_middleware(
 )
 
 app.include_router(transcribe.router)
+app.include_router(static_map.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(conversation_mutations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(account_cutover.router)

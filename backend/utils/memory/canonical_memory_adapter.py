@@ -961,11 +961,13 @@ def search_canonical_memories(
         keyword_search_ledger_memory_ids,
         keyword_search_memory_ids,
         merge_memory_search_ids,
+        require_typesense_projection_ready,
     )
 
     if ledger_kinds is None:
         keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     else:
+        require_typesense_projection_ready(uid)
         keyword_ids = keyword_search_ledger_memory_ids(
             uid,
             normalized_query,

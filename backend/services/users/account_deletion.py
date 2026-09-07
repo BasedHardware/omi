@@ -345,6 +345,21 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
+        # Best-effort Typesense conversation purge AFTER the wipe: while the
+        # Firebase extension still owns production indexing, account deletion
+        # must not fail closed on Typesense. The purge is userId-filter-based,
+        # so it stays executable (and retryable) even with the user document
+        # gone; a failure here never changes the wipe outcome.
+        current_operation = 'conversation_typesense_purge'
+        try:
+            from utils.conversations.typesense_index import purge_user_conversation_index
+
+            purge_user_conversation_index(uid)
+        except Exception as purge_err:
+            logger.error(
+                f'delete_account post-wipe conversation typesense purge failed for {uid}: '
+                f'{sanitize(str(purge_err))}'
+            )
         current_operation = 'memory_maintenance_registry'
         _delete_memory_maintenance_registry(uid)
         logger.info('delete_account background wipe complete')

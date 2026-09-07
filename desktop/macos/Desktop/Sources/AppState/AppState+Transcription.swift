@@ -80,14 +80,20 @@ extension AppState {
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
       // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
       // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      // Pendant BLE used to force cloud; identified basic now matches mic (local, unnamed).
+      // Cache miss / unknown plan fail open to the previous BLE→cloud path; prefetch warms the next start.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
       )
+      let preferLocalOnBasic =
+        SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity() == .planGated
+      Task { _ = await SubscriptionEntitlementService.shared.snapshot() }
       sttSession.beginRecording(
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
-        debugForceCloud: debugForceCloud
+        debugForceCloud: debugForceCloud,
+        preferLocalOnBasic: preferLocalOnBasic
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId

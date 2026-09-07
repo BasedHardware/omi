@@ -333,10 +333,13 @@ struct QueryHeroBar: View {
     .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isProminent)
   }
 
-  /// Whether there is anything for the primary to send. A staged file with no words is a send.
+  /// Whether there is anything for the primary to send. A staged file or conversation with no words
+  /// is a send.
   private var canSend: Bool {
-    !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+    !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || hasStagedItems
   }
+
+  private var hasStagedItems: Bool { !attachments.isEmpty || !references.isEmpty }
 
   /// **The field, grown into a composer.**
   ///
@@ -397,7 +400,7 @@ struct QueryHeroBar: View {
   /// panel had already applied; there was never a second thing for it to mean. `⌘⏎` still sends: it
   /// is the `keyboardShortcut` on the primary and never arrives here.
   private func submitFromReturnKey() {
-    switch QueryShellSubmit.resolve(text: text) {
+    switch QueryShellSubmit.resolve(text: text, hasAttachments: hasStagedItems) {
     case .ask: onAsk()
     case .none: break
     }

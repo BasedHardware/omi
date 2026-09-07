@@ -594,7 +594,7 @@ def run_universal_short_term_maintenance(
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
     client = db_client if db_client is not None else default_db_client
-    promotion_flex = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
+    flex_run = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
     expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
     registry_uids: tuple[str, ...] = ()
     registry_cursor_generation = 0
@@ -674,10 +674,17 @@ def run_universal_short_term_maintenance(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d flex=%s",
         effective_run_id,
         len(uids),
-        promotion_flex.control.enabled,
+        flex_run.control.enabled,
     )
     completed_uids: set[str] = set()
     for uid in uids:
+        if flex_run.control.enabled and not flex_run.job_budget_fits():
+            summary.flex_deferred = True
+            logger.info(
+                "canonical_short_term_maintenance_cron: uid=%s flex_deferred=job_budget",
+                uid,
+            )
+            break
         stm_count = count_active_short_term(uid, db_client=client)
         if stm_count == 0:
             summary.skipped_no_short_term += 1
@@ -699,7 +706,7 @@ def run_universal_short_term_maintenance(
             completed_uids.add(uid)
             logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=writer_mode_ledger", uid)
             continue
-        promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
+        promotion_llm_invoke = flex_run.llm_invoke_for_uid(uid)
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
@@ -715,8 +722,9 @@ def run_universal_short_term_maintenance(
                     else CONSOLIDATION_ATTEMPT_LEASE_SECONDS
                 ),
                 consolidation_result_guard=(
-                    promotion_flex.assert_result_current if promotion_llm_invoke is not None else None
+                    flex_run.assert_result_current if promotion_llm_invoke is not None else None
                 ),
+                job_budget_guard=flex_run.require_job_budget if flex_run.control.enabled else None,
             )
         except PromotionFlexDeferred as exc:
             summary.flex_deferred = True

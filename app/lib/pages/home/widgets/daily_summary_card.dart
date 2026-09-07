@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
 
 class DailySummaryCard extends StatelessWidget {
   static const double width = 260;
@@ -15,13 +13,11 @@ class DailySummaryCard extends StatelessWidget {
     required this.summary,
     required this.dateLabel,
     required this.onTap,
-    this.tileProvider,
   });
 
   final DailySummary summary;
   final String dateLabel;
   final VoidCallback onTap;
-  final TileProvider? tileProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -46,10 +42,13 @@ class DailySummaryCard extends StatelessWidget {
                   left: 0,
                   right: 0,
                   height: mapHeight,
-                  child: _DailySummaryCardMap(
+                  child: OmiMapPreview(
                     key: ValueKey('daily_summary_map_${summary.id}'),
-                    locations: locations,
-                    tileProvider: tileProvider,
+                    pins: [
+                      for (final location in locations)
+                        OmiMapPin(latitude: location.latitude, longitude: location.longitude),
+                    ],
+                    backgroundColor: const Color(0xFF1F1F25),
                   ),
                 ),
               Positioned(
@@ -96,92 +95,5 @@ class DailySummaryCard extends StatelessWidget {
         longitude >= -180 &&
         longitude <= 180 &&
         (latitude != 0 || longitude != 0);
-  }
-}
-
-class _DailySummaryCardMap extends StatefulWidget {
-  const _DailySummaryCardMap({super.key, required this.locations, this.tileProvider});
-
-  final List<LocationPin> locations;
-  final TileProvider? tileProvider;
-
-  @override
-  State<_DailySummaryCardMap> createState() => _DailySummaryCardMapState();
-}
-
-class _DailySummaryCardMapState extends State<_DailySummaryCardMap> {
-  static const double _tileLoadZoomDelta = 0.000001;
-  final MapController _mapController = MapController();
-
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  void _loadTilesAfterLayout() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final camera = _mapController.camera;
-      // flutter_map 7 can apply the initial camera fit after creating its first
-      // tile set without scheduling the newly visible tiles to load. An
-      // imperceptible camera event makes the tile layer load the fitted bounds.
-      _mapController.move(camera.center, camera.zoom + _tileLoadZoomDelta);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final points = widget.locations.map((location) => LatLng(location.latitude, location.longitude)).toList();
-    final distinctPoints = points.toSet().toList();
-    final singleLocation = distinctPoints.length == 1;
-    final center = singleLocation ? distinctPoints.first : LatLngBounds.fromPoints(distinctPoints).center;
-    final cameraFit = singleLocation
-        ? null
-        : CameraFit.bounds(bounds: LatLngBounds.fromPoints(distinctPoints), padding: const EdgeInsets.all(18));
-
-    final markers = points
-        .map(
-          (point) => Marker(
-            point: point,
-            width: 22,
-            height: 22,
-            child: Container(
-              decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-              child: const Icon(Icons.location_on, color: Colors.white, size: 13),
-            ),
-          ),
-        )
-        .toList();
-
-    return IgnorePointer(
-      child: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: center,
-          initialZoom: singleLocation ? 13 : 12,
-          initialCameraFit: cameraFit,
-          interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-          keepAlive: true,
-          backgroundColor: const Color(0xFF1F1F25),
-          onMapReady: _loadTilesAfterLayout,
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            subdomains: const ['a', 'b', 'c', 'd'],
-            userAgentPackageName: 'me.omi.app',
-            minNativeZoom: 0,
-            maxNativeZoom: 19,
-            retinaMode: RetinaMode.isHighDensity(context),
-            keepBuffer: 0,
-            panBuffer: 0,
-            tileDisplay: const TileDisplay.instantaneous(),
-            tileProvider: widget.tileProvider,
-          ),
-          MarkerLayer(markers: markers),
-        ],
-      ),
-    );
   }
 }
