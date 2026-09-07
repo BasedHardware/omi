@@ -103,7 +103,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   // faded out — sequential, not simultaneous — so this lags _showsSpinnerBackdrop
   // by exactly the device's fade-out duration when turning on, and drops
   // immediately when turning off.
-  static const Duration _backdropFadeDuration = Duration(milliseconds: 1200);
+  static const Duration _backdropFadeDuration = Duration(milliseconds: 700);
   bool _spinnerVisible = false;
   Timer? _spinnerRevealTimer;
 

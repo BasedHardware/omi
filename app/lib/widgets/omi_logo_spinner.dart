@@ -39,7 +39,7 @@ class _OmiLogoSpinnerState extends State<OmiLogoSpinner> with TickerProviderStat
     _burstController = AnimationController(duration: const Duration(milliseconds: 2600), vsync: this);
     _burstCurve = CurvedAnimation(parent: _burstController, curve: Curves.easeInOut);
     _revealController = AnimationController(
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 1000),
       reverseDuration: const Duration(milliseconds: 3200),
       vsync: this,
     );
