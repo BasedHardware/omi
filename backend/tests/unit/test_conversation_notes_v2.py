@@ -87,7 +87,7 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
                   "overview":"compatibility",
                   "emoji":"🔐",
                   "category":"technology",
-                  "sections":[{"heading":"Agent operations","body_markdown":"Ash runs ~12 long-running agents.","source_segment_ids":["s1"]}],
+                  "sections":[{"heading":"Agent operations","body_markdown":"- Ash runs ~12 long-running agents.\\n- The team proposed a review; it has not started.","source_segment_ids":["s1"]}],
                   "action_items":[{"description":"Send Fulcrum dinner invite","owner_name":"David","context":"Tentative NYC lunch or dinner with Ash.","due_at":"2026-09-08T12:00:00","due_certainty":"tentative","capture_owner":"user","source_segment_ids":["s9"]}],
                   "events":[]
                 }''')
@@ -107,7 +107,10 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
         task_intelligence_capture=True,
     )
 
-    assert result.overview == '## Agent operations\n\nAsh runs ~12 long-running agents.'
+    assert result.overview == (
+        '## Agent operations\n\n- Ash runs ~12 long-running agents.\n'
+        '- The team proposed a review; it has not started.'
+    )
     assert re.search(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b', result.title) is None
     assert result.events == []
     assert result.action_items[0].owner_name == 'David'
@@ -121,6 +124,13 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'NEVER emit diarization placeholders' in instructions
     assert 'whether or not calendar' in instructions
     assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
+    # Prompt-contract assertions only: live source replay, not this mock, measures model fidelity.
+    assert "'- ' bullets in plain, readable sentences" in instructions
+    assert 'Keep past anecdotes, current plans, and unrelated threads separate' in instructions
+    assert 'Do not complete clipped amounts' in instructions
+    assert 'not quotas' in instructions
+    assert 'COVERAGE BEATS BREVITY' not in instructions
+    assert 'terse fragments, not sentences' not in instructions
 
 
 def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
@@ -268,3 +278,23 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
     )
     assert 'Alice Chen' in prefix.context
     assert 'Speaker 1:' not in prefix.context
+
+
+@pytest.mark.parametrize('gateway_enabled', [False, True])
+def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatch, gateway_enabled):
+    from utils.llm import conversation_prompt_prefix
+    from utils.llm.model_config import get_model_config
+    from llm_gateway.gateway.config_loader import load_gateway_config
+
+    monkeypatch.setattr(conversation_prompt_prefix, 'should_route_features_through_gateway', lambda: gateway_enabled)
+    if gateway_enabled:
+        routes = load_gateway_config(prod_mode=True).route_artifacts
+        notes = routes['route.conv_structure.model_config.001']
+        memory = routes['route.memory_l1.model_config.001']
+        assert notes.primary.model == 'gpt-5.6-sol'
+        assert notes.provider_options['reasoning_effort'] == 'medium'
+        assert memory.primary.model == 'gpt-5.6-luna'
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is False
+    else:
+        assert get_model_config('conv_structure') == get_model_config('memory_l1')
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is True

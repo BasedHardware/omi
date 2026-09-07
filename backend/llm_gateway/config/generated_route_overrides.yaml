@@ -33,9 +33,10 @@ generated_route_overrides:
   - feature: conv_folder
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  # Source replay found persistent entity/amount errors on the Luna note writer.
   - feature: conv_structure
-    primary: {provider: openai, model: gpt-5.6-luna}
-    provider_options: {reasoning_effort: low}
+    primary: {provider: openai, model: gpt-5.6-sol}
+    provider_options: {reasoning_effort: medium}
   - feature: daily_summary
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
