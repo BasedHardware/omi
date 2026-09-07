@@ -82,6 +82,7 @@ import {
   ReadStatus,
   coverageStatusCopy,
   emptyLibraryCopy,
+  homeSearchPhaseCopy,
   savedDataEmptyTitle,
 } from './ReadStatus';
 import {Field} from './Field';
@@ -553,6 +554,21 @@ test('OutcomeStatus uses mapped library copy instead of a generic unavailable cl
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain(mapped);
   expect(tree).not.toContain('Conversations are unavailable.');
+});
+
+test('homeSearchPhaseCopy uses mapped copy instead of a generic unavailable claim', () => {
+  const mapped =
+    'This saved data is not available from the selected Omi service yet.';
+  expect(homeSearchPhaseCopy('unavailable', mapped)).toBe(mapped);
+  expect(homeSearchPhaseCopy('unavailable', null)).toBe(
+    'Saved data is unavailable.',
+  );
+  expect(homeSearchPhaseCopy('initial-loading', mapped)).toBe(
+    'Loading saved data…',
+  );
+  expect(homeSearchPhaseCopy('saved-but-refresh-failed', mapped)).toBe(
+    'Showing saved data. Could not refresh.',
+  );
 });
 
 test('empty library copy keeps completeness instead of claiming emptiness', () => {

@@ -46,6 +46,7 @@ import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
 import {
   emptyLibraryCopy,
+  homeSearchPhaseCopy,
   savedDataEmptyTitle,
   OutcomeStatus,
 } from '../ui/ReadStatus';
@@ -1344,29 +1345,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       styles.readStatusText,
                                       macDesktop && styles.macReadStatusText,
                                     ]}>
-                                    {readsPhase === 'initial-loading'
-                                      ? 'Loading saved data…'
-                                      : readsPhase === 'refreshing'
-                                      ? 'Refreshing saved data…'
-                                      : readsPhase ===
-                                        'saved-but-refresh-failed'
-                                      ? 'Showing saved data. Could not refresh.'
-                                      : 'Saved data is unavailable.'}
-                                  </Text>
-                                  {allHomeReadsUnavailable && (
-                                    <Text
-                                      style={[
-                                        styles.readStatusCopy,
-                                        macDesktop && styles.macReadStatusText,
-                                      ]}>
-                                      {readOutcomes === null
-                                        ? ''
-                                        : desktopRecoveryCopy(
+                                    {homeSearchPhaseCopy(
+                                      readsPhase === 'ready'
+                                        ? 'unavailable'
+                                        : readsPhase,
+                                      allHomeReadsUnavailable &&
+                                        readOutcomes !== null
+                                        ? desktopRecoveryCopy(
                                             readOutcomes.conversations,
                                             readOutcomes.memories,
-                                          )}
-                                    </Text>
-                                  )}
+                                          )
+                                        : null,
+                                    )}
+                                  </Text>
                                   {(readsPhase === 'saved-but-refresh-failed' ||
                                     readsPhase === 'unavailable') &&
                                     desktopReadsCanRetry(readOutcomes) && (

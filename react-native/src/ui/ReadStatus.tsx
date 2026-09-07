@@ -98,6 +98,26 @@ export function ReadStatus({
   );
 }
 
+export function homeSearchPhaseCopy(
+  phase:
+    | 'initial-loading'
+    | 'refreshing'
+    | 'saved-but-refresh-failed'
+    | 'unavailable',
+  mappedUnavailable: string | null,
+): string {
+  if (phase === 'initial-loading') {
+    return 'Loading saved data…';
+  }
+  if (phase === 'refreshing') {
+    return 'Refreshing saved data…';
+  }
+  if (phase === 'saved-but-refresh-failed') {
+    return 'Showing saved data. Could not refresh.';
+  }
+  return mappedUnavailable ?? 'Saved data is unavailable.';
+}
+
 export function OutcomeStatus({
   label,
   outcome,

@@ -156,7 +156,9 @@ Cloud Linux after `a5ae2b8d92`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `9c2280dda8`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Settings Account no longer says "Signed in to Omi" when a successful `/v1/users/profile` read has no email. It uses "Email not set on this account." matching mobile Settings. Nested non-retryable profile reads still use account-setting unavailable copy. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the desktop Account id and Name-not-set slice: macOS Settings Account now shows already-loaded Account id and Name, using "Name not set on this account." when name is null, matching mobile Settings. Nested non-retryable profile reads still omit those rows. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `a89cc8473a`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Settings Account now shows already-loaded Account id and Name, using "Name not set on this account." when name is null, matching mobile Settings. Nested non-retryable profile reads still omit those rows. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Home search parent-copy slice: wide Home search no longer says "Saved data is unavailable." above mapped saved-data copy when every library door failed. That parent line uses the mapped copy and still omits Retry for nested non-retryable failures. Mixed library failures keep the generic parent with per-library OutcomeStatus copy. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
