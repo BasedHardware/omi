@@ -641,4 +641,20 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
       tooltip.contains("Click to start"),
       "An armed Only Meetings wait is not off; clicking turns listening off, it does not start it.")
   }
+
+  /// The armed wait can outlive a revoked microphone grant. Promising that recording starts on the
+  /// next call would then be false, so the sentence names the missing grant instead, and still says
+  /// where a click goes, because from Only Meetings a click turns listening off without prompting.
+  func testTheAwaitingMeetingAudioTooltipNamesTheMissingMicrophoneGrant() {
+    let tooltip = ShellStatusTooltip.audio(
+      state: .active, mode: "Only Meetings", isAwaitingMeeting: true, next: "Off",
+      hasMicrophonePermission: false)
+    XCTAssertTrue(tooltip.hasPrefix("Audio"))
+    XCTAssertTrue(tooltip.localizedCaseInsensitiveContains("microphone"), "it has to say what is missing: \(tooltip)")
+    XCTAssertTrue(tooltip.contains("Only Meetings"))
+    XCTAssertTrue(tooltip.contains("click for Off"))
+    XCTAssertFalse(
+      tooltip.contains("Recording starts"),
+      "without the grant no call can be recorded, so the tooltip must not promise one: \(tooltip)")
+  }
 }

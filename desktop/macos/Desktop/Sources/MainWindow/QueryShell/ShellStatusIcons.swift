@@ -269,6 +269,13 @@ enum ShellStatusTooltip {
     case .blocked:
       return "Audio — transcription unavailable. Open Settings to reconnect."
     case .active where isAwaitingMeeting:
+      // The wait is armed, but without the microphone grant no call can actually be recorded, so
+      // the sentence has to say what is missing instead of promising a recording that cannot start.
+      guard hasMicrophonePermission else {
+        return
+          "Audio — on (\(mode)), but Omi needs microphone access to record a call. "
+          + "Grant it in Settings, or click for \(next)."
+      }
       return "Audio — on (\(mode)). Recording starts when a call is detected. Click for \(next)."
     case .active:
       return "Audio — listening (\(mode)). Click for \(next)."
