@@ -10,6 +10,7 @@ import {
   deleteActionItem,
   type CreateActionItemParams,
 } from '@/lib/api';
+import { prependOrReplaceById } from '@/lib/actionItemList';
 import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
 
@@ -417,7 +418,7 @@ export function useActionItems(): UseActionItemsReturn {
     async (params: CreateActionItemParams): Promise<ActionItem | null> => {
       try {
         const newItem = await createActionItem(params);
-        setItems((prev) => [newItem, ...prev]);
+        setItems((prev) => prependOrReplaceById(prev, newItem));
         return newItem;
       } catch (err) {
         console.error('Failed to create action item:', err);
