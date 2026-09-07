@@ -4601,6 +4601,14 @@ class FloatingControlBarManager {
       // have nothing to resolve.
       MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       return
+    case .openDailyRecap(let ref):
+      // Same not-journaled shape as the share card above: the recap announcement
+      // has no journal entry for the fallthrough below to resolve, so the tap
+      // opens the recap's own page. `openDailyRecap` presents the main window
+      // itself — seeing the summary is the whole job of this tap.
+      AnalyticsManager.shared.trackDailySummary(.cardTapped)
+      ChatFirstShellNavigation.shared.openDailyRecap(ref)
+      return
     case .askOmiPrefilled(let prompt):
       // The one "ask this" entry that leaves the send to the user: the composer
       // opens focused with the question in it, unsent.
@@ -4609,7 +4617,22 @@ class FloatingControlBarManager {
     case .contextReminder:
       break
     case nil:
-      break
+      // A card that never journals has no stored message for the fallthrough to
+      // resolve. Every such kind owes its tap an explicit action case above (the
+      // share card, the recap announcement); a nil action that still lands here —
+      // trial, onboarding copy today — must not die silently, or the card is a
+      // dead end that opens nothing. Fail open into the app's chat, the surface
+      // every card's copy points back to.
+      guard notification.kind.isJournaled else {
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "notch_card_tap",
+          from: "journal_lookup",
+          to: "open_main_chat",
+          reason: "presentation_only_card_without_action",
+          outcome: .degraded)
+        AppDelegate.openMainWindow?()
+        return
+      }
     }
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
