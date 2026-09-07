@@ -131,9 +131,10 @@ actor RewindOCRService {
   /// Falls back to English when the query fails rather than propagating: an
   /// unavailable capability list must not take OCR down with it.
   static func visionSupportedRecognitionLanguages() -> [String] {
-    (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
-      for: recognitionLevel(),
-      revision: VNRecognizeTextRequest.currentRevision)) ?? ["en-US"]
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = recognitionLevel()
+    request.revision = VNRecognizeTextRequest.currentRevision
+    return (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
   }
 
   /// Picks the recognition languages for a user, in Vision's priority order.
