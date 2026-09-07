@@ -212,6 +212,9 @@ omi_jit_qa_set_exact_tuple() {
     export FIREBASE_API_KEY="$OMI_JIT_QA_FIREBASE_API_KEY"
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
+    # Every reserved QA entry point isolates JIT spend, including direct run.sh.
+    export OMI_FORCE_BUCKET_CANDIDATES=0
+    export OMI_FORCE_BUCKET_WORKSTREAMS=0
     # The reserved bundle is dev-routed. Its exact tuple therefore includes
     # an empty Rewind profile for every entry point, not only the convenience
     # wrapper. Never copy production screenshots/history into it.

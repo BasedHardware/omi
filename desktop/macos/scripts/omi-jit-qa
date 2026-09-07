@@ -21,11 +21,6 @@ esac
 
 export OMI_APP_NAME="omi-jit-qa"
 export OMI_JIT_QA_TARGET="$target"
-# Keep JIT qualification isolated from the still-unqualified sibling loops.
-# Sibling-loop experiments use a separately named entrypoint; this reserved
-# JIT QA entrypoint always pins both to the disabled state.
-export OMI_FORCE_BUCKET_CANDIDATES=0
-export OMI_FORCE_BUCKET_WORKSTREAMS=0
 # The reserved bundle starts with an empty Rewind profile. Copying production
 # screenshots/history into a dev-routed app is never an implicit launch step.
 export OMI_SKIP_REWIND_SEED=1

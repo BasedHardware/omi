@@ -39,13 +39,15 @@ expect_launcher_failure_before_stop() {
 clear_target_env() {
     unset OMI_JIT_QA_TARGET OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE
     unset OMI_JIT_QA_CLOUD_RECEIPT_PATH OMI_JIT_QA_CLOUD_PYTHON_URL OMI_JIT_QA_CLOUD_DESKTOP_URL
-    unset FIREBASE_API_KEY
+    unset FIREBASE_API_KEY OMI_FORCE_BUCKET_CANDIDATES OMI_FORCE_BUCKET_WORKSTREAMS
     unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL
     unset OMI_SKIP_REWIND_SEED OMI_FORCE_REWIND_SEED
 }
 
 clear_target_env
 export OMI_JIT_QA_TARGET=local-dev-gcp
+export OMI_FORCE_BUCKET_CANDIDATES=1
+export OMI_FORCE_BUCKET_WORKSTREAMS=1
 omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
 test "$OMI_PYTHON_API_URL" = "http://127.0.0.1:18080"
@@ -55,6 +57,8 @@ test "$OMI_ENV_STAGE" = dev
 test "$FIREBASE_API_KEY" = "$OMI_JIT_QA_FIREBASE_API_KEY"
 test "$OMI_SKIP_BACKEND" = 1
 test "$OMI_SKIP_TUNNEL" = 1
+test "$OMI_FORCE_BUCKET_CANDIDATES" = 0
+test "$OMI_FORCE_BUCKET_WORKSTREAMS" = 0
 test "$OMI_SKIP_REWIND_SEED" = 1
 
 local_env="$(mktemp)"
@@ -283,8 +287,6 @@ grep -q 'omi_write_jit_qa_bundle_env' "$ROOT/run.sh"
 grep -q 'OMI_AUTH_API_URL' "$ROOT/run.sh"
 grep -Fq 'cd "$MACOS_ROOT"' "$ROOT/scripts/omi-jit-qa"
 grep -Fq 'export OMI_SKIP_REWIND_SEED=1' "$ROOT/scripts/omi-jit-qa"
-grep -Fq 'export OMI_FORCE_BUCKET_CANDIDATES=0' "$ROOT/scripts/omi-jit-qa"
-grep -Fq 'export OMI_FORCE_BUCKET_WORKSTREAMS=0' "$ROOT/scripts/omi-jit-qa"
 prepare_line="$(grep -n 'omi_prepare_jit_qa_target.*derived' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 request_preflight_line="$(grep -n '^omi_preflight_jit_qa_launch_request' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 dev_instance_line="$(grep -n 'source .*scripts/dev-instance.sh' "$ROOT/run.sh" | head -1 | cut -d: -f1)"

@@ -91,8 +91,8 @@ The QA HTTP services advertise `jit-cloud-qa-v1`; the dedicated gateway enforces
 that same provider-attempt budget. This capability is confined to these named
 QA services. It does not alter rollout enrollment or open either maintenance job.
 
-The reserved `desktop/macos/scripts/omi-jit-qa` wrapper pins
+The shared reserved QA target selector pins
 `OMI_FORCE_BUCKET_CANDIDATES=0` and `OMI_FORCE_BUCKET_WORKSTREAMS=0`;
-`run.sh` forwards both through `open`. This isolates JIT qualification from
+both wrapper and direct `run.sh` launches forward them through `open`. This isolates JIT qualification from
 sibling candidate/workstream calls outside its budget. Ordinary named dev
 bundles retain their defaults; use a separately named bundle for those experiments.
