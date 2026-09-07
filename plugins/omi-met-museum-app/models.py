@@ -1,6 +1,6 @@
 """Pydantic models for The Metropolitan Museum of Art Omi integration plugin."""
 
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -117,4 +117,12 @@ class DepartmentItem(BaseModel):
 class ChatToolResponse(BaseModel):
     """Standardized response format for Omi Chat Tools."""
 
-    response: str
+    result: Optional[str] = None
+    error: Optional[str] = None
+
+    def __init__(self, **data: Any):
+        # Support response alias if passed
+        if "response" in data and "result" not in data:
+            data["result"] = data.pop("response")
+        super().__init__(**data)
+

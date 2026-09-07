@@ -329,6 +329,8 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                 "description": "Search 470,000+ artworks from The Metropolitan Museum of Art collection by keyword, artist, or culture.",
                 "endpoint": "/tools/search-artworks",
                 "method": "POST",
+                "auth_required": False,
+                "status_message": "Searching the Met Collection...",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -361,6 +363,8 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                 "description": "Get comprehensive details for a specific Metropolitan Museum artwork by its object ID.",
                 "endpoint": "/tools/get-artwork-details",
                 "method": "POST",
+                "auth_required": False,
+                "status_message": "Retrieving Met artwork details...",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -377,6 +381,8 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                 "description": "List all 19 curatorial departments at The Metropolitan Museum of Art with their department IDs.",
                 "endpoint": "/tools/list-departments",
                 "method": "POST",
+                "auth_required": False,
+                "status_message": "Loading Met curatorial departments...",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -387,6 +393,8 @@ async def omi_tools_manifest() -> Dict[str, Any]:
                 "description": "Retrieve curated masterwork highlights from a specified Met curatorial department.",
                 "endpoint": "/tools/get-department-highlights",
                 "method": "POST",
+                "auth_required": False,
+                "status_message": "Fetching department highlights...",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -449,7 +457,7 @@ async def search_artworks(payload: SearchArtworksRequest) -> ChatToolResponse:
 
     if not cached_ids:
         return ChatToolResponse(
-            response=f"No artworks found in The Metropolitan Museum of Art collection matching '{payload.query}'."
+            result=f"No artworks found in The Metropolitan Museum of Art collection matching '{payload.query}'."
         )
 
     target_ids = cached_ids[: payload.limit]
@@ -476,7 +484,7 @@ async def search_artworks(payload: SearchArtworksRequest) -> ChatToolResponse:
 
     if not summaries:
         return ChatToolResponse(
-            response=f"Found matches for '{payload.query}', but detailed records are temporarily unavailable."
+            result=f"Found matches for '{payload.query}', but detailed records are temporarily unavailable."
         )
 
     lines = [
@@ -491,7 +499,7 @@ async def search_artworks(payload: SearchArtworksRequest) -> ChatToolResponse:
             f"   - **Object ID:** `{s.object_id}` • [Met Link]({s.object_url}){img_str}"
         )
 
-    return ChatToolResponse(response="\n\n".join(lines))
+    return ChatToolResponse(result="\n\n".join(lines))
 
 
 @app.post(
@@ -503,7 +511,7 @@ async def get_artwork_details(payload: ArtworkDetailsRequest) -> ChatToolRespons
     data = await _fetch_object(payload.object_id)
     if not data:
         return ChatToolResponse(
-            response=f"Artwork with Object ID `{payload.object_id}` was not found in The Metropolitan Museum of Art collection."
+            result=f"Artwork with Object ID `{payload.object_id}` was not found in The Metropolitan Museum of Art collection."
         )
 
     tags_list = [
@@ -573,7 +581,7 @@ async def get_artwork_details(payload: ArtworkDetailsRequest) -> ChatToolRespons
 
     lines.append(f"**Links:** {' • '.join(links)}")
 
-    return ChatToolResponse(response="\n".join(lines))
+    return ChatToolResponse(result="\n".join(lines))
 
 
 @app.post(
@@ -620,7 +628,7 @@ async def list_departments() -> ChatToolResponse:
     for dept in items:
         lines.append(f"- **ID {dept.department_id}**: {dept.display_name}")
 
-    return ChatToolResponse(response="\n".join(lines))
+    return ChatToolResponse(result="\n".join(lines))
 
 
 @app.post(
@@ -664,7 +672,7 @@ async def get_department_highlights(
 
     if not cached_ids:
         return ChatToolResponse(
-            response=f"No curated highlights found for Met department ID `{payload.department_id}`."
+            result=f"No curated highlights found for Met department ID `{payload.department_id}`."
         )
 
     target_ids = cached_ids[: payload.limit]
@@ -702,7 +710,7 @@ async def get_department_highlights(
             f"   - **Object ID:** `{s.object_id}` • [View on Met]({s.object_url}){img_str}"
         )
 
-    return ChatToolResponse(response="\n\n".join(lines))
+    return ChatToolResponse(result="\n\n".join(lines))
 
 
 if __name__ == "__main__":

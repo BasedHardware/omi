@@ -36,13 +36,16 @@ def run_smoke_tests() -> None:
         expected_tools = ["search_artworks", "get_artwork_details", "list_departments", "get_department_highlights"]
         for expected in expected_tools:
             assert expected in tool_names, f"Missing tool {expected} in manifest"
-        print(f"   ✓ Manifest contains all {len(expected_tools)} expected tools: {', '.join(tool_names)}")
+        for t in tools:
+            assert t.get("auth_required") is False, f"Expected auth_required=False in {t.get('name')}"
+            assert "status_message" in t, f"Missing status_message in {t.get('name')}"
+        print(f"   ✓ Manifest contains all {len(expected_tools)} expected tools with auth_required=False & status_message: {', '.join(tool_names)}")
 
         # 3. List Curatorial Departments
         print("\n3. Testing POST /tools/list-departments...")
         resp = client.post("/tools/list-departments", json={})
         assert resp.status_code == 200
-        dept_text = resp.json().get("response", "")
+        dept_text = resp.json().get("result", "")
         assert "Curatorial Departments" in dept_text
         assert "European Paintings" in dept_text or "Asian Art" in dept_text
         print(f"   ✓ Curatorial departments listed successfully ({len(dept_text.splitlines())} lines returned)")
@@ -51,7 +54,7 @@ def run_smoke_tests() -> None:
         print("\n4. Testing POST /tools/search-artworks with query 'Monet'...")
         resp = client.post("/tools/search-artworks", json={"query": "Monet", "limit": 3, "has_images": True})
         assert resp.status_code == 200
-        search_text = resp.json().get("response", "")
+        search_text = resp.json().get("result", "")
         assert "Search Results" in search_text
         assert "Claude Monet" in search_text or "Monet" in search_text
         print("   ✓ Search returned valid artwork results")
@@ -66,7 +69,7 @@ def run_smoke_tests() -> None:
         print(f"\n5. Testing POST /tools/get-artwork-details for Object ID {dynamic_object_id}...")
         resp = client.post("/tools/get-artwork-details", json={"object_id": dynamic_object_id})
         assert resp.status_code == 200
-        detail_text = resp.json().get("response", "")
+        detail_text = resp.json().get("result", "")
         assert "**Artist:**" in detail_text
         assert "**Department:**" in detail_text
         assert "**Medium:**" in detail_text
@@ -77,7 +80,7 @@ def run_smoke_tests() -> None:
         print("\n6. Testing POST /tools/get-department-highlights for Department 11 (European Paintings)...")
         resp = client.post("/tools/get-department-highlights", json={"department_id": 11, "limit": 3})
         assert resp.status_code == 200
-        highlights_text = resp.json().get("response", "")
+        highlights_text = resp.json().get("result", "")
         assert "Highlights from European Paintings" in highlights_text
         assert "Object ID:" in highlights_text
         print("   ✓ Department highlights returned successfully")
@@ -86,7 +89,7 @@ def run_smoke_tests() -> None:
         print("\n7. Testing POST /tools/search-artworks with non-existent query...")
         resp = client.post("/tools/search-artworks", json={"query": "zzzzzzzzzzzzzzzzzzz", "artist_or_culture": True})
         assert resp.status_code == 200
-        empty_text = resp.json().get("response", "")
+        empty_text = resp.json().get("result", "")
         assert "No artworks found in The Metropolitan Museum of Art collection" in empty_text
         print("   ✓ Empty search handled gracefully")
 

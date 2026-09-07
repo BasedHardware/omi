@@ -191,6 +191,8 @@ def test_omi_tools_manifest(client):
         assert "description" in t
         assert t["endpoint"].startswith("/tools/")
         assert t["method"] == "POST"
+        assert t["auth_required"] is False
+        assert "status_message" in t
         assert "parameters" in t
         assert t["parameters"]["type"] == "object"
 
@@ -199,8 +201,8 @@ def test_search_artworks_success(client):
     response = client.post("/tools/search-artworks", json={"query": "sunflowers", "limit": 2})
     assert response.status_code == 200
     data = response.json()
-    assert "response" in data
-    text = data["response"]
+    assert "result" in data
+    text = data["result"]
     assert "Bouquet of Sunflowers" in text
     assert "Claude Monet" in text
     assert "437112" in text
@@ -215,7 +217,7 @@ def test_search_artworks_empty(monkeypatch):
     with TestClient(app) as c:
         response = c.post("/tools/search-artworks", json={"query": "nonexistent123xyz"})
         assert response.status_code == 200
-        assert "No artworks found" in response.json()["response"]
+        assert "No artworks found" in response.json()["result"]
 
 
 def test_search_artworks_with_filters(client):
@@ -230,7 +232,7 @@ def test_search_artworks_with_filters(client):
         },
     )
     assert response.status_code == 200
-    assert "Claude Monet" in response.json()["response"]
+    assert "Claude Monet" in response.json()["result"]
 
 
 def test_search_artworks_empty_query_rejected(client):
@@ -258,8 +260,8 @@ def test_get_artwork_details_success(client):
     response = client.post("/tools/get-artwork-details", json={"object_id": 437112})
     assert response.status_code == 200
     data = response.json()
-    assert "response" in data
-    text = data["response"]
+    assert "result" in data
+    text = data["result"]
     assert "Bouquet of Sunflowers" in text
     assert "Claude Monet" in text
     assert "Oil on canvas" in text
@@ -271,7 +273,7 @@ def test_get_artwork_details_success(client):
 def test_get_artwork_details_not_found(client):
     response = client.post("/tools/get-artwork-details", json={"object_id": 9999999})
     assert response.status_code == 200
-    assert "was not found in The Metropolitan Museum of Art collection" in response.json()["response"]
+    assert "was not found in The Metropolitan Museum of Art collection" in response.json()["result"]
 
 
 def test_get_artwork_details_negative_caching(client):
@@ -283,7 +285,7 @@ def test_get_artwork_details_negative_caching(client):
     # Second lookup hits negative cache
     resp2 = client.post("/tools/get-artwork-details", json={"object_id": 9999999})
     assert resp2.status_code == 200
-    assert "was not found" in resp2.json()["response"]
+    assert "was not found" in resp2.json()["result"]
 
 
 def test_get_artwork_details_upstream_failure(monkeypatch):
@@ -307,7 +309,7 @@ def test_list_departments_success(client):
     response = client.post("/tools/list-departments", json={})
     assert response.status_code == 200
     data = response.json()
-    text = data["response"]
+    text = data["result"]
     assert "American Decorative Arts" in text
     assert "European Paintings" in text
     assert "Arms and Armor" in text
@@ -328,7 +330,7 @@ def test_get_department_highlights_success(client):
     response = client.post("/tools/get-department-highlights", json={"department_id": 11, "limit": 2})
     assert response.status_code == 200
     data = response.json()
-    text = data["response"]
+    text = data["result"]
     assert "Highlights from European Paintings" in text
     assert "Bouquet of Sunflowers" in text
 
@@ -342,7 +344,7 @@ def test_get_department_highlights_empty(monkeypatch):
     with TestClient(app) as c:
         resp = c.post("/tools/get-department-highlights", json={"department_id": 999})
         assert resp.status_code == 200
-        assert "No curated highlights found for Met department ID `999`" in resp.json()["response"]
+        assert "No curated highlights found for Met department ID `999`" in resp.json()["result"]
 
 
 def test_lru_cache_operations():
@@ -431,8 +433,6 @@ def test_trusted_proxy_forwarded_ip_used(client, monkeypatch):
     assert resp_direct.status_code == 200
 
 
-# Alias for backward compatibility
-test_rate_limiter_trusted_proxy_forwarded_ip = test_trusted_proxy_forwarded_ip_used
 
 
 def test_rate_limiter_spoof_prevention(client, monkeypatch):
@@ -461,8 +461,5 @@ def test_rate_limiter_spoof_prevention(client, monkeypatch):
     # Ensure the spoofed IP was never tracked or exhausted
     assert spoofed_ip not in rate_limiter._records
 
-
-# Alias for backward compatibility
-test_rate_limiter_untrusted_proxy_spoof_prevention = test_rate_limiter_spoof_prevention
 
 
