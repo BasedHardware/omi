@@ -9,11 +9,11 @@ Powered by real-time ADS-B transponder telemetry from the [OpenSky Network](http
 ## 🌟 Why This is a Killer App for Wearables
 
 When wearing an Omi AI pendant or smart glasses outdoors:
-- 👂 **Hear a plane overhead?** Ask: *"What plane is flying overhead right now?"*  
+- 👂 **Hear a plane overhead?** Ask: *"What plane is flying overhead right now?"*
   Omi calculates the exact aircraft callsign, airline, altitude, ground speed, and tells you where to look (*"Flight UAL123 is 2.4 miles to your North-East at 32,000 feet, cruising at 480 mph"*).
-- 🛫 **Tracking family or friends?** Ask: *"Track flight BAW28"*  
+- 🛫 **Tracking family or friends?** Ask: *"Track flight BAW28"*
   Omi reports live coordinates, rate of climb/descent, and whether the flight is cruising or approaching an airport.
-- 🌐 **Curious about regional skies?** Ask: *"How many planes are currently in the sky above Frankfurt / London?"*  
+- 🌐 **Curious about regional skies?** Ask: *"How many planes are currently in the sky above Frankfurt / London?"*
   Omi returns an instant air traffic summary with active airborne vs. on-ground flight counts.
 
 ---
