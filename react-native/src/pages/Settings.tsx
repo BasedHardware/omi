@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -92,8 +92,17 @@ export function SettingsPage({
   );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
+  const mounted = useRef(false);
 
   const reload = useCallback(async () => {
+    if (!mounted.current) {
+      return;
+    }
+    const generation = ++loadGeneration.current;
+    const current = () =>
+      mounted.current && generation === loadGeneration.current;
+    setPhase('loading');
     const backend = omiBackend;
     const auth = omiAuth;
     setActionError(null);
@@ -104,12 +113,18 @@ export function SettingsPage({
       return;
     }
     if (browser) {
-      setPhase('loading');
       try {
-        setServiceSettings(await loadServiceSettings(backend));
+        const settings = await loadServiceSettings(backend);
+        if (!current()) {
+          return;
+        }
+        setServiceSettings(settings);
         setError(null);
         setPhase('ready');
       } catch {
+        if (!current()) {
+          return;
+        }
         setServiceSettings(null);
         setError('Settings could not be loaded. Try again.');
         setPhase('error');
@@ -120,7 +135,13 @@ export function SettingsPage({
       let hasSession: boolean;
       try {
         hasSession = await auth.hasCloudSession();
+        if (!current()) {
+          return;
+        }
       } catch {
+        if (!current()) {
+          return;
+        }
         // A probe that cannot settle (session refresh transport failed) must
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
@@ -135,12 +156,18 @@ export function SettingsPage({
         return;
       }
     }
-    setPhase(current => (current === 'ready' ? current : 'loading'));
     try {
-      setSnapshot(await loadAccountSettings(backend));
+      const account = await loadAccountSettings(backend);
+      if (!current()) {
+        return;
+      }
+      setSnapshot(account);
       setError(null);
       setPhase('ready');
     } catch (reason) {
+      if (!current()) {
+        return;
+      }
       setSnapshot(null);
       setError(desktopReadErrorCopy(reason));
       setPhase('error');
@@ -148,7 +175,11 @@ export function SettingsPage({
   }, [browser]);
 
   useEffect(() => {
+    mounted.current = true;
     reload().catch(() => undefined);
+    return () => {
+      mounted.current = false;
+    };
   }, [reload]);
 
   const runAction = async (id: string, action: () => Promise<void>) => {
