@@ -283,6 +283,8 @@ grep -q 'omi_write_jit_qa_bundle_env' "$ROOT/run.sh"
 grep -q 'OMI_AUTH_API_URL' "$ROOT/run.sh"
 grep -Fq 'cd "$MACOS_ROOT"' "$ROOT/scripts/omi-jit-qa"
 grep -Fq 'export OMI_SKIP_REWIND_SEED=1' "$ROOT/scripts/omi-jit-qa"
+grep -Fq 'export OMI_FORCE_BUCKET_CANDIDATES=0' "$ROOT/scripts/omi-jit-qa"
+grep -Fq 'export OMI_FORCE_BUCKET_WORKSTREAMS=0' "$ROOT/scripts/omi-jit-qa"
 prepare_line="$(grep -n 'omi_prepare_jit_qa_target.*derived' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 request_preflight_line="$(grep -n '^omi_preflight_jit_qa_launch_request' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
 dev_instance_line="$(grep -n 'source .*scripts/dev-instance.sh' "$ROOT/run.sh" | head -1 | cut -d: -f1)"
@@ -305,7 +307,8 @@ if [ "$(grep -c 'omi_write_jit_qa_bundle_env' "$ROOT/run.sh")" -lt 2 ]; then
     echo "FAIL: both full and fast bundle paths must rewrite the exact JIT QA tuple" >&2
     exit 1
 fi
-for launch_key in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE; do
+for launch_key in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE \
+    OMI_FORCE_BUCKET_CANDIDATES OMI_FORCE_BUCKET_WORKSTREAMS; do
     if ! grep -q -- "--env \"${launch_key}=\$${launch_key}\"" "$ROOT/run.sh"; then
         echo "FAIL: open launch does not forward $launch_key" >&2
         exit 1

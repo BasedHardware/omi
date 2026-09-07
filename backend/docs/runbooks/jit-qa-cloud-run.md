@@ -45,6 +45,8 @@ contains those managed lanes; the workflow only grants the QA runtime access
 and never creates, exports, or prints their values. No shared
 Redis/cache, Typesense, Pinecone, queue, connector, notification, or customer
 credential binding is copied into the plane.
+The desktop QA service also receives the development `GEMINI_API_KEY` binding
+required by its batch OCR path; the gateway does not receive that key.
 
 Memorystore Basic M1 pricing is approximately `$0.049/GiB-hour` in Iowa, or
 about `$35.77` for 730 hours for the 1 GiB instance, before other dev costs.
@@ -88,3 +90,9 @@ or real Firebase identity path is serving.
 The QA HTTP services advertise `jit-cloud-qa-v1`; the dedicated gateway enforces
 that same provider-attempt budget. This capability is confined to these named
 QA services. It does not alter rollout enrollment or open either maintenance job.
+
+The reserved `desktop/macos/scripts/omi-jit-qa` wrapper pins
+`OMI_FORCE_BUCKET_CANDIDATES=0` and `OMI_FORCE_BUCKET_WORKSTREAMS=0`;
+`run.sh` forwards both through `open`. This isolates JIT qualification from
+sibling candidate/workstream calls outside its budget. Ordinary named dev
+bundles retain their defaults; use a separately named bundle for those experiments.
