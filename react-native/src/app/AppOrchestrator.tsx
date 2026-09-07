@@ -108,6 +108,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
     null,
   );
+  const [activeOmiRequestId, setActiveOmiRequestId] = useState<string | null>(
+    null,
+  );
+  const omiRequestRef = useRef<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatEpoch, setChatEpoch] = useState(0);
   const chatMutationSeqRef = useRef(0);
@@ -208,6 +212,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   useEffect(() => {
     let active = true;
     chatSessionEpochRef.current += 1;
+    const retiredRequest = omiRequestRef.current;
+    omiRequestRef.current = null;
+    setActiveOmiRequestId(null);
+    if (retiredRequest !== null)
+      void omiBackend?.cancelOmiChat?.(retiredRequest).catch(() => undefined);
     if (onboardingRequired !== false) {
       // Leaving a ready session drops the previous session's transcript,
       // cursors, and message bookkeeping so nothing leaks across accounts or
@@ -269,6 +278,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       });
     return () => {
       active = false;
+      chatSessionEpochRef.current += 1;
+      const requestId = omiRequestRef.current;
+      omiRequestRef.current = null;
+      if (requestId !== null)
+        void backend.cancelOmiChat?.(requestId).catch(() => undefined);
     };
   }, [
     animatedChatMessageIds,
@@ -462,6 +476,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     const session = chatSessionEpochRef.current;
     chatMutationSeqRef.current += 1;
     let admitted = false;
+    let requestStarted = false;
     setChatBusy(true);
     setChatError(null);
     shouldFollowChat.current = true;
@@ -480,11 +495,21 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }
         },
         localMessage,
+        id => {
+          if (chatSessionEpochRef.current !== session) return false;
+          requestStarted = true;
+          omiRequestRef.current = id;
+          setActiveOmiRequestId(id);
+          return true;
+        },
       );
       // A gate transition (sign-out, dead session, plane switch) retired the
       // session this send belonged to: its canonical messages belong to the
       // previous account and must not seed the next session's transcript.
-      if (chatSessionEpochRef.current !== session) {
+      if (
+        chatSessionEpochRef.current !== session ||
+        (requestStarted && omiRequestRef.current !== localMessage.id)
+      ) {
         return;
       }
       setMessages(current => {
@@ -512,15 +537,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         ];
       });
     } catch (error) {
-      if (chatSessionEpochRef.current === session) {
-        if (!admitted) {
+      if (
+        chatSessionEpochRef.current === session &&
+        (!requestStarted || omiRequestRef.current === localMessage.id)
+      ) {
+        if (!admitted && !requestStarted) {
           setMessages(current =>
             current.filter(message => message.id !== localMessage.id),
           );
           setDraft(current => (current === '' ? text : current));
         }
         setChatError(
-          admitted
+          admitted || requestStarted
             ? 'Response interrupted. It may still complete.'
             : chatErrorCopy(error),
         );
@@ -529,8 +557,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }
       }
     } finally {
-      if (chatSessionEpochRef.current === session) {
+      if (
+        chatSessionEpochRef.current === session &&
+        (!requestStarted || omiRequestRef.current === localMessage.id)
+      ) {
         setActiveGenerationId(null);
+        omiRequestRef.current = null;
+        setActiveOmiRequestId(null);
         setChatBusy(false);
       }
     }
@@ -625,12 +658,33 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const stopGeneration = async () => {
     const backend = omiBackend;
     const generationId = activeGenerationId;
-    if (backend === undefined || backend === null || generationId === null) {
+    const requestId = omiRequestRef.current;
+    if (
+      backend === undefined ||
+      backend === null ||
+      (generationId === null && requestId === null)
+    ) {
       return;
     }
     const session = chatSessionEpochRef.current;
     try {
-      await cancelChatGeneration(backend, generationId);
+      if (requestId !== null) {
+        if (backend.cancelOmiChat === undefined)
+          throw new Error('Omi chat cancellation is unavailable');
+        await backend.cancelOmiChat(requestId);
+        if (
+          chatSessionEpochRef.current === session &&
+          omiRequestRef.current === requestId
+        ) {
+          omiRequestRef.current = null;
+          setActiveOmiRequestId(null);
+          setChatBusy(false);
+          setChatError(
+            'Response stopped locally. It may still complete on the server.',
+          );
+        }
+      } else if (generationId !== null)
+        await cancelChatGeneration(backend, generationId);
     } catch {
       if (chatSessionEpochRef.current === session) {
         setChatError('Could not stop the response.');
@@ -648,7 +702,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
 
   const composer = (
     <Composer
-      activeGenerationId={activeGenerationId}
+      activeGenerationId={activeGenerationId ?? activeOmiRequestId}
       chatBusy={chatBusy}
       compact={compact}
       composerFocused={composerFocused}
@@ -818,7 +872,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         <DesktopApp
           taskPagination={taskPagination}
           {...taskMutations}
-          activeGenerationId={activeGenerationId}
+          activeGenerationId={activeGenerationId ?? activeOmiRequestId}
           authError={authError}
           chatBusy={chatBusy}
           chatError={chatError}

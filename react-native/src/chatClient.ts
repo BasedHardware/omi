@@ -1,3 +1,8 @@
+import {
+  omiHistoryOffset,
+  parseOmiHistory,
+  parseOmiChatStream,
+} from './legacyOmiChat';
 import type {NativeHttpResponse, OmiBackend} from './omiNative';
 import {
   parseChatGenerationEventStream,
@@ -160,6 +165,9 @@ export async function loadChatHistory(
 export async function loadNewestChatHistory(
   backend: OmiBackend,
 ): Promise<ChatHistoryPage> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiHistory(backend, 0);
+  }
   return loadChatHistoryPage(backend, '/v1/chat-messages?limit=50');
 }
 
@@ -167,6 +175,9 @@ export async function loadOlderChatHistory(
   backend: OmiBackend,
   olderCursor: string,
 ): Promise<ChatHistoryPage> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiHistory(backend, omiHistoryOffset(olderCursor));
+  }
   if (olderCursor.length === 0) {
     throw new Error('Chat history cursor is empty');
   }
@@ -176,6 +187,20 @@ export async function loadOlderChatHistory(
   );
 }
 
+async function loadOmiHistory(
+  backend: OmiBackend,
+  offset: number,
+): Promise<ChatHistoryPage> {
+  const response = await backend.request({
+    id: 'omi-chat-history',
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: `/v2/messages?limit=50&offset=${offset}`,
+  });
+  if (response.status !== 200) throwBackendError(response);
+  return parseOmiHistory(response.body, offset);
+}
+
 async function loadChatHistoryPage(
   backend: OmiBackend,
   path: `/v1/chat-messages?${string}`,
@@ -183,6 +208,7 @@ async function loadChatHistoryPage(
   const response = await backend.request({
     id: 'chat-history',
     method: 'GET',
+    expectedApiContract: 'canonical',
     path,
   });
   if (response.status !== 200) {
@@ -224,11 +250,27 @@ export async function sendChatMessage(
   now: number = Date.now(),
   onGenerationStarted?: (generationId: string) => void,
   localMessage?: ChatMessage,
+  onRequestStarted?: (requestId: string) => boolean | void,
 ): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    if (backend.sendOmiChat === undefined)
+      throw new Error('Omi chat transport is unavailable');
+    const human = localMessage ?? createLocalChatMessage(text, now);
+    if (onRequestStarted?.(human.id) === false) {
+      throw Object.assign(new Error('Omi chat request retired'), {
+        code: 'OMI_HTTP_CANCELLED',
+      });
+    }
+    const response = await backend.sendOmiChat(human.id, text);
+    if (response.status !== 200) throwBackendError(response);
+    const assistant = parseOmiChatStream(response.body);
+    return {human, assistant};
+  }
   const id = (localMessage ?? createLocalChatMessage(text, now)).id;
   const response = await backend.request({
     id: `admit-${id}`,
     method: 'POST',
+    expectedApiContract: 'canonical',
     path: '/v1/chat-messages',
     body: JSON.stringify({
       op: 'create',

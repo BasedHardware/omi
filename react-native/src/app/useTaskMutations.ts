@@ -28,10 +28,12 @@ export function useTaskMutations({
   const acknowledged = useRef(false);
   const writesAvailable =
     enabled &&
-    omiBackend?.createWriteId !== undefined &&
+    omiBackend != null &&
     outcome?.status === 'success' &&
-    Number.isSafeInteger(outcome.value.accountEpoch) &&
-    outcome.value.accountEpoch !== null;
+    (outcome.value.apiContract === 'omi' ||
+      (omiBackend.createWriteId !== undefined &&
+        Number.isSafeInteger(outcome.value.accountEpoch) &&
+        outcome.value.accountEpoch !== null));
 
   const reset = useCallback(() => {
     ++generation.current;
@@ -143,7 +145,11 @@ export function useTaskMutations({
         return;
       }
       const task = outcome.value.items.find(item => item.id === id);
-      if (task?.revision == null || outcome.value.accountEpoch == null) {
+      if (
+        task === undefined ||
+        (outcome.value.apiContract !== 'omi' &&
+          (task.revision == null || outcome.value.accountEpoch == null))
+      ) {
         setError('Refresh this task before editing.');
         return;
       }
@@ -153,6 +159,9 @@ export function useTaskMutations({
       setError(null);
       try {
         const prepared = await prepareTaskPatch(omiBackend, {
+          ...(outcome.value.apiContract === 'omi'
+            ? {apiContract: 'omi' as const}
+            : {}),
           recordId: id,
           baseRevision: task.revision,
           accountEpoch: outcome.value.accountEpoch,

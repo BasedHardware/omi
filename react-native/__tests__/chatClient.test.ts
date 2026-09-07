@@ -481,3 +481,120 @@ test('canonical history replaces matching local echoes and retains pending rows'
     local[1],
   ]);
 });
+
+test('explicit old contract uses real messages history and send stream without canonical admission', async () => {
+  const human = {
+    id: 'old-human',
+    text: 'Hello',
+    sender: 'human',
+    created_at: '2026-09-07T00:00:00Z',
+  };
+  const ai = {
+    id: 'old-ai',
+    text: '你好',
+    sender: 'ai',
+    created_at: '2026-09-07T00:00:01Z',
+  };
+  const request = jest.fn(async () => ({
+    id: 'history',
+    status: 200,
+    body: JSON.stringify([ai, human]),
+  }));
+  const sendOmiChat = jest.fn(async () => ({
+    id: 'send',
+    status: 200,
+    body: `done: ${Buffer.from(JSON.stringify(ai)).toString('base64')}\n\n`,
+  }));
+  const generationEvents = jest.fn();
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+    sendOmiChat,
+    generationEvents,
+  } as unknown as OmiBackend;
+  expect(
+    (await loadNewestChatHistory(backend)).messages.map(item => item.id),
+  ).toEqual(['old-human', 'old-ai']);
+  expect(request.mock.calls[0]).toEqual([
+    {
+      id: 'omi-chat-history',
+      method: 'GET',
+      expectedApiContract: 'omi',
+      path: '/v2/messages?limit=50&offset=0',
+    },
+  ]);
+  const started = jest.fn();
+  const result = await sendChatMessage(backend, 'Hello', 1, started);
+  expect(result.human.id).not.toBe('old-human');
+  expect(result.human.localOnly).toBe(true);
+  expect(result.assistant?.text).toBe('你好');
+  expect(started).not.toHaveBeenCalled();
+  expect(generationEvents).not.toHaveBeenCalled();
+  expect(sendOmiChat).toHaveBeenCalledTimes(1);
+  await loadOlderChatHistory(backend, 'omi-offset:50');
+  expect(request).toHaveBeenLastCalledWith({
+    id: 'omi-chat-history',
+    method: 'GET',
+    expectedApiContract: 'omi',
+    path: '/v2/messages?limit=50&offset=50',
+  });
+});
+
+test('old send does not retry non-idempotent failures or infer canonical protocol', async () => {
+  const sendOmiChat = jest.fn(async () => ({
+    id: 'send',
+    status: 503,
+    body: '{}',
+  }));
+  const request = jest.fn();
+  const backend = {
+    getApiContract: async () => 'omi',
+    request,
+    sendOmiChat,
+  } as unknown as OmiBackend;
+  await expect(sendChatMessage(backend, 'Hello')).rejects.toBeInstanceOf(
+    ChatBackendError,
+  );
+  expect(sendOmiChat).toHaveBeenCalledTimes(1);
+  expect(request).not.toHaveBeenCalled();
+});
+
+test('retired old request never starts after a delayed contract lookup', async () => {
+  let release!: (value: 'omi') => void;
+  const sendOmiChat = jest.fn();
+  const backend = {
+    getApiContract: () =>
+      new Promise(resolve => {
+        release = resolve;
+      }),
+    sendOmiChat,
+  } as unknown as OmiBackend;
+  const result = sendChatMessage(
+    backend,
+    'Hello',
+    1,
+    undefined,
+    undefined,
+    () => false,
+  );
+  release('omi');
+  await expect(result).rejects.toMatchObject({code: 'OMI_HTTP_CANCELLED'});
+  expect(sendOmiChat).not.toHaveBeenCalled();
+});
+
+test('canonical admission remains tagged if selected transport changes before dispatch', async () => {
+  const request = jest.fn(async (input: NativeHttpRequest) => {
+    expect(input.expectedApiContract).toBe('canonical');
+    throw Object.assign(new Error('Backend changed'), {
+      code: 'OMI_HTTP_BACKEND_CHANGED',
+    });
+  });
+  const backend = {
+    getApiContract: async () => 'canonical',
+    request,
+  } as unknown as OmiBackend;
+  await expect(
+    sendChatMessage(backend, 'not dispatched'),
+  ).rejects.toMatchObject({code: 'OMI_HTTP_BACKEND_CHANGED'});
+  expect(request).toHaveBeenCalledTimes(1);
+});

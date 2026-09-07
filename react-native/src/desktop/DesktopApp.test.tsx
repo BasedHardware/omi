@@ -610,6 +610,8 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(tree).not.toContain('Font Size');
   expect(tree).not.toContain('Interface Sounds');
   expect(tree).toContain('AI & Automation');
+  expect(tree).toContain('Old backend');
+  expect(tree).toContain('New backend');
   expect(tree).toContain('Screen Capture');
   expect(tree).toContain('Audio Recording');
   expect(tree).toContain('Notifications');
@@ -622,8 +624,8 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   const advanced = renderedText(renderer);
   expect(advanced).toContain('AI & Automation');
   expect(advanced).toContain('Backend');
-  expect(advanced).toContain('old');
-  expect(advanced).toContain('new');
+  expect(advanced).toContain('Old backend');
+  expect(advanced).toContain('New backend');
   expect(advanced).not.toContain('workers.dev');
 });
 
@@ -905,7 +907,7 @@ test('Settings persists a plane switch before reloading the workspace', async ()
       .props.onPress();
   });
   await act(async () => {
-    pressText(renderer, 'new');
+    pressText(renderer, 'New backend');
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -930,7 +932,7 @@ test('Settings disables backend switching while admission is pending', async () 
   expect(renderedText(renderer)).toContain(
     'Stop the active response before switching backends.',
   );
-  for (const option of ['new', 'old']) {
+  for (const option of ['New backend', 'Old backend']) {
     expect(
       renderer.root.find(
         node =>
@@ -961,7 +963,7 @@ test('Settings surfaces a failed mutation and does not reload the workspace', as
       .props.onPress();
   });
   await act(async () => {
-    pressText(renderer, 'new');
+    pressText(renderer, 'New backend');
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -1221,4 +1223,31 @@ test('actual desktop task page exposes the shared pagination action', () => {
       .props.onPress(),
   );
   expect(onLoadMore).toHaveBeenCalledTimes(1);
+});
+
+test('Settings does not inherit unrelated chat and history failures', async () => {
+  const renderer = renderDesktop({
+    chatError: 'This request cannot be completed.',
+    readsPhase: 'unavailable',
+  });
+  expect(renderedText(renderer)).toContain('This request cannot be completed.');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain('Old backend');
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    "Some of your history isn't loaded yet.",
+  );
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Home')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('This request cannot be completed.');
 });

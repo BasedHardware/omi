@@ -1,3 +1,8 @@
+import {
+  loadOmiConversations,
+  loadOmiMemories,
+  loadOmiTasks,
+} from './legacyOmiReads';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {OmiBackend} from './omiNative';
 
@@ -9,7 +14,7 @@ export type ConversationProjection = {
   summary: string;
   searchableText: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   starred: boolean;
@@ -53,9 +58,9 @@ export type MemoryProjection = {
   timestamp: number | null;
   provenance: {
     label: string | null;
-    synthesisVersion: string;
-    inputDigest: string;
-    outputDigest: string;
+    synthesisVersion: string | null;
+    inputDigest: string | null;
+    outputDigest: string | null;
   };
 };
 
@@ -73,8 +78,8 @@ export type TaskProjection = {
   provenance: string[];
   sortOrder: number;
   indentLevel: number;
-  createdAt: number;
-  updatedAt: number;
+  createdAt: number | null;
+  updatedAt: number | null;
   revision: string | null;
 };
 
@@ -158,6 +163,7 @@ export type DomainRead<T extends DesktopReadProjection> = {
 };
 
 export type TaskRead = DomainRead<TaskProjection> & {
+  apiContract?: 'omi';
   accountEpoch: number | null;
 };
 
@@ -240,7 +246,18 @@ export function desktopReadErrorCopy(error: unknown): string {
   ) {
     return desktopBackendServiceCopy;
   }
-  return error instanceof Error ? error.message : 'Desktop read failed';
+  const message = error instanceof Error ? error.message : null;
+  return message !== null &&
+    [
+      desktopBackendConfigurationCopy,
+      desktopBackendUnauthorizedCopy,
+      desktopBackendServiceCopy,
+      desktopLocalBackendServiceCopy,
+      desktopProjectionUnavailableCopy,
+      desktopReadFailureCopy,
+    ].includes(message)
+    ? message
+    : desktopReadFailureCopy;
 }
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -320,8 +337,14 @@ async function read(
   backend: OmiBackend,
   id: string,
   path: `/${string}`,
+  expectedApiContract: 'omi' | 'canonical' = 'canonical',
 ): Promise<unknown> {
-  const response = await backend.request({id, method: 'GET', path});
+  const response = await backend.request({
+    id,
+    method: 'GET',
+    path,
+    expectedApiContract,
+  });
   if (response.status !== 200) {
     if (
       response.status === 400 &&
@@ -465,6 +488,12 @@ export async function loadConversations(
   backend: OmiBackend,
   cursor: string | null = null,
 ): Promise<DomainRead<ConversationProjection>> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiConversations(
+      path => read(backend, 'desktop-omi-read', path, 'omi'),
+      cursor,
+    );
+  }
   if (cursor !== null && (cursor.length === 0 || cursor.length > 16384)) {
     throw new Error('Conversation cursor is malformed');
   }
@@ -567,6 +596,12 @@ export async function loadMemories(
   backend: OmiBackend,
   cursor: string | null = null,
 ): Promise<DomainRead<MemoryProjection>> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiMemories(
+      path => read(backend, 'desktop-omi-read', path, 'omi'),
+      cursor,
+    );
+  }
   if (cursor !== null && cursor.length === 0) {
     throw new Error('Memory cursor is malformed');
   }
@@ -620,6 +655,12 @@ export async function loadTasks(
   backend: OmiBackend,
   cursor: string | null = null,
 ): Promise<TaskRead> {
+  if ((await backend.getApiContract?.()) === 'omi') {
+    return loadOmiTasks(
+      path => read(backend, 'desktop-omi-read', path, 'omi'),
+      cursor,
+    );
+  }
   if (cursor !== null && (cursor.length === 0 || cursor.length > 16384))
     throw new Error('Task cursor is malformed');
   const value = await read(

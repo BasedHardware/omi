@@ -77,6 +77,7 @@ jest.mock('../app/useReduceMotion', () => ({
 
 import {Animated} from 'react-native';
 import {Button} from './Button';
+import {ReadStatus} from './ReadStatus';
 import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
@@ -497,4 +498,28 @@ describe('signed-out Settings and first-run', () => {
       /try \{[^]*hasSession = await auth\.hasCloudSession\(\);[^]*\} catch \{[^]*hasSession = false;/,
     );
   });
+});
+
+test('legacy unknown completeness is not presented as a known incomplete read', () => {
+  const page = {
+    windowStatus: 'unknown' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'unknown' as const,
+    reasons: [],
+  };
+  const renderer = render(<ReadStatus label="Conversations" page={page} />);
+  expect(renderer.toJSON()).toBeNull();
+  act(() =>
+    renderer.update(
+      <ReadStatus
+        label="Conversations"
+        page={{...page, completenessStatus: 'incomplete'}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Conversations are incomplete.',
+  );
 });

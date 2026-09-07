@@ -385,7 +385,7 @@ export function ConversationsPage({
                     <RecordingTranscript
                       key={selected.id}
                       sessionId={selected.id.slice('recording:'.length)}
-                      revision={selected.updatedAt}
+                      revision={selected.updatedAt ?? undefined}
                     />
                   )}
               </>

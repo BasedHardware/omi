@@ -102,7 +102,8 @@ export function DesktopApp({
     });
     return () => subscription.remove();
   }, []);
-  const chatNotice = visibleChatError(session, chatError);
+  const chatNotice =
+    route === 'Home' ? visibleChatError(session, chatError) : null;
   // Session gate. Until OmiAuth reports a real cloud session with onboarding
   // complete, this shell paints no product IA at all: the probe keeps an
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
@@ -143,9 +144,9 @@ export function DesktopApp({
         onStop={onStop}
         route={route}
       />
-      {route === 'Home' ? null : (
+      {route === 'Conversations' || route === 'Tasks' ? (
         <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
-      )}
+      ) : null}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
           <DesktopHome
