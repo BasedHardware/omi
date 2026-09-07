@@ -36,7 +36,13 @@ import {
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
 test('desktop chrome uses the shipping Home Conversations IA', () => {
-  expect(desktopNavItems).toEqual(['Home', 'Conversations', 'Tasks', 'Apps']);
+  expect(desktopNavItems).toEqual([
+    'Home',
+    'Conversations',
+    'Rewind',
+    'Tasks',
+    'Apps',
+  ]);
   expect(isShippingDesktopNav('Home')).toBe(true);
   expect(isShippingDesktopNav('Conversations')).toBe(true);
   expect(isShippingDesktopNav('Chat')).toBe(false);

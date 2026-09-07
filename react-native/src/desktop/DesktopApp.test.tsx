@@ -674,14 +674,23 @@ test('Home renders real memories alongside conversations', () => {
   expect(tree).toContain('Memory');
 });
 
-test('Home keeps screen-history copy without a Rewind tab', () => {
+test('Home opens the real Rewind destination', async () => {
   const renderer = renderDesktop();
-  const homeTree = renderedText(renderer);
-  expect(homeTree).toContain('Screen history is ready when capture is on');
-  expect(homeTree).not.toContain("I'm ready.");
+  expect(renderedText(renderer)).toContain('Browse screen history');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Rewind')
+      .props.onPress();
+    await Promise.resolve();
+  });
   expect(
-    renderer.root.findAll(node => node.props.accessibilityLabel === 'Rewind'),
-  ).toHaveLength(0);
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Search screen history',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(renderedText(renderer)).not.toContain(
+    'Screen history is ready when capture is on',
+  );
 });
 
 const kitFiles = [

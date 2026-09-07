@@ -1,4 +1,5 @@
 #import "OmiAuthModule.h"
+#import "../../apple/OmiRecordingPolicy.h"
 
 #import <TargetConditionals.h>
 #if TARGET_OS_OSX
@@ -306,6 +307,14 @@ static NSDictionary *OmiAuthReadKeychainSession(NSString *service) {
       ? session : nil;
 }
 
+static NSDictionary *OmiAuthJWTPayload(NSString *token);
+
+NSDictionary *OmiAuthLocalHistoryIdentity(void) {
+  NSDictionary *session = OmiAuthReadKeychainSession(OmiAuthKeychainService());
+  NSString *token = [session[@"idToken"] isKindOfClass:NSString.class] ? session[@"idToken"] : nil;
+  return OmiRecordingLocalIdentity(session, OmiAuthJWTPayload(token));
+}
+
 static NSDictionary *OmiAuthReadShippingPreferences(void) {
   NSString *idToken = (__bridge_transfer NSString *)CFPreferencesCopyAppValue(
       CFSTR("auth_idToken"), CFSTR("com.omi.computer-macos"));
@@ -342,6 +351,7 @@ static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
   NSString *refreshToken = [session[@"refreshToken"] isKindOfClass:NSString.class]
       ? session[@"refreshToken"] : nil;
   if (idToken.length == 0 || refreshToken.length == 0) return NO;
+  session = OmiRecordingInitializeLogin(session);
   NSData *data = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
   if (data == nil) return NO;
   NSMutableDictionary *attributes = [@{
@@ -365,7 +375,10 @@ static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
 
 BOOL OmiAuthImportShippingSessionIfNeeded(void) {
   if (OmiAuthShippingSessionIgnored()) return NO;
-  if (OmiAuthReadKeychainSession(OmiAuthKeychainService()) != nil) return YES;
+  @synchronized (OmiAuthKeychainLock()) {
+  if (OmiAuthShippingSessionIgnored()) return NO;
+  NSDictionary *own = OmiAuthReadKeychainSession(OmiAuthKeychainService());
+  if (own != nil) return [own[@"journalLogin"] isKindOfClass:NSString.class] && [own[@"journalLogin"] length] > 0 ? YES : OmiAuthCopySessionIntoOwnKeychain(own);
   #if TARGET_OS_OSX
   if (OmiAuthUsesDataProtectionKeychain()) {
     for (NSString *service in OmiAuthShippingKeychainServices()) {
@@ -377,11 +390,17 @@ BOOL OmiAuthImportShippingSessionIfNeeded(void) {
   if (defaultsSession != nil && OmiAuthCopySessionIntoOwnKeychain(defaultsSession)) return YES;
   #endif
   return NO;
+  }
 }
 
 static NSDictionary *OmiAuthStoredSession(void) {
-  NSDictionary *own = OmiAuthReadKeychainSession(OmiAuthKeychainService());
-  if (own != nil) return own;
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *own = OmiAuthReadKeychainSession(OmiAuthKeychainService());
+    if (own != nil) {
+      if ([own[@"journalLogin"] isKindOfClass:NSString.class] && [own[@"journalLogin"] length] > 0) return own;
+      return OmiAuthCopySessionIntoOwnKeychain(own) ? OmiAuthReadKeychainSession(OmiAuthKeychainService()) : nil;
+    }
+  }
   if (OmiAuthImportShippingSessionIfNeeded()) {
     return OmiAuthReadKeychainSession(OmiAuthKeychainService());
   }

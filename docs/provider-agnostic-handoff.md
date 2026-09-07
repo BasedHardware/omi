@@ -2,6 +2,18 @@
 
 Updated 2026-09-07. Production readiness remains open. The user authorizes parallel work, full hardware coverage, logical commits and pushes to v5, and deployment to BasedHardware DEV.
 
+## Cursor Cloud continuation: Recall and legacy backend
+
+The user requested moving ongoing work to Cursor Cloud so their Mac can be closed. Start from BasedHardware/omi branch v5, not main. Preserve the v5 React Native and Objective-C++ architecture; consult main read-only for product parity and existing wire contracts. Commit logical verified changes and push to v5; never force-push, merge main, or deploy production. Use existing authenticated resources only; do not purchase access or copy local credentials into the cloud.
+
+The preceding commit 63d8a0e1c6 restored old backend conversations, memories, tasks and chat contracts and an explicit Old backend / New backend Settings toggle. Keep both operational; the user reported malformed responses everywhere. Missing new backend configuration must remain an explicit error, not silent fallback.
+
+The next checkpoint restores an actual macOS Rewind route, existing account-owned Omi SQLite/JPEG/HEVC history reads, literal OCR search, pagination and preview. New explicit capture uses ScreenCaptureKit and Vision Fast OCR into this app's separate local store; Rewind and Settings use the same capture session. Existing history is read-only. Account/login retirement, exclusions, stop/lock/sleep, timeout, retention and quota guards must be preserved. Do not replace these with placeholder cards or fake empty success.
+
+Local verification before cloud transfer: 57 focused UI/hook tests, native synthetic JPEG/HEVC reader tests, generated-image OCR and persistence/lifecycle tests, and iOS/macOS Debug builds passed. Synthetic browser checks exercised search, paging, preview, source and Start/Stop. Actual macOS permission/relaunch and live ScreenCaptureKit capture remain unverified; Linux cloud cannot certify those or physical BLE/iPad behavior. Full root check result is recorded in the checkpoint commit. Local /tmp logs are not available in cloud.
+
+Continue with regression investigation and full provider-independent backend coverage against real app contracts, mobile conversations/settings/navigation/onboarding polish, and hardware coverage using the existing parity documents below. Keep the existing Mind Map decision. Prioritize defects over redesign, use Bun 1.3.14, run repository gates and real user-facing paths where the cloud supports them. Do not claim production readiness from unit tests. DEV deployment is authorized only to based-hardware-dev after verifying current IAM/resources; earlier IAM blockers and portable identity/entitlement/attachment/formation gaps remain unless current evidence resolves them. Never default to the production GCP project. Document exact external blockers and remaining native/device checks.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), and current trusted chat context packets (01bdb648bb). Chat persistence and deployed gateway identity composition remain missing.
