@@ -15,6 +15,7 @@ jest.mock('react-native', () => {
       renderItem,
       ListHeaderComponent,
       ListFooterComponent,
+      ListEmptyComponent,
       ...listProps
     }: any) =>
       ReactRuntime.createElement(
@@ -22,11 +23,13 @@ jest.mock('react-native', () => {
         listProps,
         ListHeaderComponent,
         ListFooterComponent,
-        data.map((item: any, index: number) =>
-          ReactRuntime.cloneElement(renderItem({item, index}), {
-            key: item.key ?? item.id,
-          }),
-        ),
+        data.length === 0
+          ? ListEmptyComponent
+          : data.map((item: any, index: number) =>
+              ReactRuntime.cloneElement(renderItem({item, index}), {
+                key: item.key ?? item.id,
+              }),
+            ),
       ),
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
     Platform: {OS: 'ios'},
@@ -224,6 +227,35 @@ test('empty Daily Recaps keep incomplete conversation coverage instead of claimi
   });
   expect(renderedText(renderer)).toContain('Recaps are incomplete.');
   expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('empty Home tasks keep the complete-library copy by default', () => {
+  const renderer = render({tasks: []});
+  expect(renderedText(renderer)).toContain("Nothing's waiting on you.");
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'tasks empty state',
+    ),
+  ).toBeDefined();
+});
+
+test('empty Home tasks keep incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    tasks: [],
+    taskEmptyCopy: 'Tasks are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Tasks are incomplete.');
+  expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
+});
+
+test('empty Tasks tab keeps incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [],
+    taskEmptyCopy: 'Tasks are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Tasks are incomplete.');
+  expect(renderedText(renderer)).not.toContain("Nothing's waiting on you.");
 });
 
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {

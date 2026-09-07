@@ -1110,6 +1110,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           '',
           'No recaps yet',
         )}
+        taskEmptyCopy={emptyLibraryCopy(
+          'Tasks',
+          readOutcomes?.tasks.status === 'success'
+            ? readOutcomes.tasks.value.page
+            : null,
+          false,
+          '',
+          "Nothing's waiting on you.",
+        )}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'

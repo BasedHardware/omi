@@ -77,6 +77,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
   recapEmptyCopy?: string;
+  taskEmptyCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   askValue: string;
   onAskChange: (value: string) => void;
@@ -272,6 +273,7 @@ export function MobileAppSurface({
   recaps,
   recapStatus,
   recapEmptyCopy,
+  taskEmptyCopy,
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
@@ -365,7 +367,13 @@ export function MobileAppSurface({
             {taskFeedback}
             {taskStatus === 'ready' ? (
               tasks.length === 0 ? (
-                <StatePanel noun="tasks" status="empty" />
+                <View
+                  accessibilityLabel="tasks empty state"
+                  style={styles.statePanel}>
+                  <Text style={styles.stateText}>
+                    {taskEmptyCopy ?? "Nothing's waiting on you."}
+                  </Text>
+                </View>
               ) : (
                 <View style={styles.taskCard}>
                   {tasks.slice(0, 3).map(task => (
@@ -455,6 +463,7 @@ export function MobileAppSurface({
       recaps,
       recapStatus,
       recapEmptyCopy,
+      taskEmptyCopy,
       tasks,
       taskStatus,
     ],
@@ -510,7 +519,15 @@ export function MobileAppSurface({
                 keyExtractor={task => task.id}
                 ListFooterComponent={<>{taskPagination}</>}
                 ListHeaderComponent={taskFeedback}
-                ListEmptyComponent={<StatePanel noun="tasks" status="empty" />}
+                ListEmptyComponent={
+                  <View
+                    accessibilityLabel="tasks empty state"
+                    style={styles.statePanel}>
+                    <Text style={styles.stateText}>
+                      {taskEmptyCopy ?? "Nothing's waiting on you."}
+                    </Text>
+                  </View>
+                }
                 renderItem={({item}) => (
                   <TaskRow
                     onToggle={writesAvailable ? onTaskToggle : undefined}

@@ -44,6 +44,8 @@ Cloud Linux after the blank Settings stage slice: the mobile Settings tab withou
 
 Cloud Linux after the Home Daily Recaps honesty slice: Home recap cards used raw conversation titles, so untitled processing Listen rows stayed blank, and a ready empty recap list always said "No recaps yet" even when the conversation page was incomplete or degraded. Recaps now use the same visible title fallback as conversation rows and the same empty-library completeness copy. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after the Home tasks empty-library slice: a ready empty Home or Tasks-tab list always said "Nothing's waiting on you," even when the task page was incomplete or degraded. Those surfaces now use the same empty-library completeness copy as the shared Tasks page, keeping the existing complete-empty claim. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
