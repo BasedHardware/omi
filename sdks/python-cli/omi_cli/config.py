@@ -140,6 +140,7 @@ class Config:
     path: Path
     active_profile: str = DEFAULT_PROFILE_NAME
     profiles: dict[str, Profile] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def get_profile(self, name: Optional[str] = None) -> Profile:
         target = name or self.active_profile
@@ -172,7 +173,8 @@ def load(path: Optional[Path] = None) -> Config:
     profiles_data = data.get("profiles", {})
     profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
 
-    return Config(path=p, active_profile=active, profiles=profiles)
+    extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
+    return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
 
 
 def save(config: Config) -> None:
@@ -191,6 +193,7 @@ def save(config: Config) -> None:
         pass
 
     payload: dict[str, Any] = {
+        **config.extra,
         "active_profile": config.active_profile,
         "profiles": {name: p.to_toml_dict() for name, p in config.profiles.items()},
     }

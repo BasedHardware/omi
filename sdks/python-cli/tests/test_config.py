@@ -44,6 +44,25 @@ def test_load_missing_file_returns_empty_config(config_path: Path) -> None:
     assert config.profiles == {}
 
 
+def test_config_set_preserves_unknown_root_settings(config_path: Path, cli_runner) -> None:
+    config_path.write_text(
+        'active_profile = "default"\n'
+        'future_flag = true\n'
+        '[future_display]\n'
+        'language = "ar"\n'
+        '[profiles.default]\n'
+        'api_base = "https://api.omi.me"\n',
+        encoding="utf-8",
+    )
+    result = cli_runner.invoke(app, ["config", "set", "api_base", "https://example.test"])
+    assert result.exit_code == 0, result.output
+    with config_path.open("rb") as handle:
+        saved = cfg.tomllib.load(handle)
+    assert saved["profiles"]["default"]["api_base"] == "https://example.test"
+    assert saved["future_flag"] is True
+    assert saved["future_display"] == {"language": "ar"}
+
+
 def test_save_and_round_trip_preserves_unknown_keys(config_path: Path) -> None:
     config = cfg.load()
     profile = config.get_profile("work")
