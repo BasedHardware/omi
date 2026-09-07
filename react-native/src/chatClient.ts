@@ -57,6 +57,9 @@ export function chatErrorCopy(error: unknown): string {
   if (error.action === 'reauthenticate' || error.status === 401) {
     return 'Sign in again to continue.';
   }
+  if (error.status === 403 || error.backendCode === 'forbidden') {
+    return 'Chat is not available for this account.';
+  }
   if (error.status === 429) {
     return error.retryAfterSeconds === null
       ? 'Too many requests. Try again shortly.'

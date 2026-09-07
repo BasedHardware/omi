@@ -260,9 +260,7 @@ export function ConversationsPage({
                 <Text style={styles.projectionEmptyTitle}>
                   Conversations unavailable
                 </Text>
-                <Text style={styles.projectionEmptyCopy}>
-                  Conversations could not be loaded.
-                </Text>
+                <Text style={styles.projectionEmptyCopy}>{error}</Text>
               </View>
             ) : grouped.length === 0 ? (
               <View style={styles.projectionEmpty}>
