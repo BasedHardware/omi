@@ -671,7 +671,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get redoOnboarding => 'Redo Onboarding';
 
   @override
-  String get redoOnboardingDescription => 'Walk through the onboarding flow again from the start';
+  String get redoOnboardingDescription => 'Start over from the splash screen';
 
   @override
   String get importData => 'Importovať údaje';

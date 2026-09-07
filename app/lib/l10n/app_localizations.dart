@@ -1470,7 +1470,7 @@ abstract class AppLocalizations {
   /// Subtitle under the Redo Onboarding row in Developer settings
   ///
   /// In en, this message translates to:
-  /// **'Walk through the onboarding flow again from the start'**
+  /// **'Start over from the splash screen'**
   String get redoOnboardingDescription;
 
   /// Import data feature name

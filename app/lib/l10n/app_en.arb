@@ -875,7 +875,7 @@
     "@redoOnboarding": {
         "description": "Developer settings row that restarts the onboarding flow from the splash screen"
     },
-    "redoOnboardingDescription": "Walk through the onboarding flow again from the start",
+    "redoOnboardingDescription": "Start over from the splash screen",
     "@redoOnboardingDescription": {
         "description": "Subtitle under the Redo Onboarding row in Developer settings"
     },

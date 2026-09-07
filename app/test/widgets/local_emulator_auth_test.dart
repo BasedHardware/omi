@@ -49,7 +49,7 @@ Future<void> _pumpAuth(WidgetTester tester, _RecordingAuthProvider authProvider,
 }
 
 void main() {
-  testWidgets('a tap on Google does not sign in as Alice', (tester) async {
+  testWidgets('a tap on Google points at the hold instead of starting OAuth on local_dev', (tester) async {
     final authProvider = _RecordingAuthProvider();
     addTearDown(authProvider.dispose);
     var signedIn = false;
@@ -62,8 +62,11 @@ void main() {
     await tester.tap(find.byKey(const Key('googleSignIn')));
     await tester.pump();
 
+    // The web OAuth flow has no client IDs locally and would hold the
+    // provider's loading guard for minutes, deadening every later press.
     expect(authProvider.localEmulatorSignInCalls, 0);
-    expect(authProvider.googleSignInCalls, 1);
+    expect(authProvider.googleSignInCalls, 0);
+    expect(find.textContaining('Hold for 5 seconds'), findsOneWidget);
     expect(signedIn, isFalse);
   });
 

@@ -27,6 +27,26 @@ class _AuthComponentState extends State<AuthComponent> {
     provider.onLocalEmulatorSignIn(widget.onSignIn);
   }
 
+  /// A tap runs the real provider sign-in everywhere except local_dev. There
+  /// the harness has no OAuth client IDs, so the web flow opens a 500 page and
+  /// then waits up to five minutes for a callback that never comes — and while
+  /// it waits the provider's loading guard swallows every later tap and hold,
+  /// which reads as the buttons being dead. Point at the hold instead.
+  void _onProviderTap(VoidCallback signIn) {
+    HapticFeedback.mediumImpact();
+    if (localEmulatorSignInEnabled(Env.profile)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Hold for ${kLocalEmulatorSignInHoldDuration.inSeconds} seconds to sign in as the local emulator user',
+          ),
+        ),
+      );
+      return;
+    }
+    signIn();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
@@ -80,10 +100,7 @@ class _AuthComponentState extends State<AuthComponent> {
                           key: const Key('appleSignIn'),
                           enabled: localEmulatorSignInEnabled(Env.profile),
                           onHoldComplete: () => _onLocalEmulatorSignIn(provider),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            provider.onAppleSignIn(widget.onSignIn);
-                          },
+                          onPressed: () => _onProviderTap(() => provider.onAppleSignIn(widget.onSignIn)),
                           child: _AuthSignInButtonFace(
                             icon: const FaIcon(FontAwesomeIcons.apple, size: 24, color: Colors.black),
                             label: context.l10n.signInWithApple,
@@ -101,10 +118,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         key: const Key('googleSignIn'),
                         enabled: localEmulatorSignInEnabled(Env.profile),
                         onHoldComplete: () => _onLocalEmulatorSignIn(provider),
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          provider.onGoogleSignIn(widget.onSignIn);
-                        },
+                        onPressed: () => _onProviderTap(() => provider.onGoogleSignIn(widget.onSignIn)),
                         child: _AuthSignInButtonFace(
                           icon: const FaIcon(FontAwesomeIcons.google, size: 20, color: Colors.black),
                           label: context.l10n.signInWithGoogle,
