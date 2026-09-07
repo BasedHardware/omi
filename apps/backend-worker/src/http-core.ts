@@ -1,5 +1,3 @@
-import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
-
 import { readHistory, readSettings, type Admission } from "./chat";
 import {
   conversationPage,
@@ -248,41 +246,6 @@ async function readBoundedJsonStream(
   } catch {
     return { kind: "invalid" };
   }
-}
-
-export function emptyPage(
-  completenessVersion: "recall-completeness-v1" | "tasks-completeness-v1"
-) {
-  return {
-    contractVersion: SYNTHESIZED_READ_CONTRACT_VERSION,
-    items: [],
-    window: {
-      status: "complete",
-      complete: true,
-      hasMore: false,
-      nextCursor: null,
-    },
-    completeness: {
-      version: completenessVersion,
-      status: "complete",
-      reasons: [],
-      frontiers:
-        completenessVersion === "tasks-completeness-v1"
-          ? {
-              declaredFrontier: "frontier-v1:tasks-declared",
-              newestAppliedFrontier: "frontier-v1:tasks-declared",
-              missingAppliedFrontierReason: null,
-            }
-          : {
-              declaredFrontier: "frontier-v1:declared",
-              newestSearchedAcceptedFrontier: null,
-              missingAcceptedFrontierReason: "no_accepted_work",
-              newestSearchedStmFrontier: null,
-              missingStmFrontierReason: "no_eligible_stm",
-            },
-    },
-    absence: { kind: "query_gap" },
-  };
 }
 
 async function firebaseAccountId(

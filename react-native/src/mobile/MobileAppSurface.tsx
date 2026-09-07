@@ -478,9 +478,13 @@ export function MobileAppSurface({
             )}
           </View>
           {activeRoute === 'settings' ? (
-            <View accessibilityLabel="Settings stage" style={styles.flex}>
-              {settingsContent}
-            </View>
+            settingsContent ? (
+              <View accessibilityLabel="Settings stage" style={styles.flex}>
+                {settingsContent}
+              </View>
+            ) : (
+              <StatePanel noun="settings" status="error" />
+            )
           ) : activeRoute === 'apps' ? (
             appsContent ? (
               <View accessibilityLabel="Connectors stage" style={styles.flex}>

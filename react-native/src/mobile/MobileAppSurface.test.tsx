@@ -207,6 +207,20 @@ test('mounted apps content is not replaced by an empty catalogue', () => {
   expect(renderedText(renderer)).not.toContain('No apps connected yet');
 });
 
+test('missing settings content reports unavailable instead of a blank settings stage', () => {
+  const renderer = render({activeRoute: 'settings'});
+  expect(renderedText(renderer)).toContain('Couldn’t load settings');
+});
+
+test('mounted settings content is not replaced by a blank settings stage', () => {
+  const renderer = render({
+    activeRoute: 'settings',
+    settingsContent: <Text>Account settings loaded</Text>,
+  });
+  expect(renderedText(renderer)).toContain('Account settings loaded');
+  expect(renderedText(renderer)).not.toContain('Couldn’t load settings');
+});
+
 test('task edits wait for authoritative props and preserve a failed draft for retry', () => {
   const onTaskEdit = jest.fn();
   const onTaskToggle = jest.fn();
