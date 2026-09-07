@@ -1613,6 +1613,113 @@ test('nested non-retryable training opt-in writes omit Try again', async () => {
   );
 });
 
+test('Settings AI does not claim developer webhooks unavailable while account is loading', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockReturnValueOnce(new Promise(() => {}));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Loading developer webhooks…');
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'No developer webhooks were returned.',
+  );
+});
+
+test('Settings reports a nested non-retryable webhook read as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: desktopAccountSettingUnavailableCopy,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'No developer webhooks were returned.',
+  );
+});
+
+test('Settings keeps an honest empty developer webhook catalogue', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [],
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'No developer webhooks were returned.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Developer webhook status is unavailable.',
+  );
+});
+
 test('actual desktop Tasks controls toggle and edit through shared mutation callbacks', () => {
   const onTaskToggle = jest.fn();
   const onTaskEdit = jest.fn();

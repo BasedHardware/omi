@@ -635,6 +635,49 @@ export function DesktopSettings({
     </>
   );
 
+  const automation = (
+    <>
+      {advanced}
+      {session !== 'ready' ? (
+        <Row
+          copy="Sign in to load this account setting."
+          title="Developer Webhooks"
+        />
+      ) : account === null ? (
+        <Row copy="Loading developer webhooks…" title="Developer Webhooks" />
+      ) : account.webhooks === null ? (
+        <Row
+          copy={
+            account.webhooksError ?? 'Developer webhook status is unavailable.'
+          }
+          title="Developer Webhooks"
+        />
+      ) : account.webhooks.length === 0 ? (
+        <Row
+          copy="No developer webhooks were returned."
+          title="Developer Webhooks"
+        />
+      ) : (
+        account.webhooks.map(webhook => (
+          <Row
+            copy={[
+              webhook.enabled === null
+                ? 'Status unknown'
+                : webhook.enabled
+                ? 'Enabled'
+                : 'Disabled',
+              webhook.url,
+            ]
+              .filter(item => item !== null)
+              .join(' · ')}
+            key={webhook.type}
+            title={webhook.type}
+          />
+        ))
+      )}
+    </>
+  );
+
   const body =
     pane === 'General'
       ? general
@@ -647,7 +690,7 @@ export function DesktopSettings({
       : pane === 'Alerts & Privacy'
       ? alerts
       : pane === 'AI & Automation'
-      ? advanced
+      ? automation
       : about;
 
   return (
