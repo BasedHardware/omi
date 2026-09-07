@@ -2,6 +2,8 @@
 static void require(BOOL value) { if (!value) abort(); }
 int main() {
   @autoreleasepool {
+    for (NSNumber *status in @[@408, @429, @500, @503, @599]) require(OmiRecordingRetryableOwnershipStatus(status.integerValue));
+    for (NSNumber *status in @[@200, @400, @401, @403, @409, @600]) require(!OmiRecordingRetryableOwnershipStatus(status.integerValue));
     NSDictionary *beforeForget = @{@"idToken":@"new-token", @"rememberedDevice":@{@"id":@"old-device"}};
     require(OmiRememberedRefreshSession(beforeForget, @{})[@"rememberedDevice"] == nil);
     NSDictionary *replacement = @{@"rememberedDevice":@{@"id":@"new-device"}};

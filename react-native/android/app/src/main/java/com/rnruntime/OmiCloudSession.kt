@@ -89,16 +89,19 @@ object OmiCloudSession {
 
   @Synchronized fun hasSession(context: Context): Boolean = read(context) != null || token(context) != null
 
-  @Synchronized fun invalidateToken(context: Context, failedToken: String): Boolean {
+  @Synchronized fun invalidateToken(context: Context, failedToken: String, publicationLock: Any = OmiCloudSession, active: () -> Boolean = { true }): Boolean {
     val session = read(context)
     val current = session?.getString("idToken") ?: if (preferences(context).getBoolean("signedOut", false)) null
       else System.getenv("OMI_CLOUD_API_TOKEN").orEmpty().ifEmpty { System.getenv("OMI_API_TOKEN").orEmpty() }
-    if (current != failedToken) return false
-    signOut(context)
-    return true
+    synchronized(publicationLock) {
+      if (!active() || current != failedToken) return false
+      signOut(context)
+      return true
+    }
   }
 
-  @Synchronized fun token(context: Context): String? {
+  @Synchronized fun token(context: Context, publicationLock: Any = OmiCloudSession, current: () -> Boolean = { true }): String? {
+    if (!current()) return null
     val session = read(context) ?: return if (preferences(context).getBoolean("signedOut", false)) null
       else System.getenv("OMI_CLOUD_API_TOKEN").orEmpty().ifEmpty { System.getenv("OMI_API_TOKEN").orEmpty() }.ifEmpty { null }
     if (session.getLong("expiresAt") > System.currentTimeMillis() + 60_000) return session.getString("idToken")
@@ -108,7 +111,7 @@ object OmiCloudSession {
         "application/x-www-form-urlencoded")
     } catch (error: HttpFailure) {
       if (error.status == 400 || error.status == 401 || error.status == 403) {
-        signOut(context)
+        synchronized(publicationLock) { if (current()) signOut(context) }
         return null
       }
       throw error
@@ -117,7 +120,10 @@ object OmiCloudSession {
     next.put("journalLogin", session.optString("journalLogin").ifEmpty { java.util.UUID.randomUUID().toString() })
     session.optJSONObject("recordingOwner")?.let { next.put("recordingOwner", it) }
     session.optJSONObject("rememberedDevice")?.let { next.put("rememberedDevice", it) }
-    save(context, next)
+    synchronized(publicationLock) {
+      if (!current()) return null
+      save(context, next)
+    }
     return next.getString("idToken")
   }
 

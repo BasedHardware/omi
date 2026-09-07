@@ -26,6 +26,8 @@ public final class RecordingPolicyTest {
     assert !OmiRecordingPolicy.rememberedCurrent(1, 1, "login", "other", true);
     assert !OmiRecordingPolicy.rememberedCurrent(1, 1, "login", null, true);
     assert !OmiRecordingPolicy.rememberedCurrent(1, 1, "login", "login", false);
+    for (int status : new int[]{408, 429, 500, 503, 599}) assert OmiRecordingPolicy.retryableOwnershipStatus(status);
+    for (int status : new int[]{200, 400, 401, 403, 409, 600}) assert !OmiRecordingPolicy.retryableOwnershipStatus(status);
     assert OmiRecordingPolicy.offline(new java.net.SocketTimeoutException());
     assert OmiRecordingPolicy.offline(new java.net.ConnectException());
     assert OmiRecordingPolicy.offline(new java.net.UnknownHostException());

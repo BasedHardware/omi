@@ -34,3 +34,7 @@ for platform_source in 0 1; do
     "$repo_root/react-native/apple/tests/OmiNativeStorageReplacementTest.mm" -o "$build_dir/storage-replacement"
   "$build_dir/storage-replacement"
 done
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security -framework LocalAuthentication -Wno-nullability-completeness \
+  -I"$repo_root/react-native/apple/tests" \
+  "$repo_root/react-native/apple/tests/OmiBackendDisposalTest.mm" -o "$build_dir/backend-disposal"
+"$build_dir/backend-disposal"
