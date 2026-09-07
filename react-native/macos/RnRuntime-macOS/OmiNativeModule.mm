@@ -43,6 +43,7 @@ static NSString *const OmiChargingUUID = @"19b10013-e8f2-537e-4f6c-d104768a1214"
 @property(nonatomic) BOOL scanning;
 @property(nonatomic) BOOL observing;
 @property(nonatomic) OmiBleReconnectState reconnectState;
+@property(nonatomic) OmiBleFirstAudio firstAudio;
 @property(nonatomic, strong) CBPeripheral *reconnectPeripheral;
 @property(nonatomic) BOOL buttonNotifying;
 @property(nonatomic) BOOL buttonSubscriptionRequested;
@@ -285,6 +286,7 @@ RCT_REMAP_METHOD(connectDevice,
   self.scanning = NO;
   [self finishSetting:nil error:@"Omi connection was replaced"];
   [self.settingCharacteristics removeAllObjects];
+  _firstAudio.cancel();
   self.buttonNotifying = NO;
   self.buttonSubscriptionRequested = NO;
   self.audioNotifying = NO;
@@ -495,6 +497,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if (self.settingWritten && self.pendingSettingCharacteristic == characteristic) [self finishSetting:nil error:@"Device setting read-back failed"];
     return;
   }
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]] && _firstAudio.receive(characteristic.value.length)) [self emitSnapshot];
   NSString *identifier = peripheral.identifier.UUIDString;
   if (self.devices[identifier] == nil) self.devices[identifier] = [self deviceDictionary:identifier name:peripheral.name ?: @"Omi" rssi:nil];
   if (characteristic == self.settingCharacteristics[OmiButtonUUID]) {
@@ -594,6 +597,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     @"microphone": @"unknown",
     @"notifications": @"unknown",
   } mutableCopy];
+  if ([self.connectionState isEqual:@"connected"]) snapshot[@"audioStatus"] = _firstAudio.observed ? @"active" : @"waiting";
   if (self.codec != nil) {
     snapshot[@"codec"] = self.codec;
   }
@@ -807,9 +811,26 @@ RCT_REMAP_METHOD(setDeviceSetting,
   else if (reject != nil) reject(@"OMI_DEVICE_SETTING_FAILED", error ?: @"Device setting failed", nil);
 }
 
+- (void)watchFirstAudio:(CBPeripheral *)peripheral generation:(NSUInteger)generation {
+  NSUInteger ticket = _firstAudio.generation;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, OmiBleFirstAudio::windowMs * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+    if (self.connectionGeneration != generation || !OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
+    int outcome = self->_firstAudio.timeout(ticket);
+    if (outcome == 1) {
+      CBCharacteristic *audio = nil;
+      for (CBService *service in peripheral.services) if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiServiceUUID]])
+        for (CBCharacteristic *characteristic in service.characteristics) if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]]) audio = characteristic;
+      if (audio == nil) { [self retireConnection:@"Omi audio is unavailable"]; return; }
+      [peripheral setNotifyValue:YES forCharacteristic:audio];
+      [self watchFirstAudio:peripheral generation:generation];
+    } else if (outcome == -1) { self.lastEvent = @"Omi connected · Waiting for audio"; [self emitSnapshot]; }
+  });
+}
+
 - (void)finishConnectionIfReady {
   if (!self.audioNotifying || self.codec == nil || self.connectedPeripheral == nil) return;
   self.lastEvent = @"Omi audio notify is live";
+  if (_firstAudio.begin()) [self watchFirstAudio:self.connectedPeripheral generation:self.connectionGeneration];
   self.reconnectPeripheral = self.connectedPeripheral;
   OmiBleReconnectReady(&_reconnectState);
   if (self.connectResolve != nil) {
@@ -827,6 +848,7 @@ RCT_REMAP_METHOD(setDeviceSetting,
   [self.settingCharacteristics removeAllObjects];
   CBPeripheral *previous = self.connectedPeripheral;
   self.connectedPeripheral = nil;
+  _firstAudio.cancel();
   self.buttonNotifying = NO;
   self.buttonSubscriptionRequested = NO;
   self.audioNotifying = NO;

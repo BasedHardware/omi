@@ -176,3 +176,58 @@ test.each(['compact', 'overview'] as const)(
     }
   },
 );
+
+test('connected audio status waits for an actual packet without changing capture ownership', () => {
+  const base: PlatformNativeSnapshot = {
+    bluetooth: 'poweredOn',
+    phase: 'connected',
+    capture: 'recording',
+    connectedDeviceId: 'omi',
+    devices: [{id: 'omi', name: 'Omi', connected: true}],
+    lastEvent: '',
+    microphone: 'unknown',
+    notifications: 'unknown',
+  };
+  expect(homeConnectionStatus({...base, audioStatus: 'waiting'}).label).toBe(
+    'Connected · Waiting for audio',
+  );
+  expect(homeConnectionStatus({...base, audioStatus: 'active'}).label).toBe(
+    'Connected · Listening',
+  );
+  expect(
+    homeConnectionStatus({...base, capture: 'idle', audioStatus: 'waiting'})
+      .label,
+  ).toBe('Connected · Ready');
+});
+
+test.each(['compact', 'overview', 'affordance'] as const)(
+  '%s shows transport-ready waiting status',
+  async variant => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          onScan={() => {}}
+          onToggle={() => {}}
+          nativeSnapshot={{
+            bluetooth: 'poweredOn',
+            phase: 'connected',
+            capture: 'recording',
+            audioStatus: 'waiting',
+            connectedDeviceId: 'omi',
+            devices: [{id: 'omi', name: 'Omi', connected: true}],
+            lastEvent: '',
+            microphone: 'unknown',
+            notifications: 'unknown',
+          }}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('Waiting for audio');
+    expect(JSON.stringify(renderer.toJSON())).not.toContain('Listening');
+    await act(async () => renderer.unmount());
+  },
+);

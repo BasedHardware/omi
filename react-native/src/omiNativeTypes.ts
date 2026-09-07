@@ -118,6 +118,7 @@ export type NativeSnapshot = {
   codec?: number;
   captureMode?: CaptureMode;
   background?: 'inactive' | 'active';
+  audioStatus?: 'waiting' | 'active';
   audioRoute?: string;
 };
 

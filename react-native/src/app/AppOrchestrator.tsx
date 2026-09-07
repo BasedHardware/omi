@@ -976,6 +976,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         askValue={draft}
         capture={{
           active: nativeSnapshot?.capture === 'recording',
+          waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
           transcript: '',
         }}
         device={{connected: connectedDevice !== null, label: homeStatus}}
