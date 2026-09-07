@@ -25,8 +25,12 @@ def test_ambiguous_write_is_not_replayed(authed_profile, respx_mock, monkeypatch
 
     respx_mock.route(method=method.upper(), path="/v1/dev/user/goals").mock(side_effect=server)
     with OmiClient(authed_profile) as client:
-        with pytest.raises(ServerError, match="outcome unknown"):
+        with pytest.raises(ServerError, match="outcome unknown") as info:
             getattr(client, method)("/v1/dev/user/goals", json_body={"title": "synthetic"})
+    if failure == "server_error":
+        assert "500" in info.value.message
+        assert "response failed after commit" in info.value.detail
+        assert "check the resource" in info.value.detail
     assert len(applied) == 1
 
 
@@ -39,6 +43,34 @@ def test_write_retries_before_submission(authed_profile, respx_mock, monkeypatch
     with OmiClient(authed_profile) as client:
         assert client.post("/v1/dev/user/goals", json_body={"title": "synthetic"}) == {"id": "g1"}
     assert route.call_count == 2
+
+
+@pytest.mark.parametrize("method", ["post", "patch"])
+@pytest.mark.parametrize("failure", [httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout])
+def test_exhausted_write_connection_retries(authed_profile, respx_mock, monkeypatch, method, failure):
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    route = respx_mock.route(method=method.upper(), path="/v1/dev/user/goals").mock(
+        side_effect=failure("not submitted")
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError, match="Connection failed") as info:
+            getattr(client, method)("/v1/dev/user/goals", json_body={"title": "synthetic"})
+    assert info.value.exit_code == 3
+    assert "outcome unknown" not in str(info.value)
+    assert route.call_count == 4
+
+
+def test_goal_create_reports_exhausted_connection(authed_profile, respx_mock, monkeypatch, capsys):
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    route = respx_mock.post("/v1/dev/user/goals").mock(side_effect=httpx.ConnectTimeout("not submitted"))
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "create", "synthetic", "--target", "1"])
+    with pytest.raises(SystemExit) as info:
+        main()
+    assert info.value.code == 3
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err or captured.out)
+    assert "Connection failed" in str(payload)
+    assert route.call_count == 4
 
 
 def test_read_still_retries_after_timeout(authed_profile, respx_mock, monkeypatch):

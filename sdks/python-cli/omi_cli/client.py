@@ -157,7 +157,7 @@ class OmiClient:
                     return self._handle_response(response)
         except _RetryableHttp as exc:
             if method in {"POST", "PATCH"} and exc.response.status_code >= 500:
-                raise _unknown_write_outcome(method) from exc
+                raise _unknown_write_outcome(method, response=exc.response) from exc
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
         except httpx.TransportError as exc:
@@ -165,6 +165,11 @@ class OmiClient:
                 exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
             ):
                 raise _unknown_write_outcome(method) from exc
+            if method in {"POST", "PATCH"}:
+                raise ServerError(
+                    message="Connection failed",
+                    detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
+                ) from exc
             raise
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
@@ -258,13 +263,20 @@ def _may_retry(method: str, exc: BaseException) -> bool:
     return False
 
 
-def _unknown_write_outcome(method: str) -> ServerError:
+def _unknown_write_outcome(method: str, *, response: Optional[httpx.Response] = None) -> ServerError:
+    message = f"{method} outcome unknown"
+    detail = (
+        "The server may have applied this write. It was not retried automatically; "
+        "check the resource before retrying."
+    )
+    if response is not None:
+        message += f" (HTTP {response.status_code})"
+        server_detail = _extract_detail(response)
+        if server_detail:
+            detail += f" Server detail: {server_detail}"
     return ServerError(
-        message=f"{method} outcome unknown",
-        detail=(
-            "The server may have applied this write. It was not retried automatically; "
-            "check the resource before retrying."
-        ),
+        message=message,
+        detail=detail,
     )
 
 
