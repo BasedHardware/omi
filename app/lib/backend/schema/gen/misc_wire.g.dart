@@ -93,11 +93,13 @@ class GeneratedKnowledgeGraphResponse {
 class GeneratedRebuildResponse {
   final int edgesCount;
   final int nodesCount;
+  final String? rebuildId;
   final String status;
 
   const GeneratedRebuildResponse({
     required this.edgesCount,
     required this.nodesCount,
+    this.rebuildId,
     required this.status,
   });
 
@@ -105,6 +107,7 @@ class GeneratedRebuildResponse {
     return GeneratedRebuildResponse(
       edgesCount: _required(_readFieldValue<int>(_readField(json, const ["edges_count"]), "edges_count", _readInt, requiredField: true, nullable: false), "edges_count"),
       nodesCount: _required(_readFieldValue<int>(_readField(json, const ["nodes_count"]), "nodes_count", _readInt, requiredField: true, nullable: false), "nodes_count"),
+      rebuildId: _readFieldValue<String>(_readField(json, const ["rebuild_id"]), "rebuild_id", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
@@ -113,6 +116,7 @@ class GeneratedRebuildResponse {
     return {
       'edges_count': edgesCount,
       'nodes_count': nodesCount,
+      'rebuild_id': rebuildId,
       'status': status,
     };
   }

@@ -6028,6 +6028,11 @@
               }
             ],
             "title": "Rebuild"
+          },
+          "shared_truncated": {
+            "default": false,
+            "title": "Shared Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -21261,6 +21266,17 @@
           "nodes_count": {
             "title": "Nodes Count",
             "type": "integer"
+          },
+          "rebuild_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebuild Id"
           },
           "status": {
             "title": "Status",
