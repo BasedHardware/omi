@@ -8,6 +8,7 @@ import asyncio
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 import copy
+from datetime import datetime, timezone
 import ipaddress
 import logging
 import os
@@ -43,7 +44,7 @@ TRUSTED_PROXIES = set(
     ip.strip()
     for ip in os.getenv(
         "TRUSTED_PROXIES",
-        "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,testclient",
+        "127.0.0.1,::1,testclient",
     ).split(",")
     if ip.strip()
 )
@@ -122,7 +123,7 @@ rate_limiter = SlidingWindowRateLimiter()
 
 
 def is_trusted_proxy(ip_str: str) -> bool:
-    """Check if direct connection host matches trusted proxy configuration or private network."""
+    """Check if direct connection host matches trusted proxy configuration."""
     if not ip_str or ip_str == "unknown":
         return False
     if ip_str in TRUSTED_PROXIES or "*" in TRUSTED_PROXIES:
@@ -135,7 +136,7 @@ def is_trusted_proxy(ip_str: str) -> bool:
                     return True
             except ValueError:
                 continue
-        return ip_obj.is_loopback or ip_obj.is_private
+        return False
     except ValueError:
         return False
 
@@ -157,7 +158,7 @@ def rate_limit_dependency(request: Request) -> None:
     if not rate_limiter.is_allowed(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Maximum 60 requests per minute.",
+            detail=f"Rate limit exceeded. Maximum {RATE_LIMIT_REQUESTS} requests per minute.",
         )
 
 
@@ -242,12 +243,22 @@ async def health_check() -> Dict[str, Any]:
         upstream_ok = False
         client = get_http_client()
         try:
-            resp = await client.get(
+            images_task = client.get(
                 f"{NASA_IMAGES_BASE_URL}/search",
                 params={"q": "sun", "media_type": "image"},
                 timeout=3.5,
             )
-            upstream_ok = resp.status_code == 200
+            api_task = client.get(
+                f"{NASA_API_BASE_URL}/planetary/apod",
+                params={"api_key": NASA_API_KEY},
+                timeout=3.5,
+            )
+            images_resp, api_resp = await asyncio.gather(
+                images_task, api_task, return_exceptions=True
+            )
+            images_ok = not isinstance(images_resp, Exception) and images_resp.status_code == 200
+            api_ok = not isinstance(api_resp, Exception) and api_resp.status_code == 200
+            upstream_ok = images_ok and api_ok
         except Exception as e:
             logger.warning("NASA upstream health probe failed: %s", e)
         cached_status = upstream_ok
@@ -369,8 +380,9 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
                     detail=f"Upstream NASA APOD returned HTTP {resp.status_code}: {resp.text}",
                 )
             cached = resp.json()
-            # If historical date, cache longer (24h); if today, cache for 1 hour
-            ttl = 86400.0 if payload.date else 3600.0
+            # If historical date, cache longer (24h); if today or unspecified, cache for 1 hour
+            today_utc = time.strftime("%Y-%m-%d", time.gmtime())
+            ttl = 3600.0 if (not payload.date or payload.date == today_utc) else 86400.0
             cache.set(cache_key, cached, ttl_seconds=ttl)
         except HTTPException:
             raise
@@ -388,6 +400,7 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
         media_type=cached.get("media_type", "image"),
         url=cached.get("url", ""),
         hdurl=cached.get("hdurl"),
+        thumbnail_url=cached.get("thumbnail_url"),
         copyright=cached.get("copyright"),
     )
 
@@ -411,6 +424,8 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
         links.append(f"[{label}]({apod.url})")
     if apod.hdurl and apod.hdurl != apod.url:
         links.append(f"[Full Resolution]({apod.hdurl})")
+    if apod.thumbnail_url:
+        links.append(f"[Video Thumbnail]({apod.thumbnail_url})")
 
     if links:
         lines.append(f"**Media Link:** {' • '.join(links)}")
@@ -477,10 +492,10 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
         close_data = a.get("close_approach_data", [])
         miss_km = 0.0
         velocity_kmh = 0.0
-        time_str = "Today"
+        time_raw = None
         if close_data:
             first_approach = close_data[0]
-            time_str = first_approach.get("close_approach_date_full") or first_approach.get("close_approach_date") or "Today"
+            time_raw = first_approach.get("close_approach_date_full") or first_approach.get("close_approach_date")
             try:
                 miss_km = float(first_approach.get("miss_distance", {}).get("kilometers", 0.0))
             except (ValueError, TypeError):
@@ -490,13 +505,16 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
             except (ValueError, TypeError):
                 velocity_kmh = 0.0
 
+        if not time_raw:
+            time_raw = datetime.now(timezone.utc)
+
         parsed_asteroids.append(
             AsteroidItem(
                 name=a.get("name", "Unknown Asteroid"),
                 estimated_diameter_min_m=float(diam_info.get("estimated_diameter_min", 0.0)),
                 estimated_diameter_max_m=float(diam_info.get("estimated_diameter_max", 0.0)),
                 is_potentially_hazardous=is_hazard,
-                close_approach_time=time_str,
+                close_approach_time=time_raw,
                 miss_distance_km=miss_km,
                 relative_velocity_kmh=velocity_kmh,
             )
@@ -523,12 +541,13 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
     for idx, item in enumerate(selected, 1):
         status_flag = "⚠️ **POTENTIALLY HAZARDOUS**" if item.is_potentially_hazardous else "🟢 Safe Trajectory"
         avg_diam = (item.estimated_diameter_min_m + item.estimated_diameter_max_m) / 2.0
+        time_display = item.close_approach_time.strftime("%Y-%m-%d %H:%M UTC")
         lines.append(
             f"{idx}. **Asteroid {item.name}** ({status_flag})\n"
             f"   - **Est. Diameter:** ~{avg_diam:.1f} meters ({item.estimated_diameter_min_m:.0f}m – {item.estimated_diameter_max_m:.0f}m)\n"
             f"   - **Miss Distance:** {item.miss_distance_km:,.0f} km\n"
             f"   - **Relative Speed:** {item.relative_velocity_kmh:,.0f} km/h\n"
-            f"   - **Close Approach Time:** {item.close_approach_time}"
+            f"   - **Close Approach Time:** {time_display}"
         )
 
     return ChatToolResponse(result="\n\n".join(lines))

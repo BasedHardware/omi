@@ -195,9 +195,23 @@ def test_health_healthy(client):
     assert data["upstream_nasa_api"] == "reachable"
 
 
-def test_health_degraded(monkeypatch):
+def test_health_degraded_images_failure(monkeypatch):
     mock_client = httpx.AsyncClient(
         transport=MockTransport(search_status=500),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "degraded"
+        assert data["upstream_nasa_api"] == "unreachable"
+
+
+def test_health_degraded_apod_failure(monkeypatch):
+    mock_client = httpx.AsyncClient(
+        transport=MockTransport(apod_status=500),
         headers={"User-Agent": "OmiTestApp/1.0"},
     )
     monkeypatch.setattr("main.http_client", mock_client)
@@ -267,6 +281,42 @@ def test_get_astronomy_picture_not_found(monkeypatch):
 def test_get_astronomy_picture_invalid_date_format(client):
     response = client.post("/tools/get-astronomy-picture", json={"date": "07-20-2024"})
     assert response.status_code == 422
+
+
+def test_get_astronomy_picture_calendar_invalid_date_rejected(client):
+    """Ensure impossible calendar dates like 2024-02-31 fail validation with HTTP 422."""
+    response = client.post("/tools/get-astronomy-picture", json={"date": "2024-02-31"})
+    assert response.status_code == 422
+    assert "not a valid calendar date" in response.text
+
+
+def test_get_astronomy_picture_video_with_thumbnail(monkeypatch):
+    """Ensure video APOD preserves and renders thumbnail_url in media links."""
+    video_payload = {
+        "date": "2026-09-07",
+        "title": "Cosmic Orbit Simulation",
+        "explanation": "A high definition rendering of gravitational orbits.",
+        "media_type": "video",
+        "url": "https://www.youtube.com/watch?v=sample123",
+        "thumbnail_url": "https://img.youtube.com/vi/sample123/hqdefault.jpg",
+        "copyright": "NASA Scientific Visualization Studio",
+    }
+
+    class VideoTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=video_payload)
+
+    mock_client = httpx.AsyncClient(
+        transport=VideoTransport(),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post("/tools/get-astronomy-picture", json={})
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert "Watch Video" in result
+        assert "[Video Thumbnail](https://img.youtube.com/vi/sample123/hqdefault.jpg)" in result
 
 
 def test_get_astronomy_picture_upstream_failure(monkeypatch):
@@ -495,3 +545,44 @@ def test_rate_limiter_spoof_prevention(client, monkeypatch):
 
     # Spoofed IP was never allocated in rate limiter records
     assert spoofed_ip not in rate_limiter._records
+
+
+def test_is_trusted_proxy_rejects_unconfigured_private_ips(monkeypatch):
+    """Verify that RFC1918 private IPs are NOT trusted unless explicitly configured in TRUSTED_PROXIES."""
+    from main import is_trusted_proxy
+
+    monkeypatch.setattr("main.TRUSTED_PROXIES", {"127.0.0.1", "::1", "testclient"})
+    assert is_trusted_proxy("192.168.1.10") is False
+    assert is_trusted_proxy("10.0.0.1") is False
+    assert is_trusted_proxy("172.16.5.1") is False
+    assert is_trusted_proxy("127.0.0.1") is True
+    assert is_trusted_proxy("testclient") is True
+
+
+def test_rate_limit_dynamic_error_message(monkeypatch, client):
+    """Verify that overriding RATE_LIMIT_REQUESTS updates the 429 detail message accordingly."""
+    monkeypatch.setattr("main.RATE_LIMIT_REQUESTS", 15)
+    monkeypatch.setattr(rate_limiter, "requests_per_window", 15)
+    for _ in range(15):
+        rate_limiter.is_allowed("testclient")
+    resp = client.post("/tools/get-astronomy-picture", json={})
+    assert resp.status_code == 429
+    assert "Maximum 15 requests per minute" in resp.json()["detail"]
+
+
+def test_apod_ttl_selection_for_explicit_today_vs_historical(monkeypatch, client):
+    """Verify today's date receives 1h TTL while historical date receives 24h TTL."""
+    today_utc = time.strftime("%Y-%m-%d", time.gmtime())
+    client.post("/tools/get-astronomy-picture", json={"date": today_utc})
+    today_key = f"apod:{today_utc}:True"
+    assert today_key in cache._cache
+    expires_at_today, _ = cache._cache[today_key]
+    remaining_today = expires_at_today - time.time()
+    assert 3500.0 < remaining_today <= 3600.0
+
+    client.post("/tools/get-astronomy-picture", json={"date": "2023-01-01"})
+    past_key = "apod:2023-01-01:True"
+    assert past_key in cache._cache
+    expires_at_past, _ = cache._cache[past_key]
+    remaining_past = expires_at_past - time.time()
+    assert 86300.0 < remaining_past <= 86400.0

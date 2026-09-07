@@ -1,7 +1,8 @@
 """Pydantic models for the NASA Space & Astronomy Intelligence Omi integration plugin."""
 
+from datetime import datetime, timezone
 import re
-from typing import Any, List, Optional
+from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -29,7 +30,12 @@ class ApodRequest(BaseModel):
             return None
         if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
             raise ValueError("date must be in YYYY-MM-DD format (e.g. 2024-07-20)")
-        return v
+        try:
+            # Validates real calendar date (rejects impossible dates like 2024-02-31 or 2024-13-45)
+            parsed_date = datetime.strptime(v, "%Y-%m-%d").date()
+            return parsed_date.isoformat()
+        except ValueError:
+            raise ValueError(f"'{v}' is not a valid calendar date in YYYY-MM-DD format")
 
 
 class ApodDetail(BaseModel):
@@ -41,6 +47,7 @@ class ApodDetail(BaseModel):
     media_type: str = "image"
     url: str
     hdurl: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     copyright: Optional[str] = None
 
 
@@ -68,9 +75,31 @@ class AsteroidItem(BaseModel):
     estimated_diameter_min_m: float
     estimated_diameter_max_m: float
     is_potentially_hazardous: bool
-    close_approach_time: str
+    close_approach_time: datetime
     miss_distance_km: float
     relative_velocity_kmh: float
+
+    @field_validator("close_approach_time", mode="before")
+    @classmethod
+    def parse_close_approach_time(cls, v: Any) -> datetime:
+        if isinstance(v, datetime):
+            return v.astimezone(timezone.utc) if v.tzinfo else v.replace(tzinfo=timezone.utc)
+        if isinstance(v, str):
+            v_str = v.strip()
+            # Try formats returned by NASA NeoWs
+            for fmt in ("%Y-%b-%d %H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    dt = datetime.strptime(v_str, fmt)
+                    return dt.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+            # Try standard ISO parsing
+            try:
+                dt = datetime.fromisoformat(v_str)
+                return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+        raise ValueError(f"Unable to parse close_approach_time timestamp: {v}")
 
 
 class NasaSearchRequest(BaseModel):

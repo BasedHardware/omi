@@ -75,4 +75,4 @@ Deployable to Railway, Heroku, or any standard container environment:
 - **railway.toml**: Nixpacks deployment with healthcheck path `/health`
 - **Environment Variables**:
   - `NASA_API_KEY`: Optional custom NASA API key (defaults to `DEMO_KEY`)
-  - `MET_API_TIMEOUT`: Outbound HTTP request timeout in seconds (default `10.0`)
+  - `NASA_REQUEST_TIMEOUT`: Outbound HTTP request timeout in seconds (default `10.0`)
