@@ -97,6 +97,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
   onViewRecaps: () => void;
+  onOpenRecap?: (id: string) => void;
   onExpandMindMap: () => void;
 };
 
@@ -199,14 +200,31 @@ const TaskRow = memo(function TaskRow({
   );
 });
 
-const RecapCard = memo(function RecapCard({recap}: {recap: MobileRecap}) {
-  return (
+const RecapCard = memo(function RecapCard({
+  recap,
+  onPress,
+}: {
+  recap: MobileRecap;
+  onPress?: (id: string) => void;
+}) {
+  const card = (
     <View style={styles.recapCard}>
       <Text numberOfLines={3} style={styles.recapTitle}>
         {recap.title}
       </Text>
       <Text style={styles.recapDate}>{recap.dateLabel}</Text>
     </View>
+  );
+  if (onPress === undefined) {
+    return card;
+  }
+  return (
+    <Pressable
+      accessibilityLabel={`Open recap ${recap.title}`}
+      accessibilityRole="button"
+      onPress={() => onPress(recap.id)}>
+      {card}
+    </Pressable>
   );
 });
 
@@ -297,6 +315,7 @@ export function MobileAppSurface({
   onDismissTaskMutation,
   writesAvailable,
   onViewRecaps,
+  onOpenRecap,
   onViewTasks,
   recaps,
   recapStatus,
@@ -463,7 +482,9 @@ export function MobileAppSurface({
                     data={recaps}
                     horizontal
                     keyExtractor={recap => recap.id}
-                    renderItem={({item: recap}) => <RecapCard recap={recap} />}
+                    renderItem={({item: recap}) => (
+                      <RecapCard onPress={onOpenRecap} recap={recap} />
+                    )}
                     showsHorizontalScrollIndicator={false}
                   />
                   {recapCoverageCopy ? (
@@ -524,6 +545,7 @@ export function MobileAppSurface({
       busyTaskId,
       taskFeedback,
       onViewRecaps,
+      onOpenRecap,
       onViewTasks,
       recaps,
       recapStatus,

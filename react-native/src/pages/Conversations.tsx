@@ -112,6 +112,8 @@ export function ConversationsPage({
   onLoadMore,
   loadingMore = false,
   notice = null,
+  requestedConversationId = null,
+  onRequestedConversationConsumed,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
@@ -120,6 +122,8 @@ export function ConversationsPage({
   onLoadMore?: () => void;
   loadingMore?: boolean;
   notice?: string | null;
+  requestedConversationId?: string | null;
+  onRequestedConversationConsumed?: () => void;
 }) {
   const compact = useWindowDimensions().width < 720;
   const conversations = useMemo(
@@ -137,6 +141,13 @@ export function ConversationsPage({
   const [starredOnly, setStarredOnly] = useState(false);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (requestedConversationId === null) {
+      return;
+    }
+    setSelectedId(requestedConversationId);
+    onRequestedConversationConsumed?.();
+  }, [onRequestedConversationConsumed, requestedConversationId]);
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();

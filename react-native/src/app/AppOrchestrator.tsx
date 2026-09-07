@@ -140,6 +140,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [route, setRoute] = useState<Route>(() =>
     resolveInitialRoute(initialRoute),
   );
+  const [requestedConversationId, setRequestedConversationId] = useState<
+    string | null
+  >(null);
+  const consumeRequestedConversation = useCallback(() => {
+    setRequestedConversationId(null);
+  }, []);
   const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   // useOnboarding owns the desktop session gate and needs a reads refresh;
@@ -1108,6 +1114,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             loadingMore={conversationsLoadingMore}
             notice={conversationNotice}
             outcome={readOutcomes?.conversations ?? null}
+            requestedConversationId={requestedConversationId}
+            onRequestedConversationConsumed={consumeRequestedConversation}
             loading={
               readsPhase === 'initial-loading' || readsPhase === 'refreshing'
             }
@@ -1179,7 +1187,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               : 'Home',
           );
         }}
-        onViewRecaps={() => setRoute('Conversations')}
+        onViewRecaps={() => {
+          setRequestedConversationId(null);
+          setRoute('Conversations');
+        }}
+        onOpenRecap={id => {
+          setRequestedConversationId(id);
+          setRoute('Conversations');
+        }}
         onViewTasks={() => setRoute('Tasks')}
         recapStatus={
           readOutcomes?.conversations.status === 'success'

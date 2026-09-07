@@ -330,3 +330,69 @@ test('nested non-retryable later conversation pages do not claim more are availa
   expect(textOf(renderer)).toContain(desktopBackendUnavailableCopy);
   expect(textOf(renderer)).not.toContain('More conversations are available.');
 });
+
+test('a requested conversation id opens compact conversation detail', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
+  const consumed = jest.fn();
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:recap-one',
+    title: 'Walked to the market',
+    summary: 'A short overview of the walk.',
+    searchableText: 'Walked to the market\nA short overview of the walk.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          onRequestedConversationConsumed={consumed}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [item],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+          requestedConversationId={item.id}
+        />,
+      );
+    });
+    expect(textOf(renderer)).toContain('Walked to the market');
+    expect(textOf(renderer)).toContain('Back to conversations');
+    expect(consumed).toHaveBeenCalledTimes(1);
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel ===
+          'Open conversation Walked to the market',
+      ),
+    ).toHaveLength(0);
+  } finally {
+    dimensions.mockRestore();
+  }
+});

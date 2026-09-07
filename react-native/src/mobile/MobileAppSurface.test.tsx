@@ -262,6 +262,29 @@ test('loaded Daily Recaps omit more-available after a closed later page', () => 
   expect(renderedText(renderer)).not.toContain('More recaps are available.');
 });
 
+test('Daily Recaps open the matching conversation instead of remaining display-only', () => {
+  const onOpenRecap = jest.fn();
+  const renderer = render({onOpenRecap});
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Open recap Omi gets simpler',
+      )
+      .props.onPress();
+  });
+  expect(onOpenRecap).toHaveBeenCalledWith('recap-1');
+});
+
+test('Daily Recaps stay display-only without an open handler', () => {
+  const renderer = render();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open recap Omi gets simpler',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Omi gets simpler');
+});
+
 test('loaded Home tasks keep more-available coverage instead of looking complete', () => {
   const renderer = render({
     taskCoverageCopy: 'More tasks are available.',
