@@ -26,7 +26,8 @@ const productionFactories = {
 
 export async function startProductionServer(
   env: Readonly<Record<string, string | undefined>>,
-  factories: typeof productionFactories = productionFactories
+  factories: typeof productionFactories = productionFactories,
+  signal?: AbortSignal,
 ) {
   const config = readDeployedConfig(env);
   let ownedIdentity:
@@ -61,12 +62,15 @@ export async function startProductionServer(
         throw new AggregateError(failures, "production_shutdown_unavailable");
     })());
   try {
+    signal?.throwIfAborted();
     const identity = ownedIdentity = await factories.createIdentity({
       project_id: config.projectId, app_name: "omi-platform-deployed", runtime_mode: "deployed",
     });
+    signal?.throwIfAborted();
     const pool = ownedPool = factories.createPool({
       connectionString: config.databaseUrl, databaseSocketDirectory: config.databaseSocketDirectory, maxConnections: 4, connectTimeoutSeconds: 10,
     });
+    signal?.throwIfAborted();
     const cursorSigningKeyset = { active_key_id: "v1", keys: [{ key_id: "v1", secret: config.cursorKey }] };
     const cursor = createProductionCursor(cursorSigningKeyset);
     const authorization: PostgresFirebaseAuthorizationRuntimeOptions = {
@@ -76,7 +80,7 @@ export async function startProductionServer(
     };
     const runtime = ownedRuntime = factories.createRuntime({
       pool,
-      readiness: createPostgresProductionRuntimeReadiness(pool, config.databaseGeneration),
+      readiness: createPostgresProductionRuntimeReadiness(pool, config.databaseGeneration, signal),
       graceful_shutdown_ms: 4000,
       service_options: {
         counter: createServedCounter(),
@@ -124,6 +128,7 @@ export async function startProductionServer(
         },
       },
     });
+    signal?.throwIfAborted();
     let inFlight = 0;
     const server = ownedServer = factories.serve({
       hostname: "0.0.0.0", port: config.port, idleTimeout: 150, maxRequestBodySize: 2 * 1024 * 1024,
@@ -145,7 +150,9 @@ export async function startProductionServer(
         }
       },
     });
+    signal?.throwIfAborted();
     const startup = await runtime.start();
+    signal?.throwIfAborted();
     if (startup.kind !== "ready") throw new Error("database_readiness_unavailable");
     return { server, stop };
   } catch (error) {
@@ -156,23 +163,45 @@ export async function startProductionServer(
   }
 }
 
-if (import.meta.main) {
+export async function runProductionServer(
+  env: Readonly<Record<string, string | undefined>>,
+  factories: typeof productionFactories = productionFactories,
+): Promise<number> {
+  const controller = new AbortController();
+  let shutdownDeadline: ReturnType<typeof setTimeout> | undefined;
+  let requestShutdown!: () => void;
+  const requested = new Promise<void>(resolve => { requestShutdown = resolve; });
   const startupDeadline = setTimeout(() => {
     console.error("omi-platform startup deadline exceeded");
     process.exit(1);
   }, 45000);
-  startProductionServer(process.env).then(({ stop }) => {
+  const shutdown = () => {
+    if (controller.signal.aborted) return;
+    controller.abort(new Error("production_startup_cancelled"));
+    shutdownDeadline = setTimeout(() => process.exit(1), 8000);
+    requestShutdown();
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  try {
+    const running = await startProductionServer(env, factories, controller.signal);
     clearTimeout(startupDeadline);
-    console.info("omi-platform ready: memories.read, tasks, device audio uploads");
-    const shutdown = () => {
-      const deadline = setTimeout(() => process.exit(1), 8000);
-      stop().then(() => { clearTimeout(deadline); process.exit(0); }, () => process.exit(1));
-    };
-    process.once("SIGTERM", shutdown);
-    process.once("SIGINT", shutdown);
-  }).catch(() => {
+    if (!controller.signal.aborted) console.info("omi-platform ready: memories.read, tasks, device audio uploads");
+    await requested;
+    await running.stop();
+    return 0;
+  } catch (error) {
+    if (controller.signal.aborted && error instanceof Error && error.cause === controller.signal.reason) return 0;
+    console.error("omi-platform startup or shutdown unavailable: check configuration and resource cleanup");
+    return 1;
+  } finally {
     clearTimeout(startupDeadline);
-    console.error("omi-platform startup unavailable: check required configuration and database readiness");
-    process.exit(1);
-  });
+    if (shutdownDeadline !== undefined) clearTimeout(shutdownDeadline);
+    process.removeListener("SIGTERM", shutdown);
+    process.removeListener("SIGINT", shutdown);
+  }
+}
+
+if (import.meta.main) {
+  runProductionServer(process.env).then(code => process.exit(code), () => process.exit(1));
 }

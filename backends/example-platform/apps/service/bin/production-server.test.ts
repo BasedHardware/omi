@@ -1,3 +1,8 @@
+import { watch } from "node:fs";
+import { spawn as spawnChild } from "node:child_process";
+import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "node:http";
 import { expect, test } from "bun:test";
 import { requestTimeoutMilliseconds, startProductionServer } from "./production-server";
@@ -132,3 +137,102 @@ test("unavailable startup result closes acquired resources without reporting rea
   await expect(startProductionServer(environment, fixture.factories)).rejects.toMatchObject({ cause: { message: "database_readiness_unavailable" } });
   expect(fixture.calls.slice(-4)).toEqual(["runtime.stop", "pool.close", "server.stop", "identity.close"]);
 });
+
+test("startup cancellation waits for the pending identity and closes it before rejecting", async () => {
+  const fixture = resources();
+  const controller = new AbortController();
+  let release!: (identity: typeof fixture.identity) => void;
+  fixture.factories.createIdentity = () => new Promise(resolve => { release = resolve; });
+  const pending = startProductionServer(environment, fixture.factories, controller.signal);
+  controller.abort(new Error("cancel startup"));
+  expect(fixture.calls).toEqual([]);
+  release(fixture.identity);
+  await expect(pending).rejects.toMatchObject({ cause: controller.signal.reason });
+  expect(fixture.calls).toEqual(["identity.close"]);
+});
+
+test("already cancelled startup acquires nothing", async () => {
+  const fixture = resources();
+  const controller = new AbortController(); controller.abort();
+  await expect(startProductionServer(environment, fixture.factories, controller.signal)).rejects.toMatchObject({ cause: controller.signal.reason });
+  expect(fixture.calls).toEqual([]);
+});
+
+test("startup cancellation reaches the real readiness transaction and closes all acquired owners", async () => {
+  const fixture = resources();
+  const controller = new AbortController();
+  let entered!: () => void;
+  const waiting = new Promise<void>(resolve => { entered = resolve; });
+  fixture.pool.withTransaction = options => new Promise((_resolve, reject) => {
+    expect(options.signal).toBe(controller.signal);
+    options.signal!.addEventListener("abort", () => reject(options.signal!.reason), { once: true });
+    entered();
+  });
+  const factory = fixture.factories.createRuntime;
+  fixture.factories.createRuntime = options => {
+    const runtime = factory(options);
+    runtime.start = async () => ({ kind: await options.readiness.check() ? "ready" : "unavailable" });
+    return runtime;
+  };
+  const pending = startProductionServer(environment, fixture.factories, controller.signal);
+  await waiting;
+  controller.abort(new Error("cancel readiness"));
+  await expect(pending).rejects.toMatchObject({ cause: controller.signal.reason });
+  expect(fixture.calls.slice(-4)).toEqual(["runtime.stop", "pool.close", "server.stop", "identity.close"]);
+});
+
+test.each([["SIGTERM", false], ["SIGINT", false], ["SIGTERM", true]] as const)("real %s during identity acquisition waits for cleanup (failure=%s)", async (signal, failCleanup) => {
+  const directory = await mkdtemp(join(tmpdir(), "omi-production-signal-"));
+  const path = join(directory, "signal.ts");
+  const log = join(directory, "events");
+  const source = `
+import {appendFileSync} from "node:fs";
+const record=value=>appendFileSync(${JSON.stringify(log)}, value+"\\n");
+import {runProductionServer} from ${JSON.stringify(import.meta.dir + "/production-server.ts")};
+const factories={
+  createIdentity:()=>new Promise(resolve=>{
+    process.once(${JSON.stringify(signal)},()=>resolve({adapter:{verification_source:'firebase_production',verifyIdToken:async()=>{throw Error('unexpected')}},close:async()=>{record('identity.closed');if(${failCleanup})throw Error('cleanup failed')}}));
+    record('identity.pending');
+  }),
+  createPool:()=>{throw Error('pool must not be acquired')},
+  createRuntime:()=>{throw Error('runtime must not be acquired')},
+  serve:()=>{throw Error('server must not be acquired')},
+};
+const code=await runProductionServer(${JSON.stringify(environment)},factories);
+record('exit.code='+code);
+process.exit(code);
+`;
+  let child: ReturnType<typeof spawnChild> | undefined;
+  let watcher: ReturnType<typeof watch> | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await writeFile(path, source);
+    const ready = new Promise<void>((resolve, reject) => {
+      watcher = watch(directory, () => {
+        readFile(log, "utf8").then(text => { if (text.includes("identity.pending")) resolve(); }, () => {});
+      });
+      watcher.on("error", reject);
+    });
+    child = spawnChild(process.execPath, [path], { stdio: "ignore" });
+    const exited = new Promise<number | null>((resolve, reject) => {
+      child!.once("error", reject);
+      child!.once("exit", resolve);
+    });
+    const deadline = new Promise<never>((_resolve, reject) => { timeout = setTimeout(() => reject(new Error("signal fixture deadline exceeded")), 10000); });
+    await Promise.race([ready, exited.then(code => { throw new Error(`child exited before readiness: ${code}`); }), deadline]);
+    child.kill(signal);
+    expect(await Promise.race([exited, deadline])).toBe(failCleanup ? 1 : 0);
+    const output = await readFile(log, "utf8");
+    expect(output).toContain("identity.closed");
+    expect(output).toContain(`exit.code=${failCleanup ? 1 : 0}`);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    watcher?.close();
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const closed = new Promise<void>(resolve => child!.once("exit", () => resolve()));
+      child.kill("SIGKILL");
+      await closed;
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15000);
