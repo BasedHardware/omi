@@ -1229,6 +1229,66 @@ test('a nested chat write 404 disables Ask instead of leaving it sendable', asyn
   ).toHaveLength(admitCalls);
 });
 
+test('native unsupported chat send uses unavailable copy and disables Ask', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async (value: {id: string}) => {
+    if (value.id === 'chat-history') {
+      return {id: value.id, status: 200, body: historyBody([])};
+    }
+    if (value.id.startsWith('admit-')) {
+      throw Object.assign(new Error('unsupported'), {
+        code: 'OMI_DEV_BACKEND_UNSUPPORTED',
+      });
+    }
+    return {id: value.id, status: 501, body: null};
+  });
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibar.props.onChangeText('hello');
+  });
+  await act(async () => {
+    omnibar.props.onSubmitEditing();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Message not sent. Check your connection and try again.',
+  );
+  expect(labelsOf(renderer)).toContain('Send unavailable');
+  const admitCalls = mockBackend.request.mock.calls.filter(
+    ([value]: [{id: string}]) => value.id.startsWith('admit-'),
+  ).length;
+  const omnibarAgain = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  act(() => {
+    omnibarAgain.props.onChangeText('hello again');
+  });
+  await act(async () => {
+    omnibarAgain.props.onSubmitEditing?.();
+    await flushAsyncQueue();
+  });
+  expect(
+    mockBackend.request.mock.calls.filter(([value]: [{id: string}]) =>
+      value.id.startsWith('admit-'),
+    ),
+  ).toHaveLength(admitCalls);
+});
+
 test('a backend plane switch drops a stale chat-write latch', async () => {
   mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
   mockAuth.hasCloudSession.mockResolvedValue(true);

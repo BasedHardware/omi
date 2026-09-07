@@ -449,6 +449,12 @@ test('maps ratified public recovery without automatically retrying', () => {
   expect(chatWriteDoorUnavailable({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
     true,
   );
+  expect(chatErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    'Sending messages is not available on this backend yet.',
+  );
+  expect(chatErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
+    'Message not sent. Check your connection and try again.',
+  );
   expect(chatCancelErrorCopy({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
     'Stopping the response is not available on this backend yet.',
   );

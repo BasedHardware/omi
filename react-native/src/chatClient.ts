@@ -81,6 +81,9 @@ export function chatComposerIsResting(
 }
 
 export function chatErrorCopy(error: unknown): string {
+  if (chatWriteDoorUnavailable(error)) {
+    return 'Sending messages is not available on this backend yet.';
+  }
   if (!(error instanceof ChatBackendError)) {
     return 'Message not sent. Check your connection and try again.';
   }
@@ -89,9 +92,6 @@ export function chatErrorCopy(error: unknown): string {
   }
   if (error.status === 403 || error.backendCode === 'forbidden') {
     return 'Chat is not available for this account.';
-  }
-  if (chatWriteDoorUnavailable(error)) {
-    return 'Sending messages is not available on this backend yet.';
   }
   if (error.status === 429) {
     return error.retryAfterSeconds === null
