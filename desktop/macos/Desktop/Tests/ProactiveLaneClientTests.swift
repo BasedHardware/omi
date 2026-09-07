@@ -27,6 +27,39 @@ final class ProactiveLaneClientTests: XCTestCase {
     super.tearDown()
   }
 
+  func testReasoningCompletionBudgetUsesBackendCompatibleMinimum() {
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.reasoningOperation, requested: 800),
+      ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens)
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.reasoningOperation, requested: 3000),
+      3000)
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.extractionOperation, requested: 800),
+      800)
+  }
+
+  func testReasoningCompleteForwardsBackendCompatibleMinimum() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(), baseURL: { "https://proactive.test" }, authorization: { "Bearer test" })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.reasoningOperation))
+
+    _ = try await client.complete(
+      operation: ModelQoS.Proactivity.reasoningOperation,
+      prompt: "reason",
+      jsonSchema: ["type": "object"],
+      maxCompletionTokens: 800)
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedMaxCompletionTokens,
+      [ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens])
+  }
+
   func testEnvelopeParsingPreservesGatewayAccounting() throws {
     let data = try JSONSerialization.data(withJSONObject: [
       "operation": "proactive_reasoning",
@@ -1108,6 +1141,7 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var responses: [StubResponse] = []
   private nonisolated(unsafe) static var served = 0
   private nonisolated(unsafe) static var operations: [String] = []
+  private nonisolated(unsafe) static var maxCompletionTokenBudgets: [Int] = []
   private nonisolated(unsafe) static var paths: [String] = []
   /// How many requests must be in flight before any of them is answered, if the caller asked for
   /// that. Nil is the ordinary case: answer each request as it arrives.
@@ -1127,6 +1161,12 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     return operations
   }
 
+  static var requestedMaxCompletionTokens: [Int] {
+    lock.lock()
+    defer { lock.unlock() }
+    return maxCompletionTokenBudgets
+  }
+
   /// Request URL paths in issue order, for asserting which authority routes a
   /// caller actually reached.
   static var requestedPaths: [String] {
@@ -1140,6 +1180,7 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     responses = []
     served = 0
     operations = []
+    maxCompletionTokenBudgets = []
     paths = []
     holdThreshold = nil
     holdReached = nil
@@ -1184,8 +1225,10 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       return
     }
     let operation = Self.operation(from: request)
+    let maxCompletionTokens = Self.maxCompletionTokens(from: request)
     Self.lock.lock()
     Self.operations.append(operation)
+    if let maxCompletionTokens { Self.maxCompletionTokenBudgets.append(maxCompletionTokens) }
     Self.paths.append(url.path)
     let stub = Self.responses.isEmpty ? nil : Self.responses.removeFirst()
     Self.served += 1
@@ -1226,6 +1269,13 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       let operation = object["operation"] as? String
     else { return "" }
     return operation
+  }
+
+  private static func maxCompletionTokens(from request: URLRequest) -> Int? {
+    guard let data = bodyData(from: request),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return object["max_completion_tokens"] as? Int
   }
 
   private static func bodyData(from request: URLRequest) -> Data? {

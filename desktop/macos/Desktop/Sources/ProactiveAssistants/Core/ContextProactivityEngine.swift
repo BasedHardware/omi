@@ -612,7 +612,7 @@ actor ContextProactivityEngine {
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       guard
@@ -979,15 +979,11 @@ actor ContextProactivityEngine {
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
-        // 400, not 120: the reasoning model bills its thinking into completion
-        // tokens. Measured directly against the same model with this exact
-        // prompt shape: at 120 the call finished with `finish_reason=length`,
-        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
-        // attempts — which parses as malformed and silently suppresses the
-        // candidate. At 400 every attempt finished clean (33-174 reasoning
-        // tokens plus the small JSON body). Live provenance shows the same
-        // degenerate shape (a bare "false" reason) at the old cap.
-        maxCompletionTokens: 400,
+        // The backend-compatible floor applies to every reasoning request. The
+        // reasoning model bills its thinking into completion tokens, so a small
+        // client cap can finish with `finish_reason=length` and empty content,
+        // which parses as malformed and silently suppresses the
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       // The gate awaited the model; ownership can be revoked or the visit can
@@ -1224,7 +1220,7 @@ actor ContextProactivityEngine {
         imageData: imageData,
         jsonSchema: Self.schema(allowLookup: true),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       let hopRaw = try JSONDecoder().decode(

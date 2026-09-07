@@ -582,9 +582,22 @@ actor JITProactivityDelivery {
       await terminalize(deliveryID, failure: "jit_full_turn_budget", state: "suppressed", lane: execution.lane)
       await finish(execution, delivered: false)
     } catch {
-      await terminalize(deliveryID, failure: "jit_execution", state: "failed", lane: execution.lane)
+      let classification = Self.classifyExecutionFailure(error)
+      await terminalize(
+        deliveryID,
+        failure: classification.failure,
+        state: "failed",
+        lane: execution.lane,
+        classification: classification)
       await finish(execution, delivered: false)
     }
+  }
+
+  /// Keep the full-turn ledger useful when a paid JIT attempt fails. The
+  /// classification contains only bounded status/type fields; it never stores
+  /// the agent prompt, response, or raw runtime error text.
+  static func classifyExecutionFailure(_ error: Error) -> ProactiveLaneFailureClassification {
+    ProactiveLaneFailureClassification.classify(error)
   }
 
   func graduateCandidate(
@@ -710,11 +723,17 @@ actor JITProactivityDelivery {
   }
 
   private func terminalize(
-    _ deliveryID: String, failure: String, state: String, lane: JITProactivityLane
+    _ deliveryID: String,
+    failure: String,
+    state: String,
+    lane: JITProactivityLane,
+    classification: ProactiveLaneFailureClassification? = nil
   ) async {
     _ = try? await store.completeDelivery(
       id: deliveryID, decisionType: "silence",
-      provenanceJSON: "{\"failure\":\"\(failure)\"}", message: nil, state: state)
+      provenanceJSON: classification?.provenanceJSON ?? "{\"failure\":\"\(failure)\"}",
+      message: nil,
+      state: state)
     await ContextProactivityTelemetry.recordJITDelivery(
       outcome: state == "failed" ? "delivery_failed" : "delivery_suppressed", reason: failure,
       lane: lane.rawValue, decision: "silence")
