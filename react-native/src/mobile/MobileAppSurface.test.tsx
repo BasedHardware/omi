@@ -245,6 +245,44 @@ test('empty Daily Recaps keep incomplete conversation coverage instead of claimi
   expect(renderedText(renderer)).not.toContain('No recaps yet');
 });
 
+test('nested non-retryable recap errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    recaps: [],
+    recapStatus: 'error',
+    recapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load recaps');
+});
+
+test('nested non-retryable Home task errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    tasks: [],
+    taskStatus: 'error',
+    taskErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load tasks');
+});
+
+test('nested non-retryable mind map errors use unavailable copy instead of a load blip', () => {
+  const renderer = render({
+    mindMapStatus: 'error',
+    mindMapErrorCopy:
+      'This saved data is not available from the selected Omi service yet.',
+  });
+  expect(renderedText(renderer)).toContain(
+    'This saved data is not available from the selected Omi service yet.',
+  );
+  expect(renderedText(renderer)).not.toContain('Couldn’t load mind map');
+});
+
 test('empty Home tasks keep the complete-library copy by default', () => {
   const renderer = render({tasks: []});
   expect(renderedText(renderer)).toContain("Nothing's waiting on you.");

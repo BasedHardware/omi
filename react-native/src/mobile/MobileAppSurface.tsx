@@ -77,8 +77,11 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
   recapEmptyCopy?: string;
+  recapErrorCopy?: string;
   taskEmptyCopy?: string;
+  taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
+  mindMapErrorCopy?: string;
   askValue: string;
   askUnavailable?: boolean;
   onAskChange: (value: string) => void;
@@ -101,15 +104,17 @@ type DashboardRow =
 const StatePanel = memo(function StatePanel({
   status,
   noun,
+  errorCopy,
 }: {
   status: Exclude<MobileProjectionStatus, 'ready'>;
   noun: string;
+  errorCopy?: string;
 }) {
   const copy = {
     loading: `Loading ${noun}…`,
     empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet`,
-    offline: `Couldn’t refresh ${noun}`,
-    error: `Couldn’t load ${noun}`,
+    offline: errorCopy ?? `Couldn’t refresh ${noun}`,
+    error: errorCopy ?? `Couldn’t load ${noun}`,
   }[status];
   return (
     <View
@@ -275,9 +280,12 @@ export function MobileAppSurface({
   recaps,
   recapStatus,
   recapEmptyCopy,
+  recapErrorCopy,
   taskEmptyCopy,
+  taskErrorCopy,
   tasks,
   taskStatus,
+  mindMapErrorCopy,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
@@ -394,7 +402,11 @@ export function MobileAppSurface({
                 </View>
               )
             ) : (
-              <StatePanel noun="tasks" status={taskStatus} />
+              <StatePanel
+                errorCopy={taskErrorCopy}
+                noun="tasks"
+                status={taskStatus}
+              />
             )}
           </View>
         );
@@ -426,7 +438,11 @@ export function MobileAppSurface({
                 />
               )
             ) : (
-              <StatePanel noun="recaps" status={recapStatus} />
+              <StatePanel
+                errorCopy={recapErrorCopy}
+                noun="recaps"
+                status={recapStatus}
+              />
             )}
           </View>
         );
@@ -446,7 +462,11 @@ export function MobileAppSurface({
               <View style={[styles.mapNode, styles.mapNodeBottom]} />
             </View>
           ) : (
-            <StatePanel noun="mind map" status={mindMapStatus} />
+            <StatePanel
+              errorCopy={mindMapErrorCopy}
+              noun="mind map"
+              status={mindMapStatus}
+            />
           )}
         </View>
       );
@@ -465,9 +485,12 @@ export function MobileAppSurface({
       recaps,
       recapStatus,
       recapEmptyCopy,
+      recapErrorCopy,
       taskEmptyCopy,
+      taskErrorCopy,
       tasks,
       taskStatus,
+      mindMapErrorCopy,
     ],
   );
 
@@ -545,7 +568,11 @@ export function MobileAppSurface({
               />
             ) : (
               <View style={styles.secondaryList}>
-                <StatePanel noun="tasks" status={taskStatus} />
+                <StatePanel
+                  errorCopy={taskErrorCopy}
+                  noun="tasks"
+                  status={taskStatus}
+                />
                 {taskPagination}
               </View>
             )

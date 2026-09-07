@@ -1185,6 +1185,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           '',
           'No recaps yet',
         )}
+        recapErrorCopy={
+          readOutcomes?.conversations.status === 'error'
+            ? readOutcomes.conversations.error
+            : undefined
+        }
         taskEmptyCopy={emptyLibraryCopy(
           'Tasks',
           readOutcomes?.tasks.status === 'success'
@@ -1194,6 +1199,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           '',
           "Nothing's waiting on you.",
         )}
+        taskErrorCopy={
+          readOutcomes?.tasks.status === 'error'
+            ? readOutcomes.tasks.error
+            : undefined
+        }
+        mindMapErrorCopy={
+          readOutcomes?.memories.status === 'error'
+            ? readOutcomes.memories.error
+            : undefined
+        }
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'
