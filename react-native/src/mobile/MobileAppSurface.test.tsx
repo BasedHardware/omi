@@ -207,6 +207,39 @@ test('mounted apps content is not replaced by an empty catalogue', () => {
   expect(renderedText(renderer)).not.toContain('No apps connected yet');
 });
 
+test('empty Daily Recaps keep the complete-library copy by default', () => {
+  const renderer = render({recaps: []});
+  expect(renderedText(renderer)).toContain('No recaps yet');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'recaps empty state',
+    ),
+  ).toBeDefined();
+});
+
+test('empty Daily Recaps keep incomplete conversation coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    recaps: [],
+    recapEmptyCopy: 'Recaps are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Recaps are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
+test('untitled processing recaps stay visible instead of rendering a blank card', () => {
+  const renderer = render({
+    recaps: [
+      {
+        id: 'recap-processing',
+        title: 'Processing conversation…',
+        dateLabel: 'Monday',
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('Processing conversation…');
+  expect(renderedText(renderer)).not.toContain('No recaps yet');
+});
+
 test('missing settings content reports unavailable instead of a blank settings stage', () => {
   const renderer = render({activeRoute: 'settings'});
   expect(renderedText(renderer)).toContain('Couldn’t load settings');

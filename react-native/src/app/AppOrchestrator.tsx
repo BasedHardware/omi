@@ -32,6 +32,7 @@ import {
 } from '../chatClient';
 import {omiBackend} from '../omiNative';
 import {
+  conversationDisplayTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadsCanRetry,
@@ -39,7 +40,7 @@ import {
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
-import {OutcomeStatus} from '../ui/ReadStatus';
+import {emptyLibraryCopy, OutcomeStatus} from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
 import {HomeSearchField} from '../ui/SearchField';
 import {Onboarding} from '../ui/Onboarding';
@@ -983,7 +984,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               item.startedAt ?? item.createdAt,
             ).toLocaleDateString(undefined, {weekday: 'long'}),
             id: item.id,
-            title: item.title,
+            title: conversationDisplayTitle(item),
           }))
         : [];
     const projectionStatus: MobileProjectionStatus =
@@ -1100,6 +1101,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             : projectionStatus
         }
         recaps={recapItems}
+        recapEmptyCopy={emptyLibraryCopy(
+          'Recaps',
+          readOutcomes?.conversations.status === 'success'
+            ? readOutcomes.conversations.value.page
+            : null,
+          false,
+          '',
+          'No recaps yet',
+        )}
         tasks={taskItems}
         taskStatus={
           readOutcomes?.tasks.status === 'success'

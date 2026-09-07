@@ -76,6 +76,7 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskStatus: MobileProjectionStatus;
   recaps: readonly MobileRecap[];
   recapStatus: MobileProjectionStatus;
+  recapEmptyCopy?: string;
   mindMapStatus: MobileProjectionStatus;
   askValue: string;
   onAskChange: (value: string) => void;
@@ -270,6 +271,7 @@ export function MobileAppSurface({
   onViewTasks,
   recaps,
   recapStatus,
+  recapEmptyCopy,
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
@@ -397,7 +399,13 @@ export function MobileAppSurface({
             />
             {recapStatus === 'ready' ? (
               recaps.length === 0 ? (
-                <StatePanel noun="recaps" status="empty" />
+                <View
+                  accessibilityLabel="recaps empty state"
+                  style={styles.statePanel}>
+                  <Text style={styles.stateText}>
+                    {recapEmptyCopy ?? 'No recaps yet'}
+                  </Text>
+                </View>
               ) : (
                 <FlatList
                   data={recaps}
@@ -446,6 +454,7 @@ export function MobileAppSurface({
       onViewTasks,
       recaps,
       recapStatus,
+      recapEmptyCopy,
       tasks,
       taskStatus,
     ],
