@@ -45,6 +45,7 @@ import { requestCanonicalTasks } from "./canonical-tasks";
 import {
   readDeviceTranscription,
   processDeviceTranscriptions,
+  projectDeviceTranscription,
   type TranscriptionAI,
 } from "./device-transcriptions";
 import { parseTaskLimit, readTasks } from "./tasks";
@@ -883,22 +884,16 @@ export async function handleTranscription(
 ): Promise<Response> {
   if (context.env.DB === undefined)
     return backendError("service_unavailable", "retry", 503, true);
-  const transcription = await readDeviceTranscription(
+  const row = await readDeviceTranscription(
     context.env.DB,
     context.get("accountId"),
     context.req.param("id")
   );
+  if (row === null) return backendError("not_found", "refresh_history", 404);
+  const transcription = projectDeviceTranscription(row);
   if (transcription === null)
-    return backendError("not_found", "refresh_history", 404);
-  return json({
-    transcription: {
-      ...transcription,
-      segments:
-        transcription.segments === null
-          ? []
-          : JSON.parse(transcription.segments),
-    },
-  });
+    return backendError("service_unavailable", "retry", 503, true);
+  return json({ transcription });
 }
 
 export async function handleTranscribe(

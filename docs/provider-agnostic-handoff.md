@@ -20,6 +20,8 @@ Cloud Linux after dc0ca0524f: Android now stores and honors the same Old backend
 
 GitHub `Validate backend worker` has been red since ff4738ee63: the PostgreSQL Listen-capture qualification still expected a completed client transcript without `errorCode`, while `parseRecordingTranscript` and `deviceTranscriptionProjection` already require `errorCode` (`null` on success) so the app can refresh failed work without restarting paid transcription. Docker is unavailable in this Cloud VM, so the real PostgreSQL 18.4 suite cannot be rerun here; the assertion now matches the existing client contract. Native Rewind reader fixtures already use `/Users/Shared` plus symlink-resolved containment.
 
+Cloud Linux after fa6c525055: GitHub `Validate backend worker` passed on that commit, including real PostgreSQL 18.4 Listen qualification with `errorCode: null`. Worker transcript GET/POST now projects the same client fields as `parseRecordingTranscript` / `deviceTranscriptionProjection`. Unreadable stored segments stay 503 instead of a 200 body the app would treat as an unacknowledged transcript. Root `bun run check` passed locally after that projection. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), and current trusted chat context packets (01bdb648bb). Chat persistence and deployed gateway identity composition remain missing.
