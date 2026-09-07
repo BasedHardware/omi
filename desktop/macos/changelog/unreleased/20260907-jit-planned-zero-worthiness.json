@@ -1,0 +1,3 @@
+{
+  "change": "Fixed planned reminders not firing when a matching app was on screen but that context was not independently notification-worthy"
+}
