@@ -456,6 +456,18 @@ export function DesktopSettings({
       {account?.profile?.name != null ? (
         <Row copy={account.profile.name} title="Name" />
       ) : null}
+      {account?.profile?.company != null ? (
+        <Row copy={account.profile.company} title="Company" />
+      ) : null}
+      {account?.profile?.job != null ? (
+        <Row copy={account.profile.job} title="Job" />
+      ) : null}
+      {account?.profile?.dataProtectionLevel != null ? (
+        <Row
+          copy={account.profile.dataProtectionLevel}
+          title="Data protection"
+        />
+      ) : null}
       {account?.subscription != null ? (
         <Row
           copy={[

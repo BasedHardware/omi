@@ -1494,6 +1494,56 @@ test('Settings shows already-loaded transcription seconds on Current plan', asyn
     'plus · active · 90 / 3600 transcribed seconds',
   );
   expect(renderedText(renderer)).not.toContain('Plan is unavailable.');
+  expect(renderedText(renderer)).not.toContain('Company');
+  expect(renderedText(renderer)).not.toContain('Job');
+  expect(renderedText(renderer)).not.toContain('Data protection');
+});
+
+test('Settings shows already-loaded company, job, and data protection', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-1',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: 'Based Hardware',
+      job: 'Engineer',
+      dataProtectionLevel: 'standard',
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Company');
+  expect(tree).toContain('Based Hardware');
+  expect(tree).toContain('Job');
+  expect(tree).toContain('Engineer');
+  expect(tree).toContain('Data protection');
+  expect(tree).toContain('standard');
 });
 
 test('Settings reports a nested non-retryable profile read as unavailable', async () => {

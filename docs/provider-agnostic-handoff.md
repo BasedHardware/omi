@@ -150,7 +150,9 @@ Cloud Linux after `4be501c906`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `1faf7c91ac`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Home, Conversations, and Tasks no longer say "Some of your history isn't loaded yet" when every failed library door is nested non-retryable. That banner uses the mapped saved-data unavailable copy and still omits Try again. Retryable library failures keep the existing delay copy and Try again. This does not invent a library producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the desktop Current-plan transcription-seconds slice: macOS Settings Current plan now shows already-loaded transcription seconds with the same used/limit units as mobile Settings Plan when both values are present. It does not invent `0 / 0` when those fields are null. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `320d851045`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Settings Current plan now shows already-loaded transcription seconds with the same used/limit units as mobile Settings Plan when both values are present. It does not invent `0 / 0` when those fields are null. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the desktop Account company/job/data-protection slice: macOS Settings Account now shows already-loaded company, job, and data protection when those profile fields are present, matching mobile Settings. It does not invent empty rows when they are null. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
