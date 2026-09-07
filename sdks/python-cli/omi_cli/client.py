@@ -32,7 +32,7 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, from_status
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -161,7 +161,7 @@ class OmiClient:
         except httpx.TransportError as exc:
             # Transport failures can contain credentials or URLs; keep public
             # output fixed while retaining the cause for callers debugging it.
-            raise ServerError(
+            raise TransportError(
                 message="Connection failed",
                 detail="Could not reach the Omi API after multiple attempts. Check your connection and try again.",
             ) from exc
