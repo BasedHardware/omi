@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+# Imported at module level so the store's import cost lands in collection, not
+# in the fast-unit duration guard of the test that patches it.
+from database import conversations as conversations_db
 from utils.memory import brain_map_sources as sources
 
 
@@ -159,8 +162,6 @@ def test_the_default_conversation_reader_keeps_legacy_rows_and_names_them_by_doc
     # existed, and a row without an `id` field cannot be cited. The default
     # reader asks for discarded rows and filters them here, and every row is
     # named by its document id.
-    from database import conversations as conversations_db
-
     class _Doc:
         update_time = None
 
