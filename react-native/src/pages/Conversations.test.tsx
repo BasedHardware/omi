@@ -2,7 +2,10 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import {ConversationsPage} from './Conversations';
-import type {ConversationProjection} from '../desktopReadClient';
+import {
+  desktopBackendUnavailableCopy,
+  type ConversationProjection,
+} from '../desktopReadClient';
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -227,4 +230,48 @@ test('listen conversations do not present a blank detail as a transcript', async
   } finally {
     dimensions.mockRestore();
   }
+});
+
+test('nested non-retryable conversation reads omit Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'error',
+          error: desktopBackendUnavailableCopy,
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh conversations',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable conversation reads still offer Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'error',
+          error:
+            'This saved data could not be loaded. Retry without changing it.',
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh conversations',
+    ).length,
+  ).toBeGreaterThan(0);
 });

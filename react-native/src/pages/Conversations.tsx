@@ -14,6 +14,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationGroupLabel,
+  desktopBackendUnavailableCopy,
   type ConversationProjection,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -238,7 +239,7 @@ export function ConversationsPage({
           <ScrollView
             contentContainerStyle={styles.conversationList}
             style={styles.conversationListPane}>
-            {onRefresh && (
+            {onRefresh && error !== desktopBackendUnavailableCopy && (
               <FocusPressable
                 accessibilityRole="button"
                 accessibilityLabel="Refresh conversations"
