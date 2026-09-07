@@ -13,6 +13,11 @@ const mockBackend = {
   request: jest.fn(),
   generationEvents: jest.fn(),
   cancelGenerationEvents: jest.fn(async () => undefined),
+  getSoftwarePlane: jest.fn(async (): Promise<'old' | 'new'> => 'old'),
+  setSoftwarePlane: jest.fn(
+    async (plane: 'old' | 'new'): Promise<'old' | 'new'> => plane,
+  ),
+  stampedV5BackendOrigin: jest.fn(async (): Promise<string | null> => null),
 };
 
 jest.mock('../omiNative', () => ({
@@ -52,6 +57,12 @@ afterEach(() => {
   });
   mockAuth.hasCloudSession.mockReset();
   mockBackend.request.mockReset();
+  mockBackend.getSoftwarePlane.mockReset();
+  mockBackend.getSoftwarePlane.mockResolvedValue('old');
+  mockBackend.setSoftwarePlane.mockReset();
+  mockBackend.setSoftwarePlane.mockImplementation(async plane => plane);
+  mockBackend.stampedV5BackendOrigin.mockReset();
+  mockBackend.stampedV5BackendOrigin.mockResolvedValue(null);
 });
 
 async function renderPage(Page: typeof ConnectorsPage) {
@@ -102,6 +113,28 @@ test('a rejected session probe keeps settings retryable instead of loading forev
   );
   expect(labelsOf(renderer)).toContain('Retry settings');
   expect(tree).not.toContain('Loading account…');
+});
+
+test('Settings keeps Old backend and New backend on the native transport', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockBackend.stampedV5BackendOrigin.mockResolvedValue(
+    'https://omi-v5-backend-staging.example.workers.dev',
+  );
+  const renderer = await renderPage(SettingsPage);
+  expect(textOf(renderer)).toContain(
+    'Old backend uses your existing Omi account',
+  );
+  expect(labelsOf(renderer)).toContain('Use Old backend');
+  expect(labelsOf(renderer)).toContain('Use New backend');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use New backend')
+      .props.onPress();
+  });
+  expect(mockBackend.setSoftwarePlane).toHaveBeenCalledWith('new');
+  expect(textOf(renderer)).toContain(
+    'New sends v5 chat, capture, conversations, memories, tasks, and settings',
+  );
 });
 
 test('a signed-out session still offers the native sign-in', async () => {

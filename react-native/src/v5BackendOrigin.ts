@@ -89,7 +89,8 @@ export function isCaptureBackendPath(path: string): boolean {
     route.startsWith('/v1/device-sessions/') ||
     route === '/v1/conversations' ||
     route === '/v1/memories' ||
-    route === '/v1/tasks'
+    route === '/v1/tasks' ||
+    route === '/v1/tasks/ops'
   );
 }
 
@@ -158,7 +159,7 @@ export function resolveNativeRequestOrigin(input: {
     input.softwarePlane ?? (stamped === null ? 'old' : 'new');
   if (parseSoftwarePlane(softwarePlane) === 'new') {
     if (input.v5BackendUrl === undefined || input.v5BackendUrl.length === 0) {
-      return {ok: true, origin: CLOUD_BACKEND_ORIGIN};
+      return {ok: false, reason: 'unconfigured'};
     }
     if (stamped === null) {
       return {ok: false, reason: 'rejected'};

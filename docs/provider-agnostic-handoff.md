@@ -16,6 +16,8 @@ Continue with regression investigation and full provider-independent backend cov
 
 Cloud Linux after 80341ef838: Apple capture-path matching now strips `?`/`#` the same way Android and JS already did, so New-backend conversation, memory, task, and chat reads with query strings stay on the stamped origin instead of `api.omi.me`. Canonical parsers accept ratified `partial` completeness instead of calling honest pages malformed. Focused Jest 91/91 and the full React Native suite 497/497 passed after the workspace TypeScript build; Android HTTP v5 routing passed, including existing query-string cases. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after dc0ca0524f: Android now stores and honors the same Old backend / New backend plane Apple already did, so a stamped New origin no longer ignores the Settings toggle. JS capture-path matching includes `POST /v1/tasks/ops`, and New without a valid stamp stays unconfigured instead of silently reading `api.omi.me`. Mobile Settings exposes the same backend switch. Root `bun run check` passed: 498 React Native tests, Worker/PWA/ratified/native gates, and 274 deployed-backend tests. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), and current trusted chat context packets (01bdb648bb). Chat persistence and deployed gateway identity composition remain missing.

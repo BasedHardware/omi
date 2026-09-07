@@ -116,6 +116,7 @@ static void testCaptureQueryRoutes(void) {
   assert(OmiIsCaptureBackendPath(@"/v1/conversations?limit=50&offset=0"));
   assert(OmiIsCaptureBackendPath(@"/v1/memories?limit=50"));
   assert(OmiIsCaptureBackendPath(@"/v1/tasks?limit=50&cursor=abc"));
+  assert(OmiIsCaptureBackendPath(@"/v1/tasks/ops"));
   assert(OmiIsCaptureBackendPath(@"/v1/chat-messages?limit=50"));
   assert(OmiIsCaptureBackendPath(@"/v1/conversations#keep"));
   assert(!OmiIsCaptureBackendPath(@"/v1/apps?limit=50"));
@@ -131,6 +132,7 @@ static void testCaptureQueryRoutes(void) {
   policy.clientId = @"test";
   policy.kind = OmiBackendCredentialKindCloud;
   assert([OmiRequestBaseURL(policy, @"/v1/conversations?limit=50").host isEqualToString:@"synthetic.workers.dev"]);
+  assert([OmiRequestBaseURL(policy, @"/v1/tasks/ops").host isEqualToString:@"synthetic.workers.dev"]);
   assert([OmiRequestBaseURL(policy, @"/v1/apps").host isEqualToString:@"api.omi.me"]);
   policy.captureOriginRequired = NO;
   assert([OmiRequestBaseURL(policy, @"/v1/conversations?limit=50").host isEqualToString:@"api.omi.me"]);
