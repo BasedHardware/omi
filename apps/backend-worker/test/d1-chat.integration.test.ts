@@ -318,9 +318,18 @@ describe("D1-authoritative chat persistence", () => {
     });
     expect(before.status).toBe(200);
     const beforeBody = (await before.json()) as {
-      entitlement: { used: number; limit: number };
+      entitlement: {
+        planLabel: string;
+        used: number;
+        limit: number;
+        upgradeAvailable: boolean;
+      };
     };
     expect(beforeBody.entitlement.used).toBe(0);
+    expect(beforeBody.entitlement.limit).toBe(env.STAGING_CHAT_LIMIT);
+    expect(beforeBody.entitlement.planLabel).toBe("");
+    expect(beforeBody.entitlement.planLabel).not.toBe(env.STAGING_PLAN_LABEL);
+    expect(beforeBody.entitlement.upgradeAvailable).toBe(false);
 
     await fetchWorker("/v1/chat-messages", {
       method: "POST",
@@ -335,6 +344,7 @@ describe("D1-authoritative chat persistence", () => {
       entitlement: { used: number; limit: number };
     };
     expect(afterBody.entitlement.used).toBe(1);
+    expect(afterBody.entitlement.limit).toBe(env.STAGING_CHAT_LIMIT);
   });
 
   test("alarm completes generation and writes AI message with done event to D1", async () => {

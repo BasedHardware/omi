@@ -233,7 +233,6 @@ export async function readHistory(
 export async function readSettings(
   db: D1Database,
   accountId: string,
-  planLabel: string,
   chatLimit: number | null
 ): Promise<SettingsSnapshot> {
   const usedRow = await db
@@ -246,12 +245,12 @@ export async function readSettings(
   return {
     identity: { displayName: "", email: "" },
     entitlement: {
-      planLabel,
+      planLabel: "",
       limitKey: "chat",
       used,
       limit: chatLimit,
       limitReached: chatLimit !== null && used >= chatLimit,
-      upgradeAvailable: true,
+      upgradeAvailable: false,
     },
   };
 }

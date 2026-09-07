@@ -35,13 +35,14 @@ beforeAll(async () => {
 const accountCalls: string[] = [];
 const identity = { displayName: "Test Account", email: "test@example.invalid" };
 const unavailableIdentity = { displayName: "", email: "" };
+const stagingPlanLabel = "StagingPlanMustNotLeak";
 const initialEntitlement = {
-  planLabel: "Metered",
+  planLabel: "",
   limitKey: "chat",
   used: 0,
   limit: 1,
   limitReached: false,
-  upgradeAvailable: true,
+  upgradeAvailable: false,
 };
 const admissions = new Map<
   string,
@@ -161,7 +162,7 @@ const env = {
   AI: { run: async () => ({ response: "test response" }) },
   STAGING_DISPLAY_NAME: identity.displayName,
   STAGING_EMAIL: identity.email,
-  STAGING_PLAN_LABEL: initialEntitlement.planLabel,
+  STAGING_PLAN_LABEL: stagingPlanLabel,
   STAGING_CHAT_LIMIT: initialEntitlement.limit,
   OBSERVABILITY_SINK_MODE: "cloudflare_only",
   OPENROUTER_GATEWAY_ENABLED: "false",
@@ -1301,6 +1302,7 @@ describe("settings entitlement admission contract", () => {
     });
     expect(JSON.stringify(beforeBody)).not.toContain(identity.displayName);
     expect(JSON.stringify(beforeBody)).not.toContain(identity.email);
+    expect(JSON.stringify(beforeBody)).not.toContain(stagingPlanLabel);
   });
 
   test("an identical replay consumes quota exactly once", async () => {

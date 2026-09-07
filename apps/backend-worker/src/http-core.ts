@@ -404,7 +404,6 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
     await readSettings(
       db,
       context.get("accountId"),
-      context.env.STAGING_PLAN_LABEL,
       context.env.STAGING_CHAT_LIMIT
     )
   );
