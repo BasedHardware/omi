@@ -164,9 +164,21 @@ export async function withAuthorizedConversationRead<Result>(
             if (page.length !== 1)
               throw new PostgresRepositoryError("persistence_failed");
             if (page[0]!.snapshot === null) throw new InvalidMcpCursorError();
+            const snapshotValue = page[0]!.snapshot;
+            if (
+              snapshotValue === null ||
+              typeof snapshotValue !== "object" ||
+              Array.isArray(snapshotValue)
+            ) {
+              throw new PostgresRepositoryError("persistence_failed");
+            }
+            const snapshotRecord = snapshotValue as Record<string, unknown>;
             return {
-              snapshot: parseConversationReadSnapshot(page[0]!.snapshot),
-              after: parseConversationUnionAfter(page[0]!.snapshot),
+              snapshot: parseConversationReadSnapshot({
+                revision: snapshotRecord.revision,
+                records: snapshotRecord.records,
+              }),
+              after: parseConversationUnionAfter(snapshotValue),
             };
           },
           async saveUnion(

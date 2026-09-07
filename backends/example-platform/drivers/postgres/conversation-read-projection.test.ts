@@ -21,6 +21,13 @@ const row = (values: Record<string, unknown> = {}) => ({
 });
 
 test("projects durable recording IDs and distinguishes transcript completion from pending memory work", () => {
+  expect(
+    parseConversationReadSnapshot({
+      revision: 1,
+      records: [row()],
+      after: { updatedAt: 1, id: "recording:11111111-2222-4333-8444-555555555555" },
+    }).records[0]?.record.id
+  ).toBe("recording:11111111-2222-4333-8444-555555555555");
   const projected = parseConversationReadSnapshot({
     revision: "7",
     records: [row()],
@@ -64,6 +71,16 @@ test("rejects corrupt, ambiguous, oversized or reordered snapshots instead of si
     [row({ excerpt: null })],
     [row({ ended_at: "bad" })],
     [row(), row({ sequence: 2 })],
+    [
+      row({
+        sequence: 2,
+        session_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      }),
+      row({
+        sequence: 1,
+        session_id: "ffffffff-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      }),
+    ],
     Array.from({ length: 10001 }, () => row()),
   ]) {
     expect(() =>

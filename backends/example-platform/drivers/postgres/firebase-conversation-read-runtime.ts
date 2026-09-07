@@ -154,7 +154,7 @@ export function createPostgresFirebaseConversationReadRuntime(
                 snapshotSequence: await storage.readSnapshotSequence(),
               })
           );
-          return withAuthorizedConversationRead(
+          return await withAuthorizedConversationRead(
             runtime.pool,
             authority,
             request.signal,
@@ -295,7 +295,7 @@ export function createPostgresFirebaseConversationReadRuntime(
             }
           );
         }
-        return withAuthorizedConversationRead(
+        return await withAuthorizedConversationRead(
           runtime.pool,
           authority,
           request.signal,

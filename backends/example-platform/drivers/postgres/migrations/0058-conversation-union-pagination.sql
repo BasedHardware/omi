@@ -78,6 +78,7 @@ BEGIN
     LEFT JOIN omi_memory.listen_conversation_finalization_intents i ON i.account_id=s.account_id AND i.conversation_id=s.conversation_id
     LEFT JOIN omi_memory.listen_formation_finalizations f ON f.account_id=s.account_id AND f.session_id=s.session_id
     WHERE s.account_id=v_account AND (u.upload_completed_at IS NOT NULL OR i.finalization_id IS NOT NULL)
+    ORDER BY s.conversation_sequence
   ) AS record;
   RETURN jsonb_build_object(
     'revision',v_revision,
