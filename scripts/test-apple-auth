@@ -38,3 +38,9 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework Security -f
   -I"$repo_root/react-native/apple/tests" \
   "$repo_root/react-native/apple/tests/OmiBackendDisposalTest.mm" -o "$build_dir/backend-disposal"
 "$build_dir/backend-disposal"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework AVFoundation -framework CoreImage -framework ImageIO -framework CoreGraphics -framework CoreMedia -framework CoreVideo -lsqlite3 \
+  "$repo_root/react-native/macos/Tests/OmiRewindStoreTest.mm" -o "$build_dir/rewind-store"
+"$build_dir/rewind-store"
+xcrun clang++ -fobjc-arc -fblocks -std=c++17 -framework Foundation -framework AppKit -framework ScreenCaptureKit -framework Vision -framework ImageIO -framework CoreGraphics -lsqlite3 \
+  "$repo_root/react-native/apple/OmiRewindCapture.mm" "$repo_root/react-native/apple/OmiRewindCaptureTest.mm" -o "$build_dir/rewind-capture"
+"$build_dir/rewind-capture"

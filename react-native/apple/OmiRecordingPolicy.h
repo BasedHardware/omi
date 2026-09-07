@@ -47,3 +47,20 @@ static NSDictionary *OmiRememberedRefreshSession(NSDictionary *refreshed, NSDict
   if (current[@"rememberedDevice"] != nil) merged[@"rememberedDevice"] = current[@"rememberedDevice"];
   return merged;
 }
+
+static NSDictionary *OmiRecordingInitializeLogin(NSDictionary *session) {
+  if (session == nil) return nil;
+  if ([session[@"journalLogin"] isKindOfClass:NSString.class] && [session[@"journalLogin"] length] > 0) return session;
+  NSMutableDictionary *initialized = [session mutableCopy];
+  initialized[@"journalLogin"] = NSUUID.UUID.UUIDString.lowercaseString;
+  return initialized;
+}
+
+static NSDictionary *OmiRecordingLocalIdentity(NSDictionary *session, NSDictionary *claims) {
+  NSString *uid = [session[@"tokenUserId"] isKindOfClass:NSString.class] ? session[@"tokenUserId"] : nil;
+  NSString *login = [session[@"journalLogin"] isKindOfClass:NSString.class] ? session[@"journalLogin"] : nil;
+  NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"];
+  if (uid.length == 0 || uid.length > 128 || [uid rangeOfCharacterFromSet:allowed.invertedSet].location != NSNotFound || login.length == 0 || login.length > 128) return nil;
+  if (![claims[@"aud"] isEqual:@"based-hardware"] || ![claims[@"iss"] isEqual:@"https://securetoken.google.com/based-hardware"] || ![claims[@"sub"] isEqual:uid] || (claims[@"user_id"] != nil && ![claims[@"user_id"] isEqual:uid])) return nil;
+  return @{@"uid":uid,@"login":login};
+}

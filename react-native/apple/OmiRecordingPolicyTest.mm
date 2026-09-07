@@ -2,6 +2,21 @@
 static void require(BOOL value) { if (!value) abort(); }
 int main() {
   @autoreleasepool {
+    NSDictionary *legacy = @{@"tokenUserId":@"existing-owner",@"idToken":@"synthetic",@"refreshToken":@"synthetic-refresh"};
+    NSDictionary *initialized = OmiRecordingInitializeLogin(legacy);
+    require([initialized[@"journalLogin"] length] > 0);
+    require([initialized[@"tokenUserId"] isEqual:legacy[@"tokenUserId"]]);
+    require([initialized[@"idToken"] isEqual:legacy[@"idToken"]]);
+    require([OmiRecordingInitializeLogin(initialized)[@"journalLogin"] isEqual:initialized[@"journalLogin"]]);
+    require(legacy[@"journalLogin"] == nil);
+    require(OmiRecordingInitializeLogin(nil) == nil);
+    NSDictionary *claims = @{@"aud":@"based-hardware",@"iss":@"https://securetoken.google.com/based-hardware",@"sub":@"existing-owner"};
+    require([OmiRecordingLocalIdentity(initialized, claims)[@"uid"] isEqual:@"existing-owner"]);
+    for (NSDictionary *change in @[@{@"aud":@"another-project"},@{@"iss":@"https://securetoken.google.com/another-project"},@{@"sub":@"other-owner"},@{@"user_id":@"other-owner"}]) {
+      NSMutableDictionary *wrong = [claims mutableCopy]; [wrong addEntriesFromDictionary:change];
+      require(OmiRecordingLocalIdentity(initialized, wrong) == nil);
+    }
+    require(OmiRecordingLocalIdentity(legacy, claims) == nil);
     for (NSNumber *status in @[@408, @429, @500, @503, @599]) require(OmiRecordingRetryableOwnershipStatus(status.integerValue));
     for (NSNumber *status in @[@200, @400, @401, @403, @409, @600]) require(!OmiRecordingRetryableOwnershipStatus(status.integerValue));
     NSDictionary *beforeForget = @{@"idToken":@"new-token", @"rememberedDevice":@{@"id":@"old-device"}};

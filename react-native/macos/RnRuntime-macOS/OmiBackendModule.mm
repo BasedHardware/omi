@@ -207,10 +207,8 @@ static NSString *OmiRecordingLogin(void) {
     if (session == nil) return nil;
     NSString *existing = [session[@"journalLogin"] isKindOfClass:NSString.class] ? session[@"journalLogin"] : nil;
     if (existing.length > 0) return existing;
-    NSMutableDictionary *updated = [session mutableCopy];
-    NSString *generated = NSUUID.UUID.UUIDString.lowercaseString;
-    updated[@"journalLogin"] = generated;
-    return OmiStoreOwnKeychainCloudSession(updated) ? generated : nil;
+    NSDictionary *updated = OmiRecordingInitializeLogin(session);
+    return OmiStoreOwnKeychainCloudSession(updated) ? updated[@"journalLogin"] : nil;
   }
 }
 

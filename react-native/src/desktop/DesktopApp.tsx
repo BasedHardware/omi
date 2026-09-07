@@ -21,6 +21,8 @@ import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
+import {DesktopRewind} from './DesktopRewind';
+import {useRewindCapture} from '../app/useRewindCapture';
 import {ShippingStage} from './ShippingStage';
 
 export type {DesktopSession};
@@ -88,6 +90,10 @@ export function DesktopApp({
   signingIn,
   ...taskMutations
 }: Props) {
+  const [captureRevision, setCaptureRevision] = useState(0);
+  const capture = useRewindCapture(session === 'ready', () =>
+    setCaptureRevision(value => value + 1),
+  );
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const omnibarRef = useRef<TextInput>(null);
   useEffect(() => {
@@ -155,6 +161,7 @@ export function DesktopApp({
             hasOlderChat={hasOlderChat}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
+            onOpenRewind={() => setRoute('Rewind')}
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
@@ -163,6 +170,8 @@ export function DesktopApp({
           />
         ) : route === 'Conversations' ? (
           <LibraryPage outcomes={outcomes} />
+        ) : route === 'Rewind' ? (
+          <DesktopRewind capture={capture} captureRevision={captureRevision} />
         ) : route === 'Tasks' ? (
           <TasksPage outcomes={outcomes} {...taskMutations} />
         ) : route === 'Apps' ? (
@@ -170,6 +179,7 @@ export function DesktopApp({
         ) : (
           <View style={styles.page}>
             <DesktopSettings
+              capture={capture}
               deviceContent={deviceContent}
               onSignIn={onSignIn}
               onSignOut={onSignOut}

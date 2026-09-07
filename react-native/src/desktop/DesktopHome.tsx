@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import Monitor from 'lucide-react-native/icons/monitor';
 import type {ChatMessage} from '../chatClient';
 import type {
   DesktopReadOutcomes,
@@ -29,24 +28,11 @@ type Props = {
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
   onRefresh: () => void;
+  onOpenRewind?: () => void;
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
 };
-
-export function RewindPanel() {
-  return (
-    <View style={styles.centerState}>
-      <Monitor color={token.color.inkMuted} size={28} />
-      <Text style={styles.emptyTitle}>
-        Screen history is ready when capture is on
-      </Text>
-      <Text style={styles.emptyCopy}>
-        Captured frames stay navigable by time and application.
-      </Text>
-    </View>
-  );
-}
 
 export function DesktopReadBanner({
   onRefresh,
@@ -147,6 +133,7 @@ export function DesktopHome({
   messages,
   onLoadOlderChat,
   onRefresh,
+  onOpenRewind,
   outcomes,
   reads,
   readsPhase,
@@ -285,7 +272,12 @@ export function DesktopHome({
         </View>
         <View accessibilityLabel="Home rewind" style={styles.section}>
           <SectionTitle>Screen history</SectionTitle>
-          <EmptyCopy>Screen history is ready when capture is on</EmptyCopy>
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Rewind"
+            onPress={onOpenRewind}>
+            <Text style={styles.bannerAction}>Browse screen history</Text>
+          </FocusPressable>
         </View>
       </ScrollView>
     </View>
@@ -340,27 +332,5 @@ const styles = StyleSheet.create({
     color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.title,
-  },
-  emptyTitle: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.search,
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  emptyCopy: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    lineHeight: 18,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  centerState: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
-    justifyContent: 'center',
-    paddingVertical: 40,
   },
 });

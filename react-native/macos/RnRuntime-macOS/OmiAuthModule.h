@@ -13,5 +13,7 @@ BOOL OmiAuthUsesDataProtectionKeychain(void);
 // 401s, so it must never be a refresh dependency.
 NSString *OmiAuthResolvedFirebaseApiKey(void);
 
+NSDictionary *OmiAuthLocalHistoryIdentity(void);
+
 @interface OmiAuthModule : NSObject <RCTBridgeModule>
 @end

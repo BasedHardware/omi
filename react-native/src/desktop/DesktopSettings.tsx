@@ -1,4 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import type {useRewindCapture} from '../app/useRewindCapture';
 import {Animated, ScrollView, Switch, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
@@ -31,6 +32,7 @@ import {ShippingStage} from './ShippingStage';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
+  capture?: ReturnType<typeof useRewindCapture>;
   deviceContent?: React.ReactNode;
   session: DesktopSession;
   signingIn: boolean;
@@ -169,6 +171,7 @@ function SettingsNav({
 }
 
 export function DesktopSettings({
+  capture,
   deviceContent,
   onSignIn,
   onSignOut,
@@ -309,7 +312,12 @@ export function DesktopSettings({
       {advanced}
       <Row
         copy={
-          permissions.screen === 'granted'
+          capture?.available
+            ? capture.error ??
+              (capture.capturing
+                ? 'Saving screen history on this Mac.'
+                : 'Start or stop saving screen history on this Mac.')
+            : permissions.screen === 'granted'
             ? 'Screen capture is allowed on this Mac.'
             : 'Omi needs Screen Recording to keep what you see.'
         }
@@ -317,6 +325,11 @@ export function DesktopSettings({
         trailing={
           <Switch
             onValueChange={value => {
+              if (capture?.available) {
+                if (value) void capture.start();
+                else void capture.stop();
+                return;
+              }
               if (value) {
                 runAction(async () => {
                   await request('screen');
@@ -325,7 +338,11 @@ export function DesktopSettings({
               }
               runAction(() => setPref('screenCapture', false));
             }}
-            value={prefs.screenCapture && permissions.screen !== 'denied'}
+            value={
+              capture?.available
+                ? capture.capturing || capture.busy
+                : prefs.screenCapture && permissions.screen !== 'denied'
+            }
           />
         }
       />
