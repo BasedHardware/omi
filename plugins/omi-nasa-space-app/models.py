@@ -1,7 +1,7 @@
 """Pydantic models for the NASA Space & Astronomy Intelligence Omi integration plugin."""
 
+import datetime as dt
 from datetime import datetime, timezone
-import re
 from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -11,7 +11,7 @@ class ApodRequest(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    date: Optional[str] = Field(
+    date: Optional[dt.date] = Field(
         default=None,
         description="The date of the APOD image to retrieve in YYYY-MM-DD format (defaults to today).",
     )
@@ -20,22 +20,14 @@ class ApodRequest(BaseModel):
         description="Whether to include thumbnail URL for video APOD items.",
     )
 
-    @field_validator("date")
+    @field_validator("date", mode="before")
     @classmethod
-    def validate_date(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        v = v.strip()
-        if not v:
-            return None
-        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
-            raise ValueError("date must be in YYYY-MM-DD format (e.g. 2024-07-20)")
-        try:
-            # Validates real calendar date (rejects impossible dates like 2024-02-31 or 2024-13-45)
-            parsed_date = datetime.strptime(v, "%Y-%m-%d").date()
-            return parsed_date.isoformat()
-        except ValueError:
-            raise ValueError(f"'{v}' is not a valid calendar date in YYYY-MM-DD format")
+    def empty_str_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if not v_stripped:
+                return None
+        return v
 
 
 class ApodDetail(BaseModel):

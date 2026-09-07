@@ -287,7 +287,7 @@ def test_get_astronomy_picture_calendar_invalid_date_rejected(client):
     """Ensure impossible calendar dates like 2024-02-31 fail validation with HTTP 422."""
     response = client.post("/tools/get-astronomy-picture", json={"date": "2024-02-31"})
     assert response.status_code == 422
-    assert "not a valid calendar date" in response.text
+    assert "date" in response.text.lower()
 
 
 def test_get_astronomy_picture_video_with_thumbnail(monkeypatch):

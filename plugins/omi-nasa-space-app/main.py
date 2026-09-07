@@ -355,14 +355,15 @@ async def omi_tools_manifest() -> Dict[str, Any]:
 )
 async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
     """Retrieve NASA Astronomy Picture of the Day."""
-    cache_key = f"apod:{payload.date or 'today'}:{payload.thumbs}"
+    date_str = payload.date.isoformat() if payload.date else None
+    cache_key = f"apod:{date_str or 'today'}:{payload.thumbs}"
     cached = cache.get(cache_key)
 
     if cached is None:
         client = get_http_client()
         params: Dict[str, Any] = {"api_key": NASA_API_KEY}
-        if payload.date:
-            params["date"] = payload.date
+        if date_str:
+            params["date"] = date_str
         if payload.thumbs:
             params["thumbs"] = "true"
 
@@ -372,7 +373,7 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
             )
             if resp.status_code == 404:
                 return ChatToolResponse(
-                    result=f"No NASA Astronomy Picture of the Day found for date '{payload.date}'."
+                    result=f"No NASA Astronomy Picture of the Day found for date '{date_str}'."
                 )
             if resp.status_code != 200:
                 raise HTTPException(
@@ -381,7 +382,7 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
                 )
             cached = resp.json()
             # If historical date, cache longer (24h); if today or unspecified, cache for 1 hour
-            today_utc = time.strftime("%Y-%m-%d", time.gmtime())
+            today_utc = datetime.now(timezone.utc).date()
             ttl = 3600.0 if (not payload.date or payload.date == today_utc) else 86400.0
             cache.set(cache_key, cached, ttl_seconds=ttl)
         except HTTPException:
