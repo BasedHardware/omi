@@ -5,6 +5,7 @@ import {
   openDeviceSession,
   transcribeDeviceSession,
   isTransientDeviceSessionError,
+  deviceCaptureDoorClosed,
 } from '../src/deviceSessionClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 
@@ -243,6 +244,34 @@ test('does not treat nested non-retryable capture 503s as transient', async () =
       new DeviceSessionBackendError(500, 'unknown'),
     ),
   ).toBe(true);
+  expect(deviceCaptureDoorClosed({code: 'OMI_DEV_BACKEND_UNSUPPORTED'})).toBe(
+    true,
+  );
+  expect(
+    deviceCaptureDoorClosed({code: 'OMI_CAPTURE_OWNERSHIP_UNAVAILABLE'}),
+  ).toBe(true);
+  expect(
+    deviceCaptureDoorClosed(
+      new DeviceSessionBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    deviceCaptureDoorClosed(
+      new DeviceSessionBackendError(503, 'capture_ownership_unavailable', true),
+    ),
+  ).toBe(true);
+  expect(
+    deviceCaptureDoorClosed(
+      new DeviceSessionBackendError(503, 'service_unavailable', true),
+    ),
+  ).toBe(false);
+  expect(deviceCaptureDoorClosed(new TypeError('Open response lost'))).toBe(
+    false,
+  );
 });
 
 test.each([

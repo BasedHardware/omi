@@ -116,11 +116,7 @@ function rejectIfUnusable(response: NativeHttpResponse): void {
   } catch {
     backendCode = 'unknown';
   }
-  throw new DeviceSessionBackendError(
-    response.status,
-    backendCode,
-    retryable,
-  );
+  throw new DeviceSessionBackendError(response.status, backendCode, retryable);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -257,6 +253,26 @@ export function isTransientDeviceSessionError(error: unknown): boolean {
       'code' in error &&
       error.code === 'OMI_HTTP_TRANSPORT')
   );
+}
+
+export function deviceCaptureDoorClosed(error: unknown): boolean {
+  if (error instanceof DeviceSessionBackendError) {
+    return (
+      error.backendCode === 'capture_ownership_unavailable' ||
+      error.backendCode === 'development_backend_unsupported'
+    );
+  }
+  if (error === null || typeof error !== 'object') {
+    return false;
+  }
+  if (
+    'code' in error &&
+    (error.code === 'OMI_DEV_BACKEND_UNSUPPORTED' ||
+      error.code === 'OMI_CAPTURE_OWNERSHIP_UNAVAILABLE')
+  ) {
+    return true;
+  }
+  return 'retryable' in error && error.retryable === false;
 }
 
 export async function transcribeDeviceSession(

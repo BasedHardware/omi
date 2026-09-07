@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   appendDeviceSessionAudio,
   completeDeviceSession,
+  deviceCaptureDoorClosed,
   isTransientDeviceSessionError,
   openDeviceSession,
   transcribeDeviceSession,
@@ -62,6 +63,24 @@ function mergeBattery(
 
 const pausedUploadMessage =
   'Recording is saved on this device. Upload is paused and will retry automatically.';
+const captureUnavailableCopy =
+  'Audio capture is not available from this backend yet.';
+const ownershipUnavailableCopy =
+  'Recording ownership is not available from this backend yet.';
+const ownershipRefreshCopy =
+  'Recording ownership could not be verified. Connecting is unavailable until you reopen the app.';
+
+function recordingOwnershipDoorClosed(error: unknown): boolean {
+  if (deviceCaptureDoorClosed(error)) {
+    return true;
+  }
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    error.code === 'OMI_RECORDING_OWNERSHIP' &&
+    error.message === 'Recording ownership is unavailable from this backend'
+  );
+}
 
 export const DEVICE_UPLOAD_LIMITS = {
   maxPendingBytes: 8_388_608,
@@ -420,7 +439,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               .catch(() => undefined);
           }
           setDeviceScanMessage(
-            capture.journal !== null
+            deviceCaptureDoorClosed(error)
+              ? captureUnavailableCopy
+              : capture.journal !== null
               ? 'Recording upload paused. Saved audio is retained on this device for recovery when you reopen the app.'
               : capture.id === null
               ? 'Audio upload could not start. Reconnect your Omi to start a new recording.'
@@ -445,7 +466,9 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               else {
                 capture.failed = true;
                 setDeviceScanMessage(
-                  'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
+                  deviceCaptureDoorClosed(error)
+                    ? captureUnavailableCopy
+                    : 'Audio was uploaded, but the recording could not be finalized. Its saved status is unconfirmed.',
                 );
               }
             }
@@ -927,10 +950,12 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         });
       });
       journalReadyRef.current = ready;
-      void ready.catch(() => {
+      void ready.catch(error => {
         if (active) {
           setDeviceScanMessage(
-            'Recording ownership could not be verified. Connecting is unavailable until you reopen the app.',
+            recordingOwnershipDoorClosed(error)
+              ? ownershipUnavailableCopy
+              : ownershipRefreshCopy,
           );
         }
       });

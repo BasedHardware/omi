@@ -108,7 +108,9 @@ Cloud Linux after `7cfd1cc9ed`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `83dae78a57`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested `{error:{retryable:false}}` task-write 503s and `OMI_DEV_BACKEND_UNSUPPORTED` throws are permanent, so Retry is omitted. Write-ops `control_unavailable` 503s stay retryable on purpose. Transport throws without that door still retry.
 
-Cloud Linux after the transcript throw slice: `OMI_DEV_BACKEND_UNSUPPORTED` and nested `{error:{retryable:false}}` transcript throws omit Check again and use unavailable copy instead of "Transcript could not be loaded." Transport throws still offer Check again. Nested non-retryable HTTP 503s already did. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `05b6a00930`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Native transcript GET throws of `OMI_DEV_BACKEND_UNSUPPORTED` or nested `retryable:false` omit Check again and use unavailable copy instead of "Transcript could not be loaded." Transport throws still offer Check again. Nested non-retryable HTTP 503s already did.
+
+Cloud Linux after the capture-door copy slice: nested non-retryable capture opens, `OMI_DEV_BACKEND_UNSUPPORTED`, and `capture_ownership_unavailable` no longer ask to reconnect. Ownership preflight that is `OMI_CAPTURE_OWNERSHIP_UNAVAILABLE` or native "unavailable from this backend" no longer asks to reopen the app. Transport ownership failures still ask to reopen. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
