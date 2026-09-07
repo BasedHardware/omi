@@ -281,7 +281,7 @@ export function DesktopRewind({
           {busy ? (
             <Text style={styles.meta}>Loading screen history…</Text>
           ) : null}
-          {!busy && error === null && frames.length === 0 ? (
+          {!busy && error === null && frames.length === 0 && cursor === null ? (
             <Text style={styles.text}>
               {query
                 ? 'No captures match this search.'

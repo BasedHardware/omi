@@ -183,6 +183,51 @@ test('missing native bridge reports unavailable instead of empty success', async
   expect(content(view)).not.toContain('No captures saved yet.');
 });
 
+test('a complete empty history may claim nothing is saved', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain('No captures saved yet.');
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('an incomplete empty history does not claim nothing is saved', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
+test('an incomplete empty search does not claim a complete miss', async () => {
+  mockRewind.listFrames
+    .mockResolvedValueOnce({
+      frames: [frame('one')],
+      nextCursor: null,
+    })
+    .mockResolvedValueOnce({
+      frames: [],
+      nextCursor: 'page-two',
+    });
+  const view = await render();
+  await act(async () =>
+    label(view, 'Search screen history').props.onChangeText('zzz'),
+  );
+  await press(view, 'Search history');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
 test.each(['rejected', 'wrong-id'])(
   'image %s cannot display unrelated bytes',
   async mode => {

@@ -52,6 +52,8 @@ Cloud Linux after the Home search honesty slice: Home search treated an empty ma
 
 Cloud Linux after the Home task search honesty slice: Desktop Home search hid unmatched tasks and then claimed "No tasks yet," which is an empty library, not a search miss. Completeness copy still wins; a complete unmatched search now says tasks do not match instead of inventing an empty task list. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after the Rewind empty-page honesty slice: Rewind treated an empty first page as "No captures saved yet" / "No captures match this search" even when a continuation cursor remained. Empty claims now require a terminal page; more history still offers Load more. Live ScreenCaptureKit and physical Mac capture remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
