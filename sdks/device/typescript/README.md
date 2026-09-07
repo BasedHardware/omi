@@ -11,7 +11,8 @@ import { AUDIO_DATA_UUID, stripPacketHeader, OmiDeviceSession } from '@basedhard
 
 For the local Whisper transcriber, `stop()` stops accepting new audio and
 flushes any buffered tail. Transcription already in progress still delivers its
-result through `onTranscript`, so callbacks may occur after `stop()` returns.
+result through `onTranscript` in audio input order, even if runners finish out of
+order. Callbacks may occur after `stop()` returns.
 
 Run `bun test` in this directory for the SDK's hardware-free unit tests. The same
 suite runs through the repository's shared preflight manifest locally and in CI.
