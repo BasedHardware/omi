@@ -6,7 +6,8 @@ import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
-  memoryDisplayText,
+  memoryDisplayBody,
+  memoryDisplayTitle,
   projectionTimestamp,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -67,7 +68,7 @@ export const ReadRow = memo(function ReadRow({
           {item.kind === 'conversation'
             ? conversationDisplayTitle(item)
             : item.kind === 'memory'
-            ? memoryDisplayText(item)
+            ? memoryDisplayTitle(item)
             : item.title}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
@@ -108,7 +109,7 @@ export const MemoryRow = memo(function MemoryRow({
   return (
     <View style={styles.memoryCard}>
       <Text numberOfLines={3} style={styles.memoryText}>
-        {memoryDisplayText(item)}
+        {memoryDisplayBody(item)}
       </Text>
       <Text style={styles.rowMeta}>
         {item.timestamp === null

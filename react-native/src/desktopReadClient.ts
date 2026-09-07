@@ -50,13 +50,22 @@ export function conversationDisplaySummary(item: {
     : 'Conversation summary unavailable';
 }
 
-export function memoryDisplayText(item: {
+export function memoryDisplayTitle(item: {
   title: string;
   summary: string;
 }): string {
-  const parsed = parseMemoryText(
-    item.summary !== '' ? item.summary : item.title,
-  );
+  return visibleMemoryText(item.title !== '' ? item.title : item.summary);
+}
+
+export function memoryDisplayBody(item: {
+  title: string;
+  summary: string;
+}): string {
+  return visibleMemoryText(item.summary !== '' ? item.summary : item.title);
+}
+
+function visibleMemoryText(text: string): string {
+  const parsed = parseMemoryText(text);
   return parsed.body !== '' ? parsed.body : 'Memory text unavailable';
 }
 
@@ -724,7 +733,7 @@ export async function loadMemories(
           ...item,
           title: parsed.body,
           summary: parsed.body,
-          searchableText: memoryDisplayText({
+          searchableText: memoryDisplayTitle({
             title: parsed.body,
             summary: parsed.body,
           }),
@@ -771,7 +780,7 @@ export async function loadMemories(
       id,
       title: parsedText.body,
       summary: parsedText.body,
-      searchableText: `${memoryDisplayText({
+      searchableText: `${memoryDisplayTitle({
         title: parsedText.body,
         summary: parsedText.body,
       })}\n${citations.join('\n')}`,

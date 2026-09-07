@@ -22,7 +22,8 @@ import {
   loadDesktopReads,
   loadMemories,
   loadTasks,
-  memoryDisplayText,
+  memoryDisplayBody,
+  memoryDisplayTitle,
   parseMemoryText,
   projectionTimestamp,
   taskGroup,
@@ -585,17 +586,32 @@ test('empty conversation titles stay visible instead of a blank row', () => {
 });
 
 test('empty memory text stays visible instead of a blank row', () => {
-  expect(memoryDisplayText({title: '', summary: ''})).toBe(
+  expect(memoryDisplayTitle({title: '', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayBody({title: '', summary: ''})).toBe(
     'Memory text unavailable',
   );
   expect(
-    memoryDisplayText({
+    memoryDisplayTitle({
       title: 'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
       summary:
         'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
     }),
   ).toBe('qa_memory (observed 2026-07-30T12:00:00.000Z).');
-  expect(memoryDisplayText({title: 'A walk.', summary: 'A walk.'})).toBe(
+  expect(
+    memoryDisplayTitle({
+      title: 'Prefers concise release notes',
+      summary: 'Release notes should lead with the outcome.',
+    }),
+  ).toBe('Prefers concise release notes');
+  expect(
+    memoryDisplayBody({
+      title: 'Prefers concise release notes',
+      summary: 'Release notes should lead with the outcome.',
+    }),
+  ).toBe('Release notes should lead with the outcome.');
+  expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
     'A walk.',
   );
 });

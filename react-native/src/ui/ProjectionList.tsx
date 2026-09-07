@@ -9,14 +9,14 @@ import {
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
-  memoryDisplayText,
+  memoryDisplayTitle,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import {styles} from './styles';
 
 function displayTitle(item: DesktopReadProjection): string {
   if (item.kind === 'memory') {
-    return memoryDisplayText(item);
+    return memoryDisplayTitle(item);
   }
   if (item.kind === 'conversation') {
     return conversationDisplayTitle(item);
