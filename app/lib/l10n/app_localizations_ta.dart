@@ -1805,6 +1805,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get getStarted => 'தொடங்குங்கள்';
 
   @override
+  String get onboardingSplashTagline => 'உங்கள் இரண்டாவது மூளை.';
+
+  @override
   String get allDone => 'அனைத்தும் முடிந்துவிட்டது!';
 
   @override
@@ -1869,9 +1872,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get openSettings => 'அமைப்புகளைத் திறக்கவும்';
-
-  @override
-  String get wantDifferentName => 'வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?';
 
   @override
   String get whatsYourName => 'உங்கள் பெயர் என்ன?';
@@ -7884,7 +7884,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google தேடல்';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ஆடியோ கோப்பு இயக்கத்திற்கு उपलब्ध அல்ல';
@@ -10024,4 +10024,15 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name இன் குரல் சுயவிவரம்';
+  }
+
+  @override
+  String get play => 'இயக்கு';
+
+  @override
+  String get redo => 'மீண்டும் செய்';
 }

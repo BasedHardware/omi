@@ -1795,6 +1795,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get getStarted => 'Kom i gang';
 
   @override
+  String get onboardingSplashTagline => 'Din andre hjerne.';
+
+  @override
   String get allDone => 'Alt ferdig!';
 
   @override
@@ -1856,9 +1859,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get openSettings => 'Åpne innstillinger';
-
-  @override
-  String get wantDifferentName => 'Vil du bli kalt noe annet?';
 
   @override
   String get whatsYourName => 'Hva heter du?';
@@ -7825,7 +7825,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Lydfilen er ikke tilgjengelig for avspilling';
@@ -9952,4 +9952,15 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Kunne ikke laste kunnskapsgrafen';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Stemmeprofilen til $name';
+  }
+
+  @override
+  String get play => 'Spill av';
+
+  @override
+  String get redo => 'Gjør på nytt';
 }

@@ -294,6 +294,16 @@ class HomeProvider extends ChangeNotifier {
     }
   }
 
+  /// Records [languageCode] as the primary language on this device without a
+  /// server round trip, for a flow that defaults it rather than asking.
+  void assumePrimaryLanguageLocally(String languageCode) {
+    userPrimaryLanguage = languageCode;
+    hasSetPrimaryLanguage = true;
+    SharedPreferencesUtil().userPrimaryLanguage = languageCode;
+    SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+    notifyListeners();
+  }
+
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
       final serverSingleLanguageMode = await setUserPrimaryLanguage(languageCode);

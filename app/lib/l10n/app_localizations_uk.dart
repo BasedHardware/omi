@@ -1797,6 +1797,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get getStarted => 'Почати';
 
   @override
+  String get onboardingSplashTagline => 'Твій другий мозок.';
+
+  @override
   String get allDone => 'Все готово!';
 
   @override
@@ -1860,9 +1863,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get openSettings => 'Відкрити налаштування';
-
-  @override
-  String get wantDifferentName => 'Хочете, щоб до вас звертались інакше?';
 
   @override
   String get whatsYourName => 'Як вас звати?';
@@ -7841,7 +7841,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Аудіофайл недоступний для відтворення';
@@ -9976,4 +9976,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Не вдалося завантажити граф знань';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Голосовий профіль: $name';
+  }
+
+  @override
+  String get play => 'Відтворити';
+
+  @override
+  String get redo => 'Заново';
 }

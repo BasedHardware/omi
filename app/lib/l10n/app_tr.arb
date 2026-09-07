@@ -554,6 +554,7 @@
     "maybeLater": "Belki sonra",
     "speechProfileIntro": "Omi hedeflerinizi ve sesinizi öğrenmeli. Daha sonra değiştirebilirsiniz.",
     "getStarted": "Başlayın",
+    "onboardingSplashTagline": "İkinci beynin.",
     "allDone": "Hepsi tamam!",
     "keepGoing": "Devam et, harika gidiyorsun",
     "skipThisQuestion": "Bu soruyu atla",
@@ -574,7 +575,6 @@
     "permissionsRequired": "İzinler gerekli",
     "permissionsRequiredDesc": "Bu uygulamanın düzgün çalışması için Bluetooth ve Konum izinlerine ihtiyacı var. Lütfen ayarlardan bunları etkinleştirin.",
     "openSettings": "Ayarları Aç",
-    "wantDifferentName": "Farklı bir isimle mi anılmak istiyorsunuz?",
     "whatsYourName": "Adın ne?",
     "speakTranscribeSummarize": "Konuş. Transkripsiyonu Oluştur. Özetle.",
     "signInWithApple": "Apple ile Giriş Yap",
@@ -2540,7 +2540,7 @@
     "coworker": "İş arkadaşı",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Ses dosyası oynatma için mevcut değil",
     "audioPlaybackFailed": "Ses oynatılamıyor. Dosya bozuk veya eksik olabilir.",
     "pairingTitleOmi": "Omi'yi Açın",
@@ -3281,5 +3281,8 @@
     "chatBlockUnavailable": "Artık kullanılamıyor",
     "chatBlockRecommendedNextSteps": "Önerilen sonraki adımlar",
     "couldNotLoadMemories": "Anılar yüklenemedi",
-    "couldNotLoadKnowledgeGraph": "Bilgi grafiği yüklenemedi"
+    "couldNotLoadKnowledgeGraph": "Bilgi grafiği yüklenemedi",
+    "play": "Oynat",
+    "redo": "Yeniden yap",
+    "speechProfileOwnerTitle": "{name} adlı kişinin ses profili"
 }

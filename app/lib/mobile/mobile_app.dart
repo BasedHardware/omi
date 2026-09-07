@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -35,15 +34,15 @@ class _MobileAppState extends State<MobileApp> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
+        Widget content;
         if (authProvider.requiresReauthentication) {
           _presentSessionExpiration(authProvider.sessionExpirationGeneration);
-          return const OnboardingWrapper(forceAuthPage: true);
-        }
-        if (authProvider.isSignedIn()) {
+          content = const OnboardingWrapper(forceAuthPage: true);
+        } else if (authProvider.isSignedIn()) {
           // Cutover gate sits above onboarding and home so completed-onboarding
           // navigator replacements cannot bypass enforcement, and product
           // widgets are not constructed while blocked.
-          return AccountCutoverBlockingGate(
+          content = AccountCutoverBlockingGate(
             productBuilder: (context) {
               // Returning users who haven't yet given consent under the new
               // model must see the consent screen before any AI processing
@@ -63,8 +62,10 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          return const DeviceSelectionPage();
+          content = const OnboardingWrapper();
         }
+
+        return content;
       },
     );
   }

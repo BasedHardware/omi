@@ -554,6 +554,7 @@
     "maybeLater": "ربما لاحقاً",
     "speechProfileIntro": "يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقًا.",
     "getStarted": "ابدأ",
+    "onboardingSplashTagline": "دماغك الثاني.",
     "allDone": "تم كل شيء!",
     "keepGoing": "استمر، أنت تقوم بعمل رائع",
     "skipThisQuestion": "تخطي هذا السؤال",
@@ -574,7 +575,6 @@
     "permissionsRequired": "الأذونات مطلوبة",
     "permissionsRequiredDesc": "يحتاج هذا التطبيق إلى أذونات البلوتوث والموقع للعمل بشكل صحيح. يرجى تمكينها في الإعدادات.",
     "openSettings": "فتح الإعدادات",
-    "wantDifferentName": "تريد أن يُناديك باسم آخر؟",
     "whatsYourName": "ما اسمك؟",
     "speakTranscribeSummarize": "تحدث. انسخ. لخص.",
     "signInWithApple": "تسجيل الدخول باستخدام Apple",
@@ -2472,7 +2472,7 @@
     "coworker": "زميل عمل",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ملف الصوت غير متاح للتشغيل",
     "audioPlaybackFailed": "تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا.",
     "pairingTitleOmi": "تشغيل Omi",
@@ -3222,5 +3222,8 @@
     "chatBlockUnavailable": "لم يعد متاحًا",
     "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها",
     "couldNotLoadMemories": "تعذر تحميل الذكريات",
-    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة"
+    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة",
+    "play": "تشغيل",
+    "redo": "إعادة",
+    "speechProfileOwnerTitle": "الملف الصوتي لـ {name}"
 }

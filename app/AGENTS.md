@@ -124,6 +124,7 @@ PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.
 - Google Sign In (`google_sign_in` package)
 - Apple Sign In (`sign_in_with_apple` package, includes PKCE via nonce+sha256)
 - Firebase Auth as the identity layer
+- `local_dev` only: long-press Apple/Google on sign-in to sign in as the emulator user (see `backend/docs/runbooks/local-emulator-manual-qa.md`).
 
 ### Request Headers
 All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash, X-App-Version, plus Bearer token.

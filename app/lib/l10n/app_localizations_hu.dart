@@ -1806,6 +1806,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get getStarted => 'Kezdés';
 
   @override
+  String get onboardingSplashTagline => 'A második agyad.';
+
+  @override
   String get allDone => 'Kész!';
 
   @override
@@ -1870,9 +1873,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openSettings => 'Beállítások megnyitása';
-
-  @override
-  String get wantDifferentName => 'Máshogy szeretnéd, hogy hívjanak?';
 
   @override
   String get whatsYourName => 'Mi a neved?';
@@ -7864,7 +7864,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'A hangfájl nem érhető el lejátszásra';
@@ -9995,4 +9995,15 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name hangprofilja';
+  }
+
+  @override
+  String get play => 'Lejátszás';
+
+  @override
+  String get redo => 'Újra';
 }

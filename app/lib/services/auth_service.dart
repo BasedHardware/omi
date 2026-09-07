@@ -17,6 +17,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth/local_emulator_auth.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -261,6 +262,35 @@ class AuthService {
     } catch (e) {
       Logger.debug('Error during Apple Sign In: $e');
       Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
+      return null;
+    }
+  }
+
+  /// Signs in as the seeded harness user (`alice`) against the Firebase Auth
+  /// emulator. Google/Apple `/v1/auth/authorize` is 500 on local because the
+  /// harness has no OAuth client IDs — this is the supported local-dev path.
+  Future<UserCredential?> signInWithLocalEmulatorUser() async {
+    if (!localEmulatorSignInEnabled(Env.profile)) {
+      throw StateError('Local emulator sign-in is only available on local_dev');
+    }
+    try {
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: LocalEmulatorAuthUser.email,
+        password: LocalEmulatorAuthUser.password,
+      );
+      clearLocalOnboardingWalkthroughFlags();
+      await _updateUserPreferences(credential, 'password', restoreOnboarding: false);
+      try {
+        await updateUserOnboardingState(completed: false);
+      } catch (e) {
+        Logger.debug('Failed to reset server onboarding state for local walkthrough: $e');
+      }
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      Logger.debug('Local emulator sign-in FirebaseAuthException: ${e.code} - ${e.message}');
+      return null;
+    } catch (e) {
+      Logger.debug('Local emulator sign-in error: $e');
       return null;
     }
   }
@@ -633,7 +663,7 @@ class AuthService {
     }
   }
 
-  Future<void> _updateUserPreferences(UserCredential result, String provider) async {
+  Future<void> _updateUserPreferences(UserCredential result, String provider, {bool restoreOnboarding = true}) async {
     try {
       final user = result.user;
       if (user == null) return;
@@ -699,8 +729,9 @@ class AuthService {
       Logger.debug('Family Name: ${SharedPreferencesUtil().familyName}');
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
 
-      // Restore onboarding state from server
-      await _restoreOnboardingState();
+      if (restoreOnboarding) {
+        await _restoreOnboardingState();
+      }
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
     }

@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Početak",
+    "onboardingSplashTagline": "Tvoj drugi mozak.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "Otvorite postavke",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Želite li da se zoveš nečim drugim?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Kako se zoveš?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "Kolega",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google pretraga",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Audio datoteka nije dostupna za reprodukciju",
     "audioPlaybackFailed": "Nije moguće reproducirati audio. Datoteka može biti oštećena ili nedostaje.",
     "connectionGuide": "Vodič za povezivanje",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "Više nije dostupno",
     "chatBlockRecommendedNextSteps": "Preporučeni sljedeći koraci",
     "couldNotLoadMemories": "Nije moguće učitati uspomene",
-    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja"
+    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja",
+    "play": "Pusti",
+    "redo": "Ponovo",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}"
 }

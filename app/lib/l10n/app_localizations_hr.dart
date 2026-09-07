@@ -1797,6 +1797,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get getStarted => 'Počni';
 
   @override
+  String get onboardingSplashTagline => 'Tvoj drugi mozak.';
+
+  @override
   String get allDone => 'Sve gotovo!';
 
   @override
@@ -1859,9 +1862,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get openSettings => 'Otvori Postavke';
-
-  @override
-  String get wantDifferentName => 'Želiš li da ide sa nečim drugačijim?';
 
   @override
   String get whatsYourName => 'Koje je tvoje ime?';
@@ -7857,7 +7857,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google pretraga';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Audio datoteka nije dostupna za reprodukciju';
@@ -9990,4 +9990,15 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nije moguće učitati graf znanja';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Glasovni profil: $name';
+  }
+
+  @override
+  String get play => 'Reproduciraj';
+
+  @override
+  String get redo => 'Ponovi';
 }

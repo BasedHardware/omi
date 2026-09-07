@@ -1799,6 +1799,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get getStarted => 'Започнете';
 
   @override
+  String get onboardingSplashTagline => 'Твоят втори мозък.';
+
+  @override
   String get allDone => 'Готово!';
 
   @override
@@ -1861,9 +1864,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get openSettings => 'Отвори настройки';
-
-  @override
-  String get wantDifferentName => 'Искате ли различно име?';
 
   @override
   String get whatsYourName => 'Как се казвате?';
@@ -7858,7 +7858,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Аудио файлът не е наличен за възпроизвеждане';
@@ -9991,4 +9991,15 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Неуспешно зареждане на графа на знанията';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Гласов профил на $name';
+  }
+
+  @override
+  String get play => 'Пусни';
+
+  @override
+  String get redo => 'Отново';
 }

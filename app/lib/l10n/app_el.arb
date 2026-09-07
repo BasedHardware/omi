@@ -554,6 +554,7 @@
     "maybeLater": "Ίσως αργότερα",
     "speechProfileIntro": "Το Omi πρέπει να μάθει τους στόχους και τη φωνή σας. Θα μπορείτε να το τροποποιήσετε αργότερα.",
     "getStarted": "Ξεκινήστε",
+    "onboardingSplashTagline": "Ο δεύτερος εγκέφαλός σου.",
     "allDone": "Όλα έτοιμα!",
     "keepGoing": "Συνεχίστε, τα πηγαίνετε υπέροχα",
     "skipThisQuestion": "Παράλειψη αυτής της ερώτησης",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Απαιτούνται δικαιώματα",
     "permissionsRequiredDesc": "Αυτή η εφαρμογή χρειάζεται άδειες Bluetooth και Τοποθεσίας για να λειτουργήσει σωστά. Παρακαλώ ενεργοποιήστε τις στις ρυθμίσεις.",
     "openSettings": "Άνοιγμα Ρυθμίσεων",
-    "wantDifferentName": "Θέλετε να αποκαλείστε διαφορετικά;",
     "whatsYourName": "Πώς σε λένε;",
     "speakTranscribeSummarize": "Μιλήστε. Απομαγνητοφώνηση. Περίληψη.",
     "signInWithApple": "Σύνδεση με Apple",
@@ -2505,7 +2505,7 @@
     "coworker": "Συνάδελφος",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή",
     "audioPlaybackFailed": "Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει.",
     "pairingTitleOmi": "Ενεργοποιήστε το Omi",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "Δεν είναι πλέον διαθέσιμο",
     "chatBlockRecommendedNextSteps": "Προτεινόμενα επόμενα βήματα",
     "couldNotLoadMemories": "Δεν ήταν δυνατή η φόρτωση των αναμνήσεων",
-    "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης"
+    "couldNotLoadKnowledgeGraph": "Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης",
+    "play": "Αναπαραγωγή",
+    "redo": "Ξανά",
+    "speechProfileOwnerTitle": "Προφίλ φωνής: {name}"
 }

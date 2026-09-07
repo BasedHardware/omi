@@ -1798,6 +1798,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get getStarted => 'ಪ್ರಾರಂಭ ಮಾಡಿ';
 
   @override
+  String get onboardingSplashTagline => 'ನಿಮ್ಮ ಎರಡನೇ ಮೆದುಳು.';
+
+  @override
   String get allDone => 'ಎಲ್ಲಾ ಪೂರ್ಣ!';
 
   @override
@@ -1861,9 +1864,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openSettings => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು ತೆರೆಯಿರಿ';
-
-  @override
-  String get wantDifferentName => 'ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಹೆಸರು ಹೇಳಿದೆ ತೆಗೆದುಕೊಳ್ಳಬೇಕೆ?';
 
   @override
   String get whatsYourName => 'ನಿಮ್ಮ ಹೆಸರು ಏನು?';
@@ -7857,7 +7857,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ಆಡಿಯೋ ಫೈಲ್ ಪ್ಲೇಬ್ಯಾಕ್‌ಗೆ ಲಭ್ಯವಿಲ್ಲ';
@@ -9986,4 +9986,15 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್';
+  }
+
+  @override
+  String get play => 'ಪ್ಲೇ ಮಾಡಿ';
+
+  @override
+  String get redo => 'ಮತ್ತೆ ಮಾಡಿ';
 }

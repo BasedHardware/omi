@@ -554,6 +554,7 @@
     "maybeLater": "Ehkä myöhemmin",
     "speechProfileIntro": "Omin täytyy oppia tavoitteesi ja äänesi. Voit muokata sitä myöhemmin.",
     "getStarted": "Aloita",
+    "onboardingSplashTagline": "Toinen aivosi.",
     "allDone": "Kaikki valmista!",
     "keepGoing": "Jatka, teet loistavasti",
     "skipThisQuestion": "Ohita tämä kysymys",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Käyttöoikeudet vaaditaan",
     "permissionsRequiredDesc": "Tämä sovellus tarvitsee Bluetooth- ja sijaintioikeudet toimiakseen oikein. Ota ne käyttöön asetuksissa.",
     "openSettings": "Avaa asetukset",
-    "wantDifferentName": "Haluatko käyttää eri nimeä?",
     "whatsYourName": "Mikä on nimesi?",
     "speakTranscribeSummarize": "Puhu. Litteroi. Tee yhteenveto.",
     "signInWithApple": "Kirjaudu Applella",
@@ -2505,7 +2505,7 @@
     "coworker": "Työkaveri",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Äänitiedosto ei ole saatavilla toistettavaksi",
     "audioPlaybackFailed": "Ääntä ei voi toistaa. Tiedosto saattaa olla vioittunut tai puuttua.",
     "pairingTitleOmi": "Käynnistä Omi",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "Ei ole enää saatavilla",
     "chatBlockRecommendedNextSteps": "Suositellut seuraavat vaiheet",
     "couldNotLoadMemories": "Muistoja ei voitu ladata",
-    "couldNotLoadKnowledgeGraph": "Tietograafia ei voitu ladata"
+    "couldNotLoadKnowledgeGraph": "Tietograafia ei voitu ladata",
+    "play": "Toista",
+    "redo": "Uudelleen",
+    "speechProfileOwnerTitle": "Käyttäjän {name} ääniprofiili"
 }

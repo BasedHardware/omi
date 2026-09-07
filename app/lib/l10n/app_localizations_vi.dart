@@ -1800,6 +1800,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get getStarted => 'Bắt đầu';
 
   @override
+  String get onboardingSplashTagline => 'Bộ não thứ hai của bạn.';
+
+  @override
   String get allDone => 'Hoàn tất!';
 
   @override
@@ -1861,9 +1864,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get openSettings => 'Mở cài đặt';
-
-  @override
-  String get wantDifferentName => 'Muốn được gọi bằng tên khác?';
 
   @override
   String get whatsYourName => 'Tên bạn là gì?';
@@ -7830,7 +7830,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Tệp âm thanh không khả dụng để phát';
@@ -9949,4 +9949,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Không thể tải đồ thị tri thức';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hồ sơ giọng nói của $name';
+  }
+
+  @override
+  String get play => 'Phát';
+
+  @override
+  String get redo => 'Làm lại';
 }

@@ -1797,6 +1797,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get getStarted => 'Kom igång';
 
   @override
+  String get onboardingSplashTagline => 'Din andra hjärna.';
+
+  @override
   String get allDone => 'Allt klart!';
 
   @override
@@ -1859,9 +1862,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get openSettings => 'Öppna inställningar';
-
-  @override
-  String get wantDifferentName => 'Vill du kallas något annat?';
 
   @override
   String get whatsYourName => 'Vad heter du?';
@@ -7834,7 +7834,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Ljudfilen är inte tillgänglig för uppspelning';
@@ -9958,4 +9958,15 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Kunde inte läsa in kunskapsgrafen';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Röstprofil för $name';
+  }
+
+  @override
+  String get play => 'Spela upp';
+
+  @override
+  String get redo => 'Gör om';
 }

@@ -2329,23 +2329,20 @@ class CaptureController extends ChangeNotifier
         status: ConversationStatus.processing,
       ),
     );
-    processInProgressConversation().then((result) async {
-      if (result == null || result.conversation == null) {
-        externalActions.removeProcessingConversation('0');
-        return;
-      }
+    final result = await processInProgressConversation();
+    if (result == null || result.conversation == null) {
       externalActions.removeProcessingConversation('0');
-      result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
+      return;
+    }
+    externalActions.removeProcessingConversation('0');
+    result.conversation!.isNew = true;
+    _processConversationCreated(result.conversation, result.messages);
 
-      // Stamp WALs with conversation ID and auto-sync
-      if (sessionStart > 0 && result.conversation != null) {
-        await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
-        _autoSyncSessionWals();
-      }
-    });
-
-    return;
+    // Stamp WALs with conversation ID and auto-sync
+    if (sessionStart > 0 && result.conversation != null) {
+      await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
+      _autoSyncSessionWals();
+    }
   }
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.

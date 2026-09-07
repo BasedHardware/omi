@@ -36,6 +36,8 @@ class KnowledgeGraphApi {
     );
 
     if (response != null && response.statusCode == 200) {
+      // Nodes and edges are free-form maps on the wire type, so the server's
+      // snake_case keys (`node_type`, `source_id`) survive the round trip.
       return wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);

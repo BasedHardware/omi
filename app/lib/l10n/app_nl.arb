@@ -554,6 +554,7 @@
     "maybeLater": "Misschien later",
     "speechProfileIntro": "Omi moet je doelen en je stem leren. Je kunt het later aanpassen.",
     "getStarted": "Aan de slag",
+    "onboardingSplashTagline": "Jouw tweede brein.",
     "allDone": "Helemaal klaar!",
     "keepGoing": "Ga zo door, je doet het geweldig",
     "skipThisQuestion": "Sla deze vraag over",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Machtigingen vereist",
     "permissionsRequiredDesc": "Deze app heeft Bluetooth- en locatiemachtigingen nodig om correct te functioneren. Schakel deze in via de instellingen.",
     "openSettings": "Instellingen openen",
-    "wantDifferentName": "Wil je een andere naam gebruiken?",
     "whatsYourName": "Wat is je naam?",
     "speakTranscribeSummarize": "Spreek. Transcribeer. Vat samen.",
     "signInWithApple": "Inloggen met Apple",
@@ -2505,7 +2505,7 @@
     "coworker": "Collega",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Audiobestand is niet beschikbaar voor afspelen",
     "audioPlaybackFailed": "Kan audio niet afspelen. Het bestand is mogelijk beschadigd of ontbreekt.",
     "pairingTitleOmi": "Zet Omi aan",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "Niet langer beschikbaar",
     "chatBlockRecommendedNextSteps": "Aanbevolen volgende stappen",
     "couldNotLoadMemories": "Herinneringen konden niet worden geladen",
-    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen"
+    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen",
+    "play": "Afspelen",
+    "redo": "Opnieuw",
+    "speechProfileOwnerTitle": "Stemprofiel van {name}"
 }

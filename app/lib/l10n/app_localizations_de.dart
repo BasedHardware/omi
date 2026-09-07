@@ -1808,6 +1808,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get getStarted => 'Loslegen';
 
   @override
+  String get onboardingSplashTagline => 'Dein zweites Gehirn.';
+
+  @override
   String get allDone => 'Alles erledigt!';
 
   @override
@@ -1873,9 +1876,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get openSettings => 'Einstellungen öffnen';
-
-  @override
-  String get wantDifferentName => 'Möchten Sie einen anderen Namen verwenden?';
 
   @override
   String get whatsYourName => 'Wie heißen Sie?';
@@ -7891,7 +7891,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Audiodatei ist nicht zur Wiedergabe verfügbar';
@@ -10037,4 +10037,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Wissensgraph konnte nicht geladen werden';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Sprachprofil von $name';
+  }
+
+  @override
+  String get play => 'Abspielen';
+
+  @override
+  String get redo => 'Wiederholen';
 }

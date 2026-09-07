@@ -424,7 +424,13 @@ class ListenSessionRuntime:
         if FAIR_USE_ENABLED:
             self.state.fair_use_track_dg_usage = context.fair_use_track_dg_usage
             self.state.fair_use_dg_budget_exhausted = context.fair_use_dg_budget_exhausted
-        if request.onboarding_mode and self.onboarding_admitted:
+        # A completed account re-recording its speech profile from Settings
+        # asks with ``speech_profile_redo``: it gets the server-pushed question
+        # flow, but never the admission above, so its transcripts carry no
+        # direct-user onboarding provenance and the completed-account gate is
+        # not weakened for real onboarding.
+        redo_question_flow = request.onboarding_mode and request.speech_profile_redo and not self.onboarding_admitted
+        if request.onboarding_mode and (self.onboarding_admitted or redo_question_flow):
 
             async def send_onboarding(event: Dict[str, Any]) -> None:
                 if self.state.active and request.websocket.client_state == WebSocketState.CONNECTED:

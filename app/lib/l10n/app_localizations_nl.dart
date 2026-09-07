@@ -1799,6 +1799,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get getStarted => 'Aan de slag';
 
   @override
+  String get onboardingSplashTagline => 'Jouw tweede brein.';
+
+  @override
   String get allDone => 'Helemaal klaar!';
 
   @override
@@ -1862,9 +1865,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get openSettings => 'Instellingen openen';
-
-  @override
-  String get wantDifferentName => 'Wil je een andere naam gebruiken?';
 
   @override
   String get whatsYourName => 'Wat is je naam?';
@@ -7851,7 +7851,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Audiobestand is niet beschikbaar voor afspelen';
@@ -9981,4 +9981,15 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Kennisgrafiek kon niet worden geladen';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Stemprofiel van $name';
+  }
+
+  @override
+  String get play => 'Afspelen';
+
+  @override
+  String get redo => 'Opnieuw';
 }

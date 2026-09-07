@@ -7,6 +7,18 @@
     {
       "path": "app/lib/phone_mic_interface.dart",
       "reason": "codegen contract inputs, unimported by design"
+    },
+    {
+      "path": "app/lib/dev/onboarding_preview_main.dart",
+      "reason": "dev-only onboarding preview entrypoint (flutter run -d chrome -t lib/dev/onboarding_preview_main.dart); unimported by main.dart by design"
+    },
+    {
+      "path": "app/lib/dev/preview_steps.dart",
+      "reason": "visual stand-ins for the dev-only onboarding preview entrypoint; unimported by main.dart by design"
+    },
+    {
+      "path": "app/lib/pages/onboarding/splash/splash_page.dart",
+      "reason": "reachable only from the dev-only onboarding preview entrypoint and its widget test; production splash lives in pages/onboarding/wrapper.dart"
     }
   ]
 }

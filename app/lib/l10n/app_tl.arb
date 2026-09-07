@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Magsimula",
+    "onboardingSplashTagline": "Ang iyong pangalawang utak.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "Buksan ang Settings",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Gusto mo bang gamitin ang ibang pangalan?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Ano ang iyong pangalan?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "Kasamahan sa trabaho",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Ang audio file ay hindi available para sa playback",
     "audioPlaybackFailed": "Hindi ma-play ang audio. Ang file ay maaaring na-corrupt o nawawala.",
     "connectionGuide": "Connection Guide",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "Hindi na available",
     "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
     "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
-    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph"
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph",
+    "play": "I-play",
+    "redo": "Ulitin",
+    "speechProfileOwnerTitle": "Voice profile ni {name}"
 }

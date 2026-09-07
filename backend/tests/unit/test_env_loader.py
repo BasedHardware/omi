@@ -265,3 +265,55 @@ def test_load_backend_env_skips_disk_when_harness_instance_set(tmp_path: Path, m
 
     assert loaded == []
     assert "SHOULD_NOT_LOAD" not in os.environ
+
+
+def test_load_backend_env_harness_without_opt_in_never_reads_personal_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A harness that isolates its children (JIT-QA) sets OMI_HARNESS_INSTANCE
+    # and nothing else; the developer's own .env must stay out of that child.
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("MODULATE_API_KEY=developer-secret\n", encoding="utf-8")
+    monkeypatch.setenv("OMI_ENV_STAGE", "local")
+    monkeypatch.setenv("OMI_HARNESS_INSTANCE", "jit-qa")
+    monkeypatch.delenv("OMI_HARNESS_PERSONAL_ENV", raising=False)
+    monkeypatch.delenv("MODULATE_API_KEY", raising=False)
+
+    loaded = load_backend_env(tmp_path)
+
+    assert loaded == []
+    assert "MODULATE_API_KEY" not in os.environ
+
+
+def test_load_backend_env_harness_fills_unset_keys_from_personal_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("LOCAL_ONLY_SECRET=from-personal-env\nHARNESS_OWNED=from-disk\n", encoding="utf-8")
+    monkeypatch.setenv("OMI_ENV_STAGE", "local")
+    monkeypatch.setenv("OMI_HARNESS_INSTANCE", "default")
+    monkeypatch.setenv("OMI_HARNESS_PERSONAL_ENV", "1")
+    monkeypatch.setenv("HARNESS_OWNED", "from-harness")
+    monkeypatch.delenv("LOCAL_ONLY_SECRET", raising=False)
+
+    loaded = load_backend_env(tmp_path)
+
+    assert loaded == [tmp_path / ".env"]
+    assert os.environ["LOCAL_ONLY_SECRET"] == "from-personal-env"
+    assert os.environ["HARNESS_OWNED"] == "from-harness"
+
+
+def test_load_backend_env_harness_offline_does_not_load_personal_provider_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("MODULATE_API_KEY=should-not-load\n", encoding="utf-8")
+    monkeypatch.setenv("OMI_ENV_STAGE", "offline")
+    monkeypatch.setenv("OMI_HARNESS_INSTANCE", "default")
+    monkeypatch.setenv("OMI_HARNESS_PERSONAL_ENV", "1")
+    monkeypatch.delenv("MODULATE_API_KEY", raising=False)
+
+    loaded = load_backend_env(tmp_path)
+
+    assert loaded == []
+    assert "MODULATE_API_KEY" not in os.environ

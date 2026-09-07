@@ -1765,6 +1765,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get getStarted => '始める';
 
   @override
+  String get onboardingSplashTagline => 'あなたの第二の脳.';
+
+  @override
   String get allDone => '完了しました！';
 
   @override
@@ -1823,9 +1826,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openSettings => '設定を開く';
-
-  @override
-  String get wantDifferentName => '別の名前を使いますか？';
 
   @override
   String get whatsYourName => 'お名前は何ですか？';
@@ -7703,7 +7703,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => '音声ファイルは再生できません';
@@ -9785,4 +9785,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$nameの音声プロファイル';
+  }
+
+  @override
+  String get play => '再生';
+
+  @override
+  String get redo => 'やり直す';
 }

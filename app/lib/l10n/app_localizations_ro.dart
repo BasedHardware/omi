@@ -1804,6 +1804,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get getStarted => 'Începe';
 
   @override
+  String get onboardingSplashTagline => 'Al doilea tău creier.';
+
+  @override
   String get allDone => 'Totul e gata!';
 
   @override
@@ -1867,9 +1870,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get openSettings => 'Deschide setările';
-
-  @override
-  String get wantDifferentName => 'Vrei să folosești alt nume?';
 
   @override
   String get whatsYourName => 'Cum te cheamă?';
@@ -7865,7 +7865,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Fișierul audio nu este disponibil pentru redare';
@@ -10001,4 +10001,15 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nu s-a putut încărca graful de cunoștințe';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profilul vocal pentru $name';
+  }
+
+  @override
+  String get play => 'Redă';
+
+  @override
+  String get redo => 'Reia';
 }

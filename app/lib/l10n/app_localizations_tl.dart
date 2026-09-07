@@ -1804,6 +1804,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get getStarted => 'Magsimula';
 
   @override
+  String get onboardingSplashTagline => 'Ang iyong pangalawang utak.';
+
+  @override
   String get allDone => 'Tapos na!';
 
   @override
@@ -1868,9 +1871,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get openSettings => 'Buksan ang Settings';
-
-  @override
-  String get wantDifferentName => 'Gusto mo bang gamitin ang ibang pangalan?';
 
   @override
   String get whatsYourName => 'Ano ang iyong pangalan?';
@@ -7899,7 +7899,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Ang audio file ay hindi available para sa playback';
@@ -10045,4 +10045,15 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Hindi ma-load ang knowledge graph';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Voice profile ni $name';
+  }
+
+  @override
+  String get play => 'I-play';
+
+  @override
+  String get redo => 'Ulitin';
 }

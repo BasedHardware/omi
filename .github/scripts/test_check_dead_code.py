@@ -10,6 +10,7 @@ end. No network, no git history: pure filesystem analysis, like production.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -124,14 +125,23 @@ DEAD_BY_AREA = {
 }
 
 
+# A git hook (pre-push runs this suite when the allowlists change) exports
+# GIT_DIR and friends for the real checkout. Left in place, every `git init`
+# and `git ls-files` below would answer for that repo instead of the fixture,
+# so the gitignore cases silently scan the wrong tree.
+HOOK_GIT_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX")
+
+
 class DeadCodeRatchetTests(unittest.TestCase):
     def setUp(self) -> None:
+        self._saved_git_env = {name: os.environ.pop(name) for name in HOOK_GIT_ENV if name in os.environ}
         self.temp_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_directory.name)
         build_fake_checkout(self.root)
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
+        os.environ.update(self._saved_git_env)
 
     def test_check_fails_on_each_area_dead_file_with_fix_hint(self) -> None:
         seed_allowlist(self.root)

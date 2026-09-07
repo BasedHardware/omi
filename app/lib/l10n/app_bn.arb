@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "শুরু করুন",
+    "onboardingSplashTagline": "আপনার দ্বিতীয় মস্তিষ্ক.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "সেটিংস খুলুন",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "অন্য কিছু নাম পেতে চান?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "আপনার নাম কি?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "সহকর্মী",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google সার্চ",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "অডিও ফাইল প্লেব্যাকের জন্য উপলব্ধ নয়",
     "audioPlaybackFailed": "অডিও চালাতে পারা যায়নি। ফাইলটি ক্ষতিগ্রস্ত বা অনুপলব্ধ হতে পারে।",
     "connectionGuide": "সংযোগ গাইড",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "আর উপলব্ধ নেই",
     "chatBlockRecommendedNextSteps": "প্রস্তাবিত পরবর্তী পদক্ষেপ",
     "couldNotLoadMemories": "স্মৃতি লোড করা যায়নি",
-    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি"
+    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি",
+    "play": "চালান",
+    "redo": "আবার করুন",
+    "speechProfileOwnerTitle": "{name}-এর ভয়েস প্রোফাইল"
 }

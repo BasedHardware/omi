@@ -52,7 +52,9 @@ void main() {
       expect(find.byType(HomePageWrapper), findsNothing);
       expect(find.text('Session expired — sign in again.'), findsOneWidget);
 
-      await tester.pumpAndSettle();
+      // OnboardingWrapper's spinner backdrop repeats forever, so a bounded
+      // pump stands in for pumpAndSettle here.
+      await tester.pump(const Duration(milliseconds: 500));
     },
   );
 }

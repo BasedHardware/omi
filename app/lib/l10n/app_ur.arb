@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "شروع کریں",
+    "onboardingSplashTagline": "آپ کا دوسرا دماغ.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "ترتیبات کھولیں",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "کچھ اور نام سے جانا چاہتے ہیں؟",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "آپ کا نام کیا ہے؟",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "کام کے ساتھی",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google تلاش",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "آڈیو فائل چلانے کے لیے دستیاب نہیں ہے",
     "audioPlaybackFailed": "آڈیو چلانے میں ناکام۔ فائل خراب ہو سکتی ہے یا غائب ہو سکتی ہے۔",
     "connectionGuide": "منسلکی گائیڈ",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "اب دستیاب نہیں",
     "chatBlockRecommendedNextSteps": "تجویز کردہ اگلے اقدامات",
     "couldNotLoadMemories": "یادیں لوڈ نہیں ہو سکیں",
-    "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا"
+    "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا",
+    "play": "چلائیں",
+    "redo": "دوبارہ کریں",
+    "speechProfileOwnerTitle": "{name} کا صوتی پروفائل"
 }

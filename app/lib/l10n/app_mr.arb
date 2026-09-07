@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "सुरुवात करा",
+    "onboardingSplashTagline": "तुमचा दुसरा मेंदू.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "सेटिंग्ज खोला",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "अन्य काहीतरी नावाने जाऊ इच्छिता?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "आपले नाव काय आहे?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "सहकर्मी",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google शोध",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ऑडिओ फाइल प्लेबॅकसाठी उपलब्ध नाही",
     "audioPlaybackFailed": "ऑडिओ प्ले करू शकत नाही. फाइल खराब किंवा हरवली असू शकते.",
     "connectionGuide": "जोडणी मार्गदर्शक",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "आता उपलब्ध नाही",
     "chatBlockRecommendedNextSteps": "शिफारस केलेली पुढील पावले",
     "couldNotLoadMemories": "आठवणी लोड करता आल्या नाहीत",
-    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही"
+    "couldNotLoadKnowledgeGraph": "ज्ञान आलेख लोड करता आला नाही",
+    "play": "प्ले करा",
+    "redo": "पुन्हा करा",
+    "speechProfileOwnerTitle": "{name} यांचे व्हॉइस प्रोफाइल"
 }

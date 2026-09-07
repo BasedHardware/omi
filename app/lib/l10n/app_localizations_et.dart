@@ -1794,6 +1794,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get getStarted => 'Alusta';
 
   @override
+  String get onboardingSplashTagline => 'Sinu teine aju.';
+
+  @override
   String get allDone => 'Kõik tehtud!';
 
   @override
@@ -1856,9 +1859,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get openSettings => 'Ava seaded';
-
-  @override
-  String get wantDifferentName => 'Soovite kasutada muud nime?';
 
   @override
   String get whatsYourName => 'Mis on teie nimi?';
@@ -7828,7 +7828,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Helifail ei ole esitamiseks saadaval';
@@ -9948,4 +9948,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Teadmiste graafi ei õnnestunud laadida';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name hääleprofiil';
+  }
+
+  @override
+  String get play => 'Esita';
+
+  @override
+  String get redo => 'Uuesti';
 }

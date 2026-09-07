@@ -554,6 +554,7 @@
     "maybeLater": "Может позже",
     "speechProfileIntro": "Omi нужно узнать ваши цели и ваш голос. Вы сможете изменить это позже.",
     "getStarted": "Начать",
+    "onboardingSplashTagline": "Ваш второй мозг.",
     "allDone": "Всё готово!",
     "keepGoing": "Продолжайте, вы отлично справляетесь",
     "skipThisQuestion": "Пропустить этот вопрос",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Требуются разрешения",
     "permissionsRequiredDesc": "Этому приложению нужны разрешения Bluetooth и Местоположение для правильной работы. Пожалуйста, включите их в настройках.",
     "openSettings": "Открыть настройки",
-    "wantDifferentName": "Хотите использовать другое имя?",
     "whatsYourName": "Как вас зовут?",
     "speakTranscribeSummarize": "Говорите. Расшифровывайте. Резюмируйте.",
     "signInWithApple": "Войти с Apple",
@@ -2540,7 +2540,7 @@
     "coworker": "Коллега",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Аудиофайл недоступен для воспроизведения",
     "audioPlaybackFailed": "Не удалось воспроизвести аудио. Файл может быть повреждён или отсутствовать.",
     "pairingTitleOmi": "Включите Omi",
@@ -3281,5 +3281,8 @@
     "chatBlockUnavailable": "Больше недоступно",
     "chatBlockRecommendedNextSteps": "Рекомендуемые следующие шаги",
     "couldNotLoadMemories": "Не удалось загрузить воспоминания",
-    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний"
+    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний",
+    "play": "Воспроизвести",
+    "redo": "Заново",
+    "speechProfileOwnerTitle": "Голосовой профиль: {name}"
 }

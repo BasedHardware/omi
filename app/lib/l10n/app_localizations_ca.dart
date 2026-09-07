@@ -1807,6 +1807,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get getStarted => 'Començar';
 
   @override
+  String get onboardingSplashTagline => 'El teu segon cervell.';
+
+  @override
   String get allDone => 'Tot fet!';
 
   @override
@@ -1870,9 +1873,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get openSettings => 'Obrir configuració';
-
-  @override
-  String get wantDifferentName => 'Voleu que us anomeni d\'una altra manera?';
 
   @override
   String get whatsYourName => 'Com et dius?';
@@ -7875,7 +7875,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'El fitxer d\'àudio no està disponible per a la reproducció';
@@ -10011,4 +10011,15 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'No s\'ha pogut carregar el graf de coneixement';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Perfil de veu de $name';
+  }
+
+  @override
+  String get play => 'Reprodueix';
+
+  @override
+  String get redo => 'Torna-ho a fer';
 }

@@ -989,6 +989,7 @@
     "getOmiUnlimitedFree": "Gaukite Omi Unlimited nemokamai, prisidėdami savo duomenimis prie AI modelių mokymo.",
     "getPaidThroughStripe": "Gaukite mokėjimus už programų pardavimus per Stripe",
     "getStarted": "Pradėti",
+    "onboardingSplashTagline": "Tavo antrosios smegenys.",
     "goBack": "Grįžti atgal",
     "goal": "TIKSLAS",
     "goalTitle": "Tikslo pavadinimas",
@@ -2222,7 +2223,6 @@
     "voiceAndPeople": "Balsas ir Žmonės",
     "voiceFailedToTranscribe": "Nepavyko transkribuoti garso",
     "waitingForTranscriptOrPhotos": "Laukiama transkripcijos arba nuotraukų...",
-    "wantDifferentName": "Norite, kad jus vadintų kitaip?",
     "wasThisHelpful": "Ar tai buvo naudinga?",
     "wearableAiCompanion": "Nešiojamas AI palydovas",
     "webhookUrlNotSet": "Webhook URL nenustatytas",
@@ -2505,7 +2505,7 @@
     "coworker": "Bendradarbis",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Garso failas nepasiekiamas atkūrimui",
     "audioPlaybackFailed": "Nepavyksta atkurti garso. Failas gali būti pažeistas arba trūkstamas.",
     "pairingTitleOmi": "Įjunkite Omi",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "Nebepasiekiama",
     "chatBlockRecommendedNextSteps": "Rekomenduojami tolesni veiksmai",
     "couldNotLoadMemories": "Nepavyko įkelti prisiminimų",
-    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo"
+    "couldNotLoadKnowledgeGraph": "Nepavyko įkelti žinių grafo",
+    "play": "Leisti",
+    "redo": "Iš naujo",
+    "speechProfileOwnerTitle": "{name} balso profilis"
 }

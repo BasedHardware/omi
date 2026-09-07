@@ -1799,6 +1799,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get getStarted => 'Začať';
 
   @override
+  String get onboardingSplashTagline => 'Tvoj druhý mozog.';
+
+  @override
   String get allDone => 'Všetko hotové!';
 
   @override
@@ -1862,9 +1865,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get openSettings => 'Otvoriť nastavenia';
-
-  @override
-  String get wantDifferentName => 'Chcete sa volať inak?';
 
   @override
   String get whatsYourName => 'Ako sa voláš?';
@@ -7820,7 +7820,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Zvukový súbor nie je k dispozícii na prehrávanie';
@@ -9947,4 +9947,15 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nepodarilo sa načítať graf znalostí';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hlasový profil: $name';
+  }
+
+  @override
+  String get play => 'Prehrať';
+
+  @override
+  String get redo => 'Znova';
 }

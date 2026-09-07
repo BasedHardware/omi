@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Пачаць",
+    "onboardingSplashTagline": "Твой другі мозг.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "Адкрыць налады",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Хочаце быць вядомамі пад чым-то іншым?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Якое вашае імя?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "칈лег",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Аўдыё-файл недаступны для прайграння",
     "audioPlaybackFailed": "Не ўдалося ўключыць аўдыё. Файл можа быць пашкоджаны ці адсутнічаць.",
     "connectionGuide": "Кіраўнік па падключэнню",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "Больш недаступна",
     "chatBlockRecommendedNextSteps": "Рэкамендаваныя наступныя крокі",
     "couldNotLoadMemories": "Не ўдалося загрузіць успаміны",
-    "couldNotLoadKnowledgeGraph": "Не ўдалося загрузіць граф ведаў"
+    "couldNotLoadKnowledgeGraph": "Не ўдалося загрузіць граф ведаў",
+    "play": "Прайграць",
+    "redo": "Перазапісаць",
+    "speechProfileOwnerTitle": "Галасавы профіль {name}"
 }

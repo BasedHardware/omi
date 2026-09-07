@@ -1796,6 +1796,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get getStarted => 'شروع کنید';
 
   @override
+  String get onboardingSplashTagline => 'مغز دوم شما.';
+
+  @override
   String get allDone => 'همه کار تمام شد!';
 
   @override
@@ -1856,9 +1859,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get openSettings => 'باز کردن تنظیمات';
-
-  @override
-  String get wantDifferentName => 'می‌خواهید به چیز دیگری نامیده شوید؟';
 
   @override
   String get whatsYourName => 'نام شما چیست؟';
@@ -7833,7 +7833,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'جستجوی Google';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'فایل صوتی برای پخش دسترسی‌پذیر نیست';
@@ -9954,4 +9954,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'بارگذاری گراف دانش ممکن نشد';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'پروفایل صوتی $name';
+  }
+
+  @override
+  String get play => 'پخش';
+
+  @override
+  String get redo => 'دوباره';
 }

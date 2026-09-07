@@ -1802,6 +1802,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get getStarted => 'Начать';
 
   @override
+  String get onboardingSplashTagline => 'Ваш второй мозг.';
+
+  @override
   String get allDone => 'Всё готово!';
 
   @override
@@ -1865,9 +1868,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openSettings => 'Открыть настройки';
-
-  @override
-  String get wantDifferentName => 'Хотите использовать другое имя?';
 
   @override
   String get whatsYourName => 'Как вас зовут?';
@@ -7853,7 +7853,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Аудиофайл недоступен для воспроизведения';
@@ -9991,4 +9991,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Не удалось загрузить граф знаний';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Голосовой профиль: $name';
+  }
+
+  @override
+  String get play => 'Воспроизвести';
+
+  @override
+  String get redo => 'Заново';
 }

@@ -1708,13 +1708,17 @@
     "@maybeLater": {
         "description": "Button text to defer action"
     },
-    "speechProfileIntro": "Omi needs to learn your goals and your voice. You'll be able to modify it later.",
+    "speechProfileIntro": "Let's set up your speech profile. You can always change it later",
     "@speechProfileIntro": {
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "Get Started",
     "@getStarted": {
         "description": "Button text to begin a process"
+    },
+    "onboardingSplashTagline": "your second brain.",
+    "@onboardingSplashTagline": {
+        "description": "Tagline on the onboarding splash screen, under the Omi wordmark"
     },
     "allDone": "All done!",
     "@allDone": {
@@ -1795,10 +1799,6 @@
     "openSettings": "Open Settings",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Want to go by something else?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "What's your name?",
     "@whatsYourName": {
@@ -2873,7 +2873,7 @@
     "@serverProcessesAudio": {
         "description": "Step 3: Server processing"
     },
-    "youreAllSet": "You're all set!",
+    "youreAllSet": "You are all set",
     "@youreAllSet": {
         "description": "Completion message when onboarding is finished"
     },
@@ -2881,7 +2881,7 @@
     "@welcomeToOmiDescription": {
         "description": "Welcome message on completion screen"
     },
-    "startUsingOmi": "Start Using Omi",
+    "startUsingOmi": "Start using Omi",
     "@startUsingOmi": {
         "description": "Button to complete onboarding and start using the app"
     },
@@ -9582,7 +9582,7 @@
     "coworker": "Coworker",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Audio file is not available for playback",
     "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
     "connectionGuide": "Connection Guide",
@@ -9748,7 +9748,7 @@
     "enterWifiNetworkName": "Enter WiFi network name",
     "enterWifiPassword": "Enter WiFi password",
     "appIconLabel": "App Icon",
-    "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
+    "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you.",
     "@onboardingWhatIKnowAboutYouTitle": {
         "description": "Title for onboarding step that previews the memory graph"
     },
@@ -11792,5 +11792,22 @@
     },
     "@couldNotLoadKnowledgeGraph": {
         "description": "Short user-facing error when the knowledge graph request is non-200; must not include the response body"
+    },
+    "speechProfileOwnerTitle": "{name}'s Speech Profile",
+    "@speechProfileOwnerTitle": {
+        "description": "Title shown on the speech profile page when the user already has a speech profile set up",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "play": "Play",
+    "@play": {
+        "description": "Label for the play/listen button on the speech profile page"
+    },
+    "redo": "Redo",
+    "@redo": {
+        "description": "Label for the redo/re-record button on the speech profile page"
     }
 }

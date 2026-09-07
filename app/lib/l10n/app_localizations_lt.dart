@@ -1794,6 +1794,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get getStarted => 'Pradėti';
 
   @override
+  String get onboardingSplashTagline => 'Tavo antrosios smegenys.';
+
+  @override
   String get allDone => 'Viskas atlikta!';
 
   @override
@@ -1856,9 +1859,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get openSettings => 'Atidaryti nustatymus';
-
-  @override
-  String get wantDifferentName => 'Norite, kad jus vadintų kitaip?';
 
   @override
   String get whatsYourName => 'Koks tavo vardas?';
@@ -7836,7 +7836,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Garso failas nepasiekiamas atkūrimui';
@@ -9974,4 +9974,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nepavyko įkelti žinių grafo';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balso profilis';
+  }
+
+  @override
+  String get play => 'Leisti';
+
+  @override
+  String get redo => 'Iš naujo';
 }

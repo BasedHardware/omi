@@ -1763,6 +1763,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get getStarted => '开始';
 
   @override
+  String get onboardingSplashTagline => '你的第二大脑。';
+
+  @override
   String get allDone => '全部完成！';
 
   @override
@@ -1821,9 +1824,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openSettings => '打开设置';
-
-  @override
-  String get wantDifferentName => '想用不同的名字？';
 
   @override
   String get whatsYourName => '您叫什么名字？';
@@ -7694,7 +7694,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => '音频文件无法播放';
@@ -9766,4 +9766,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => '无法加载知识图谱';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name的语音配置文件';
+  }
+
+  @override
+  String get play => '播放';
+
+  @override
+  String get redo => '重新录制';
 }

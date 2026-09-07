@@ -549,6 +549,7 @@
     "maybeLater": "以后再说",
     "speechProfileIntro": "Omi需要学习您的目标和声音。您稍后可以修改它。",
     "getStarted": "开始",
+    "onboardingSplashTagline": "你的第二大脑。",
     "allDone": "全部完成！",
     "keepGoing": "继续加油",
     "skipThisQuestion": "跳过此问题",
@@ -569,7 +570,6 @@
     "permissionsRequired": "需要权限",
     "permissionsRequiredDesc": "需要蓝牙和位置权限。",
     "openSettings": "打开设置",
-    "wantDifferentName": "想用不同的名字？",
     "whatsYourName": "您叫什么名字？",
     "speakTranscribeSummarize": "开口说，自动转写，智能总结。",
     "signInWithApple": "通过 Apple 登录",
@@ -2531,7 +2531,7 @@
     "coworker": "同事",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "音频文件无法播放",
     "audioPlaybackFailed": "无法播放音频。文件可能已损坏或丢失。",
     "pairingTitleOmi": "开启Omi",
@@ -3268,5 +3268,8 @@
     "chatBlockUnavailable": "已不再可用",
     "chatBlockRecommendedNextSteps": "建议的后续步骤",
     "couldNotLoadMemories": "无法加载回忆",
-    "couldNotLoadKnowledgeGraph": "无法加载知识图谱"
+    "couldNotLoadKnowledgeGraph": "无法加载知识图谱",
+    "play": "播放",
+    "redo": "重新录制",
+    "speechProfileOwnerTitle": "{name}的语音配置文件"
 }

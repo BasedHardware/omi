@@ -554,6 +554,7 @@
     "maybeLater": "Mungkin nanti",
     "speechProfileIntro": "Omi perlu mempelajari tujuan dan suara Anda. Anda dapat memodifikasinya nanti.",
     "getStarted": "Mulai",
+    "onboardingSplashTagline": "Otak kedua Anda.",
     "allDone": "Semua selesai!",
     "keepGoing": "Terus lanjutkan, Anda melakukannya dengan baik",
     "skipThisQuestion": "Lewati pertanyaan ini",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Izin diperlukan",
     "permissionsRequiredDesc": "Aplikasi ini memerlukan izin Bluetooth dan Lokasi agar berfungsi dengan baik. Silakan aktifkan di pengaturan.",
     "openSettings": "Buka Pengaturan",
-    "wantDifferentName": "Ingin menggunakan nama lain?",
     "whatsYourName": "Siapa nama Anda?",
     "speakTranscribeSummarize": "Bicara. Transkripsi. Ringkas.",
     "signInWithApple": "Masuk dengan Apple",
@@ -2547,7 +2547,7 @@
     "coworker": "Rekan kerja",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "File audio tidak tersedia untuk diputar",
     "audioPlaybackFailed": "Tidak dapat memutar audio. File mungkin rusak atau hilang.",
     "pairingTitleOmi": "Nyalakan Omi",
@@ -3288,5 +3288,8 @@
     "chatBlockUnavailable": "Tidak lagi tersedia",
     "chatBlockRecommendedNextSteps": "Langkah berikutnya yang disarankan",
     "couldNotLoadMemories": "Tidak dapat memuat kenangan",
-    "couldNotLoadKnowledgeGraph": "Tidak dapat memuat graf pengetahuan"
+    "couldNotLoadKnowledgeGraph": "Tidak dapat memuat graf pengetahuan",
+    "play": "Putar",
+    "redo": "Ulangi",
+    "speechProfileOwnerTitle": "Profil suara {name}"
 }

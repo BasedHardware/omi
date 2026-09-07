@@ -1801,6 +1801,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get getStarted => 'Mulakan';
 
   @override
+  String get onboardingSplashTagline => 'Otak kedua anda.';
+
+  @override
   String get allDone => 'Semua selesai!';
 
   @override
@@ -1863,9 +1866,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get openSettings => 'Buka Tetapan';
-
-  @override
-  String get wantDifferentName => 'Mahu dipanggil dengan nama lain?';
 
   @override
   String get whatsYourName => 'Siapa nama anda?';
@@ -7851,7 +7851,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Fail audio tidak tersedia untuk dimainkan';
@@ -9980,4 +9980,15 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuatkan graf pengetahuan';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil suara $name';
+  }
+
+  @override
+  String get play => 'Main';
+
+  @override
+  String get redo => 'Ulang';
 }

@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "התחל",
+    "onboardingSplashTagline": "המוח השני שלך.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "פתח הגדרות",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "רוצה להכנס בשם אחר?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "מה שמך?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "עמית",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "חיפוש Google",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "קובץ אודיו אינו זמין להשמעה",
     "audioPlaybackFailed": "לא היתה אפשרות להשמיע אודיו. ייתכן שהקובץ פגום או חסר.",
     "connectionGuide": "מדריך חיבור",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "אינו זמין עוד",
     "chatBlockRecommendedNextSteps": "השלבים הבאים המומלצים",
     "couldNotLoadMemories": "לא ניתן לטעון את הזיכרונות",
-    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע"
+    "couldNotLoadKnowledgeGraph": "לא ניתן לטעון את גרף הידע",
+    "play": "הפעל",
+    "redo": "מחדש",
+    "speechProfileOwnerTitle": "פרופיל הקול של {name}"
 }

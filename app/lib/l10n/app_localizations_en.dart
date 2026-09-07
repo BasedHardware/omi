@@ -1786,10 +1786,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get maybeLater => 'Maybe Later';
 
   @override
-  String get speechProfileIntro => 'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.';
+  String get speechProfileIntro => 'Let\'s set up your speech profile. You can always change it later';
 
   @override
   String get getStarted => 'Get Started';
+
+  @override
+  String get onboardingSplashTagline => 'your second brain.';
 
   @override
   String get allDone => 'All done!';
@@ -1855,9 +1858,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openSettings => 'Open Settings';
-
-  @override
-  String get wantDifferentName => 'Want to go by something else?';
 
   @override
   String get whatsYourName => 'What\'s your name?';
@@ -2573,14 +2573,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverProcessesAudio => 'The server processes the audio files and creates memories';
 
   @override
-  String get youreAllSet => 'You\'re all set!';
+  String get youreAllSet => 'You are all set';
 
   @override
   String get welcomeToOmiDescription =>
       'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.';
 
   @override
-  String get startUsingOmi => 'Start Using Omi';
+  String get startUsingOmi => 'Start using Omi';
 
   @override
   String get back => 'Back';
@@ -7826,7 +7826,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Audio file is not available for playback';
@@ -7997,7 +7997,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you.';
 
   @override
   String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
@@ -9945,4 +9945,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Couldn\'t load knowledge graph';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name\'s Speech Profile';
+  }
+
+  @override
+  String get play => 'Play';
+
+  @override
+  String get redo => 'Redo';
 }

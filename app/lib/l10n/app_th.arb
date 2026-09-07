@@ -554,6 +554,7 @@
     "maybeLater": "ไว้ทีหลัง",
     "speechProfileIntro": "Omi จำเป็นต้องเรียนรู้เป้าหมายและเสียงของคุณ คุณจะสามารถแก้ไขได้ในภายหลัง",
     "getStarted": "เริ่มต้น",
+    "onboardingSplashTagline": "สมองที่สองของคุณ.",
     "allDone": "เสร็จแล้ว!",
     "keepGoing": "ทำต่อไป คุณทำได้ดีมาก",
     "skipThisQuestion": "ข้ามคำถามนี้",
@@ -574,7 +575,6 @@
     "permissionsRequired": "ต้องการสิทธิ์",
     "permissionsRequiredDesc": "แอปนี้ต้องการสิทธิ์ Bluetooth และตำแหน่งเพื่อทำงานอย่างถูกต้อง กรุณาเปิดใช้งานในการตั้งค่า",
     "openSettings": "เปิดการตั้งค่า",
-    "wantDifferentName": "ต้องการใช้ชื่ออื่นไหม?",
     "whatsYourName": "คุณชื่ออะไร?",
     "speakTranscribeSummarize": "พูด ถอดเสียง สรุป",
     "signInWithApple": "ลงชื่อเข้าใช้ด้วย Apple",
@@ -2505,7 +2505,7 @@
     "coworker": "เพื่อนร่วมงาน",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ไฟล์เสียงไม่พร้อมสำหรับการเล่น",
     "audioPlaybackFailed": "ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป",
     "pairingTitleOmi": "เปิด Omi",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "ไม่พร้อมใช้งานอีกต่อไป",
     "chatBlockRecommendedNextSteps": "ขั้นตอนถัดไปที่แนะนำ",
     "couldNotLoadMemories": "ไม่สามารถโหลดความทรงจำได้",
-    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้"
+    "couldNotLoadKnowledgeGraph": "ไม่สามารถโหลดกราฟความรู้ได้",
+    "play": "เล่น",
+    "redo": "ทำใหม่",
+    "speechProfileOwnerTitle": "โปรไฟล์เสียงของ {name}"
 }

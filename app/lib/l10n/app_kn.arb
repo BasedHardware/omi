@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "ಪ್ರಾರಂಭ ಮಾಡಿ",
+    "onboardingSplashTagline": "ನಿಮ್ಮ ಎರಡನೇ ಮೆದುಳು.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು ತೆರೆಯಿರಿ",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಹೆಸರು ಹೇಳಿದೆ ತೆಗೆದುಕೊಳ್ಳಬೇಕೆ?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "ನಿಮ್ಮ ಹೆಸರು ಏನು?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "ಸಹೋದ್ಯೋಗಿ",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ಆಡಿಯೋ ಫೈಲ್ ಪ್ಲೇಬ್ಯಾಕ್‌ಗೆ ಲಭ್ಯವಿಲ್ಲ",
     "audioPlaybackFailed": "ಆಡಿಯೋ ಪ್ಲೇ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಫೈಲ್ ಹಾಳಾಗಿರುತ್ತದೆ ಅಥವಾ ಕಾಣೆಯಾಗಿರುತ್ತದೆ.",
     "connectionGuide": "ಸಂಪರ್ಕ ಮಾರ್ಗದರ್ಶಿ",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "ಇನ್ನು ಲಭ್ಯವಿಲ್ಲ",
     "chatBlockRecommendedNextSteps": "ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು",
     "couldNotLoadMemories": "ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
-    "couldNotLoadKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ"
+    "couldNotLoadKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "play": "ಪ್ಲೇ ಮಾಡಿ",
+    "redo": "ಮತ್ತೆ ಮಾಡಿ",
+    "speechProfileOwnerTitle": "{name} ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್"
 }

@@ -1783,6 +1783,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get getStarted => 'התחל';
 
   @override
+  String get onboardingSplashTagline => 'המוח השני שלך.';
+
+  @override
   String get allDone => 'הכל בסדר!';
 
   @override
@@ -1842,9 +1845,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get openSettings => 'פתח הגדרות';
-
-  @override
-  String get wantDifferentName => 'רוצה להכנס בשם אחר?';
 
   @override
   String get whatsYourName => 'מה שמך?';
@@ -7768,7 +7768,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'חיפוש Google';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'קובץ אודיו אינו זמין להשמעה';
@@ -9875,4 +9875,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'לא ניתן לטעון את גרף הידע';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'פרופיל הקול של $name';
+  }
+
+  @override
+  String get play => 'הפעל';
+
+  @override
+  String get redo => 'מחדש';
 }

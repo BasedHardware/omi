@@ -7,19 +7,53 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/services/auth/local_emulator_auth.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
 
-  const AuthComponent({super.key, required this.onSignIn});
+  /// Whether the local-dev hold-to-sign-in-as-Alice path is live. Defaults to
+  /// the build profile (only the Auth-emulator profile enables it); tests pass
+  /// it explicitly to exercise the production tap path.
+  final bool? localEmulatorSignIn;
+
+  const AuthComponent({super.key, required this.onSignIn, this.localEmulatorSignIn});
 
   @override
   State<AuthComponent> createState() => _AuthComponentState();
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  bool get _emulatorSignInEnabled => widget.localEmulatorSignIn ?? localEmulatorSignInEnabled(Env.profile);
+
+  void _onLocalEmulatorSignIn(AuthenticationProvider provider) {
+    HapticFeedback.mediumImpact();
+    provider.onLocalEmulatorSignIn(widget.onSignIn);
+  }
+
+  /// A tap runs the real provider sign-in everywhere except local_dev. There
+  /// the harness has no OAuth client IDs, so the web flow opens a 500 page and
+  /// then waits up to five minutes for a callback that never comes — and while
+  /// it waits the provider's loading guard swallows every later tap and hold,
+  /// which reads as the buttons being dead. Point at the hold instead.
+  void _onProviderTap(VoidCallback signIn) {
+    HapticFeedback.mediumImpact();
+    if (_emulatorSignInEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Hold for ${kLocalEmulatorSignInHoldDuration.inSeconds} seconds to sign in as the local emulator user',
+          ),
+        ),
+      );
+      return;
+    }
+    signIn();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
@@ -31,14 +65,9 @@ class _AuthComponentState extends State<AuthComponent> {
               child: Container(), // Just takes up space for background image
             ),
 
-            // Bottom drawer card - wraps content
             Container(
               width: double.infinity,
               padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-              ),
               child: SafeArea(
                 top: false,
                 child: Column(
@@ -74,30 +103,14 @@ class _AuthComponentState extends State<AuthComponent> {
                       SizedBox(
                         width: double.infinity,
                         height: 56,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            provider.onAppleSignIn(widget.onSignIn);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const FaIcon(FontAwesomeIcons.apple, size: 24),
-                              const SizedBox(width: 8),
-                              Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
+                        child: _HoldForLocalEmulator(
+                          key: const Key('appleSignIn'),
+                          enabled: _emulatorSignInEnabled,
+                          onHoldComplete: () => _onLocalEmulatorSignIn(provider),
+                          onPressed: () => _onProviderTap(() => provider.onAppleSignIn(widget.onSignIn)),
+                          child: _AuthSignInButtonFace(
+                            icon: const FaIcon(FontAwesomeIcons.apple, size: 24, color: Colors.black),
+                            label: context.l10n.signInWithApple,
                           ),
                         ),
                       ),
@@ -108,26 +121,14 @@ class _AuthComponentState extends State<AuthComponent> {
                     SizedBox(
                       width: double.infinity,
                       height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          provider.onGoogleSignIn(widget.onSignIn);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                            ),
-                          ],
+                      child: _HoldForLocalEmulator(
+                        key: const Key('googleSignIn'),
+                        enabled: _emulatorSignInEnabled,
+                        onHoldComplete: () => _onLocalEmulatorSignIn(provider),
+                        onPressed: () => _onProviderTap(() => provider.onGoogleSignIn(widget.onSignIn)),
+                        child: _AuthSignInButtonFace(
+                          icon: const FaIcon(FontAwesomeIcons.google, size: 20, color: Colors.black),
+                          label: context.l10n.signInWithGoogle,
                         ),
                       ),
                     ),
@@ -167,6 +168,105 @@ class _AuthComponentState extends State<AuthComponent> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Static Apple/Google face — no InkWell, splash, overlay, or elevation.
+class _AuthSignInButtonFace extends StatelessWidget {
+  final Widget icon;
+  final String label;
+
+  const _AuthSignInButtonFace({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          icon,
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Manrope',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Holds a pointer for [kLocalEmulatorSignInHoldDuration] before firing Alice.
+///
+/// Uses [LongPressGestureRecognizer] with that duration so Flutter's default
+/// ~500ms long-press cannot win the arena. A Material button splash used to
+/// look like the hold completed in ~2s; this child has no press animation.
+class _HoldForLocalEmulator extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onHoldComplete;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  const _HoldForLocalEmulator({
+    super.key,
+    required this.enabled,
+    required this.onHoldComplete,
+    required this.onPressed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // The raw recognizer replaces a Material button, which carried button
+    // semantics and keyboard activation; both are put back here so a screen
+    // reader or a hardware keyboard can still trigger the ordinary tap path.
+    return FocusableActionDetector(
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          onPressed();
+          return null;
+        }),
+      },
+      child: Semantics(
+        button: true,
+        onTap: onPressed,
+        child: _gestures(),
+      ),
+    );
+  }
+
+  Widget _gestures() {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+          () => TapGestureRecognizer(debugOwner: this),
+          (TapGestureRecognizer instance) {
+            instance.onTap = onPressed;
+          },
+        ),
+        if (enabled)
+          LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+              debugOwner: this,
+              duration: kLocalEmulatorSignInHoldDuration,
+            ),
+            (LongPressGestureRecognizer instance) {
+              instance.onLongPress = onHoldComplete;
+            },
+          ),
+      },
+      child: child,
     );
   }
 }

@@ -1795,6 +1795,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get getStarted => 'شروع کریں';
 
   @override
+  String get onboardingSplashTagline => 'آپ کا دوسرا دماغ.';
+
+  @override
   String get allDone => 'ہو گیا!';
 
   @override
@@ -1856,9 +1859,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get openSettings => 'ترتیبات کھولیں';
-
-  @override
-  String get wantDifferentName => 'کچھ اور نام سے جانا چاہتے ہیں؟';
 
   @override
   String get whatsYourName => 'آپ کا نام کیا ہے؟';
@@ -7841,7 +7841,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google تلاش';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'آڈیو فائل چلانے کے لیے دستیاب نہیں ہے';
@@ -9966,4 +9966,15 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'نالج گراف لوڈ نہیں ہو سکا';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name کا صوتی پروفائل';
+  }
+
+  @override
+  String get play => 'چلائیں';
+
+  @override
+  String get redo => 'دوبارہ کریں';
 }

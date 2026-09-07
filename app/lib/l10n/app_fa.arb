@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "شروع کنید",
+    "onboardingSplashTagline": "مغز دوم شما.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "باز کردن تنظیمات",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "می‌خواهید به چیز دیگری نامیده شوید؟",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "نام شما چیست؟",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "همکار",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "جستجوی Google",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "فایل صوتی برای پخش دسترسی‌پذیر نیست",
     "audioPlaybackFailed": "نتوانست صوت را پخش کند. فایل ممکن است خراب یا حذف شده باشد.",
     "connectionGuide": "راهنمای اتصال",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "دیگر در دسترس نیست",
     "chatBlockRecommendedNextSteps": "گام‌های بعدی پیشنهادی",
     "couldNotLoadMemories": "بارگذاری خاطرات ممکن نشد",
-    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد"
+    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد",
+    "play": "پخش",
+    "redo": "دوباره",
+    "speechProfileOwnerTitle": "پروفایل صوتی {name}"
 }

@@ -554,6 +554,7 @@
     "maybeLater": "Kanskje senere",
     "speechProfileIntro": "Omi må lære dine mål og din stemme. Du kan endre det senere.",
     "getStarted": "Kom i gang",
+    "onboardingSplashTagline": "Din andre hjerne.",
     "allDone": "Alt ferdig!",
     "keepGoing": "Fortsett, du gjør det bra",
     "skipThisQuestion": "Hopp over dette spørsmålet",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Tillatelser kreves",
     "permissionsRequiredDesc": "Denne appen trenger Bluetooth- og posisjonstillatelser for å fungere ordentlig. Aktiver dem i innstillingene.",
     "openSettings": "Åpne innstillinger",
-    "wantDifferentName": "Vil du bli kalt noe annet?",
     "whatsYourName": "Hva heter du?",
     "speakTranscribeSummarize": "Snakk. Transkriber. Sammenfatt.",
     "signInWithApple": "Logg inn med Apple",
@@ -2505,7 +2505,7 @@
     "coworker": "Kollega",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Lydfilen er ikke tilgjengelig for avspilling",
     "audioPlaybackFailed": "Kan ikke spille av lyd. Filen kan være skadet eller mangler.",
     "pairingTitleOmi": "Slå på Omi",
@@ -3246,5 +3246,8 @@
     "chatBlockUnavailable": "Ikke lenger tilgjengelig",
     "chatBlockRecommendedNextSteps": "Anbefalte neste trinn",
     "couldNotLoadMemories": "Kunne ikke laste minner",
-    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen"
+    "couldNotLoadKnowledgeGraph": "Kunne ikke laste kunnskapsgrafen",
+    "play": "Spill av",
+    "redo": "Gjør på nytt",
+    "speechProfileOwnerTitle": "Stemmeprofilen til {name}"
 }

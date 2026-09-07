@@ -1794,6 +1794,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get getStarted => 'Aloita';
 
   @override
+  String get onboardingSplashTagline => 'Toinen aivosi.';
+
+  @override
   String get allDone => 'Kaikki valmista!';
 
   @override
@@ -1855,9 +1858,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get openSettings => 'Avaa asetukset';
-
-  @override
-  String get wantDifferentName => 'Haluatko käyttää eri nimeä?';
 
   @override
   String get whatsYourName => 'Mikä on nimesi?';
@@ -7828,7 +7828,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Äänitiedosto ei ole saatavilla toistettavaksi';
@@ -9955,4 +9955,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Tietograafia ei voitu ladata';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Käyttäjän $name ääniprofiili';
+  }
+
+  @override
+  String get play => 'Toista';
+
+  @override
+  String get redo => 'Uudelleen';
 }

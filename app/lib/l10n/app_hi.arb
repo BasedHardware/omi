@@ -549,6 +549,7 @@
     "maybeLater": "शायद बाद में",
     "speechProfileIntro": "Omi को आपके लक्ष्यों और आपकी आवाज़ सीखनी होगी। आप इसे बाद में संशोधित कर सकते हैं।",
     "getStarted": "शुरू करें",
+    "onboardingSplashTagline": "आपका दूसरा दिमाग.",
     "allDone": "सब हो गया!",
     "keepGoing": "जारी रखें",
     "skipThisQuestion": "इस प्रश्न को छोड़ें",
@@ -569,7 +570,6 @@
     "permissionsRequired": "अनुमतियाँ आवश्यक",
     "permissionsRequiredDesc": "ब्लूटूथ और स्थान की अनुमति आवश्यक है।",
     "openSettings": "सेटिंग्स खोलें",
-    "wantDifferentName": "क्या आप कोई दूसरा नाम इस्तेमाल करना चाहते हैं?",
     "whatsYourName": "आपका नाम क्या है?",
     "speakTranscribeSummarize": "बोलें। ट्रांसक्राइब करें। संक्षेप करें।",
     "signInWithApple": "Apple के साथ साइन इन करें",
@@ -2506,7 +2506,7 @@
     "coworker": "सहकर्मी",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है",
     "audioPlaybackFailed": "ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।",
     "pairingTitleOmi": "Omi चालू करें",
@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "अब उपलब्ध नहीं है",
     "chatBlockRecommendedNextSteps": "अनुशंसित अगले कदम",
     "couldNotLoadMemories": "यादें लोड नहीं हो सकीं",
-    "couldNotLoadKnowledgeGraph": "नॉलेज ग्राफ़ लोड नहीं हो सका"
+    "couldNotLoadKnowledgeGraph": "नॉलेज ग्राफ़ लोड नहीं हो सका",
+    "play": "चलाएँ",
+    "redo": "फिर से करें",
+    "speechProfileOwnerTitle": "{name} की वॉइस प्रोफ़ाइल"
 }

@@ -1798,6 +1798,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get getStarted => 'Sākt';
 
   @override
+  String get onboardingSplashTagline => 'Tavas otrās smadzenes.';
+
+  @override
   String get allDone => 'Viss padarīts!';
 
   @override
@@ -1861,9 +1864,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openSettings => 'Atvērt iestatījumus';
-
-  @override
-  String get wantDifferentName => 'Vēlaties, lai jūs uzrunā citādi?';
 
   @override
   String get whatsYourName => 'Kā tevi sauc?';
@@ -7847,7 +7847,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Audio fails nav pieejams atskaņošanai';
@@ -9978,4 +9978,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balss profils';
+  }
+
+  @override
+  String get play => 'Atskaņot';
+
+  @override
+  String get redo => 'Vēlreiz';
 }

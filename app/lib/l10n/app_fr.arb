@@ -554,6 +554,7 @@
     "maybeLater": "Peut-être plus tard",
     "speechProfileIntro": "Omi doit apprendre vos objectifs et votre voix. Vous pourrez le modifier plus tard.",
     "getStarted": "Commencer",
+    "onboardingSplashTagline": "Votre deuxième cerveau.",
     "allDone": "Terminé !",
     "keepGoing": "Continuez, vous vous en sortez très bien",
     "skipThisQuestion": "Passer cette question",
@@ -574,7 +575,6 @@
     "permissionsRequired": "Autorisations requises",
     "permissionsRequiredDesc": "Cette application a besoin des autorisations Bluetooth et Localisation pour fonctionner correctement. Veuillez les activer dans les paramètres.",
     "openSettings": "Ouvrir les paramètres",
-    "wantDifferentName": "Voulez-vous utiliser un autre nom ?",
     "whatsYourName": "Comment vous appelez-vous ?",
     "speakTranscribeSummarize": "Parlez. Transcrivez. Résumez.",
     "signInWithApple": "Se connecter avec Apple",
@@ -2540,7 +2540,7 @@
     "coworker": "Collègue",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "Le fichier audio n'est pas disponible pour la lecture",
     "audioPlaybackFailed": "Impossible de lire l'audio. Le fichier est peut-être corrompu ou manquant.",
     "pairingTitleOmi": "Allumez Omi",
@@ -3281,5 +3281,8 @@
     "chatBlockUnavailable": "N’est plus disponible",
     "chatBlockRecommendedNextSteps": "Prochaines étapes recommandées",
     "couldNotLoadMemories": "Impossible de charger les souvenirs",
-    "couldNotLoadKnowledgeGraph": "Impossible de charger le graphe de connaissances"
+    "couldNotLoadKnowledgeGraph": "Impossible de charger le graphe de connaissances",
+    "play": "Lire",
+    "redo": "Refaire",
+    "speechProfileOwnerTitle": "Profil vocal de {name}"
 }

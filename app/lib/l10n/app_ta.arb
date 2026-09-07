@@ -1698,6 +1698,7 @@
         "description": "Introduction text for speech profile setup"
     },
     "getStarted": "தொடங்குங்கள்",
+    "onboardingSplashTagline": "உங்கள் இரண்டாவது மூளை.",
     "@getStarted": {
         "description": "Button text to begin a process"
     },
@@ -1780,10 +1781,6 @@
     "openSettings": "அமைப்புகளைத் திறக்கவும்",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "உங்கள் பெயர் என்ன?",
     "@whatsYourName": {
@@ -9546,7 +9543,7 @@
     "coworker": "சக-கர்மचारி",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google தேடல்",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "ஆடியோ கோப்பு இயக்கத்திற்கு उपलब्ध அல்ல",
     "audioPlaybackFailed": "ஆடியோவை இயக்க முடியவில்லை. கோப்பு சிதைந்திருக்கலாம் அல்லது காணவில்லை.",
     "connectionGuide": "இணைப்பு வழிகாட்டி",
@@ -10812,5 +10809,8 @@
     "chatBlockUnavailable": "இனி கிடைக்கவில்லை",
     "chatBlockRecommendedNextSteps": "பரிந்துரைக்கப்பட்ட அடுத்த படிகள்",
     "couldNotLoadMemories": "நினைவுகளை ஏற்ற முடியவில்லை",
-    "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை"
+    "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை",
+    "play": "இயக்கு",
+    "redo": "மீண்டும் செய்",
+    "speechProfileOwnerTitle": "{name} இன் குரல் சுயவிவரம்"
 }

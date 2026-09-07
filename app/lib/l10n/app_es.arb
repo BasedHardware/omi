@@ -549,6 +549,7 @@
     "maybeLater": "Quizás más tarde",
     "speechProfileIntro": "Omi necesita aprender tus objetivos y tu voz. Podrás modificarlo más tarde.",
     "getStarted": "Empezar",
+    "onboardingSplashTagline": "Tu segundo cerebro.",
     "allDone": "¡Listo!",
     "keepGoing": "Sigue así",
     "skipThisQuestion": "Saltar esta pregunta",
@@ -569,7 +570,6 @@
     "permissionsRequired": "Permisos requeridos",
     "permissionsRequiredDesc": "Esta app requiere permisos de Bluetooth y Ubicación.",
     "openSettings": "Abrir ajustes",
-    "wantDifferentName": "¿Quieres usar un nombre diferente?",
     "whatsYourName": "¿Cómo te llamas?",
     "speakTranscribeSummarize": "Habla. Transcribe. Resume.",
     "signInWithApple": "Iniciar sesión con Apple",
@@ -2506,7 +2506,7 @@
     "coworker": "Compañero de trabajo",
     "linkedIn": "LinkedIn",
     "appStore": "App Store",
-    "googleSearch": "Google Search",
+    "googleSearch": "Google",
     "audioPlaybackUnavailable": "El archivo de audio no está disponible para reproducción",
     "audioPlaybackFailed": "No se puede reproducir el audio. El archivo puede estar dañado o no existir.",
     "pairingTitleOmi": "Enciende Omi",
@@ -3247,5 +3247,8 @@
     "chatBlockUnavailable": "Ya no está disponible",
     "chatBlockRecommendedNextSteps": "Próximos pasos recomendados",
     "couldNotLoadMemories": "No se pudieron cargar los recuerdos",
-    "couldNotLoadKnowledgeGraph": "No se pudo cargar el grafo de conocimiento"
+    "couldNotLoadKnowledgeGraph": "No se pudo cargar el grafo de conocimiento",
+    "play": "Reproducir",
+    "redo": "Repetir",
+    "speechProfileOwnerTitle": "Perfil de voz de {name}"
 }

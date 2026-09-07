@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/pages/onboarding/onboarding_layout.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -16,12 +17,10 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   var focusNode = FocusNode();
-  bool hasPrefilledName = false;
 
   @override
   void initState() {
     nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
-    hasPrefilledName = SharedPreferencesUtil().givenName.trim().isNotEmpty;
     super.initState();
 
     // Auto-focus the name input field after the widget is built
@@ -46,14 +45,9 @@ class _NameWidgetState extends State<NameWidget> {
           child: Container(), // Just takes up space for background image
         ),
 
-        // Bottom drawer card - wraps content
         Container(
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
-          ),
           child: SafeArea(
             top: false,
             child: Column(
@@ -62,17 +56,7 @@ class _NameWidgetState extends State<NameWidget> {
                 const SizedBox(height: 16),
 
                 // Main title
-                Text(
-                  hasPrefilledName ? context.l10n.wantDifferentName : context.l10n.whatsYourName,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: hasPrefilledName ? 22 : 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                OnboardingStepTitle(context.l10n.whatsYourName),
 
                 const SizedBox(height: 8),
 

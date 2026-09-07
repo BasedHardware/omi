@@ -1765,6 +1765,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get getStarted => '시작하기';
 
   @override
+  String get onboardingSplashTagline => '당신의 두 번째 뇌.';
+
+  @override
   String get allDone => '모두 완료!';
 
   @override
@@ -1823,9 +1826,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openSettings => '설정 열기';
-
-  @override
-  String get wantDifferentName => '다른 이름으로 부르시겠습니까?';
 
   @override
   String get whatsYourName => '이름이 무엇인가요?';
@@ -7705,7 +7705,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => '오디오 파일을 재생할 수 없습니다';
@@ -9788,4 +9788,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => '지식 그래프를 불러올 수 없습니다';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name님의 음성 프로필';
+  }
+
+  @override
+  String get play => '재생';
+
+  @override
+  String get redo => '다시 하기';
 }

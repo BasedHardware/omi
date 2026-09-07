@@ -482,9 +482,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               };
               final content = child!;
               final guidedContent = BluetoothGuidanceListener(child: content);
-              return PlatformService.isIOS && Env.posthogApiKey != null
+              final tracked = PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)
                   : guidedContent;
+              return tracked;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

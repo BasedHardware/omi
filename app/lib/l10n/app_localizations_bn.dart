@@ -1794,6 +1794,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get getStarted => 'শুরু করুন';
 
   @override
+  String get onboardingSplashTagline => 'আপনার দ্বিতীয় মস্তিষ্ক.';
+
+  @override
   String get allDone => 'সবকিছু সম্পন্ন!';
 
   @override
@@ -1855,9 +1858,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get openSettings => 'সেটিংস খুলুন';
-
-  @override
-  String get wantDifferentName => 'অন্য কিছু নাম পেতে চান?';
 
   @override
   String get whatsYourName => 'আপনার নাম কি?';
@@ -7838,7 +7838,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google সার্চ';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'অডিও ফাইল প্লেব্যাকের জন্য উপলব্ধ নয়';
@@ -9959,4 +9959,15 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'নলেজ গ্রাফ লোড করা যায়নি';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name-এর ভয়েস প্রোফাইল';
+  }
+
+  @override
+  String get play => 'চালান';
+
+  @override
+  String get redo => 'আবার করুন';
 }

@@ -3,7 +3,16 @@ import 'package:flutter/material.dart';
 class ProgressBarWithPercentage extends StatefulWidget {
   final double progressValue;
 
-  const ProgressBarWithPercentage({super.key, required this.progressValue});
+  /// Renders the percentage as plain white text to the right of the bar
+  /// instead of the floating bubble+pointer. Used by onboarding; the
+  /// Settings speech-profile page keeps the bubble.
+  final bool showPercentageAsPlainText;
+
+  const ProgressBarWithPercentage({
+    super.key,
+    required this.progressValue,
+    this.showPercentageAsPlainText = false,
+  });
   @override
   _ProgressBarWithPercentageState createState() => _ProgressBarWithPercentageState();
 }
@@ -14,44 +23,86 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final barWidth = constraints.maxWidth;
-        final progress = double.parse(widget.progressValue.toStringAsFixed(2));
-        return SizedBox(
-          height: 60,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 46,
-                width: barWidth,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      left: (barWidth * progress),
-                      child: FractionalTranslation(
-                        translation: const Offset(-0.5, 0.0),
-                        child: ProgressBubble(content: '${(widget.progressValue * 100).toInt()}%'),
+        final targetProgress = double.parse(widget.progressValue.toStringAsFixed(2));
+
+        // Eases the bar (and the bubble/percentage riding on it) toward each
+        // new progress value instead of snapping instantly.
+        return TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: targetProgress, end: targetProgress),
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+          builder: (context, progress, child) {
+            final displayPercent = '${(progress * 100).toInt()}%';
+
+            if (widget.showPercentageAsPlainText) {
+              return Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.all(Radius.circular(10)),
+                        border: Border.all(color: Colors.white),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.all(Radius.circular(9)),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: Colors.grey.shade300,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: barWidth,
-                height: 8,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Text(displayPercent, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                ],
+              );
+            }
+
+            return SizedBox(
+              height: 60,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 46,
+                    width: barWidth,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: (barWidth * progress),
+                          child: FractionalTranslation(
+                            translation: const Offset(-0.5, 0.0),
+                            child: ProgressBubble(content: displayPercent),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: barWidth,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.all(Radius.circular(10)),
+                      border: Border.all(color: Colors.white),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.all(Radius.circular(9)),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey.shade300,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

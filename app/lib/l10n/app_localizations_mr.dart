@@ -1796,6 +1796,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get getStarted => 'सुरुवात करा';
 
   @override
+  String get onboardingSplashTagline => 'तुमचा दुसरा मेंदू.';
+
+  @override
   String get allDone => 'सर्व पूर्ण!';
 
   @override
@@ -1858,9 +1861,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get openSettings => 'सेटिंग्ज खोला';
-
-  @override
-  String get wantDifferentName => 'अन्य काहीतरी नावाने जाऊ इच्छिता?';
 
   @override
   String get whatsYourName => 'आपले नाव काय आहे?';
@@ -7842,7 +7842,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google शोध';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ऑडिओ फाइल प्लेबॅकसाठी उपलब्ध नाही';
@@ -9963,4 +9963,15 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ज्ञान आलेख लोड करता आला नाही';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name यांचे व्हॉइस प्रोफाइल';
+  }
+
+  @override
+  String get play => 'प्ले करा';
+
+  @override
+  String get redo => 'पुन्हा करा';
 }

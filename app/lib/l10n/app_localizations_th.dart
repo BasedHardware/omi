@@ -1786,6 +1786,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get getStarted => 'เริ่มต้น';
 
   @override
+  String get onboardingSplashTagline => 'สมองที่สองของคุณ.';
+
+  @override
   String get allDone => 'เสร็จแล้ว!';
 
   @override
@@ -1847,9 +1850,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get openSettings => 'เปิดการตั้งค่า';
-
-  @override
-  String get wantDifferentName => 'ต้องการใช้ชื่ออื่นไหม?';
 
   @override
   String get whatsYourName => 'คุณชื่ออะไร?';
@@ -7793,7 +7793,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ไฟล์เสียงไม่พร้อมสำหรับการเล่น';
@@ -9897,4 +9897,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ไม่สามารถโหลดกราฟความรู้ได้';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'โปรไฟล์เสียงของ $name';
+  }
+
+  @override
+  String get play => 'เล่น';
+
+  @override
+  String get redo => 'ทำใหม่';
 }

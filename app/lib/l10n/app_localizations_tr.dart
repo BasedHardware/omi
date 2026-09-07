@@ -1800,6 +1800,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get getStarted => 'Başlayın';
 
   @override
+  String get onboardingSplashTagline => 'İkinci beynin.';
+
+  @override
   String get allDone => 'Hepsi tamam!';
 
   @override
@@ -1862,9 +1865,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get openSettings => 'Ayarları Aç';
-
-  @override
-  String get wantDifferentName => 'Farklı bir isimle mi anılmak istiyorsunuz?';
 
   @override
   String get whatsYourName => 'Adın ne?';
@@ -7842,7 +7842,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Ses dosyası oynatma için mevcut değil';
@@ -9966,4 +9966,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name adlı kişinin ses profili';
+  }
+
+  @override
+  String get play => 'Oynat';
+
+  @override
+  String get redo => 'Yeniden yap';
 }

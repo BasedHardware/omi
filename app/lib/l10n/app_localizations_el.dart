@@ -1808,6 +1808,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get getStarted => 'Ξεκινήστε';
 
   @override
+  String get onboardingSplashTagline => 'Ο δεύτερος εγκέφαλός σου.';
+
+  @override
   String get allDone => 'Όλα έτοιμα!';
 
   @override
@@ -1872,9 +1875,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get openSettings => 'Άνοιγμα Ρυθμίσεων';
-
-  @override
-  String get wantDifferentName => 'Θέλετε να αποκαλείστε διαφορετικά;';
 
   @override
   String get whatsYourName => 'Πώς σε λένε;';
@@ -7883,7 +7883,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή';
@@ -10024,4 +10024,15 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Προφίλ φωνής: $name';
+  }
+
+  @override
+  String get play => 'Αναπαραγωγή';
+
+  @override
+  String get redo => 'Ξανά';
 }

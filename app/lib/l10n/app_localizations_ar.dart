@@ -1781,6 +1781,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get getStarted => 'ابدأ';
 
   @override
+  String get onboardingSplashTagline => 'دماغك الثاني.';
+
+  @override
   String get allDone => 'تم كل شيء!';
 
   @override
@@ -1842,9 +1845,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get openSettings => 'فتح الإعدادات';
-
-  @override
-  String get wantDifferentName => 'تريد أن يُناديك باسم آخر؟';
 
   @override
   String get whatsYourName => 'ما اسمك؟';
@@ -7775,7 +7775,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google Search';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ملف الصوت غير متاح للتشغيل';
@@ -9896,4 +9896,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'تعذر تحميل الرسم البياني للمعرفة';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'الملف الصوتي لـ $name';
+  }
+
+  @override
+  String get play => 'تشغيل';
+
+  @override
+  String get redo => 'إعادة';
 }

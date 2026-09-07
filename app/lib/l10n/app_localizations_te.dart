@@ -1800,6 +1800,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get getStarted => 'ప్రారంభించండి';
 
   @override
+  String get onboardingSplashTagline => 'మీ రెండవ మెదడు.';
+
+  @override
   String get allDone => 'అంతా చేయబడింది!';
 
   @override
@@ -1864,9 +1867,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get openSettings => 'సెట్టింగ్‌లను తెరండి';
-
-  @override
-  String get wantDifferentName => 'వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?';
 
   @override
   String get whatsYourName => 'మీ పేరు ఏమిటి?';
@@ -7874,7 +7874,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get appStore => 'App Store';
 
   @override
-  String get googleSearch => 'Google శోధన';
+  String get googleSearch => 'Google';
 
   @override
   String get audioPlaybackUnavailable => 'ఆడియో ఫైల్ ప్లేబ్యాక్ కోసం అందుబాటులో లేదు';
@@ -10003,4 +10003,15 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'నాలెడ్జ్ గ్రాఫ్‌ను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name వాయిస్ ప్రొఫైల్';
+  }
+
+  @override
+  String get play => 'ప్లే చేయండి';
+
+  @override
+  String get redo => 'మళ్ళీ చేయండి';
 }

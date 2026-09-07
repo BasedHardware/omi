@@ -44,6 +44,14 @@ class ListenRequest:
     client_device_context: Optional[ClientDeviceContext] = None
     owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
     geolocation: Optional[Geolocation] = None
+    # A re-record of an *existing* speech profile from Settings, not a claim to
+    # onboarding provenance. Distinct from onboarding_mode (which still drives
+    # the same server-pushed question flow) so this can bypass the
+    # completed-account admission gate without weakening it for real
+    # onboarding: runtime.py mounts the question flow for a redo but issues no
+    # admission, so the session carries no onboarding provenance. Appended
+    # last so a positional caller can't silently mis-bind an existing argument.
+    speech_profile_redo: bool = False
 
 
 @dataclass
