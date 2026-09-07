@@ -2,6 +2,16 @@ package com.rnruntime;
 
 public final class DeviceControlsTest {
   public static void main(String[] args) {
+    assert !OmiDeviceControls.buttonSupported(null);
+    assert !OmiDeviceControls.buttonSupported(0L);
+    assert OmiDeviceControls.buttonSupported(4L);
+    assert !OmiDeviceControls.doublePress(null);
+    byte[] button = {2, 0, 0, 0, 0, 0, 0, 0};
+    assert OmiDeviceControls.doublePress(button);
+    for (int length : new int[]{0, 4, 7, 9}) assert !OmiDeviceControls.doublePress(java.util.Arrays.copyOf(button, length));
+    for (int action : new int[]{0, 1, 3, 4, 5, 255}) { button[0] = (byte)action; assert !OmiDeviceControls.doublePress(button); }
+    button[0] = 2;
+    for (int index = 1; index < 8; index++) { button[index] = 1; assert !OmiDeviceControls.doublePress(button); button[index] = 0; }
     OmiDeviceControls.FindPattern pattern = new OmiDeviceControls.FindPattern();
     long ticket = pattern.begin();
     assert OmiDeviceControls.FindPattern.LEVEL == 3 && OmiDeviceControls.FindPattern.DELAY_MS == 750;
