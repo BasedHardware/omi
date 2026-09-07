@@ -10,7 +10,7 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import USER_AGENT, OmiClient
+from omi_cli.client import MAX_RETRY_ATTEMPTS, USER_AGENT, OmiClient
 from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
 
 
@@ -135,6 +135,46 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
     with OmiClient(authed_profile) as client:
         result = client.get("/v1/dev/user/goals")
     assert result == []
+
+
+@pytest.mark.parametrize("error_type", [httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError])
+def test_exhausted_transport_retries_surface_server_error(authed_profile, respx_mock, monkeypatch, error_type) -> None:
+    failure = error_type("request failed at https://user:secret@example.invalid/?token=private-token")
+    route = respx_mock.get("/v1/dev/user/memories").mock(side_effect=failure)
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/memories")
+
+    assert route.call_count == MAX_RETRY_ATTEMPTS
+    assert len(sleeps) == MAX_RETRY_ATTEMPTS - 1
+    assert all(delay > 0 for delay in sleeps)
+    assert info.value.exit_code == 3
+    assert info.value.__cause__ is failure
+    assert info.value.message == "Connection failed"
+    assert info.value.detail == (
+        "Could not reach the Omi API after multiple attempts. Check your connection and try again."
+    )
+    assert "secret" not in str(info.value)
+    assert "private-token" not in str(info.value)
+
+
+def test_transport_error_then_success_preserves_retry_recovery(authed_profile, respx_mock, monkeypatch) -> None:
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.ConnectError("connection refused"), httpx.Response(200, json=[{"id": "m1"}])]
+    )
+    sleeps = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+
+    with OmiClient(authed_profile) as client:
+        result = client.get("/v1/dev/user/memories")
+
+    assert result == [{"id": "m1"}]
+    assert route.call_count == 2
+    assert len(sleeps) == 1
+    assert sleeps[0] > 0
 
 
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:

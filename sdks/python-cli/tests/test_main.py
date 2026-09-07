@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
+import sys
+import time
+
+import httpx
+import pytest
 
 from omi_cli import __version__
-from omi_cli.main import app
+from omi_cli.client import MAX_RETRY_ATTEMPTS
+from omi_cli.main import app, main
 
 
 def test_version_flag(cli_runner) -> None:
@@ -55,3 +61,34 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
     result = cli_runner.invoke(app, ["--json", "memory", "list"])
     assert result.exit_code == 0
     assert result.stdout.strip() == "[]"
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_main_transport_failure_preserves_error_contract(
+    authed_profile, respx_mock, monkeypatch, capsys, json_mode
+) -> None:
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=httpx.ConnectError("request failed at https://user:secret@example.invalid/?token=private-token")
+    )
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    monkeypatch.setattr(sys, "argv", ["omi", "--no-color", *(["--json"] if json_mode else []), "memory", "list"])
+
+    with pytest.raises(SystemExit) as info:
+        main()
+
+    captured = capsys.readouterr()
+    assert info.value.code == 3
+    assert route.call_count == MAX_RETRY_ATTEMPTS
+    assert captured.out == ""
+    if json_mode:
+        assert json.loads(captured.err) == {
+            "error": "Connection failed",
+            "detail": "Could not reach the Omi API after multiple attempts. Check your connection and try again.",
+        }
+    else:
+        assert "Connection failed" in captured.err
+        assert "Check your connection and try again." in captured.err
+    assert "unexpected error" not in captured.err
+    assert "Traceback" not in captured.err
+    assert "secret" not in captured.err
+    assert "private-token" not in captured.err

@@ -5,8 +5,8 @@ This is the single surface every command goes through. It owns:
 * Bearer-token injection from the active :class:`omi_cli.config.Profile`.
 * Retry/backoff for ``429`` and ``5xx`` responses, honoring ``Retry-After`` when
   the server provides one.
-* Translating non-2xx responses into the :mod:`omi_cli.errors` hierarchy so the
-  call sites just see a clean exception.
+* Translating non-2xx responses and exhausted transport failures into the
+  :mod:`omi_cli.errors` hierarchy so the call sites just see a clean exception.
 * Sniffing the rate-limit policy from the response body so the user gets a
   useful message instead of a bare ``429``.
 
@@ -158,6 +158,13 @@ class OmiClient:
         except _RetryableHttp as exc:
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
+        except httpx.TransportError as exc:
+            # Transport failures can contain credentials or URLs; keep public
+            # output fixed while retaining the cause for callers debugging it.
+            raise ServerError(
+                message="Connection failed",
+                detail="Could not reach the Omi API after multiple attempts. Check your connection and try again.",
+            ) from exc
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")

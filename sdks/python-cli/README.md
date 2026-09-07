@@ -251,6 +251,11 @@ omi
 5  not found (404)
 ```
 
+Connection failures, timeouts, and transport protocol errors are retried
+automatically. If all attempts fail, the CLI exits with code `3` and emits a
+safe error message on stderr (JSON when `--json` is set), without raw transport
+exception details.
+
 ## For agents
 
 The CLI is built so an LLM can use it without a wrapper:
