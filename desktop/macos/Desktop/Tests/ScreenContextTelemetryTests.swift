@@ -784,4 +784,21 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertEqual(screenNow?["source"] as? String, "last_external_frame")
     XCTAssertEqual(screenNow?["app_name"] as? String, "ChatGPT")
   }
+
+  @MainActor
+  func testBoundaryRecordedForAnotherOwnerIsNotServed() {
+    let loader = fallbackLoader(ageSeconds: 10)
+    loader.storeSummonBoundary(
+      LoadedRewindFrame(
+        data: Data([0x09]),
+        appName: "ZCode",
+        windowTitle: nil,
+        timestamp: Date()
+      ),
+      ownerID: "someone-else"
+    )
+    // Whatever owner this process has (including nil on a signed-out CI
+    // runner), a boundary minted for a different owner must never surface.
+    XCTAssertNil(loader.currentSummonBoundary())
+  }
 }

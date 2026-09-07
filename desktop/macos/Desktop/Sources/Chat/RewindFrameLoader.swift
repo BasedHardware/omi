@@ -125,12 +125,12 @@ final class RewindFrameLoader {
     summonBoundaryOwnerID = ownerID
   }
 
-  /// The recorded boundary for the *current* owner, if any.
+  /// The recorded boundary for the *current* owner, if any. Owner match is
+  /// equality, not presence: a signed-out install has a nil owner on both
+  /// sides of the comparison, and its boundary is as valid as anyone's.
   @MainActor
   func currentSummonBoundary() -> LoadedRewindFrame? {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
-      summonBoundaryOwnerID == ownerID
-    else { return nil }
+    guard summonBoundaryOwnerID == RuntimeOwnerIdentity.currentOwnerId() else { return nil }
     return summonBoundary
   }
 
