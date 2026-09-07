@@ -1866,7 +1866,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect(clientProviderCalls).toBe(0);
       clientToken = "device.qa.valid";
       const clientTranscript = await deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id);
-      expect(clientTranscript).toEqual({ sessionId: clientSession.id, state: "completed", text: "Actual client wire qualification", discardedLeadingPackets: 0 });
+      expect(clientTranscript).toEqual({ sessionId: clientSession.id, state: "completed", text: "Actual client wire qualification", errorCode: null, discardedLeadingPackets: 0 });
       expect(await deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id)).toEqual(clientTranscript);
       expect(clientProviderCalls).toBe(1);
 
