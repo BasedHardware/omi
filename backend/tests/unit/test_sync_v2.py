@@ -1269,6 +1269,11 @@ class TestAsyncCoordinatorScenarios:
 # ---------------------------------------------------------------------------
 
 
+async def _passthrough_resolve_geolocation(geolocation):
+    """Stub for utils.conversations.location: identity, like the real resolver on a geocode miss."""
+    return geolocation
+
+
 def _install_sync_observability_stubs():
     """Stub observability modules + metrics for routers.sync imports.
 
@@ -1340,6 +1345,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -1388,6 +1394,7 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -3080,6 +3087,7 @@ class TestV2EndpointExecution:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -3126,6 +3134,7 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint

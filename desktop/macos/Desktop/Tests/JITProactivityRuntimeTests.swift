@@ -486,6 +486,51 @@ final class JITProactivityRuntimeTests: XCTestCase {
     XCTAssertEqual(execution?.claim.triggerID, "z-confirmed")
   }
 
+  func testZeroWorthinessValidatedFactsStillAdmitMatchingPlannedTrigger() async throws {
+    let snapshotFacts = ["Safari is showing github.com/BasedHardware/omi"]
+    let bucket = ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: snapshotFacts, notifyWorthiness: 0)
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "safari-trigger", condition: ["keywords": ["safari"]])])
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: snapshotFacts.joined(separator: "\n"),
+        appName: "Safari",
+        occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(bucket))
+
+    guard case .deliver(.planned, "safari-trigger", _) = decision else {
+      return XCTFail("zero-worthiness validated facts must still match planned triggers: \(decision)")
+    }
+    XCTAssertFalse(JITAmbientRuntimeContext.fromSnapshot(bucket).permitsNanoTriage)
+  }
+
+  func testZeroWorthinessAmbientDoesNotPurchaseNanoWhenNoPlannedMatch() async throws {
+    let bucket = ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [],
+      validatedFacts: ["Safari is showing github.com/BasedHardware/omi"], notifyWorthiness: 0)
+    let runtime = try wiredRuntime(
+      triggers: [try compiledTrigger(id: "planned", condition: ["keywords": ["release"]])],
+      nano: { _, _ in
+        XCTFail("zero-worthiness ambient must not purchase nano")
+        return .approved
+      })
+
+    let decision = await runtime.admission(
+      authorizationSnapshot: try snapshot(),
+      observation: .init(
+        text: bucket.validatedFacts.joined(separator: "\n"),
+        occurredAt: Date(timeIntervalSince1970: 1_777_248_000)),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(bucket))
+
+    XCTAssertEqual(decision, .suppressed(reason: "ambient_local_gate"))
+    XCTAssertFalse(JITAmbientRuntimeContext.fromSnapshot(bucket).permitsNanoTriage)
+  }
+
   func testAmbiguousOnlySuppressesWithoutAmbientOrNewModelAuthority() async throws {
     let runtime = try wiredRuntime(
       triggers: [try compiledTrigger(id: "ambiguous", condition: ["apps": ["Slack"]])])

@@ -323,6 +323,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_pusher_rollout_budget.py
           python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_cohost_env_diff.py
           python3 backend/scripts/verify_pusher_dev_observability.py
 
       - name: Get GKE credentials

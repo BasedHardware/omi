@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,9 +40,13 @@ def _resource(profile: str, kind: str, image: str) -> dict:
         for name, reference in secrets.items()
     )
     if kind == "service":
+        resources = {"limits": {"memory": CONTRACT.BACKEND_MEMORY}} if profile == "backend" else None
+        container = {"image": image, "env": env}
+        if resources is not None:
+            container["resources"] = resources
         template = {
             "spec": {
-                "containers": [{"image": image, "env": env}],
+                "containers": [container],
                 "serviceAccountName": CONTRACT.RUNTIME_SERVICE_ACCOUNT,
             }
         }
@@ -161,6 +166,7 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
         expected_environment=CONTRACT.resource_environment("backend")[0],
         expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
     )
     resource["spec"]["template"]["spec"]["containers"][0]["image"] = image.replace("@sha256:", ":")
     with pytest.raises(CONTRACT.JITQAContractError):
@@ -170,6 +176,29 @@ def test_cloud_run_resource_requires_exact_image_env_secrets_name_and_identity()
             expected_image=image,
             expected_environment=CONTRACT.resource_environment("backend")[0],
             expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_memory=CONTRACT.BACKEND_MEMORY,
+        )
+
+
+@pytest.mark.parametrize("memory", ["512Mi", None])
+def test_backend_resource_requires_explicit_four_gib_memory(memory):
+    image = "gcr.io/based-hardware-dev/backend-jit-qa@sha256:" + "a" * 64
+    resource = _resource("backend", "service", image)
+    resource["metadata"]["name"] = CONTRACT.BACKEND_SERVICE
+    limits = resource["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]
+    if memory is None:
+        resource["spec"]["template"]["spec"]["containers"][0].pop("resources")
+    else:
+        limits["memory"] = memory
+    with pytest.raises(CONTRACT.JITQAContractError, match="memory limit"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=CONTRACT.resource_environment("backend")[0],
+            expected_secret_bindings=CONTRACT.resource_environment("backend")[1],
+            expected_name=CONTRACT.BACKEND_SERVICE,
+            expected_memory=CONTRACT.BACKEND_MEMORY,
         )
 
 
@@ -256,6 +285,7 @@ def test_cloud_run_v1_nested_service_fixture_is_supported():
         expected_environment=literals,
         expected_secret_bindings=secrets,
         expected_name=CONTRACT.BACKEND_SERVICE,
+        expected_memory=CONTRACT.BACKEND_MEMORY,
         gateway_url=CONTRACT.DEFAULT_GATEWAY_URL,
         redis_host=CONTRACT.DEFAULT_REDIS_HOST,
     )
@@ -277,6 +307,50 @@ def test_gateway_resource_is_fenced_to_the_fixed_qa_uid():
     literals, _ = CONTRACT.resource_environment("gateway")
     assert literals["OMI_JIT_QA_AUTH_ONLY"] == "true"
     assert literals["OMI_JIT_QA_UID_ALLOWLIST"] == CONTRACT.QA_UID
+
+
+def test_gateway_resource_requires_accounting_enabled():
+    image = "gcr.io/based-hardware-dev/llm-gateway-jit-qa@sha256:" + "b" * 64
+    resource = _resource("gateway", "service", image)
+    resource["metadata"]["name"] = CONTRACT.LLM_GATEWAY_SERVICE
+    expected_environment, expected_secret_bindings = CONTRACT.resource_environment("gateway")
+    assert expected_environment["LLM_GATEWAY_ACCOUNTING_ENABLED"] == "true"
+
+    CONTRACT.validate_cloud_run_resource(
+        resource,
+        kind="service",
+        expected_image=image,
+        expected_environment=expected_environment,
+        expected_secret_bindings=expected_secret_bindings,
+        expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+    )
+
+    accounting = next(
+        entry
+        for entry in resource["spec"]["template"]["spec"]["containers"][0]["env"]
+        if entry["name"] == "LLM_GATEWAY_ACCOUNTING_ENABLED"
+    )
+    accounting["value"] = "false"
+    with pytest.raises(CONTRACT.JITQAContractError, match="unexpected value"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+        )
+
+    resource["spec"]["template"]["spec"]["containers"][0]["env"].remove(accounting)
+    with pytest.raises(CONTRACT.JITQAContractError, match="missing required environment"):
+        CONTRACT.validate_cloud_run_resource(
+            resource,
+            kind="service",
+            expected_image=image,
+            expected_environment=expected_environment,
+            expected_secret_bindings=expected_secret_bindings,
+            expected_name=CONTRACT.LLM_GATEWAY_SERVICE,
+        )
 
 
 def _typesense_resource(image: str) -> dict:
@@ -417,6 +491,8 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "based-hardware-dev" in text
     assert "backend-jit-qa" in text
     assert "desktop-backend-jit-qa" in text
+    assert 'if [[ "$service" == "$QA_SERVICE" ]]' in text
+    assert "resource_flags+=(--memory=4Gi)" in text
     assert "llm-gateway-jit-qa" in text
     assert "knowledge-ledger-drain-qa-job" in text
     assert "daily-memory-sweep-qa-job" in text
@@ -432,6 +508,8 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "--set-env-vars \"$drain_env\"" in text
     assert 'LLM_GATEWAY_ALLOWED_CALLERS=backend,desktop' in text
     assert 'LLM_GATEWAY_ACCOUNTING_ENABLED=true' in text
+    gateway_environment, _ = CONTRACT.resource_environment("gateway")
+    assert gateway_environment["LLM_GATEWAY_ACCOUNTING_ENABLED"] == "true"
     assert 'gcloud firestore databases describe --database "$QA_FIRESTORE_DATABASE"' in text
     assert 'gcloud redis instances describe "$QA_REDIS_INSTANCE"' in text
     assert "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest" in text
@@ -440,6 +518,11 @@ def test_workflow_is_manual_main_only_and_cannot_reach_prod_or_scheduler():
     assert "gcr.io/${QA_PROJECT}" in text
     assert "vars.GCP_PROJECT_ID" not in text
     assert "environment: prod" not in text
+
+
+def test_workflow_backend_memory_literal_matches_contract():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert f"resource_flags+=(--memory={CONTRACT.BACKEND_MEMORY})" in text
 
 
 def test_qa_workflows_admit_only_proven_merged_ancestors():
@@ -463,6 +546,8 @@ def test_typesense_workflow_smokes_images_before_publish_and_has_unready_bootstr
     assert "unauthenticated_status" in text
     assert '"$smoke_url/collections/jit_qa_smoke/documents/export?include_fields=id,content"' in text
     assert 'scripts/jit_qa_typesense_projection.py --help' in text
+    import_smoke_secrets = re.findall(r"-e ENCRYPTION_SECRET=([A-Za-z0-9_-]+)", text)
+    assert import_smoke_secrets and all(len(secret) >= 32 for secret in import_smoke_secrets)
     assert "if: ${{ inputs.mode == 'prove' }}" in text
     assert "if: ${{ inputs.mode == 'bootstrap' }}" in text
     assert '"status": "not_qualified"' in text

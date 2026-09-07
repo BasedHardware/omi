@@ -500,7 +500,9 @@ async def extract_speaker_samples(
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
             # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text, language=conversation.get('language')
+            )
             if not is_valid:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment

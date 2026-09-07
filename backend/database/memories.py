@@ -228,6 +228,17 @@ _MEMORY_LIST_INDEX_FIELDS = (
     'capture_device_ids',
 )
 _MEMORY_LIST_CANDIDATE_WINDOW_MAX = 5000
+# Cap for the scoring_desc visible-page scan. Covers skip+page plus slack for
+# user-rejected / invalidated rows between visible ones; one request must not
+# stream an unbounded historical collection.
+# Extra documents the scoring scan may stream *beyond* the rows the page needs when
+# nothing is hidden. The floor is the page itself, never this: the previous raw
+# ``.limit(n).offset(m)`` query already streamed n + m documents, so budgeting
+# ``needed + slack`` can only read more than before by the slack, and can never fail
+# to service an offset the old query serviced. Capping the total instead returned a
+# short page at depth, which callers read as end-of-data -- the same defect this scan
+# exists to fix.
+_MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK = 2000
 
 
 def _memory_passes_list_visibility(memory: Dict[str, Any], *, include_invalidated: bool) -> bool:
@@ -416,18 +427,75 @@ def get_memories(
     )
 
     # Closest safe Firestore query for this path: category / created_at bounds
-    # (applied above) plus scoring+created_at order, limit, and offset. Do not add
-    # ``user_review`` / ``invalid_at`` FieldFilters — see
-    # ``_memory_passes_list_visibility``. A server-side ``user_review != False``
-    # (or ``not-in [False]``) would also need a new composite index with scoring
-    # and still drop legacy docs missing the field (#4498).
-    memories_ref = memories_ref.limit(limit).offset(offset)
+    # (applied above) plus scoring+created_at order. Do not add ``user_review`` /
+    # ``invalid_at`` FieldFilters — see ``_memory_passes_list_visibility``. A
+    # server-side ``user_review != False`` (or ``not-in [False]``) would also need
+    # a new composite index with scoring and still drop legacy docs missing the
+    # field (#4498). Applying limit/offset on the raw stream then filtering in
+    # Python returns short pages and advances past visible rows the client never
+    # saw — same failure class as chat ``get_messages`` reported pagination.
+    # Scan with a bounded budget until ``offset`` visible rows are skipped and
+    # ``limit`` visible rows are collected.
+    visible_limit = max(0, int(limit))
+    visible_offset = max(0, int(offset))
+    # A page with nothing hidden needs exactly this many documents, which is what the
+    # old raw query streamed. Bound the slack on top of it, not the page itself.
+    needed = visible_offset + visible_limit
+    # Flat slack, not proportional. Scaling it with the page size gave a small page a
+    # tiny allowance (limit=2 -> 6 documents), so a dense run of hidden rows still
+    # returned an empty page that callers read as end-of-data. The read cost is set by
+    # the batch sizing below, not by this ceiling, so a flat allowance costs a clean
+    # page nothing and only bounds how far a page that meets hidden rows may scan.
+    scan_budget = needed + _MEMORY_SCORING_VISIBLE_PAGE_SCAN_SLACK
+    scanned = 0
+    visible_skipped = 0
+    result: List[Dict[str, Any]] = []
+    cursor_snapshot: Any = None
 
-    memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
-    logger.info(f"get_memories {len(memories)}")
-    result: List[Dict[str, Any]] = [
-        memory for memory in memories if _memory_passes_list_visibility(memory, include_invalidated=include_invalidated)
-    ]
+    while scanned < scan_budget and len(result) < visible_limit:
+        # Read exactly what the page needs before reading any slack. The 100-document
+        # floor made every small page stream 100 full documents on an endpoint with a
+        # 504 history (#11831); slack is now paid only by a page that meets a hidden row.
+        batch_limit = min(100, scan_budget - scanned)
+        if scanned == 0:
+            batch_limit = min(batch_limit, max(1, needed))
+        page_query = memories_ref.start_after(cursor_snapshot) if cursor_snapshot is not None else memories_ref
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            memory = _typed_doc(document)
+            if not _memory_passes_list_visibility(memory, include_invalidated=include_invalidated):
+                continue
+            if visible_skipped < visible_offset:
+                visible_skipped += 1
+                continue
+            result.append(memory)
+            if len(result) == visible_limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
+
+    if scanned >= scan_budget and len(result) < visible_limit:
+        # The page stopped on our own ceiling, not on the end of the collection, so the
+        # short page a caller receives here is indistinguishable from end-of-data. A
+        # bounded scan cannot avoid that edge -- it can only make it visible, which is
+        # what this line is for. Reaching it means a run of hidden rows longer than the
+        # slack, i.e. the page size or the slack is wrong for this account's data.
+        logger.warning(
+            'get_memories_scan_budget_exhausted offset=%s limit=%s scanned=%s budget=%s returned=%s',
+            visible_offset,
+            visible_limit,
+            scanned,
+            scan_budget,
+            len(result),
+        )
+
+    logger.info(f"get_memories {len(result)}")
     return result
 
 

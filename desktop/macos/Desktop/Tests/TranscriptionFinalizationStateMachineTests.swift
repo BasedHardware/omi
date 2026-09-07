@@ -657,6 +657,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     XCTAssertEqual(json["conversation_role"] as? String, "meeting")
     XCTAssertEqual(json["conversation_finalization_reason"] as? String, "max_duration_rotation")
+    XCTAssertNil(json["client_processing"], "flag off must keep today's segments-only upload")
   }
 
   func testRetryingMeetingFinalizationRecoversExactIdAndWakesChat() async throws {

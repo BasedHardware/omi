@@ -135,8 +135,12 @@ with expiry-ordered accounts first. It skips accounts with no active Short-term
 row, and skips non-urgent accounts dreamed in the last 20 hours unless they
 already have more than 10 active Short-term rows (hourly overflow drain).
 Remaining users run until the 15-minute Flex
-reservation no longer fits in the one-hour job budget. A Flex deferral leaves
+reservation no longer fits in the one-hour job budget. In-UID TTL apply and
+outbox/vector drain use that same `job_budget_fits` predicate so one account
+cannot consume the remaining hour. A Flex deferral leaves
 the durable cursor on the unfinished UID so later accounts are not skipped.
+A successful Flex stop with residual non-outbox errors exits 0; outbox and
+cursor_persist failures still fail the job.
 The job does not run a separate required-processing LLM: explicit submissions
 enter the consolidation batch with `requires_normalization=true`, and apply
 stamps the L2 receipt then the route from that one decision. Promote

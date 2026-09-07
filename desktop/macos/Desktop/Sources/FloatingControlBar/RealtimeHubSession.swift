@@ -1465,6 +1465,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           + "image_tokens=\(usageInImage)")
       activeScreenEvidence = nil
     }
+    let turnId = activeEventIdentity?.turnID.rawValue.uuidString ?? ""
     resetTurnUsage()
     guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
     let providerName = provider == .gemini ? "gemini" : "openai"
@@ -1476,7 +1477,8 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         contextPlanID: self.contextPlanID,
         stableCacheIdentity: self.stableCacheIdentity,
         dynamicContextIdentity: self.dynamicContextIdentity,
-        contextCacheReplaced: self.contextCacheReplaced)
+        contextCacheReplaced: self.contextCacheReplaced,
+        turnId: turnId)
     }
   }
 

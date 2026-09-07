@@ -23,6 +23,11 @@ import pytest
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
+async def _passthrough_async_resolve_geolocation(geolocation):
+    """Identity stub for utils.conversations.location: the real resolver returns its input on a miss."""
+    return geolocation
+
+
 def _load_module_with_stubs(relative_path, module_name, stubs):
     """Load a backend module with selected imports stubbed in sys.modules."""
     import importlib.util
@@ -1010,6 +1015,7 @@ def _load_sync_router_for_fast_path():
         'utils.conversations',
         'utils.conversations.process_conversation',
         'utils.conversations.factory',
+        'utils.conversations.location',
         'utils.other',
         'utils.other.endpoints',
         'utils.other.storage',
@@ -1043,6 +1049,10 @@ def _load_sync_router_for_fast_path():
         sys.modules[mod_name] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
+    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
+    # since a MagicMock parent does not resolve submodules by itself.
+    sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
     sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

@@ -288,6 +288,10 @@ def test_enabled_flex_uid_routes_promotion_and_l2_with_long_leases_and_guards(mo
         def job_budget_fits(self) -> bool:
             return True
 
+        def require_job_budget(self) -> None:
+            if not self.job_budget_fits():
+                raise cron.PromotionFlexDeferred("job_budget")
+
         assert_result_current = staticmethod(result_guard)
 
     def maintenance(uid, **kwargs):
@@ -309,6 +313,7 @@ def test_enabled_flex_uid_routes_promotion_and_l2_with_long_leases_and_guards(mo
     assert flex_kwargs["consolidation_attempt_lease_seconds"] == cron.MEMORY_PROMOTION_FLEX_LEASE_SECONDS
     assert flex_kwargs["consolidation_result_guard"] is result_guard
     assert flex_kwargs["required_processing_limit"] == 0
+    assert callable(flex_kwargs["job_budget_guard"])
     assert "required_processor" not in flex_kwargs
     standard_kwargs = calls[1][1]
     assert standard_kwargs["llm_invoke"] is None
@@ -395,6 +400,10 @@ def test_job_budget_stop_skips_later_uids_without_flex_invoke(monkeypatch):
             self._checks += 1
             return self._checks == 1
 
+        def require_job_budget(self) -> None:
+            if not self.job_budget_fits():
+                raise cron.PromotionFlexDeferred("job_budget")
+
     def maintenance(uid, **_kwargs):
         calls.append(uid)
         return cron.CanonicalShortTermMaintenanceReport(uid=uid)
@@ -416,6 +425,47 @@ def test_job_budget_stop_skips_later_uids_without_flex_invoke(monkeypatch):
     assert calls == ["uid-a"]
     assert summary.flex_deferred is True
     assert db.docs[cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH]["last_uid"] == "uid-a"
+
+
+def test_in_uid_job_budget_guard_stops_the_page_without_finishing_the_uid(monkeypatch):
+    _enable(monkeypatch)
+    calls = []
+
+    class _FlexRouter:
+        def __init__(self, *, db_client, force_enabled=False):
+            self.control = type("Control", (), {"enabled": True})()
+
+        def llm_invoke_for_uid(self, _uid):
+            return None
+
+        def job_budget_fits(self) -> bool:
+            return True
+
+        def require_job_budget(self) -> None:
+            raise cron.PromotionFlexDeferred("job_budget")
+
+    def maintenance(uid, **kwargs):
+        calls.append(uid)
+        kwargs["job_budget_guard"]()
+        raise AssertionError("in-UID work must not continue after the clock is gone")
+
+    monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
+    monkeypatch.setattr(cron, "count_active_short_term", lambda uid, db_client, cap=11: 3)
+    monkeypatch.setattr(cron, "recently_dreamed", lambda uid, db_client, now: False)
+
+    db = _Db(
+        [
+            _Snapshot("canonical_memory_maintenance_registry/uid-a"),
+            _Snapshot("canonical_memory_maintenance_registry/uid-b"),
+        ]
+    )
+    summary = cron.run_universal_short_term_maintenance(db_client=db, now=NOW, inventory_limit=2)
+
+    assert calls == ["uid-a"]
+    assert summary.flex_deferred is True
+    assert summary.dreamed_users == 0
+    assert cron.CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH not in db.docs
 
 
 def test_registry_cursor_persists_after_empty_short_term_skip(monkeypatch):
@@ -461,6 +511,10 @@ def test_maintenance_flex_env_forces_the_router(monkeypatch):
         def job_budget_fits(self) -> bool:
             return True
 
+        def require_job_budget(self) -> None:
+            if not self.job_budget_fits():
+                raise cron.PromotionFlexDeferred("job_budget")
+
     monkeypatch.setattr(cron, "PromotionFlexRunRouter", _FlexRouter)
     monkeypatch.setattr(
         cron,
@@ -492,6 +546,10 @@ def test_overflow_queue_bypasses_recent_dream_cooldown(monkeypatch):
 
         def job_budget_fits(self) -> bool:
             return True
+
+        def require_job_budget(self) -> None:
+            if not self.job_budget_fits():
+                raise cron.PromotionFlexDeferred("job_budget")
 
         assert_result_current = staticmethod(lambda: None)
 

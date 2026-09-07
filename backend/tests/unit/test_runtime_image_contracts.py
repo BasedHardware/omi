@@ -1,5 +1,8 @@
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -171,6 +174,75 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     assert 'jsonschema' in dependencies
     assert not any(
         dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.') for dependency in dependencies
+    )
+
+
+def test_jit_projection_declares_optional_plugin_sdk_fallback(contracts_module):
+    projection = _contract(contracts_module, 'jit-qa-typesense-projection-runner')
+
+    # The static import walk sees the optional SDK symbols inside the
+    # ModuleNotFoundError-protected branch of models.structured.  The image
+    # intentionally relies on that backend-owned fallback, so the exclusion
+    # must be scoped to this SDK prefix rather than weakening all dependency
+    # probes.
+    # Walk only the defining module here; the full projection entrypoint graph
+    # is covered by the registry/source-closure checks and is too expensive for
+    # the per-test fast-unit CPU budget.
+    unfiltered = replace(
+        projection,
+        entrypoints=('models.structured',),
+        dependency_probe_exclusions=frozenset(),
+    )
+    dependencies = contracts_module.third_party_dependency_modules(unfiltered)
+    assert 'omi_plugin_sdk.models.ActionItem' in dependencies
+    filtered = replace(unfiltered, dependency_probe_exclusions=projection.dependency_probe_exclusions)
+    filtered_dependencies = contracts_module.third_party_dependency_modules(filtered)
+    assert not any(
+        dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.')
+        for dependency in filtered_dependencies
+    )
+    assert 'pydantic' in filtered_dependencies
+    assert projection.dependency_probe_exclusions == frozenset({'omi_plugin_sdk'})
+
+
+def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
+    models_root = tmp_path / 'models'
+    models_root.mkdir()
+    shutil.copy(BACKEND_DIR / 'models' / '__init__.py', models_root / '__init__.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'conversation_enums.py', models_root / 'conversation_enums.py')
+    shutil.copy(BACKEND_DIR / 'models' / 'structured.py', models_root / 'structured.py')
+
+    probe = '''
+import builtins
+
+real_import = builtins.__import__
+
+def block_optional_sdk(name, *args, **kwargs):
+    if name == "omi_plugin_sdk" or name.startswith("omi_plugin_sdk."):
+        raise ModuleNotFoundError(name)
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = block_optional_sdk
+from models import structured
+
+assert structured.ActionItem.__module__ == "models.structured"
+assert structured.Event.__module__ == "models.structured"
+assert structured.Section.__module__ == "models.structured"
+assert structured.Structured(title="fallback").title == "fallback"
+'''
+    environment = dict(os.environ)
+    environment['PYTHONPATH'] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, (
+        'SDK-absent fallback import failed; ' f'stdout={result.stdout[-2000:]!r} stderr={result.stderr[-2000:]!r}'
     )
 
 

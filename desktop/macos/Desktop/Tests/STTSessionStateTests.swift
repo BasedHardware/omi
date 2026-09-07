@@ -23,6 +23,39 @@ final class STTSessionStateTests: XCTestCase {
     XCTAssertEqual(mode, .cloud)
   }
 
+  func testResolveMode_bleDevice_basicAppleSilicon_isLocal() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: true,
+      debugForceCloud: false,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .local)
+  }
+
+  func testResolveMode_bleDevice_basicIntel_isCloud() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: false,
+      debugForceCloud: false,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .cloud)
+  }
+
+  func testResolveMode_bleDevice_basicDebugForceCloud_isCloud() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: true,
+      debugForceCloud: true,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .cloud)
+  }
+
   func testResolveMode_intelMac_isCloud() {
     let session = STTSessionState()
     let mode = session.resolveMode(
@@ -256,6 +289,24 @@ final class STTSessionStateTests: XCTestCase {
       state.resolveMode(
         audioSource: .bleDevice, isAppleSilicon: true, debugForceCloud: false,
         wakeWordNeedsRecognizableName: false),
+      .cloud)
+  }
+
+  /// A basic pendant user now resolves to the on-device lane, so the opt-in is no longer a
+  /// no-op there: it is the one case where enabling the wake word moves a pendant off
+  /// on-device transcription. That is the trade the flag's own documentation names, and the
+  /// user has to make it deliberately, but it is a combination neither change tested alone.
+  func testWakeWordOptInOutranksTheBasicPendantLocalLane() {
+    let state = STTSessionState()
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .bleDevice, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: false, preferLocalOnBasic: true),
+      .local)
+    XCTAssertEqual(
+      state.resolveMode(
+        audioSource: .bleDevice, isAppleSilicon: true, debugForceCloud: false,
+        wakeWordNeedsRecognizableName: true, preferLocalOnBasic: true),
       .cloud)
   }
 }

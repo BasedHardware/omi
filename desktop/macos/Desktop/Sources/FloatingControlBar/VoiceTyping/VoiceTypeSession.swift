@@ -24,7 +24,8 @@ final class VoiceTypeSession {
   private enum Latch {
     case none
     case typing
-    /// A type command that cannot be delivered (no Accessibility grant). Latched
+    /// A type command that cannot be pasted (no Accessibility grant), but still
+    /// belongs to voice typing — delivered by clipboard copy instead. Latched
     /// so one denied turn reports one fallback, not one per transcript.
     case blocked
   }
@@ -54,8 +55,10 @@ final class VoiceTypeSession {
   /// window forward and a dictation was typed into it instead of the document.
   private var releaseFocusTarget: String?
 
-  /// True once this turn has been recognised as a dictation.
-  var claimsTurn: Bool { latch == .typing }
+  /// True once this turn has been recognised as a dictation — whether or not
+  /// it can be pasted. A blocked turn still owns the turn: the words are
+  /// dictation, not a question, regardless of what delivers them.
+  var claimsTurn: Bool { latch == .typing || latch == .blocked }
 
   init(
     sink: TextInsertionSink = PasteboardTextInsertionSink(),
@@ -81,7 +84,7 @@ final class VoiceTypeSession {
   @discardableResult
   func claim(transcript: String, lenient: Bool = false) -> Bool {
     switch latch {
-    case .blocked: return false
+    case .blocked: return true
     case .typing: return true
     case .none: break
     }
@@ -121,11 +124,19 @@ final class VoiceTypeSession {
       latch = .none
       releaseFocusTarget = nil
     }
-    guard latch == .typing else { return .none }
+    let blocked = latch == .blocked
+    guard latch == .typing || blocked else { return .none }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     // Nothing detected means nothing typed: not an empty paste, and not a
     // stray "." or "…" the recognizer produced from a breath.
     guard DictationPolisher.hasContent(trimmed) else { return .none }
+    // No Accessibility grant: a paste would not land, so go straight to the
+    // clipboard rather than trying and failing silently.
+    guard !blocked else {
+      log("VoiceTypeSession: Accessibility not granted — copied \(trimmed.count) chars instead of pasting")
+      sink.copy(trimmed)
+      return .copied(trimmed)
+    }
     if let aimed = releaseFocusTarget {
       let current = sink.focusTarget()
       if current == nil || current != aimed {
@@ -159,14 +170,16 @@ final class VoiceTypeSession {
   private func arm() -> Bool {
     guard isAccessibilityTrusted() else {
       latch = .blocked
-      log("VoiceTypeSession: Accessibility not granted — releasing turn to chat")
+      // Still owns the turn — see `claimsTurn` — so it never reaches the
+      // realtime model; only the delivery mechanism (copy, not paste) changes.
+      log("VoiceTypeSession: Accessibility not granted — will copy instead of paste")
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "voice_typing",
         from: "paste_injection",
-        to: "chat_query",
+        to: "clipboard_copy",
         reason: "policy",
         outcome: .degraded)
-      return false
+      return true
     }
     latch = .typing
     log("VoiceTypeSession: typing turn armed")

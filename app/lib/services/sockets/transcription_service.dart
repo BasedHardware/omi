@@ -71,7 +71,8 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.source,
     super.geolocation,
     super.clientConversationId,
-  }) : super.create(includeSpeechProfile: true, customSttMode: true);
+    bool includeSpeechProfile = true,
+  }) : super.create(includeSpeechProfile: includeSpeechProfile, customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -328,8 +329,15 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
-  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
-    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+  static bool shouldBlockUnsupportedCodecFallback(
+    BleAudioCodec codec,
+    CustomSttConfig? config, {
+    bool allowanceOnDevice = false,
+  }) {
+    if (isCodecSupportedForCustomStt(codec)) return false;
+    if (allowanceOnDevice) return true;
+    if (config == null || !config.isEnabled) return false;
+    return !config.sendRawAudioToOmi;
   }
 
   /// Create default Omi transcription service
@@ -412,6 +420,12 @@ class TranscriptSocketServiceFactory {
       forwardRawAudioToSecondary: config.sendRawAudioToOmi,
       clientConversationId: clientConversationId,
     );
+  }
+
+  /// S19: synthesized freemium local mode is unnamed. User Custom STT keeps
+  /// today's speech-profile request on the Omi secondary socket.
+  static bool includeSpeechProfileForCustomSecondary(String? sttConfigId) {
+    return sttConfigId != 'freemium:on-device';
   }
 
   /// Create streaming WebSocket for live STT
@@ -548,6 +562,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       geolocation: geolocation,
       clientConversationId: clientConversationId,
+      includeSpeechProfile: includeSpeechProfileForCustomSecondary(sttConfigId),
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,

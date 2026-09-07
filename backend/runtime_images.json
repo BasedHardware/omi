@@ -35,6 +35,9 @@
                 "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
             },
             "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured has a built-in fallback when the optional plugin SDK is absent from backend images."
+            },
             "pull_request_smoke": true
         },
         {

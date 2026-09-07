@@ -237,6 +237,73 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(
       ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12).localizedDescription,
       "proactive_quota_cooldown status=429")
+    XCTAssertEqual(ProactiveLaneClientError.planGated.localizedDescription, "proactive_plan_gated")
+  }
+
+  func testPlanGatedIsNotClassifiedAsNetworkOrRetryableHTTP() {
+    let classified = ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)
+    XCTAssertEqual(classified.failure, "plan_gated")
+    XCTAssertEqual(classified.status, 402)
+    XCTAssertNotEqual(classified.failure, "network")
+    XCTAssertNotEqual(classified.failure, "http_error")
+  }
+
+  func testPixelCompleteThrowsPlanGatedWithoutNetwork() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .planGated })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "extract",
+        imageData: Data("jpeg".utf8),
+        jsonSchema: ["type": "object"])
+      XCTFail("expected planGated")
+    } catch ProactiveLaneClientError.planGated {
+      XCTAssertTrue(ProactiveLaneURLStub.requestedPaths.isEmpty)
+    }
+  }
+
+  func testTextOnlyCompleteIsNotPreGatedByBasicPlan() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .planGated })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    let result = try await client.complete(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      prompt: "extract",
+      jsonSchema: ["type": "object"])
+    XCTAssertEqual(result.operation, ModelQoS.Proactivity.extractionOperation)
+    XCTAssertEqual(ProactiveLaneURLStub.requestedPaths, ["/v1/desktop/proactivity/completions"])
+  }
+
+  func testHTTP402PlanGatedBodyMapsToPlanGated() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .allowManagedProactivity })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 402,
+      body: Data(#"{"detail":{"error":"plan_gated","plan_type":"basic"}}"#.utf8))
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "extract",
+        jsonSchema: ["type": "object"])
+      XCTFail("expected planGated")
+    } catch ProactiveLaneClientError.planGated {
+    }
   }
 
   func testUnprocessableEntityIsClassifiedAsInvalidStructuredOutputNotHttpError() throws {

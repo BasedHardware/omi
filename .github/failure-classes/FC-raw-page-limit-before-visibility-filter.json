@@ -2,9 +2,10 @@
   "schema_version": 1,
   "id": "FC-raw-page-limit-before-visibility-filter",
   "violated_contract": "A list page whose store query cannot express the caller's visibility rule must measure limit and offset in visible rows. Applying limit/offset on the raw store stream and only then dropping hidden rows (for example reported chat messages) returns a short page and advances past visible rows the client never saw, so single-page callers and len < limit EOF checks stop early while older visible messages still exist.",
-  "canonical_prevention": "Scan the ordered raw stream with a bounded budget, skip hidden rows without consuming page capacity, and stop only when the visible limit is filled or the collection is exhausted — the same pattern get_messages_reconcile_page already uses. Prove it with a hermetic page whose middle row is hidden: the returned page must still contain limit visible ids, and the next visible offset must continue at the next visible row rather than a raw Firestore slot.",
+  "canonical_prevention": "Scan the ordered raw stream with a bounded budget, skip hidden rows without consuming page capacity, and stop only when the visible limit is filled or the collection is exhausted \u2014 the same pattern get_messages_reconcile_page already uses. Prove it with a hermetic page whose middle row is hidden: the returned page must still contain limit visible ids, and the next visible offset must continue at the next visible row rather than a raw Firestore slot.",
   "canonical_prevention_artifact": [
-    "backend/tests/unit/test_get_messages_reported_pagination.py"
+    "backend/tests/unit/test_get_messages_reported_pagination.py",
+    "backend/tests/unit/test_get_memories_scoring_visibility_pagination.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

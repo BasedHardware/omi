@@ -187,12 +187,19 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(session.payload(from: "Type hello"), "Hello")
   }
 
-  func testWithoutAccessibilityTheTurnIsReleasedToChat() {
+  func testWithoutAccessibilityTheTurnStillDictatesButCopiesInsteadOfPasting() {
+    // Regression for #12877: a "type …" turn with no Accessibility grant used
+    // to release itself to the realtime model once blocked, which then acted
+    // on the words as an instruction (spawned an agent) instead of dictating
+    // them. The turn must still claim itself — never reach the model — and
+    // deliver by clipboard copy since a paste cannot land without the grant.
     let (session, sink) = makeSession(trusted: false)
-    XCTAssertFalse(session.claim(transcript: "Type hello"))
-    XCTAssertNil(session.payload(from: "Type hello again"), "one denied turn stays denied")
-    XCTAssertEqual(session.deliver("Hello"), .none)
-    XCTAssertTrue(sink.pasted.isEmpty)
+    XCTAssertTrue(session.claim(transcript: "Type hello"), "a blocked turn still claims itself")
+    XCTAssertEqual(session.payload(from: "Type hello again"), "Hello again", "one denied turn stays denied")
+    XCTAssertTrue(session.claimsTurn)
+    XCTAssertEqual(session.deliver("Hello again"), .copied("Hello again"))
+    XCTAssertTrue(sink.pasted.isEmpty, "no Accessibility grant means no paste is even attempted")
+    XCTAssertEqual(sink.copied, ["Hello again"])
   }
 
   func testADictationThatContinuesALineOpensWithASpace() {

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
 
 const _mapClusterDistanceMeters = 100.0;
 const _mapDistance = Distance(roundResult: false);
@@ -80,35 +81,14 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   ];
 }
 
-class ConversationMapPage extends StatefulWidget {
-  const ConversationMapPage({super.key, required this.conversations, this.tileProvider});
+/// Conversations by place: a static map preview of every cluster anchor (tap
+/// opens the native map app) above a grouped list of the conversations recorded
+/// at each place. Single-conversation places open the conversation directly;
+/// multi-conversation places keep the cluster bottom sheet.
+class ConversationMapPage extends StatelessWidget {
+  const ConversationMapPage({super.key, required this.conversations});
 
   final List<ServerConversation> conversations;
-  final TileProvider? tileProvider;
-
-  @override
-  State<ConversationMapPage> createState() => _ConversationMapPageState();
-}
-
-class _ConversationMapPageState extends State<ConversationMapPage> {
-  static const double _tileLoadZoomDelta = 0.000001;
-  final MapController _mapController = MapController();
-
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  void _loadTilesAfterLayout() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final camera = _mapController.camera;
-      // flutter_map 7 can apply the initial camera fit after creating its first
-      // tile set without scheduling the newly visible tiles to load.
-      _mapController.move(camera.center, camera.zoom + _tileLoadZoomDelta);
-    });
-  }
 
   Future<void> _openConversation(BuildContext context, ServerConversation conversation) async {
     final timestamp = conversation.startedAt ?? conversation.createdAt;
@@ -163,9 +143,17 @@ class _ConversationMapPageState extends State<ConversationMapPage> {
     );
   }
 
+  String _groupLabel(BuildContext context, ConversationMapGroup group) {
+    if (group.conversations.length == 1) {
+      final conversation = group.conversations.single;
+      return conversation.structured.title.isEmpty ? context.l10n.untitledConversation : conversation.structured.title;
+    }
+    return '${group.conversations.length} ${context.l10n.conversations}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final groups = buildConversationMapGroups(widget.conversations);
+    final groups = buildConversationMapGroups(conversations);
     return Scaffold(
       backgroundColor: AppStyles.backgroundPrimary,
       appBar: AppBar(
@@ -178,73 +166,88 @@ class _ConversationMapPageState extends State<ConversationMapPage> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  widget.conversations.isEmpty ? context.l10n.noConversationsYet : context.l10n.unknownLocation,
+                  conversations.isEmpty ? context.l10n.noConversationsYet : context.l10n.unknownLocation,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ),
             )
-          : FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: LatLng(groups.first.latitude, groups.first.longitude),
-                initialZoom: groups.length == 1 ? 14 : 11,
-                initialCameraFit: groups.length == 1
-                    ? null
-                    : CameraFit.bounds(
-                        bounds: LatLngBounds.fromPoints(
-                          groups.map((group) => LatLng(group.latitude, group.longitude)).toList(),
-                        ),
-                        padding: const EdgeInsets.all(48),
-                      ),
-                backgroundColor: AppStyles.backgroundPrimary,
-                onMapReady: _loadTilesAfterLayout,
-              ),
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
-                TileLayer(
-                  urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
-                  userAgentPackageName: 'me.omi.app',
-                  retinaMode: RetinaMode.isHighDensity(context),
-                  tileProvider: widget.tileProvider,
-                ),
-                MarkerLayer(
-                  markers: [
-                    for (final group in groups)
-                      Marker(
-                        point: LatLng(group.latitude, group.longitude),
-                        width: 44,
-                        height: 44,
-                        child: Semantics(
-                          button: true,
-                          label: group.conversations.length == 1
-                              ? (group.conversations.single.structured.title.isEmpty
-                                  ? context.l10n.untitledConversation
-                                  : group.conversations.single.structured.title)
-                              : '${group.conversations.length} ${context.l10n.conversations}',
-                          child: GestureDetector(
-                            key: ValueKey('conversation_map_marker_${group.membershipKey}'),
-                            onTap: () => _openGroup(context, group),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.black, width: 2),
-                                boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 8)],
-                              ),
-                              alignment: Alignment.center,
-                              child: group.conversations.length == 1
-                                  ? const Icon(Icons.location_on, color: Colors.black, size: 24)
-                                  : Text(
-                                      '${group.conversations.length}',
-                                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
-                                    ),
-                            ),
-                          ),
+                Semantics(
+                  button: true,
+                  label: '${context.l10n.conversations} · ${context.l10n.location}',
+                  child: GestureDetector(
+                    onTap: () => MapsUtil.launchMap(groups.first.latitude, groups.first.longitude),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: SizedBox(
+                        key: const ValueKey('conversation_map_preview'),
+                        height: 220,
+                        child: OmiMapPreview(
+                          key: ValueKey('conversation_map_preview_${groups.length}'),
+                          pins: [
+                            for (final group in groups) OmiMapPin(latitude: group.latitude, longitude: group.longitude),
+                          ],
+                          backgroundColor: AppStyles.backgroundPrimary,
                         ),
                       ),
-                  ],
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 16),
+                for (final group in groups)
+                  Semantics(
+                    // The established per-place tappable key (this was the
+                    // marker's); kept stable for automation that predates the
+                    // static preview.
+                    key: ValueKey('conversation_map_marker_${group.membershipKey}'),
+                    button: true,
+                    label: _groupLabel(context, group),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _openGroup(context, group),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppStyles.backgroundSecondary,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                              child: Center(
+                                child: group.conversations.length == 1
+                                    ? const Icon(Icons.location_on, color: Colors.black, size: 20)
+                                    : Text(
+                                        '${group.conversations.length}',
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _groupLabel(context, group),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right, color: Colors.white70),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
     );

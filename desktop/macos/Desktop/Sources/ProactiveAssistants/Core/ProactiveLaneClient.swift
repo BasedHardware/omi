@@ -138,6 +138,9 @@ enum ProactiveLaneClientError: LocalizedError {
   case http(status: Int, retryAfterSeconds: Int?)
   case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
+  /// Identified basic + non-BYOK pixel call, or a typed 402 `plan_gated`.
+  /// Text-only JIT completions stay open (S14 / S24 narrowing).
+  case planGated
 
   var errorDescription: String? {
     switch self {
@@ -149,6 +152,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
+    case .planGated:
+      return "proactive_plan_gated"
     }
   }
 }
@@ -184,6 +189,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       return "invalid_structured_output status=\(status ?? 0)"
     case "quota_cooldown":
       return "quota_cooldown status=\(status ?? 0)"
+    case "plan_gated":
+      return "plan_gated status=\(status ?? 402)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -206,6 +213,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
         return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      case .planGated:
+        return ProactiveLaneFailureClassification(failure: "plan_gated", status: 402, errorType: nil)
       }
     }
     if error is DecodingError {
@@ -257,6 +266,7 @@ actor ProactiveLaneClient {
     @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot) async throws
       -> Void
   private let now: @Sendable () -> Date
+  private let managedPixelDecision: @Sendable () async -> SubscriptionEntitlementDecision
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
@@ -321,7 +331,8 @@ actor ProactiveLaneClient {
       (
         @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot)
           async throws -> Void
-      )? = nil
+      )? = nil,
+    managedPixelDecision: (@Sendable () async -> SubscriptionEntitlementDecision)? = nil
   ) {
     self.session = session
     self.baseURL = baseURL
@@ -344,6 +355,11 @@ actor ProactiveLaneClient {
         _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
           authorizationSnapshot: authorizationSnapshot,
           knownAuthority: snapshot)
+      }
+    self.managedPixelDecision =
+      managedPixelDecision
+      ?? {
+        await ManagedProactivityDecisionSource.current()
       }
   }
 
@@ -434,6 +450,16 @@ actor ProactiveLaneClient {
     let currentOwner = authorizationSnapshot?.ownerID
     clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
+    if imageData != nil {
+      if await managedPixelDecision() == .planGated {
+        // S24 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route pixels to
+        // LocalInferenceRuntime. Text-only completions stay ungated here.
+        if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+          // Local lane not shipped — still fail closed to `.planGated`.
+        }
+        throw ProactiveLaneClientError.planGated
+      }
+    }
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -492,6 +518,14 @@ actor ProactiveLaneClient {
     let requestID = http.value(forHTTPHeaderField: "X-Omi-Request-ID")
     Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
+      if ManagedPlanGateHTTP.isPlanGated(status: http.statusCode, data: data) {
+        await responseObserver?(
+          ProactiveLaneResponseObservation(
+            statusCode: http.statusCode,
+            requestID: requestID,
+            failure: ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)))
+        throw ProactiveLaneClientError.planGated
+      }
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)

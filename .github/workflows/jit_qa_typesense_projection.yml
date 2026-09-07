@@ -219,7 +219,7 @@ jobs:
             python3 backend/scripts/runtime_image_contracts.py smoke \
               --dockerfile backend/Dockerfile --image "$runner_tag"
             docker run --rm --entrypoint python3 \
-              -e ENCRYPTION_SECRET=jit-qa-import-smoke-secret \
+              -e ENCRYPTION_SECRET=0123456789abcdef0123456789abcdef \
               "$runner_tag" scripts/jit_qa_typesense_projection.py --help >/dev/null
           fi
           docker push "$typesense_tag" >/dev/null
@@ -414,6 +414,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
       - uses: google-github-actions/setup-gcloud@v3
+      - name: Authenticate Docker to Artifact Registry
+        run: gcloud auth configure-docker gcr.io --quiet
       - name: Run canonical rebuild and real search_knowledge proof
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}

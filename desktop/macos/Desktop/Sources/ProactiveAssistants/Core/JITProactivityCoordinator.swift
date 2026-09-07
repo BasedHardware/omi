@@ -17,13 +17,7 @@ actor JITProactivityCoordinator {
     // pay for (or prompt for) calendar access to reach a decision that ignores the observation.
     let decision = await JITProactivityRuntime.shared.admission(
       authorizationSnapshot: authorizationSnapshot,
-      ambient: JITAmbientRuntimeContext(
-        id: snapshot.bucketID,
-        semanticFingerprint: JITAmbientRuntimeContext.semanticFingerprint(
-          contextID: snapshot.bucketID, validatedFacts: snapshot.validatedFacts),
-        locallyRelevant: snapshot.notifyWorthiness > 0,
-        boundedEvidence: snapshot.validatedFacts.prefix(20).map { String($0.prefix(400)) }
-          .joined(separator: "\n")),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(snapshot),
       observationProvider: {
         let calendarEvents = await SystemCalendarMeetingContextService.shared
           .authorizedTriggerEvents(around: frame.captureTime)

@@ -151,12 +151,21 @@ def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
     blocks forever and the failure presents as a health-check timeout instead.
     """
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    monkeypatch.setattr(cli, "_which", lambda name: None if name == "firebase" else f"/usr/bin/{name}")
     cfg = config.load_config(REPO_ROOT, create_layout=True)
 
     command = cli._firebase_command(cfg)
 
-    assert command[:3] == ["npx", "--yes", "firebase-tools"]
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
+
+
+def test_firebase_command_ignores_global_cli_and_uses_repo_pin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda name: "/opt/homebrew/bin/firebase" if name == "firebase" else None)
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    command = cli._firebase_command(cfg)
+
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
 
 
 def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
