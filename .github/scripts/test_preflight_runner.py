@@ -465,6 +465,7 @@ class LaunchContractTests(unittest.TestCase):
         git = shutil.which("git")
         self.assertIsNotNone(bash)
         self.assertIsNotNone(git)
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo"
@@ -475,6 +476,7 @@ class LaunchContractTests(unittest.TestCase):
             (scripts / "dev-harness").mkdir()
             subprocess.run(
                 [git, "init", "--quiet", str(root)],
+                env=env,
                 check=True,
                 capture_output=True,
             )
@@ -493,7 +495,6 @@ class LaunchContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            env = os.environ.copy()
             env["PYTHON"] = Path(sys.executable).as_posix()
             env["OMI_PREFLIGHT_STATE_DIR"] = (root / "state").as_posix()
             env["PATH"] = windows_path_without_python(bash, git)
@@ -582,6 +583,12 @@ class LaunchContractTests(unittest.TestCase):
     def test_runner_emits_utf8_from_unicode_checkout_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
+        # These are foreign repositories: a hook's Git context must not select
+        # the real checkout instead of the disposable fixture (githooks docs).
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env.pop("OMI_PREFLIGHT_STATE_DIR", None)
+        env["PYTHONUTF8"] = "0"
+        env.pop("PYTHONIOENCODING", None)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
@@ -589,12 +596,10 @@ class LaunchContractTests(unittest.TestCase):
             subprocess.run(
                 [git, "init", "--quiet"],
                 cwd=root,
+                env=env,
                 check=True,
                 capture_output=True,
             )
-            env = os.environ.copy()
-            env["PYTHONUTF8"] = "0"
-            env.pop("PYTHONIOENCODING", None)
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -623,6 +628,12 @@ class LaunchContractTests(unittest.TestCase):
     def test_pr_preflight_emits_utf8_from_unicode_branch_without_utf8_mode(self) -> None:
         git = shutil.which("git")
         self.assertIsNotNone(git)
+        # These are foreign repositories: a hook's Git context must not select
+        # the real checkout instead of the disposable fixture (githooks docs).
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        env.pop("OMI_PREFLIGHT_STATE_DIR", None)
+        env["PYTHONUTF8"] = "0"
+        env.pop("PYTHONIOENCODING", None)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "repo-\u96ea"
@@ -631,6 +642,7 @@ class LaunchContractTests(unittest.TestCase):
             subprocess.run(
                 [git, "init", "--quiet"],
                 cwd=root,
+                env=env,
                 check=True,
                 capture_output=True,
             )
@@ -648,13 +660,11 @@ class LaunchContractTests(unittest.TestCase):
                     "initial",
                 ],
                 cwd=root,
+                env=env,
                 check=True,
                 capture_output=True,
             )
-            subprocess.run([git, "branch", unicode_branch], cwd=root, check=True, capture_output=True)
-            env = os.environ.copy()
-            env["PYTHONUTF8"] = "0"
-            env.pop("PYTHONIOENCODING", None)
+            subprocess.run([git, "branch", unicode_branch], cwd=root, env=env, check=True, capture_output=True)
             completed = subprocess.run(
                 [
                     sys.executable,
