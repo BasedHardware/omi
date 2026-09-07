@@ -748,6 +748,35 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(savedDataEmptyTitle(complete, complete, complete, false)).toBe(
     'Nothing saved yet',
   );
+  const morePage = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  expect(
+    savedDataEmptyTitle(morePage, complete, complete, true, {
+      conversations: true,
+    }),
+  ).toBe('No results');
+  expect(
+    savedDataEmptyTitle(morePage, complete, complete, false, {
+      conversations: true,
+    }),
+  ).toBe('More conversations are available.');
+  expect(
+    savedDataEmptyTitle(complete, morePage, complete, true, {
+      memories: true,
+    }),
+  ).toBe('No results');
+  expect(
+    savedDataEmptyTitle(complete, complete, morePage, true, {tasks: true}),
+  ).toBe('No results');
+  expect(
+    coverageStatusCopy(morePage, complete, complete, {conversations: true}),
+  ).toBeNull();
   const orchestrator = readFileSync(
     resolve(__dirname, '../app/AppOrchestrator.tsx'),
     'utf8',
@@ -755,4 +784,13 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('homeSearchEmptyTitle');
   expect(orchestrator).toContain('savedDataEmptyTitle(');
   expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
+  expect(orchestrator).toContain(
+    'conversations: conversationNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'memories: memoryNotice === desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'tasks: taskNotice === desktopBackendUnavailableCopy',
+  );
 });

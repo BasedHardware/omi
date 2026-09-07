@@ -2482,6 +2482,66 @@ test('nested non-retryable later task pages omit more-available on Home', () => 
   expect(tree).not.toContain('More tasks are available.');
 });
 
+test('nested non-retryable later conversation pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    draft: 'nomatch',
+    outcomes: pagedConversationOutcomes(),
+    reads: outcomes.conversations.value.items,
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More conversations are available.');
+});
+
+test('nested non-retryable later task pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    draft: 'nomatch',
+    outcomes: pagedTaskOutcomes(),
+    taskNotice: desktopBackendUnavailableCopy,
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('No tasks match this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More tasks are available.');
+});
+
+test('nested non-retryable later memory pages do not claim more-available in a Home search miss', () => {
+  const renderer = renderDesktop({
+    draft: 'nomatch',
+    memoryNotice: desktopBackendUnavailableCopy,
+    outcomes: pagedMemoryOutcomes(),
+    reads: [...outcomes.conversations.value.items, homeMemory],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Nothing captured matches this search.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+  expect(tree).not.toContain('More memories are available.');
+});
+
+test('an unfiltered empty Home with remaining conversations still reports more-available after a closed later page', () => {
+  const paged = pagedConversationOutcomes();
+  const renderer = renderDesktop({
+    conversationNotice: desktopBackendUnavailableCopy,
+    outcomes: {
+      ...paged,
+      conversations: {
+        ...paged.conversations,
+        value: {
+          ...paged.conversations.value,
+          items: [],
+        },
+      },
+    },
+    reads: [],
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('More conversations are available.');
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).toContain(desktopBackendUnavailableCopy);
+});
+
 test('nested non-retryable later memory pages keep rows and omit Load more', () => {
   const renderer = renderDesktop({
     memoryNotice: desktopBackendUnavailableCopy,

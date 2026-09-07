@@ -39,6 +39,7 @@ import {
   conversationDisplayTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
+  desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   desktopRecoveryCopy,
 } from '../desktopReadClient';
@@ -382,6 +383,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ? readOutcomes.tasks.value.page
       : null,
     homeSearching,
+    {
+      conversations: conversationNotice === desktopBackendUnavailableCopy,
+      memories: memoryNotice === desktopBackendUnavailableCopy,
+      tasks: taskNotice === desktopBackendUnavailableCopy,
+    },
   );
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of

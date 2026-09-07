@@ -201,9 +201,10 @@ export function DesktopHome({
       : emptyLibraryCopy(
           'Tasks',
           tasksOutcome.value.page,
-          false,
+          query !== '',
+          'No tasks match this search.',
           'No tasks yet',
-          query !== '' ? 'No tasks match this search.' : 'No tasks yet',
+          taskNotice === desktopBackendUnavailableCopy,
         );
   const conversationsOutcome = outcomes?.conversations ?? null;
   const memoriesOutcome = outcomes?.memories ?? null;
@@ -222,6 +223,14 @@ export function DesktopHome({
           memoriesOutcome.status === 'success'
             ? memoriesOutcome.value.page
             : null,
+          null,
+          query !== ''
+            ? {
+                conversations:
+                  conversationNotice === desktopBackendUnavailableCopy,
+                memories: memoryNotice === desktopBackendUnavailableCopy,
+              }
+            : {},
         ) ??
         (query !== ''
           ? 'Nothing captured matches this search.'

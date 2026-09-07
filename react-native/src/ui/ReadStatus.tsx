@@ -63,13 +63,30 @@ export function coverageStatusCopy(
   conversationsPage: ReadPageState | null,
   memoriesPage: ReadPageState | null,
   tasksPage: ReadPageState | null = null,
+  continueUnavailable: {
+    conversations?: boolean;
+    memories?: boolean;
+    tasks?: boolean;
+  } = {},
 ): string | null {
   return (
     (conversationsPage === null
       ? null
-      : readStatusCopy('Conversations', conversationsPage)) ??
-    (memoriesPage === null ? null : readStatusCopy('Memories', memoriesPage)) ??
-    (tasksPage === null ? null : readStatusCopy('Tasks', tasksPage))
+      : readStatusCopy(
+          'Conversations',
+          conversationsPage,
+          continueUnavailable.conversations === true,
+        )) ??
+    (memoriesPage === null
+      ? null
+      : readStatusCopy(
+          'Memories',
+          memoriesPage,
+          continueUnavailable.memories === true,
+        )) ??
+    (tasksPage === null
+      ? null
+      : readStatusCopy('Tasks', tasksPage, continueUnavailable.tasks === true))
   );
 }
 
@@ -78,10 +95,19 @@ export function savedDataEmptyTitle(
   memoriesPage: ReadPageState | null,
   tasksPage: ReadPageState | null,
   searching: boolean,
+  continueUnavailable: {
+    conversations?: boolean;
+    memories?: boolean;
+    tasks?: boolean;
+  } = {},
 ): string {
   return (
-    coverageStatusCopy(conversationsPage, memoriesPage, tasksPage) ??
-    (searching ? 'No results' : 'Nothing saved yet')
+    coverageStatusCopy(
+      conversationsPage,
+      memoriesPage,
+      tasksPage,
+      searching ? continueUnavailable : {},
+    ) ?? (searching ? 'No results' : 'Nothing saved yet')
   );
 }
 
