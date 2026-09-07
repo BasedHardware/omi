@@ -102,7 +102,7 @@ class Renderer:
 
         table = Table(title=title, show_lines=False, header_style="bold")
         for col in cols:
-            table.add_column(Text(col))
+            table.add_column(Text(col, style="bold"))
         for row in rows:
             table.add_row(*[Text(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)
