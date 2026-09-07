@@ -323,7 +323,11 @@ export function ConversationsPage({
               )}
             {outcome?.status === 'success' &&
               (grouped.length > 0 || filtering) && (
-                <ReadStatus label="Conversations" page={outcome.value.page} />
+                <ReadStatus
+                  continueUnavailable={notice === desktopBackendUnavailableCopy}
+                  label="Conversations"
+                  page={outcome.value.page}
+                />
               )}
           </ScrollView>
         )}

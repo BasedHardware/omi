@@ -4,6 +4,7 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
   desktopAppsUnavailableCopy,
+  desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
@@ -84,7 +85,14 @@ export function LibraryPage({
           </FocusPressable>
         ) : null}
         {outcome?.status === 'success' && conversations.length > 0 ? (
-          <ReadStatus label="Conversations" mac page={outcome.value.page} />
+          <ReadStatus
+            continueUnavailable={
+              conversationNotice === desktopBackendUnavailableCopy
+            }
+            label="Conversations"
+            mac
+            page={outcome.value.page}
+          />
         ) : null}
       </ScrollView>
     </View>

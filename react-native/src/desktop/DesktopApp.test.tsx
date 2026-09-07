@@ -2248,6 +2248,7 @@ test('nested non-retryable later conversation pages keep rows and omit Load more
       node => node.props.accessibilityLabel === 'Load more conversations',
     ),
   ).toHaveLength(0);
+  expect(tree).not.toContain('More conversations are available.');
 });
 
 test('generic later-page conversation failures keep Load more', () => {
@@ -2367,6 +2368,7 @@ test('nested non-retryable later memory pages keep rows and omit Load more', () 
       node => node.props.accessibilityLabel === 'Load more memories',
     ),
   ).toHaveLength(0);
+  expect(tree).not.toContain('More memories are available.');
 });
 
 test('generic later-page memory failures keep Load more', () => {

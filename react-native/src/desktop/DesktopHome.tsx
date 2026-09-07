@@ -303,6 +303,9 @@ export function DesktopHome({
           ) : null}
           {memoriesOutcome?.status === 'success' && currents.length > 0 ? (
             <ReadStatus
+              continueUnavailable={
+                memoryNotice === desktopBackendUnavailableCopy
+              }
               label="Memories"
               mac
               page={memoriesOutcome.value.page}

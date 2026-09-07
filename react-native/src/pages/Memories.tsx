@@ -204,7 +204,13 @@ export function MemoriesPage({
             page === null ? null : (
               <View style={styles.memoryFooter}>
                 {(results.length > 0 || filtering) && (
-                  <ReadStatus label="Memories" page={page} />
+                  <ReadStatus
+                    continueUnavailable={
+                      loadMoreError === desktopBackendUnavailableCopy
+                    }
+                    label="Memories"
+                    page={page}
+                  />
                 )}
                 {page.hasMore &&
                   page.nextCursor !== null &&

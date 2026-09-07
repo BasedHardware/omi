@@ -318,6 +318,7 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
     });
     expect(textOf(view)).toContain(desktopBackendUnavailableCopy);
     expect(textOf(view)).not.toContain('More memories could not be loaded.');
+    expect(textOf(view)).not.toContain('More memories are available.');
     expect(ids(view)).toEqual(['kept-first']);
     expect(
       view.root.findAll(

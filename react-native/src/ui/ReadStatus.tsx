@@ -10,6 +10,7 @@ import {styles} from './styles';
 export function readStatusCopy(
   label: string,
   page: ReadPageState,
+  continueUnavailable = false,
 ): string | null {
   if (page.complete && page.completenessStatus === 'complete') {
     return null;
@@ -18,6 +19,9 @@ export function readStatusCopy(
     return null;
   }
   if (page.hasMore) {
+    if (continueUnavailable) {
+      return null;
+    }
     return page.nextCursor === null
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
       : `More ${label.toLowerCase()} are available.`;
@@ -77,15 +81,17 @@ export function savedDataEmptyTitle(
 }
 
 export function ReadStatus({
+  continueUnavailable = false,
   label,
   page,
   mac = false,
 }: {
+  continueUnavailable?: boolean;
   label: string;
   page: ReadPageState;
   mac?: boolean;
 }) {
-  const detail = readStatusCopy(label, page);
+  const detail = readStatusCopy(label, page, continueUnavailable);
   if (detail === null) {
     return null;
   }

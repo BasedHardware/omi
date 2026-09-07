@@ -542,6 +542,25 @@ test('legacy unknown completeness is not presented as a known incomplete read', 
   );
 });
 
+test('ReadStatus does not claim more pages when the continue door is unavailable', () => {
+  const page = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = render(
+    <ReadStatus continueUnavailable label="Conversations" page={page} />,
+  );
+  expect(JSON.stringify(renderer.toJSON())).toBe('null');
+  act(() => renderer.update(<ReadStatus label="Conversations" page={page} />));
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'More conversations are available.',
+  );
+});
+
 test('OutcomeStatus uses mapped library copy instead of a generic unavailable claim', () => {
   const mapped =
     'This saved data is not available from the selected Omi service yet.';
