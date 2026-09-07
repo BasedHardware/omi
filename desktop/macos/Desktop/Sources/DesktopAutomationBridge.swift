@@ -566,6 +566,58 @@ func awaitWithTimeout<T: Sendable>(
   }
 }
 
+/// Catches the next notification of one name, from the moment it is made.
+///
+/// Made before the action that provokes the notification, so an answer posted
+/// synchronously during that action — the way a mounted surface acknowledges
+/// a rebuild request — is not missed; then awaited, with a bound. `extract`
+/// reduces the notification to a `Sendable` value on the posting thread.
+final class NotificationWaiter<Payload: Sendable>: @unchecked Sendable {
+  private let lock = NSLock()
+  private var received: Payload?
+  private var continuation: CheckedContinuation<Payload?, Never>?
+  private var observer: NSObjectProtocol?
+
+  init(name: Notification.Name, extract: @escaping @Sendable (Notification) -> Payload) {
+    observer = NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { [weak self] note in
+      self?.deliver(extract(note))
+    }
+  }
+
+  deinit {
+    if let observer { NotificationCenter.default.removeObserver(observer) }
+  }
+
+  private func deliver(_ payload: Payload) {
+    lock.lock()
+    guard received == nil else {
+      lock.unlock()
+      return
+    }
+    received = payload
+    let waiting = continuation
+    continuation = nil
+    lock.unlock()
+    waiting?.resume(returning: payload)
+  }
+
+  /// The payload, or `nil` once `timeout` has passed without a notification.
+  func wait(for timeout: Duration) async -> Payload? {
+    await awaitWithTimeout(timeout) { [self] in
+      await withCheckedContinuation { (continuation: CheckedContinuation<Payload?, Never>) in
+        lock.lock()
+        if let received {
+          lock.unlock()
+          continuation.resume(returning: received)
+          return
+        }
+        self.continuation = continuation
+        lock.unlock()
+      }
+    } ?? nil
+  }
+}
+
 func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
   // during sign-in), fall back to the last cached snapshot so `/state` still
@@ -3546,22 +3598,46 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "memory_graph_rebuild",
       summary:
-        "Press the Brain Map's Rebuild control: the server rebuild, or this Mac's own rebuild from every conversation, memory, person and goal when the server refuses",
-      params: ["target"]
+        "Press the Brain Map's Rebuild control: the server rebuild, or this Mac's own rebuild from every conversation, memory, person and goal when the server refuses. `wait_seconds` waits for the outcome.",
+      params: ["wait_seconds"]
     ) { params in
       // Drives the same state the Rebuild button does, so an automated check
       // exercises the real path (server first, desktop fallback) rather than
       // a parallel API call that the button no longer makes. Mutating and not
-      // undoable; poll `memory_graph_snapshot` for the result.
-      let target = params["target"] == "inline" ? "inline" : "page"
-      await MainActor.run {
-        NotificationCenter.default.post(
-          name: .desktopAutomationMemoryAtlasRebuildRequested,
-          object: nil,
-          userInfo: ["target": target]
-        )
+      // undoable.
+      //
+      // The surface that takes the request acknowledges it synchronously while
+      // the notification is delivered, so `accepted` is known on return: no
+      // acknowledgement means no Brain Map surface is mounted. With
+      // `wait_seconds` the call then waits for the rebuild to end and reports
+      // how it went and which path it took.
+      let waitSeconds = Double(params["wait_seconds"] ?? "") ?? 0
+      let acknowledgement = NotificationWaiter(name: .desktopAutomationMemoryAtlasRebuildAcknowledged) { note in
+        (accepted: note.userInfo?["accepted"] as? Bool ?? false, reason: note.userInfo?["reason"] as? String)
       }
-      return ["posted": "true", "target": target]
+      let finish = NotificationWaiter(name: .desktopAutomationMemoryAtlasRebuildFinished) { note in
+        note.userInfo?["outcome"] as? MemoryGraphViewModel.RebuildOutcome
+      }
+      await MainActor.run {
+        NotificationCenter.default.post(name: .desktopAutomationMemoryAtlasRebuildRequested, object: nil)
+      }
+      guard let acknowledged = await acknowledgement.wait(for: .seconds(2)) else {
+        return ["posted": "true", "accepted": "false", "reason": "no_receiver"]
+      }
+      var detail: [String: String] = ["posted": "true", "accepted": acknowledged.accepted ? "true" : "false"]
+      if let reason = acknowledged.reason { detail["reason"] = reason }
+      guard acknowledged.accepted, waitSeconds > 0 else { return detail }
+      guard let outcome = await finish.wait(for: .seconds(waitSeconds)) ?? nil else {
+        detail["finished"] = "false"
+        return detail
+      }
+      detail["finished"] = "true"
+      detail["succeeded"] = outcome.succeeded ? "true" : "false"
+      detail["path"] = outcome.path.rawValue
+      detail["node_count"] = "\(outcome.nodeCount)"
+      detail["edge_count"] = "\(outcome.edgeCount)"
+      detail["detail"] = outcome.detail
+      return detail
     }
 
     register(

@@ -58,6 +58,9 @@ actor KnowledgeGraphStorage {
   ) async throws {
     try authorization.require()
     let db = try await ensureDB()
+    // Rows saved here must survive a Brain Map rebuild, which replaces every
+    // row under its own prefix; a row that arrives under it is moved off it.
+    let (nodes, edges) = LocalKGReservedIdentifiers.relocating(nodes: nodes, edges: edges)
 
     try await authorization.withCommitLease {
       try await db.write { database in
@@ -77,10 +80,12 @@ actor KnowledgeGraphStorage {
         for edge in edges {
           try database.execute(
             sql: """
-              INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
-              VALUES (?, ?, ?, ?, ?)
+              INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt, memoryIdsJson)
+              VALUES (?, ?, ?, ?, ?, ?)
               """,
-            arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
+            arguments: [
+              edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt, edge.memoryIdsJson,
+            ]
           )
         }
         // Throwing here rolls the transaction back if ownership changed
@@ -124,10 +129,12 @@ actor KnowledgeGraphStorage {
         for edge in edges {
           try database.execute(
             sql: """
-              INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
-              VALUES (?, ?, ?, ?, ?)
+              INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt, memoryIdsJson)
+              VALUES (?, ?, ?, ?, ?, ?)
               """,
-            arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
+            arguments: [
+              edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt, edge.memoryIdsJson,
+            ]
           )
         }
         try authorization.require()

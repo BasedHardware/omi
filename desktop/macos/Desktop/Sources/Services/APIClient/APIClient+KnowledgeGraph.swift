@@ -122,6 +122,9 @@ struct KnowledgeGraphRebuildStatus: Codable, Equatable, Sendable {
   let finishedAt: Date?
   let nodesCount: Int?
   let edgesCount: Int?
+  /// Names the rebuild that wrote this status; the same id the rebuild call
+  /// returned. Absent from a server that predates it.
+  let rebuildId: String?
 
   enum CodingKeys: String, CodingKey {
     case status
@@ -129,18 +132,43 @@ struct KnowledgeGraphRebuildStatus: Codable, Equatable, Sendable {
     case finishedAt = "finished_at"
     case nodesCount = "nodes_count"
     case edgesCount = "edges_count"
+    case rebuildId = "rebuild_id"
+  }
+
+  init(
+    status: String, startedAt: Date?, finishedAt: Date?, nodesCount: Int?, edgesCount: Int?,
+    rebuildId: String? = nil
+  ) {
+    self.status = status
+    self.startedAt = startedAt
+    self.finishedAt = finishedAt
+    self.nodesCount = nodesCount
+    self.edgesCount = edgesCount
+    self.rebuildId = rebuildId
   }
 
   var phase: Phase? { Phase(rawValue: status) }
 
-  /// True once a rebuild requested at `requestedAt` has run to the end.
+  /// The client's request time is compared with the server's timestamps.
+  static let clockSkewAllowance: TimeInterval = 120
+
+  /// True once the rebuild requested at `requestedAt` has run to the end.
+  ///
+  /// When both sides name the rebuild, the id decides: this status is that
+  /// rebuild's and it is no longer running. Otherwise the rebuild must have
+  /// both started and finished after the request (less clock skew); a status
+  /// that finished after the request but started before it belongs to an
+  /// earlier rebuild that was still running when this one was asked for.
   /// A rebuild that failed also counts as finished: waiting longer would not
   /// change the answer, and the map the user has is still the map they have.
-  func finished(since requestedAt: Date) -> Bool {
+  func finished(since requestedAt: Date, rebuildID: String? = nil) -> Bool {
     guard let finishedAt, phase != .running else { return false }
-    // A clock skew allowance: the request timestamp is the client's, the
-    // finish timestamp is the server's.
-    return finishedAt >= requestedAt.addingTimeInterval(-120)
+    if let rebuildID, let rebuildId {
+      return rebuildId == rebuildID
+    }
+    let earliest = requestedAt.addingTimeInterval(-Self.clockSkewAllowance)
+    guard let startedAt, startedAt >= earliest else { return false }
+    return finishedAt >= earliest
   }
 }
 
@@ -359,11 +387,15 @@ struct RebuildGraphResponse: Codable {
   let status: String
   let nodesCount: Int?
   let edgesCount: Int?
+  /// Names the rebuild this call started, matched against the `rebuild`
+  /// status on graph reads. Absent from a server that predates it.
+  let rebuildId: String?
 
   enum CodingKeys: String, CodingKey {
     case status
     case nodesCount = "nodes_count"
     case edgesCount = "edges_count"
+    case rebuildId = "rebuild_id"
   }
 }
 

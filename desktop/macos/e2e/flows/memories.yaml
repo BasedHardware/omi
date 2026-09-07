@@ -137,19 +137,25 @@ steps:
       result.detail.target: "page"
 
   - id: S8b
-    name: Rebuild the Brain Map from the whole account
-    # Posts the same request the Rebuild button makes. The server rebuild is tried first; when it
-    # refuses (assertion-backed account, hourly limit, or no route) the desktop reads conversations,
-    # memories, people and goals itself and extracts them in batches. Poll `memory_graph_snapshot`
-    # afterwards — a full account takes a minute or two and the button narrates progress meanwhile.
+    name: Rebuild the Brain Map from the whole account and wait for it
+    # Posts the same request the Rebuild button makes and waits for the outcome. The server rebuild
+    # is tried first; when it refuses (assertion-backed account, hourly limit, or no route) the desktop
+    # reads conversations, memories, people and goals itself and extracts them in batches, and the
+    # result reports which path ran (`path`: server or local) and the map it produced. A mounted Brain
+    # Map surface acknowledges the request synchronously, so `accepted: false` with `no_receiver` means
+    # S8 did not leave the Brain Map on screen. A rebuild that cannot read a source or extract every
+    # batch leaves the map as it was and reports `succeeded: false` with the reason in `detail`.
     bridge.action:
       name: memory_graph_rebuild
       params:
-        target: "page"
+        wait_seconds: "600"
     expect:
       result.detail.posted: "true"
-      result.detail.target: "page"
-
+      result.detail.accepted: "true"
+      result.detail.finished: "true"
+      result.detail.succeeded: "true"
+      result.detail.path: { exists: true }
+      result.detail.node_count: { min: 3 }
   - id: S10
     name: Zoom and pan Atlas
     bridge.action:

@@ -317,6 +317,30 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     }
   }
 
+  func testMemoryGraphRebuildWaitsForTheSurfaceToAcknowledgeAndFinish() throws {
+    let body = try actionBody(named: "memory_graph_rebuild", in: try bridgeSource())
+    XCTAssertTrue(body.contains("desktopAutomationMemoryAtlasRebuildRequested"))
+    XCTAssertTrue(body.contains("desktopAutomationMemoryAtlasRebuildAcknowledged"))
+    XCTAssertTrue(body.contains("desktopAutomationMemoryAtlasRebuildFinished"))
+    XCTAssertTrue(body.contains("\"wait_seconds\""))
+    XCTAssertTrue(body.contains("no_receiver"), "a request nobody was mounted to take is reported, not posted=true")
+    XCTAssertFalse(body.contains("\"inline\""), "the rebuild has one target: the mounted page")
+  }
+
+  func testNotificationWaiterCatchesAnAnswerPostedBeforeItIsAwaited() async {
+    let name = Notification.Name("test.notification-waiter.\(UUID().uuidString)")
+    let waiter = NotificationWaiter(name: name) { $0.userInfo?["accepted"] as? Bool ?? false }
+    // The answer a mounted surface posts synchronously while the request is delivered.
+    NotificationCenter.default.post(name: name, object: nil, userInfo: ["accepted": true])
+
+    let caught = await waiter.wait(for: .seconds(2))
+    XCTAssertEqual(caught, true)
+
+    let silent = NotificationWaiter(name: name) { _ in true }
+    let none = await silent.wait(for: .milliseconds(50))
+    XCTAssertNil(none, "no answer within the bound reads as nobody mounted")
+  }
+
   func testNavigateViaShortcutPostsSidebarNotification() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "navigate_via_shortcut", in: source)

@@ -77,16 +77,29 @@ final class BrainMapLocalRebuildTests: XCTestCase {
 
     let assembled = BrainMapLocalGraphAssembly.assemble([(batchA, graphA), (batchB, graphB)])
 
-    XCTAssertEqual(assembled.nodes.map(\.id), ["brainmap:sarah", "brainmap:omi", "brainmap:tokyo"])
+    let id = BrainMapLocalGraphAssembly.nodeID(for:)
+    XCTAssertEqual(assembled.nodes.map(\.id), [id("Sarah"), id("Omi"), id("Tokyo")])
     let sarah = assembled.nodes[0]
     XCTAssertEqual(sarah.label, "Sarah", "the first spelling seen names the node")
     XCTAssertEqual(sarah.aliases, ["Sara"])
     XCTAssertEqual(sarah.memoryIds, ["conversation:a", "conversation:b"])
     XCTAssertEqual(
       assembled.edges.map { ($0.sourceId, $0.targetId, $0.label) }.map { "\($0.0)->\($0.1):\($0.2)" },
-      ["brainmap:sarah->brainmap:omi:joined", "brainmap:sarah->brainmap:tokyo:moved to"])
+      ["\(id("Sarah"))->\(id("Omi")):joined", "\(id("Sarah"))->\(id("Tokyo")):moved to"])
     XCTAssertTrue(assembled.edges.allSatisfy { $0.id.hasPrefix(BrainMapLocalGraphAssembly.nodeIDPrefix) })
     XCTAssertEqual(assembled.edges[0].memoryIds, ["conversation:a"], "an edge cites what both ends cite")
+  }
+
+  func testNodeIDsAreStableReadableAndDistinctForDistinctLabels() {
+    let id = BrainMapLocalGraphAssembly.nodeID(for:)
+
+    XCTAssertEqual(id("Sarah"), id("  sarah "), "case and surrounding whitespace do not make a new entity")
+    XCTAssertEqual(id("Sarah"), "brainmap:sarah-" + BrainMapLocalGraphAssembly.stableHash("sarah"))
+    // These slug identically ("a-b"); they are not the same entity.
+    XCTAssertEqual(Set([id("A-B"), id("A B"), id("a.b")]).count, 3)
+    XCTAssertEqual(id("!!!"), "brainmap:entity-" + BrainMapLocalGraphAssembly.stableHash("!!!"))
+    XCTAssertEqual(BrainMapLocalGraphAssembly.stableHash("omi"), BrainMapLocalGraphAssembly.stableHash("omi"))
+    XCTAssertEqual(BrainMapLocalGraphAssembly.stableHash("omi").count, 8)
   }
 
   func testAssemblyDropsSelfLoopsAndEdgesToUnknownNodes() {
@@ -147,7 +160,196 @@ final class BrainMapLocalRebuildTests: XCTestCase {
     XCTAssertEqual(merged.rebuild, status)
   }
 
+  // MARK: The run
+
+  private struct Scripted {
+    var conversations: [ServerConversation] = []
+    var memories: [ServerMemory] = []
+    var people: [Person] = []
+    var goals: [Goal] = []
+    var failingRead: String?
+  }
+
+  private final class StoreSpy: @unchecked Sendable {
+    var writes = 0
+  }
+
+  private func reads(_ script: Scripted) -> BrainMapLocalRebuilder.Reads {
+    BrainMapLocalRebuilder.Reads(
+      conversations: { _, _ in
+        if script.failingRead == "conversations" { throw APIError.httpError(statusCode: 500, detail: "down") }
+        return script.conversations
+      },
+      memories: { _ in
+        if script.failingRead == "memories" { throw APIError.httpError(statusCode: 500, detail: "down") }
+        return script.memories
+      },
+      people: {
+        if script.failingRead == "people" { throw APIError.httpError(statusCode: 500, detail: "down") }
+        return script.people
+      },
+      goals: {
+        if script.failingRead == "goals" { throw APIError.httpError(statusCode: 500, detail: "down") }
+        return script.goals
+      })
+  }
+
+  private func memory(_ id: String, _ content: String) -> ServerMemory {
+    ServerMemory(
+      id: id, content: content, category: .system, tier: .shortTerm,
+      createdAt: Date(timeIntervalSince1970: 1), updatedAt: Date(timeIntervalSince1970: 2),
+      conversationId: nil, reviewed: false, userReview: nil, visibility: "private", manuallyAdded: false,
+      scoring: nil, source: "desktop", confidence: nil, sourceApp: nil, contextSummary: nil, isRead: false,
+      isDismissed: false, tags: [], reasoning: nil, currentActivity: nil, inputDeviceName: nil,
+      windowTitle: nil, headline: nil)
+  }
+
+  private func run(
+    _ script: Scripted, store: StoreSpy,
+    extract: @escaping BrainMapLocalRebuilder.Extract
+  ) async throws -> BrainMapLocalRebuilder.Report {
+    try await BrainMapLocalRebuilder.run(
+      reads: reads(script),
+      isAuthorizationCurrent: { true },
+      progress: { _ in },
+      extract: extract,
+      store: { _, _, _ in store.writes += 1 },
+      retryDelay: .zero)
+  }
+
+  func testARebuildThatCannotReadASourceChangesNothing() async {
+    for source in ["conversations", "memories", "people", "goals"] {
+      let store = StoreSpy()
+      var script = Scripted(memories: [memory("m1", "Runs daily.")])
+      script.failingRead = source
+
+      do {
+        _ = try await run(script, store: store) { _ in KnowledgeGraphExtractResponse(nodes: [], edges: []) }
+        XCTFail("\(source) unreadable should fail the rebuild")
+      } catch let failure as BrainMapLocalRebuilder.Failure {
+        XCTAssertEqual(failure, .sourceUnreadable(source))
+      } catch {
+        XCTFail("unexpected \(error)")
+      }
+      XCTAssertEqual(store.writes, 0, "the previous map stays when \(source) cannot be read")
+    }
+  }
+
+  func testABatchThatFailsTwiceLeavesThePreviousMapAndSaysSo() async {
+    let store = StoreSpy()
+    // Three memories too long to share a batch, so three batches; the middle one never extracts.
+    let script = Scripted(
+      memories: ["a", "b", "c"].map { memory("m-\($0)", String(repeating: $0, count: 20_000)) })
+    let calls = StoreSpy()
+
+    do {
+      _ = try await run(script, store: store) { text in
+        calls.writes += 1
+        if text.hasPrefix("bbb") { throw APIError.httpError(statusCode: 429) }
+        return KnowledgeGraphExtractResponse(
+          nodes: [KnowledgeGraphNode(id: "1", label: "Omi", nodeType: .concept)], edges: [])
+      }
+      XCTFail("a batch that never extracts should fail the rebuild")
+    } catch let failure as BrainMapLocalRebuilder.Failure {
+      XCTAssertEqual(failure, .extractionIncomplete(failed: 1, of: 3))
+    } catch {
+      XCTFail("unexpected \(error)")
+    }
+    XCTAssertEqual(calls.writes, 4, "two good batches once, the failing one twice")
+    XCTAssertEqual(store.writes, 0)
+  }
+
+  func testABatchThatFailsOnceIsRetriedAndTheRebuildCompletes() async throws {
+    let store = StoreSpy()
+    let script = Scripted(memories: [memory("m1", "Sarah joined Omi.")])
+    let attempts = StoreSpy()
+
+    let report = try await run(script, store: store) { _ in
+      attempts.writes += 1
+      if attempts.writes == 1 { throw APIError.httpError(statusCode: 502) }
+      return KnowledgeGraphExtractResponse(
+        nodes: [
+          KnowledgeGraphNode(id: "1", label: "Sarah", nodeType: .concept),
+          KnowledgeGraphNode(id: "2", label: "Omi", nodeType: .concept),
+        ],
+        edges: [KnowledgeGraphEdge(id: "e", sourceId: "1", targetId: "2", label: "joined")])
+    }
+
+    XCTAssertEqual(report.batches, 1)
+    XCTAssertEqual(report.retriedBatches, 1)
+    XCTAssertEqual(report.nodes, 2)
+    XCTAssertEqual(store.writes, 1)
+  }
+
+  // MARK: The local store
+
+  func testRowsSavedOutsideTheRebuildAreMovedOffItsPrefix() {
+    let now = Date()
+    let nodes = [
+      LocalKGNodeRecord(nodeId: "brainmap:x", label: "X", nodeType: "concept", createdAt: now, updatedAt: now),
+      LocalKGNodeRecord(nodeId: "file:y", label: "Y", nodeType: "concept", createdAt: now, updatedAt: now),
+    ]
+    let edges = [
+      LocalKGEdgeRecord(
+        edgeId: "brainmap:e", sourceNodeId: "brainmap:x", targetNodeId: "file:y", label: "l", createdAt: now)
+    ]
+
+    let relocated = LocalKGReservedIdentifiers.relocating(nodes: nodes, edges: edges)
+
+    XCTAssertEqual(relocated.nodes.map(\.nodeId), ["local:brainmap:x", "file:y"])
+    XCTAssertEqual(relocated.edges[0].edgeId, "local:brainmap:e")
+    XCTAssertEqual(relocated.edges[0].sourceNodeId, "local:brainmap:x")
+    XCTAssertEqual(relocated.edges[0].targetNodeId, "file:y")
+  }
+
+  func testAnEdgeRecordCarriesItsCitations() {
+    let record = LocalKGEdgeRecord(
+      edgeId: "e", sourceNodeId: "a", targetNodeId: "b", label: "l", createdAt: Date(),
+      memoryIdsJson: "[\"conversation:c1\",\"m1\"]")
+
+    XCTAssertEqual(record.toKnowledgeGraphEdge().memoryIds, ["conversation:c1", "m1"])
+    XCTAssertEqual(
+      LocalKGEdgeRecord(edgeId: "e", sourceNodeId: "a", targetNodeId: "b", label: "l", createdAt: Date())
+        .toKnowledgeGraphEdge().memoryIds, [])
+  }
+
+  // MARK: Waiting for the server
+
+  func testAServerRebuildIsFinishedWhenItsOwnIDReportsAnEnd() {
+    let asked = Date()
+    let mine = KnowledgeGraphRebuildStatus(
+      status: "complete", startedAt: asked.addingTimeInterval(5), finishedAt: asked.addingTimeInterval(60),
+      nodesCount: 1, edgesCount: 0, rebuildId: "mine")
+    let earlier = KnowledgeGraphRebuildStatus(
+      status: "complete", startedAt: asked.addingTimeInterval(-600), finishedAt: asked.addingTimeInterval(60),
+      nodesCount: 1, edgesCount: 0, rebuildId: "earlier")
+    let running = KnowledgeGraphRebuildStatus(
+      status: "running", startedAt: asked.addingTimeInterval(5), finishedAt: nil, nodesCount: nil,
+      edgesCount: nil, rebuildId: "mine")
+
+    XCTAssertTrue(mine.finished(since: asked, rebuildID: "mine"))
+    XCTAssertFalse(earlier.finished(since: asked, rebuildID: "mine"), "an earlier rebuild ending is not mine ending")
+    XCTAssertFalse(running.finished(since: asked, rebuildID: "mine"))
+    // A server without ids: the rebuild must have started as well as finished after the request.
+    let unlabelledEarlier = KnowledgeGraphRebuildStatus(
+      status: "complete", startedAt: asked.addingTimeInterval(-600), finishedAt: asked.addingTimeInterval(60),
+      nodesCount: 1, edgesCount: 0)
+    let unlabelledMine = KnowledgeGraphRebuildStatus(
+      status: "complete", startedAt: asked.addingTimeInterval(5), finishedAt: asked.addingTimeInterval(60),
+      nodesCount: 1, edgesCount: 0)
+    XCTAssertFalse(unlabelledEarlier.finished(since: asked, rebuildID: "mine"))
+    XCTAssertTrue(unlabelledMine.finished(since: asked, rebuildID: "mine"))
+    XCTAssertTrue(unlabelledMine.finished(since: asked))
+  }
+
   // MARK: Sources
+
+  func testTheWholeAccountSourcesAreNotOpenable() {
+    XCTAssertEqual(MemoryAtlasEvidence.source(for: .people)?.isOpenable, false)
+    XCTAssertEqual(MemoryAtlasEvidence.source(for: .goals)?.isOpenable, false)
+    XCTAssertTrue(
+      MemoryAtlasEvidence.conversation(id: "c", title: "T", overview: "", createdAt: nil).isOpenable)
+  }
 
   func testPeopleAndGoalsBecomeOneSourceEach() {
     XCTAssertEqual(

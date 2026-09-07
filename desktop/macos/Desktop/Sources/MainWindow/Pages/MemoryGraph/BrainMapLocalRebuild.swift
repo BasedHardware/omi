@@ -168,13 +168,34 @@ enum BrainMapLocalGraphAssembly {
     var edges: [KnowledgeGraphEdge]
   }
 
+  /// The label as entities are keyed: case and surrounding whitespace do not
+  /// distinguish two mentions, everything else does.
+  static func normalizedLabel(_ label: String) -> String {
+    label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+  }
+
+  /// A readable slug for the logs, made unique by a hash of the normalized
+  /// label: "A-B", "A B" and "a.b" slug alike but are not the same entity.
   static func nodeID(for label: String) -> String {
+    let normalized = normalizedLabel(label)
     let slug =
-      label.lowercased()
+      normalized
       .components(separatedBy: CharacterSet.alphanumerics.inverted)
       .filter { !$0.isEmpty }
       .joined(separator: "-")
-    return nodeIDPrefix + (slug.isEmpty ? "entity" : slug)
+    return nodeIDPrefix + (slug.isEmpty ? "entity" : String(slug.prefix(40))) + "-" + stableHash(normalized)
+  }
+
+  /// FNV-1a over the UTF-8 bytes, as eight hex digits. `hashValue` is seeded
+  /// per process and would give the same entity a new id on every launch.
+  static func stableHash(_ text: String) -> String {
+    var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+    for byte in text.utf8 {
+      hash ^= UInt64(byte)
+      hash = hash &* 0x0000_0100_0000_01b3
+    }
+    return String(format: "%08x", UInt32(truncatingIfNeeded: hash ^ (hash >> 32)))
   }
 
   static func assemble(
@@ -331,6 +352,11 @@ enum BrainMapLocalGraphMerge {
 /// return-only extract endpoint, persisted in the local knowledge graph store
 /// and merged under the server graph on every read. Progress is reported as
 /// short sentences for the Rebuild button.
+///
+/// The map the user has is replaced only by a whole one. Every source is read
+/// or the rebuild fails; every batch is extracted (with one retry) or the
+/// rebuild fails; nothing is written to the store until both hold, so a
+/// rebuild that runs short leaves the previous map exactly as it was.
 enum BrainMapLocalRebuilder {
   struct Report: Equatable {
     var conversations = 0
@@ -338,22 +364,64 @@ enum BrainMapLocalRebuilder {
     var people = 0
     var goals = 0
     var batches = 0
-    var failedBatches = 0
+    /// Batches that failed once and were extracted on the retry.
+    var retriedBatches = 0
     var nodes = 0
     var edges = 0
   }
 
   enum Failure: Error, Equatable {
     case nothingToRead
-    case everyExtractionFailed
+    /// One of the account's sources could not be read; the map is unchanged.
+    case sourceUnreadable(String)
+    /// `failed` of `total` batches still failed after their retry; the map is unchanged.
+    case extractionIncomplete(failed: Int, of: Int)
+
+    var localizedDescription: String {
+      switch self {
+      case .nothingToRead: return "nothing to read"
+      case .sourceUnreadable(let source): return "could not read \(source)"
+      case .extractionIncomplete(let failed, let total): return "\(failed) of \(total) batches failed"
+      }
+    }
   }
 
   static let conversationPageSize = 100
   /// Most recent first; the batch budget decides how many are actually read.
   static let maxConversations = 400
   static let maxMemories = 500
+  /// How long a failed batch waits before its one retry.
+  static let retryDelay: Duration = .seconds(2)
 
   typealias Extract = @Sendable (String) async throws -> KnowledgeGraphExtractResponse
+
+  /// Everything the rebuild reads, as seams so a test can drive the run
+  /// without a server; the defaults are the API, pinned to the authorization
+  /// the rebuild started under.
+  struct Reads: Sendable {
+    var conversations: @Sendable (_ limit: Int, _ offset: Int) async throws -> [ServerConversation]
+    var memories: @Sendable (_ limit: Int) async throws -> [ServerMemory]
+    var people: @Sendable () async throws -> [Person]
+    var goals: @Sendable () async throws -> [Goal]
+
+    static func live(authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot) -> Reads {
+      Reads(
+        conversations: { limit, offset in
+          try await APIClient.shared.getConversations(
+            limit: limit, offset: offset, authorizationSnapshot: authorizationSnapshot)
+        },
+        memories: { limit in
+          try await APIClient.shared.getMemories(limit: limit, authorizationSnapshot: authorizationSnapshot)
+        },
+        people: { try await APIClient.shared.getPeople() },
+        goals: { try await APIClient.shared.getGoals(authorizationSnapshot: authorizationSnapshot) })
+    }
+  }
+
+  /// Where the finished graph goes; the local knowledge-graph store by default.
+  typealias Store =
+    @Sendable ([LocalKGNodeRecord], [LocalKGEdgeRecord], LocalMutationAuthorization) async throws ->
+    Void
 
   /// Where a rebuild is, as a fraction the bar can fill to. Reading the
   /// account is the first tenth, extraction the middle four fifths (one
@@ -370,12 +438,17 @@ enum BrainMapLocalRebuilder {
   }
 
   static func run(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    reads: Reads,
     isAuthorizationCurrent: @escaping @Sendable () -> Bool,
     progress: @MainActor @escaping (Progress) -> Void,
     extract: Extract = { text in
       try await APIClient.shared.extractKnowledgeGraph(text: text, includeExisting: false)
-    }
+    },
+    store: Store = { nodes, edges, authorization in
+      try await KnowledgeGraphStorage.shared.replaceRebuiltGraph(
+        nodes: nodes, edges: edges, authorization: authorization)
+    },
+    retryDelay: Duration = retryDelay
   ) async throws -> Report {
     var report = Report()
     var sources: [BrainMapRebuildSource] = []
@@ -384,8 +457,12 @@ enum BrainMapLocalRebuilder {
     var offset = 0
     var conversations: [ServerConversation] = []
     while conversations.count < maxConversations {
-      let page = try await APIClient.shared.getConversations(
-        limit: conversationPageSize, offset: offset, authorizationSnapshot: authorizationSnapshot)
+      let page: [ServerConversation]
+      do {
+        page = try await reads.conversations(conversationPageSize, offset)
+      } catch {
+        throw readFailure("conversations", error)
+      }
       conversations.append(contentsOf: page)
       if page.count < conversationPageSize { break }
       offset += page.count
@@ -398,23 +475,35 @@ enum BrainMapLocalRebuilder {
     }
 
     await progress(Progress(label: "Reading memories…", fraction: 0.07))
-    if let memories = try? await APIClient.shared.getMemories(limit: maxMemories) {
-      for memory in memories {
-        if let source = BrainMapRebuildSources.memory(id: memory.id, content: memory.content) {
-          sources.append(source)
-          report.memories += 1
-        }
+    let memories: [ServerMemory]
+    do {
+      memories = try await reads.memories(maxMemories)
+    } catch {
+      throw readFailure("memories", error)
+    }
+    for memory in memories {
+      if let source = BrainMapRebuildSources.memory(id: memory.id, content: memory.content) {
+        sources.append(source)
+        report.memories += 1
       }
     }
-    if let people = try? await APIClient.shared.getPeople(),
-      let source = BrainMapRebuildSources.people(names: people.map(\.name))
-    {
+    let people: [Person]
+    do {
+      people = try await reads.people()
+    } catch {
+      throw readFailure("people", error)
+    }
+    if let source = BrainMapRebuildSources.people(names: people.map(\.name)) {
       sources.append(source)
       report.people = people.count
     }
-    if let goals = try? await APIClient.shared.getGoals(authorizationSnapshot: authorizationSnapshot),
-      let source = BrainMapRebuildSources.goals(goals.map { (title: $0.title, description: $0.description) })
-    {
+    let goals: [Goal]
+    do {
+      goals = try await reads.goals()
+    } catch {
+      throw readFailure("goals", error)
+    }
+    if let source = BrainMapRebuildSources.goals(goals.map { (title: $0.title, description: $0.description) }) {
       sources.append(source)
       report.goals = goals.count
     }
@@ -423,18 +512,32 @@ enum BrainMapLocalRebuilder {
     let batches = BrainMapExtractionBatches.make(sources)
     report.batches = batches.count
     var extractions: [(batch: [BrainMapRebuildSource], graph: KnowledgeGraphExtractResponse)] = []
+    var failedBatches = 0
     for (index, batch) in batches.enumerated() {
       guard isAuthorizationCurrent() else { throw LocalMutationAuthorizationError.revoked }
       await progress(.extracting(completed: index, of: batches.count))
+      let text = BrainMapExtractionBatches.text(for: batch)
       do {
-        let graph = try await extract(BrainMapExtractionBatches.text(for: batch))
-        extractions.append((batch, graph))
+        extractions.append((batch, try await extract(text)))
       } catch {
-        report.failedBatches += 1
-        log("Brain Map local rebuild: batch \(index + 1) failed: \(error.localizedDescription)")
+        // One retry after a pause covers the transient answer; a second
+        // failure is the account's rate limit or a server that is down, and
+        // neither is worth a partial map.
+        log("Brain Map local rebuild: batch \(index + 1) failed, retrying: \(error.localizedDescription)")
+        try? await Task.sleep(for: retryDelay)
+        guard isAuthorizationCurrent() else { throw LocalMutationAuthorizationError.revoked }
+        do {
+          extractions.append((batch, try await extract(text)))
+          report.retriedBatches += 1
+        } catch {
+          failedBatches += 1
+          log("Brain Map local rebuild: batch \(index + 1) failed again: \(error.localizedDescription)")
+        }
       }
     }
-    guard !extractions.isEmpty else { throw Failure.everyExtractionFailed }
+    guard failedBatches == 0 else {
+      throw Failure.extractionIncomplete(failed: failedBatches, of: batches.count)
+    }
 
     await progress(Progress(label: "Saving…", fraction: 0.92))
     let assembled = BrainMapLocalGraphAssembly.assemble(extractions)
@@ -454,13 +557,16 @@ enum BrainMapLocalRebuilder {
     let edgeRecords = assembled.edges.map { edge in
       LocalKGEdgeRecord(
         edgeId: edge.id, sourceNodeId: edge.sourceId, targetNodeId: edge.targetId, label: edge.label,
-        createdAt: now)
+        createdAt: now,
+        memoryIdsJson: String(data: (try? JSONEncoder().encode(edge.memoryIds)) ?? Data(), encoding: .utf8))
     }
-    try await KnowledgeGraphStorage.shared.replaceRebuiltGraph(
-      nodes: nodeRecords,
-      edges: edgeRecords,
-      authorization: LocalMutationAuthorization(isAuthorizationCurrent))
+    try await store(nodeRecords, edgeRecords, LocalMutationAuthorization(isAuthorizationCurrent))
     return report
+  }
+
+  private static func readFailure(_ source: String, _ error: Error) -> Error {
+    log("Brain Map local rebuild: could not read \(source): \(error.localizedDescription)")
+    return Failure.sourceUnreadable(source)
   }
 
   /// The locally rebuilt part of the local store: only rows this rebuild
