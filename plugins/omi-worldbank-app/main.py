@@ -696,7 +696,7 @@ async def landing_page():
     <div class="container">
         <h1>🌐 World Bank Economic Intelligence <span class="badge">Active</span></h1>
         <p>A production-ready integration app connecting Omi AI wearable devices with the <strong>World Bank Open Data API</strong>.</p>
-        
+
         <h2>Available Omi Chat Tools</h2>
         <div class="card">
             <h3>1. <code>get_country_profile</code></h3>
