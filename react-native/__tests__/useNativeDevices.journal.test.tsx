@@ -11,6 +11,7 @@ const mockCapture = '11111111-2222-4333-8444-555555555555';
 const mockSession = '99999999-2222-4333-8444-555555555555';
 const mockSnapshot: NativeSnapshot = {
   bluetooth: 'poweredOn',
+  connectionId: 'test-connection',
   devices: [],
   connectedDeviceId: null,
   phase: 'disconnected',
@@ -131,6 +132,7 @@ async function emit(event: OmiNativeEvent) {
 }
 const packet: OmiNativeEvent = {
   type: 'audio',
+  connectionId: 'test-connection',
   deviceId: 'omi-1',
   codec: 21,
   payloadBase64: 'AAAB',

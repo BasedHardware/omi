@@ -11,6 +11,7 @@ const mockListeners: Array<(event: OmiNativeEvent) => void> = [];
 
 const snapshot = (overrides: Partial<NativeSnapshot> = {}): NativeSnapshot => ({
   bluetooth: 'poweredOn',
+  connectionId: 'test-connection',
   devices: [],
   connectedDeviceId: null,
   phase: 'disconnected',
@@ -268,6 +269,7 @@ test.each(['disable', 'unmount'] as const)(
     const hook = await renderHook();
     const audio = {
       type: 'audio' as const,
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
@@ -315,6 +317,7 @@ test('retired upload failure cannot clear or complete the next session', async (
   const hook = await renderHook();
   const audio = {
     type: 'audio' as const,
+    connectionId: 'test-connection',
     deviceId: 'omi-1',
     codec: 21,
     payloadBase64: 'AQID',
@@ -423,6 +426,7 @@ test('opens a worker session only after a live audio frame, never a transcript',
     mockListeners.forEach(listener =>
       listener({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -483,6 +487,7 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
@@ -499,6 +504,7 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
     });
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'BAUG',
@@ -521,6 +527,7 @@ test('keeps uploading after snapshot events and serializes overlapping appends',
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'BwgJ',
@@ -572,12 +579,14 @@ test('drains queued audio before completing a session', async () => {
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
     });
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'BAUG',
@@ -591,6 +600,7 @@ test('drains queued audio before completing a session', async () => {
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'BwgJ',
@@ -636,6 +646,7 @@ test.each([false, true])(
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -692,6 +703,7 @@ test('completes a session that opens after disconnect', async () => {
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
@@ -745,6 +757,7 @@ test('an ambiguous audio failure stays visible and never completes or retries th
   const hook = await renderHook();
   const audio = {
     type: 'audio' as const,
+    connectionId: 'test-connection',
     deviceId: 'omi-1',
     codec: 21,
     payloadBase64: 'AQID',
@@ -861,6 +874,7 @@ test.each(['open', 'audio', 'complete'] as const)(
     const hook = await renderHook();
     const audio = {
       type: 'audio' as const,
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
@@ -937,6 +951,7 @@ test.each([false, true])(
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -991,12 +1006,14 @@ test('retries the same indexed batch before sending later packets or completing'
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
       });
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'BAUG',
@@ -1005,6 +1022,7 @@ test('retries the same indexed batch before sending later packets or completing'
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'BwgJ',
@@ -1057,6 +1075,7 @@ test.each([401, 409, 413, 503])(
       await ReactTestRenderer.act(async () => {
         emitNative({
           type: 'audio',
+          connectionId: 'test-connection',
           deviceId: 'omi-1',
           codec: 21,
           payloadBase64: 'AQID',
@@ -1101,6 +1120,7 @@ test('auth retirement cancels delayed retries and starts the next account at ind
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -1115,6 +1135,7 @@ test('auth retirement cancels delayed retries and starts the next account at ind
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'BAUG',
@@ -1150,7 +1171,13 @@ test('bounds buffered audio while recording identity is being created', async ()
   const payloadBase64 = Buffer.alloc(1_048_576).toString('base64');
   await ReactTestRenderer.act(async () => {
     for (let count = 0; count < 9; count += 1) {
-      emitNative({type: 'audio', deviceId: 'omi-1', codec: 21, payloadBase64});
+      emitNative({
+        type: 'audio',
+        connectionId: 'test-connection',
+        deviceId: 'omi-1',
+        codec: 21,
+        payloadBase64,
+      });
     }
   });
   expect(hook.latest().deviceScanMessage).toContain('storage limit reached');
@@ -1181,6 +1208,7 @@ test('retries idempotent completion on a transient transport failure', async () 
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -1210,6 +1238,7 @@ test('bounds recording open retries and retains the original capture identity', 
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -1252,6 +1281,7 @@ test('recovers a lost open response before draining and completing the capture',
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -1294,6 +1324,7 @@ test('retires a recording identity request when authentication is disabled', asy
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',
@@ -1316,6 +1347,7 @@ test('cancels open retry backoff after authentication is disabled', async () => 
     await ReactTestRenderer.act(async () => {
       emitNative({
         type: 'audio',
+        connectionId: 'test-connection',
         deviceId: 'omi-1',
         codec: 21,
         payloadBase64: 'AQID',
@@ -1340,6 +1372,7 @@ test('rejects an invalid native recording identity before opening', async () => 
   await ReactTestRenderer.act(async () => {
     emitNative({
       type: 'audio',
+      connectionId: 'test-connection',
       deviceId: 'omi-1',
       codec: 21,
       payloadBase64: 'AQID',

@@ -11,6 +11,8 @@
 #import <UserNotifications/UserNotifications.h>
 #endif
 
+static NSString *const OmiButtonServiceUUID = @"23ba7924-0000-1000-7450-346eac492e92";
+static NSString *const OmiButtonUUID = @"23ba7925-0000-1000-7450-346eac492e92";
 static NSString *const OmiStorageServiceUUID = @"30295780-4301-eabd-2904-2849adfeae43";
 static NSString *const OmiStorageStatusUUID = @"30295782-4301-eabd-2904-2849adfeae43";
 static NSString *const OmiHapticServiceUUID = @"cab1ab95-2ea5-4f4d-bb56-874b72cfc984";
@@ -40,6 +42,8 @@ static NSString *const OmiChargingUUID = @"19b10013-e8f2-537e-4f6c-d104768a1214"
 @property(nonatomic) BOOL observing;
 @property(nonatomic) OmiBleReconnectState reconnectState;
 @property(nonatomic, strong) CBPeripheral *reconnectPeripheral;
+@property(nonatomic) BOOL buttonNotifying;
+@property(nonatomic) BOOL buttonSubscriptionRequested;
 @property(nonatomic) BOOL audioNotifying;
 @property(nonatomic, strong) NSNumber *codec;
 @property(nonatomic, copy) RCTPromiseResolveBlock scanResolve;
@@ -234,6 +238,8 @@ RCT_REMAP_METHOD(connectDevice,
   self.scanning = NO;
   [self finishSetting:nil error:@"Omi connection was replaced"];
   [self.settingCharacteristics removeAllObjects];
+  self.buttonNotifying = NO;
+  self.buttonSubscriptionRequested = NO;
   self.audioNotifying = NO;
   self.codec = nil;
   self.connectionState = @"connecting";
@@ -305,7 +311,7 @@ RCT_REMAP_METHOD(disconnectDevice,
   self.connectionState = @"connected";
   self.lastEvent = @"Connected to Omi";
   peripheral.delegate = self;
-  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID], [CBUUID UUIDWithString:OmiHapticServiceUUID], [CBUUID UUIDWithString:OmiStorageServiceUUID] ]];
+  [peripheral discoverServices:@[ [CBUUID UUIDWithString:OmiServiceUUID], [CBUUID UUIDWithString:OmiBatteryServiceUUID], [CBUUID UUIDWithString:OmiInformationServiceUUID], [CBUUID UUIDWithString:OmiFeaturesServiceUUID], [CBUUID UUIDWithString:OmiSettingsServiceUUID], [CBUUID UUIDWithString:OmiHapticServiceUUID], [CBUUID UUIDWithString:OmiStorageServiceUUID], [CBUUID UUIDWithString:OmiButtonServiceUUID] ]];
   [self emitSnapshot];
 }
 
@@ -347,6 +353,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiHapticUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiFeaturesUUID] ] forService:service];
+    } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiButtonServiceUUID]]) {
+      [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiButtonUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiSettingsServiceUUID]]) {
       [peripheral discoverCharacteristics:@[ [CBUUID UUIDWithString:OmiLedUUID], [CBUUID UUIDWithString:OmiGainUUID], [CBUUID UUIDWithString:OmiChargingUUID] ] forService:service];
     } else if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiInformationServiceUUID]]) {
@@ -365,6 +373,10 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
     return;
   }
   for (CBCharacteristic *characteristic in service.characteristics) {
+    if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiButtonServiceUUID]] && [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiButtonUUID]]) {
+      self.settingCharacteristics[OmiButtonUUID] = characteristic;
+      [self subscribeButton];
+    }
     if ([service.UUID isEqual:[CBUUID UUIDWithString:OmiStorageServiceUUID]] && [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiStorageStatusUUID]]) {
       self.settingCharacteristics[OmiStorageStatusUUID] = characteristic;
       [self emitSnapshot];
@@ -396,6 +408,11 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
 didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
              error:(NSError *)error {
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
+  if (characteristic == self.settingCharacteristics[OmiButtonUUID]) {
+    self.buttonNotifying = error == nil && characteristic.isNotifying;
+    [self emitSnapshot];
+    return;
+  }
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]]) {
     self.audioNotifying = error == nil && characteristic.isNotifying;
     if (!self.audioNotifying) { [self retireConnection:@"Omi audio notification subscription failed"]; return; }
@@ -416,9 +433,14 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     return;
   }
   NSString *identifier = peripheral.identifier.UUIDString;
+  if (characteristic == self.settingCharacteristics[OmiButtonUUID]) {
+    if (self.buttonNotifying && self.audioNotifying && OmiButtonSupported(self.devices[identifier][@"features"]) && OmiButtonDoublePress(characteristic.value))
+      [self emit:@"button" body:@{ @"deviceId":identifier, @"connectionId":[NSString stringWithFormat:@"%lu", (unsigned long)self.connectionGeneration], @"action":@"doublePress" }];
+    return;
+  }
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiFeaturesUUID]]) {
     NSNumber *features = OmiDeviceFeatures(characteristic.value);
-    if (features != nil) { self.devices[identifier][@"features"] = features; [self readSupportedSettings]; [self emitSnapshot]; }
+    if (features != nil) { self.devices[identifier][@"features"] = features; [self readSupportedSettings]; [self subscribeButton]; [self emitSnapshot]; }
     return;
   }
   NSString *setting = [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiLedUUID]] ? @"ledBrightness" : [characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiGainUUID]] ? @"microphoneGain" : nil;
@@ -477,6 +499,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
           body:@{
             @"deviceId": identifier,
             @"codec": self.codec,
+            @"connectionId": [NSString stringWithFormat:@"%lu", (unsigned long)self.connectionGeneration],
             @"payloadBase64": [characteristic.value base64EncodedStringWithOptions:0],
           }];
   }
@@ -516,6 +539,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
   snapshot[@"background"] = @"inactive";
   snapshot[@"audioRoute"] = @"phone-mic";
 #endif
+  if (self.connectedPeripheral != nil) snapshot[@"connectionId"] = [NSString stringWithFormat:@"%lu", (unsigned long)self.connectionGeneration];
   return snapshot;
 }
 
@@ -537,6 +561,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if (battery != nil) {
       device[@"battery"] = battery;
     }
+    device[@"buttonSupported"] = @([device[@"connected"] boolValue] && self.buttonNotifying && OmiButtonSupported(device[@"features"]));
     CBCharacteristic *storage = self.settingCharacteristics[OmiStorageStatusUUID];
     device[@"storageStatusSupported"] = @([device[@"connected"] boolValue] && OmiStorageSupported(device[@"features"]) && storage != nil && (storage.properties & CBCharacteristicPropertyRead) != 0);
     CBCharacteristic *haptic = self.settingCharacteristics[OmiHapticUUID];
@@ -564,6 +589,14 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     device[@"battery"] = battery;
   }
   return device;
+}
+
+- (void)subscribeButton {
+  CBCharacteristic *button = self.settingCharacteristics[OmiButtonUUID];
+  if (!self.buttonSubscriptionRequested && self.connectedPeripheral != nil && OmiButtonSupported(self.devices[self.connectedPeripheral.identifier.UUIDString][@"features"]) && (button.properties & CBCharacteristicPropertyNotify) != 0) {
+    self.buttonSubscriptionRequested = YES;
+    [self.connectedPeripheral setNotifyValue:YES forCharacteristic:button];
+  }
 }
 
 - (void)readSupportedSettings {
@@ -730,6 +763,8 @@ RCT_REMAP_METHOD(setDeviceSetting,
   [self.settingCharacteristics removeAllObjects];
   CBPeripheral *previous = self.connectedPeripheral;
   self.connectedPeripheral = nil;
+  self.buttonNotifying = NO;
+  self.buttonSubscriptionRequested = NO;
   self.audioNotifying = NO;
   self.codec = nil;
   self.connectionState = @"disconnected";

@@ -146,6 +146,11 @@ export function DeviceControls({
 
   return (
     <View accessibilityLabel="Device controls" style={local.container}>
+      {device.connected && device.buttonSupported ? (
+        <Text style={styles.deviceMeta}>
+          Double-press to save this conversation and keep recording.
+        </Text>
+      ) : null}
       <Text style={styles.deviceMeta}>
         Charging:{' '}
         {device.charging === undefined

@@ -93,6 +93,7 @@ export type Device = {
   features?: number;
   ledBrightness?: number;
   microphoneGain?: number;
+  buttonSupported?: boolean;
   findDeviceSupported?: boolean;
   storageStatusSupported?: boolean;
   charging?: boolean;
@@ -108,6 +109,7 @@ export type NativeSnapshot = {
   bluetooth: BluetoothState;
   devices: Device[];
   connectedDeviceId: string | null;
+  connectionId?: string;
   phase: ConnectionPhase;
   capture: 'idle' | 'recording' | 'stopping';
   lastEvent: string;
@@ -120,9 +122,21 @@ export type NativeSnapshot = {
 };
 
 export type OmiNativeEvent =
+  | {
+      type: 'button';
+      deviceId: string;
+      connectionId: string;
+      action: 'doublePress';
+    }
   | {type: 'discovery'; device: Device}
   | {type: 'battery'; deviceId: string; battery: number}
-  | {type: 'audio'; deviceId: string; codec: number; payloadBase64: string}
+  | {
+      type: 'audio';
+      deviceId: string;
+      connectionId: string;
+      codec: number;
+      payloadBase64: string;
+    }
   | {type: 'snapshot'; snapshot: NativeSnapshot};
 
 export type OmiNative = {

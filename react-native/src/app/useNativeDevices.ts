@@ -68,6 +68,10 @@ export const DEVICE_UPLOAD_LIMITS = {
 } as const;
 
 type CaptureSession = {
+  connectionId: string | null;
+  frameStarted: boolean;
+  lastPacketSequence: number | null;
+  rotationRequested: boolean;
   uploadPaused: boolean;
   journal: RecordingJournal | null;
   journalWork: Promise<void>;
@@ -407,56 +411,102 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
     [releaseCaptureBuffer],
   );
 
-  const finishSession = useCallback(async () => {
-    const epoch = epochRef.current;
-    cancelledRef.current = true;
-    const capture = captureRef.current;
-    captureRef.current = null;
-    if (capture === null) {
-      return;
-    }
-    capture.stopped = true;
-    if (
-      omiBackend !== null &&
-      omiBackend !== undefined &&
-      hasRecordingJournal(omiBackend)
-    ) {
-      capture.journalWork = capture.journalWork.then(async () => {
-        if (capture.journal !== null) {
-          await omiBackend!.appendRecordingJournal!(
-            capture.journal.handle,
-            JSON.stringify(['s']),
-          );
-        }
-      });
-      void capture.journalWork.catch(() => failJournal(capture, epoch));
-    }
-    const work = processCapture(capture, epoch);
-    if (capture.uploadPaused) {
-      try {
-        await capture.journalWork;
-        pendingBytesRef.current -= capture.bufferedBytes;
-        capture.bufferedBytes = 0;
-        capture.pending = [];
-        capturesRef.current.delete(capture);
-      } catch {
-        failJournal(capture, epoch);
+  const finishSession = useCallback(
+    async (continueRecording = false) => {
+      const epoch = epochRef.current;
+      cancelledRef.current = !continueRecording;
+      const capture = captureRef.current;
+      captureRef.current = null;
+      if (capture === null) {
+        return;
       }
-    }
-    if (capture.id !== null) {
-      await work;
-    }
-  }, [failJournal, processCapture]);
+      capture.stopped = true;
+      if (
+        omiBackend !== null &&
+        omiBackend !== undefined &&
+        hasRecordingJournal(omiBackend)
+      ) {
+        capture.journalWork = capture.journalWork.then(async () => {
+          if (capture.journal !== null) {
+            await omiBackend!.appendRecordingJournal!(
+              capture.journal.handle,
+              JSON.stringify(['s']),
+            );
+          }
+        });
+        void capture.journalWork.catch(() => failJournal(capture, epoch));
+      }
+      const work = processCapture(capture, epoch);
+      if (capture.uploadPaused) {
+        try {
+          await capture.journalWork;
+          pendingBytesRef.current -= capture.bufferedBytes;
+          capture.bufferedBytes = 0;
+          capture.pending = [];
+          capturesRef.current.delete(capture);
+        } catch {
+          failJournal(capture, epoch);
+        }
+      }
+      if (capture.id !== null) {
+        await work;
+      }
+    },
+    [failJournal, processCapture],
+  );
 
   const persistAudio = useCallback(
     async (event: Extract<OmiNativeEvent, {type: 'audio'}>) => {
       if (!enabledRef.current || omiBackend == null || cancelledRef.current) {
         return;
       }
+      if (
+        event.connectionId.length === 0 ||
+        event.connectionId !== nativeSnapshotRef.current?.connectionId
+      )
+        return;
+      const size = Math.floor((event.payloadBase64.length * 3) / 4);
+      const bytes =
+        size > DEVICE_UPLOAD_LIMITS.maxPendingBytes
+          ? null
+          : bytesFromBase64(event.payloadBase64);
+      const startsFrame = bytes !== null && bytes.length > 3 && bytes[2] === 0;
+      const sequence =
+        bytes !== null && bytes.length > 3
+          ? bytes[0]! | (bytes[1]! << 8)
+          : null;
       let capture = captureRef.current;
+      if (
+        capture !== null &&
+        capture.rotationRequested &&
+        !capture.failed &&
+        !capture.stopped &&
+        !capture.completed &&
+        startsFrame &&
+        capture.deviceId === event.deviceId &&
+        capture.codec === event.codec &&
+        capture.connectionId === nativeSnapshotRef.current?.connectionId
+      ) {
+        if (
+          capture.lastPacketSequence !== null &&
+          sequence === ((capture.lastPacketSequence + 1) & 0xffff)
+        ) {
+          void finishSession(true);
+          capture = null;
+        } else {
+          capture.rotationRequested = false;
+          setDeviceScanMessage(
+            'Audio packet loss was detected. The recording was not split.',
+          );
+        }
+      }
       if (capture === null) {
         transcriptionRevisionRef.current++;
         capture = {
+          connectionId: nativeSnapshotRef.current?.connectionId ?? null,
+          frameStarted: false,
+          lastPacketSequence: null,
+          rotationRequested: false,
           uploadPaused: false,
           journal: null,
           journalWork: Promise.resolve(),
@@ -498,16 +548,12 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       }
       if (
         capture.failed ||
+        capture.connectionId !== event.connectionId ||
         capture.deviceId !== event.deviceId ||
         capture.codec !== event.codec
       ) {
         return;
       }
-      const size = Math.floor((event.payloadBase64.length * 3) / 4);
-      const bytes =
-        size > DEVICE_UPLOAD_LIMITS.maxPendingBytes
-          ? null
-          : bytesFromBase64(event.payloadBase64);
       if (
         bytes === null ||
         pendingBytesRef.current + bytes.length >
@@ -548,13 +594,15 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         });
         void target.journalWork.catch(() => failJournal(target, epoch));
       }
+      capture.frameStarted ||= startsFrame;
+      capture.lastPacketSequence = sequence;
       capture.pending.push(bytes);
       capture.bufferedBytes += bytes.length;
       capture.totalBytes += bytes.length;
       pendingBytesRef.current += bytes.length;
       await processCapture(capture, epochRef.current);
     },
-    [failJournal, processCapture, releaseCaptureBuffer],
+    [failJournal, finishSession, processCapture, releaseCaptureBuffer],
   );
 
   const applySnapshot = useCallback(
@@ -645,6 +693,10 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               continue;
             }
             const capture: CaptureSession = {
+              connectionId: null,
+              frameStarted: false,
+              lastPacketSequence: null,
+              rotationRequested: false,
               uploadPaused: false,
               journal: restored.journal,
               journalWork: Promise.resolve(),
@@ -730,6 +782,36 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
         setNativeSnapshot(current =>
           current === null ? current : mergeBattery(current, event),
         );
+        return;
+      }
+      if (event.type === 'button') {
+        const snapshot = nativeSnapshotRef.current;
+        const capture = captureRef.current;
+        if (
+          enabledRef.current &&
+          !cancelledRef.current &&
+          event.action === 'doublePress' &&
+          snapshot?.capture === 'recording' &&
+          snapshot.phase === 'connected' &&
+          snapshot.connectedDeviceId === event.deviceId &&
+          snapshot.connectionId === event.connectionId &&
+          snapshot.devices.some(
+            device =>
+              device.id === event.deviceId &&
+              device.connected &&
+              device.buttonSupported === true,
+          ) &&
+          capture !== null &&
+          capture.connectionId === event.connectionId &&
+          capture.deviceId === event.deviceId &&
+          capture.frameStarted &&
+          capture.totalBytes > 0 &&
+          !capture.failed &&
+          !capture.stopped &&
+          !capture.completed
+        ) {
+          capture.rotationRequested = true;
+        }
         return;
       }
       if (event.type === 'audio') {

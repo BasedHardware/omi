@@ -211,3 +211,28 @@ test('storage read failure remains unknown and can be retried', async () => {
   expect(JSON.stringify(renderer.toJSON())).not.toContain('Stored audio:');
   expect(button('Read storage status').props.disabled).toBe(false);
 });
+
+test('labels double-press only for a connected device with a confirmed button subscription', async () => {
+  await render({...device, buttonSupported: true});
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Double-press to save this conversation and keep recording.',
+  );
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, buttonSupported: false}}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Double-press');
+  await act(async () =>
+    renderer.update(
+      <DeviceControls
+        device={{...device, connected: false, buttonSupported: true}}
+        busy={false}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain('Double-press');
+});
