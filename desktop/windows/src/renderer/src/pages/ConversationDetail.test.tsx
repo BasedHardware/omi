@@ -24,6 +24,8 @@ vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }))
 
 import { ConversationDetail } from './ConversationDetail'
+import { toast } from '../lib/toast'
+import { invalidateConversationsCache } from '../lib/pageCache'
 
 const CONVERSATION = {
   id: 'conv1',
@@ -53,11 +55,58 @@ const CONVERSATION_WITH_ID = {
 
 beforeEach(() => {
   patchMock.mockClear()
+  vi.mocked(invalidateConversationsCache).mockClear()
   getMock.mockReset()
   getMock.mockResolvedValue({ data: CONVERSATION })
 })
 
 afterEach(() => cleanup())
+
+describe('ConversationDetail — copy Markdown', () => {
+  it('copies the current task state from loaded data without another request', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const { findByRole, getAllByTitle } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    const copy = await findByRole('button', { name: 'Copy as Markdown' })
+    fireEvent.click(getAllByTitle('Mark as done')[0])
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(invalidateConversationsCache).toHaveBeenCalledTimes(1))
+    const requests = getMock.mock.calls.length
+    fireEvent.click(copy)
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const result = writeText.mock.calls[0][0]
+    expect(result).toContain('### 💡 Planning sync\n\n*Captured via Omi •')
+    expect(result).toContain('**Key Takeaways:**\n\nDiscussed the roadmap.')
+    expect(result).toContain('- [x] Buy milk\n- [ ] Send recap')
+    expect(getMock).toHaveBeenCalledTimes(requests)
+    expect(patchMock).toHaveBeenCalledTimes(1)
+    expect(toast).toHaveBeenCalledWith('Summary copied', { tone: 'success' })
+  })
+
+  it('shows a useful error when clipboard permission is denied', async () => {
+    vi.mocked(toast).mockClear()
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard denied'))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const { findByRole } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    fireEvent.click(await findByRole('button', { name: 'Copy as Markdown' }))
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Could not copy summary', {
+        tone: 'error',
+        body: 'Clipboard denied'
+      })
+    )
+    expect(toast).not.toHaveBeenCalledWith('Summary copied', expect.anything())
+  })
+
+})
 
 describe('ConversationDetail — action item toggle (C3)', () => {
   it('sends parallel items_idx/values arrays, not action_item_idx/completed', async () => {
