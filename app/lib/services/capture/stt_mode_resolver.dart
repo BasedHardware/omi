@@ -84,7 +84,7 @@ class SttModeResolver {
   static CustomSttConfig? _defaultOnDeviceConfig() {
     final config = FreemiumTranscriptionService().getFreemiumConfig();
     if (config == null) return null;
-    return config.copyWith(identity: freemiumOnDeviceId);
+    return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
   Future<SttModeDecision> decide({

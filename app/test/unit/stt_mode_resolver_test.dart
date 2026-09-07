@@ -28,6 +28,7 @@ CustomSttConfig _onDevice() {
     provider: SttProvider.onDeviceWhisper,
     language: 'en',
     identity: SttModeResolver.freemiumOnDeviceId,
+    sendRawAudioToOmi: false,
   );
 }
 
@@ -91,6 +92,7 @@ void main() {
         expect(decision.path, SttResolvedPath.onDevice);
         expect(decision.opensManagedOmiSocket, isFalse);
         expect(decision.customSttConfig?.sttConfigId, SttModeResolver.freemiumOnDeviceId);
+        expect(decision.customSttConfig?.sendRawAudioToOmi, isFalse);
         expect(decision.reason, case_.$3);
       });
 
