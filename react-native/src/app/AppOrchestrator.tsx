@@ -1396,10 +1396,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 !allHomeReadsUnavailable && (
                                   <View style={styles.readStatuses}>
                                     <OutcomeStatus
+                                      continueUnavailable={
+                                        conversationNotice ===
+                                        desktopBackendUnavailableCopy
+                                      }
                                       label="Conversations"
                                       outcome={readOutcomes.conversations}
                                     />
                                     <OutcomeStatus
+                                      continueUnavailable={
+                                        memoryNotice ===
+                                        desktopBackendUnavailableCopy
+                                      }
                                       label="Memories"
                                       outcome={readOutcomes.memories}
                                     />

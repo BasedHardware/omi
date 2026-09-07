@@ -561,6 +561,36 @@ test('ReadStatus does not claim more pages when the continue door is unavailable
   );
 });
 
+test('OutcomeStatus omits more-available after a closed later page', () => {
+  const page = {
+    windowStatus: 'more' as const,
+    complete: false,
+    hasMore: true,
+    nextCursor: 'next-page',
+    completenessStatus: 'complete' as const,
+    reasons: [],
+  };
+  const renderer = render(
+    <OutcomeStatus
+      continueUnavailable
+      label="Conversations"
+      outcome={{status: 'success', value: {items: [], page}}}
+    />,
+  );
+  expect(JSON.stringify(renderer.toJSON())).toBe('null');
+  act(() =>
+    renderer.update(
+      <OutcomeStatus
+        label="Conversations"
+        outcome={{status: 'success', value: {items: [], page}}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'More conversations are available.',
+  );
+});
+
 test('OutcomeStatus uses mapped library copy instead of a generic unavailable claim', () => {
   const mapped =
     'This saved data is not available from the selected Omi service yet.';
@@ -793,4 +823,11 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain(
     'tasks: taskNotice === desktopBackendUnavailableCopy',
   );
+  expect(orchestrator).toContain(
+    'conversationNotice ===\n                                        desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain(
+    'memoryNotice ===\n                                        desktopBackendUnavailableCopy',
+  );
+  expect(orchestrator).toContain('<OutcomeStatus');
 });

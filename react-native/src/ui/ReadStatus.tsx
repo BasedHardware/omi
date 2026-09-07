@@ -156,10 +156,12 @@ export function homeSearchPhaseCopy(
 }
 
 export function OutcomeStatus({
+  continueUnavailable = false,
   label,
   outcome,
   mac = false,
 }: {
+  continueUnavailable?: boolean;
   label: string;
   outcome: DomainReadOutcome<DesktopReadProjection>;
   mac?: boolean;
@@ -171,6 +173,11 @@ export function OutcomeStatus({
       </Text>
     </View>
   ) : (
-    <ReadStatus label={label} mac={mac} page={outcome.value.page} />
+    <ReadStatus
+      continueUnavailable={continueUnavailable}
+      label={label}
+      mac={mac}
+      page={outcome.value.page}
+    />
   );
 }
