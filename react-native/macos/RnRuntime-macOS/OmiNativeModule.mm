@@ -487,6 +487,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
+  double capturedAtMs = floor(NSDate.date.timeIntervalSince1970 * 1000.0);
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) return;
   if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiStorageStatusUUID]] && self.storageResolve != nil) {
     NSDictionary *status = error == nil ? OmiStorageStatus(characteristic.value) : nil;
@@ -561,14 +562,15 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     [self emitSnapshot];
     return;
   }
-  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]] && OmiBleRecordingReady([self.connectionState isEqualToString:@"connected"], self.audioNotifying, self.codec != nil)) {
-    [self emit:@"audio"
-          body:@{
+  if ([characteristic.UUID isEqual:[CBUUID UUIDWithString:OmiAudioUUID]] && characteristic.value.length > 0 && OmiBleRecordingReady([self.connectionState isEqualToString:@"connected"], self.audioNotifying, self.codec != nil)) {
+    NSMutableDictionary *audio = [@{
             @"deviceId": identifier,
             @"codec": self.codec,
             @"connectionId": [NSString stringWithFormat:@"%lu", (unsigned long)self.connectionGeneration],
             @"payloadBase64": [characteristic.value base64EncodedStringWithOptions:0],
-          }];
+          } mutableCopy];
+    if (isfinite(capturedAtMs) && capturedAtMs >= 0 && capturedAtMs <= 8640000000000000.0) audio[@"capturedAtMs"] = @(capturedAtMs);
+    [self emit:@"audio" body:audio];
   }
 }
 

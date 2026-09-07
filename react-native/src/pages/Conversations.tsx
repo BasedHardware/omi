@@ -348,6 +348,12 @@ export function ConversationsPage({
                   {selected.summary}
                 </Text>
                 <View style={styles.conversationDetailFields}>
+                  {selected.capturedAtMs !== undefined && (
+                    <Text style={styles.conversationDetailField}>
+                      Captured (device time) ·{' '}
+                      {new Date(selected.capturedAtMs).toLocaleString()}
+                    </Text>
+                  )}
                   <Text style={styles.conversationDetailField}>
                     Started · {formatConversationDate(selected.startedAt)}
                   </Text>

@@ -1,3 +1,4 @@
+import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {NativeHttpResponse, OmiBackend} from './omiNativeTypes';
 import {
   parseRecordingTranscript,
@@ -5,6 +6,7 @@ import {
 } from './recordingTranscriptContract';
 
 export type DeviceSessionRecord = {
+  capturedAtMs?: number;
   id: string;
   deviceId: string;
   deviceName: string | null;
@@ -42,6 +44,7 @@ function parseSession(value: unknown): DeviceSessionRecord {
     throw new Error('Device session response invented a transcript');
   }
   if (
+    !isOptionalCaptureTimestamp(item.capturedAtMs) ||
     typeof item.id !== 'string' ||
     typeof item.deviceId !== 'string' ||
     (item.deviceName !== null && typeof item.deviceName !== 'string') ||
@@ -63,6 +66,9 @@ function parseSession(value: unknown): DeviceSessionRecord {
     throw new Error('Device session response is incomplete');
   }
   return {
+    ...(item.capturedAtMs === undefined
+      ? {}
+      : {capturedAtMs: item.capturedAtMs}),
     id: item.id,
     deviceId: item.deviceId,
     deviceName: item.deviceName,
@@ -108,6 +114,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 export async function openDeviceSession(
   backend: OmiBackend,
   input: {
+    capturedAtMs?: number;
     captureId: string;
     deviceId: string;
     deviceName?: string;
@@ -115,6 +122,7 @@ export async function openDeviceSession(
   },
 ): Promise<DeviceSessionRecord> {
   if (
+    !isOptionalCaptureTimestamp(input.capturedAtMs) ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
       input.captureId,
     )
@@ -126,6 +134,9 @@ export async function openDeviceSession(
     method: 'POST',
     path: '/v1/device-sessions',
     body: JSON.stringify({
+      ...(input.capturedAtMs === undefined
+        ? {}
+        : {capturedAtMs: input.capturedAtMs}),
       captureId: input.captureId,
       deviceId: input.deviceId,
       ...(input.deviceName !== undefined ? {deviceName: input.deviceName} : {}),
@@ -135,6 +146,7 @@ export async function openDeviceSession(
   rejectIfUnusable(response);
   const session = parseSession(parseObject(response.body).session);
   if (
+    session.capturedAtMs !== input.capturedAtMs ||
     session.deviceId !== input.deviceId ||
     session.codec !== input.codec ||
     session.deviceName !== (input.deviceName ?? null) ||

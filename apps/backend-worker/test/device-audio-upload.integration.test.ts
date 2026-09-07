@@ -443,3 +443,52 @@ test("historical unindexed chunks cannot be overwritten and the transcription si
       .first()
   ).toEqual({ count: 0 });
 });
+
+test("capture time is immutable provenance across retries and completion without replacing server chronology", async () => {
+  for (const capturedAtMs of [undefined, 0, 8640000000000000]) {
+    const request = {
+      captureId: crypto.randomUUID(),
+      deviceId: "pendant",
+      deviceName: null,
+      codec: 1,
+      ...(capturedAtMs === undefined ? {} : { capturedAtMs }),
+    };
+    const [first, replay] = await Promise.all([
+      openDeviceSession(env.DB, "owner", request, 10),
+      openDeviceSession(env.DB, "owner", request, 11),
+    ]);
+    expect(replay).toEqual(first);
+    expect(first?.capturedAtMs).toBe(capturedAtMs);
+    if (capturedAtMs === undefined)
+      expect(first).not.toHaveProperty("capturedAtMs");
+    expect(first?.startedAt).toBeGreaterThanOrEqual(10);
+    expect(first?.startedAt).toBeLessThanOrEqual(11);
+    expect(
+      await openDeviceSession(
+        env.DB,
+        "owner",
+        {
+          captureId: request.captureId,
+          deviceId: request.deviceId,
+          deviceName: request.deviceName,
+          codec: request.codec,
+          ...(capturedAtMs === undefined ? { capturedAtMs: 0 } : {}),
+        },
+        12
+      )
+    ).toBeNull();
+    const completed = await completeDeviceSession(
+      env.DB,
+      "owner",
+      first!.id,
+      14
+    );
+    expect(completed.kind).toBe("ok");
+    expect(await openDeviceSession(env.DB, "owner", request, 20)).toMatchObject(
+      { id: first!.id, startedAt: first!.startedAt, endedAt: 14 }
+    );
+    expect(
+      (await openDeviceSession(env.DB, "other", request, 20))?.id
+    ).not.toBe(first!.id);
+  }
+});

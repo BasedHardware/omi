@@ -99,3 +99,17 @@ test('constrained transport sends the native journal handle without exposing own
     createRecordingJournal(backend, {...input, codec: 20}),
   ).rejects.toThrow('acknowledgement');
 });
+
+test('legacy journal capture time remains absent and malformed persisted time is rejected', () => {
+  expect(restoreRecording(journal()).journal).not.toHaveProperty(
+    'capturedAtMs',
+  );
+  expect(
+    restoreRecording({...journal(), capturedAtMs: 0}).journal.capturedAtMs,
+  ).toBe(0);
+  for (const value of [null, -1, 0.5, Infinity, 8640000000000001, '1000']) {
+    expect(() =>
+      restoreRecording({...journal(), capturedAtMs: value as number}),
+    ).toThrow('identity is invalid');
+  }
+});

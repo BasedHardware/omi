@@ -1593,6 +1593,20 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect(openedUploads[1]).toEqual(upload);
       expect(upload.id).not.toBe(uploadInput.captureId);
       await expect(uploads.open(context, { ...uploadInput, deviceId: "changed" })).rejects.toMatchObject({ code: "idempotency_conflict" });
+      expect(upload).not.toHaveProperty("capturedAtMs");
+      await expect(uploads.open(context, { ...uploadInput, capturedAtMs: 0 })).rejects.toMatchObject({ code: "idempotency_conflict" });
+      for (const capturedAtMs of [0, 8640000000000000]) {
+        const timedInput = { ...uploadInput, captureId: crypto.randomUUID(), capturedAtMs };
+        const timed = await uploads.open(context, timedInput);
+        expect(timed.capturedAtMs).toBe(capturedAtMs);
+        const restartedUploads = createPostgresDeviceSessionUploadRepository({ pool: appRolePool });
+        expect(await restartedUploads.open(context, timedInput)).toEqual(timed);
+        await expect(uploads.open(context, { ...timedInput, capturedAtMs: undefined })).rejects.toMatchObject({ code: "idempotency_conflict" });
+        await expect(uploads.open(context, { ...timedInput, capturedAtMs: capturedAtMs === 0 ? 1 : 0 })).rejects.toMatchObject({ code: "idempotency_conflict" });
+        await uploads.complete(context, timed.id);
+        const completedTimed = await restartedUploads.read(context, timed.id);
+        expect(completedTimed).toMatchObject({ capturedAtMs, startedAt: timed.startedAt, state: "complete" });
+      }
       const audio = Uint8Array.of(0, 0, 0, 248, 255, 128);
       const batchUpload = await uploads.open(context, { ...uploadInput, captureId: crypto.randomUUID() });
       const packetBatch = Array.from({ length: 3 }, (_, index) => ({ index, bytes: Uint8Array.of(index, 0, 0, 248, 255, 128) }));
@@ -1818,9 +1832,13 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         async generationEvents() { throw new Error("unexpected_generation_request"); },
         async cancelGenerationEvents() { throw new Error("unexpected_generation_request"); },
       };
-      const clientCapture = { captureId: crypto.randomUUID(), deviceId: "real-rn-client", deviceName: "Protocol fixture", codec: 1 };
+      const beforeClientOpen = Date.now();
+      const clientCapture = { captureId: crypto.randomUUID(), deviceId: "real-rn-client", deviceName: "Protocol fixture", codec: 1, capturedAtMs: 1700000000123 };
       await expect(deviceClient.openDeviceSession(nativeTransport, clientCapture)).rejects.toBeInstanceOf(TypeError);
       const clientSession = await deviceClient.openDeviceSession(nativeTransport, clientCapture);
+      expect(clientSession.capturedAtMs).toBe(clientCapture.capturedAtMs);
+      expect(clientSession.startedAt).toBeGreaterThanOrEqual(beforeClientOpen);
+      expect(clientSession.startedAt).toBeLessThanOrEqual(Date.now());
       expect(await deviceClient.openDeviceSession(nativeTransport, clientCapture)).toEqual(clientSession);
       const clientPackets = [0, 1].map(sequence => {
         const packet = Uint8Array.from({ length: 8003 }, (_, index) => index % 256);
@@ -1838,7 +1856,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       const changedClientPacket = clientPackets[1]!.slice(); changedClientPacket[3] ^= 255;
       await expect(deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, [clientPackets[0]!, changedClientPacket], 0))
         .rejects.toMatchObject({ status: 409 });
-      expect(await deviceClient.completeDeviceSession(nativeTransport, clientSession.id)).toMatchObject({ state: "complete", byteCount: 16006, chunkCount: 2 });
+      const completedClient = await deviceClient.completeDeviceSession(nativeTransport, clientSession.id);
+      expect(completedClient).toMatchObject({ state: "complete", byteCount: 16006, chunkCount: 2, capturedAtMs: clientCapture.capturedAtMs, startedAt: clientSession.startedAt });
+      expect(completedClient.endedAt!).toBeGreaterThanOrEqual(clientSession.startedAt);
+      expect(completedClient.endedAt!).toBeLessThanOrEqual(Date.now());
       expect(await deviceClient.appendDeviceSessionAudio(nativeTransport, clientSession.id, clientPackets, 0)).toMatchObject({ state: "complete", chunkCount: 2 });
       clientToken = "other.qa.valid";
       await expect(deviceClient.transcribeDeviceSession(nativeTransport, clientSession.id)).rejects.toMatchObject({ status: 403 });

@@ -301,3 +301,65 @@ test('rejects over-budget batches before transport', async () => {
     ).rejects.toThrow();
   expect(send).not.toHaveBeenCalled();
 });
+
+test('open preserves optional device capture time and rejects changed acknowledgements', async () => {
+  const input = {
+    captureId: '11111111-2222-4333-8444-555555555555',
+    deviceId: 'omi-1',
+    deviceName: 'Omi',
+    codec: 21,
+    capturedAtMs: 0,
+  };
+  const requests: NativeHttpRequest[] = [];
+  const record = await openDeviceSession(
+    backend(request => {
+      requests.push(request);
+      return {
+        status: 200,
+        body: JSON.stringify({session: session({capturedAtMs: 0})}),
+      };
+    }),
+    input,
+  );
+  expect(record.capturedAtMs).toBe(0);
+  expect(record.startedAt).toBe(1);
+  expect(JSON.parse(requests[0]!.body!).capturedAtMs).toBe(0);
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({session: session({capturedAtMs: 100})}),
+      })),
+      input,
+    ),
+  ).rejects.toThrow('recording identity');
+});
+
+test.each([null, -1, 0.5, Infinity, 8640000000000001, '1000'])(
+  'invalid capture provenance %s cannot be sent or accepted',
+  async capturedAtMs => {
+    const input = {
+      captureId: '11111111-2222-4333-8444-555555555555',
+      deviceId: 'omi-1',
+      deviceName: 'Omi',
+      codec: 21,
+    };
+    await expect(
+      openDeviceSession(
+        backend(() => {
+          throw Error('must not send');
+        }),
+        {...input, capturedAtMs: capturedAtMs as number},
+      ),
+    ).rejects.toThrow('Invalid recording identity');
+    await expect(
+      openDeviceSession(
+        backend(() => ({
+          status: 200,
+          body: JSON.stringify({session: session({capturedAtMs})}),
+        })),
+        input,
+      ),
+    ).rejects.toThrow();
+  },
+);

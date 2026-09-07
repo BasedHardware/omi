@@ -19,6 +19,7 @@ type StoredSession = {
   byte_count: number;
   chunk_count: number;
   started_at: number;
+  captured_at_ms: number | null;
   ended_at: number | null;
   created_at: number;
   updated_at: number;
@@ -26,6 +27,7 @@ type StoredSession = {
 
 export type DeviceSessionCreateRequest = {
   captureId: string;
+  capturedAtMs?: number;
   deviceId: string;
   deviceName: string | null;
   codec: number;
@@ -56,7 +58,14 @@ export function parseDeviceSessionCreate(
   const item = body as Record<string, unknown>;
   if (
     Object.keys(item).some(
-      (key) => !["captureId", "deviceId", "deviceName", "codec"].includes(key)
+      (key) =>
+        ![
+          "captureId",
+          "deviceId",
+          "deviceName",
+          "codec",
+          "capturedAtMs",
+        ].includes(key)
     )
   )
     return null;
@@ -90,9 +99,19 @@ export function parseDeviceSessionCreate(
     item["codec"] > 255
   )
     return null;
+  if (
+    item["capturedAtMs"] !== undefined &&
+    (!Number.isSafeInteger(item["capturedAtMs"]) ||
+      (item["capturedAtMs"] as number) < 0 ||
+      (item["capturedAtMs"] as number) > 8_640_000_000_000_000)
+  )
+    return null;
   if ("transcript" in item || "text" in item) return null;
   return {
     captureId: item["captureId"],
+    ...(item["capturedAtMs"] === undefined
+      ? {}
+      : { capturedAtMs: item["capturedAtMs"] as number }),
     deviceId: item["deviceId"],
     deviceName:
       typeof item["deviceName"] === "string" ? item["deviceName"] : null,
@@ -183,6 +202,7 @@ export function toDeviceSession(row: StoredSession): DeviceSession {
     byteCount: row.byte_count,
     chunkCount: row.chunk_count,
     startedAt: row.started_at,
+    ...(row.captured_at_ms == null ? {} : { capturedAtMs: row.captured_at_ms }),
     endedAt: row.ended_at,
   };
 }
@@ -200,8 +220,8 @@ export async function openDeviceSession(
     .prepare(
       `INSERT INTO device_sessions (
         id, account_id, device_id, device_name, codec, state, r2_prefix,
-        byte_count, chunk_count, started_at, ended_at, created_at, updated_at, capture_id
-      ) VALUES (?, ?, ?, ?, ?, 'open', ?, 0, 0, ?, NULL, ?, ?, ?)
+        byte_count, chunk_count, started_at, ended_at, created_at, updated_at, capture_id, captured_at_ms
+      ) VALUES (?, ?, ?, ?, ?, 'open', ?, 0, 0, ?, NULL, ?, ?, ?, ?)
       ON CONFLICT(account_id, capture_id) DO NOTHING`
     )
     .bind(
@@ -214,7 +234,8 @@ export async function openDeviceSession(
       now,
       now,
       now,
-      request.captureId
+      request.captureId,
+      request.capturedAtMs ?? null
     )
     .run();
   const row = await db
@@ -227,7 +248,8 @@ export async function openDeviceSession(
   if (
     row.device_id !== request.deviceId ||
     row.device_name !== request.deviceName ||
-    row.codec !== request.codec
+    row.codec !== request.codec ||
+    (row.captured_at_ms ?? null) !== (request.capturedAtMs ?? null)
   )
     return null;
   return toDeviceSession(row);

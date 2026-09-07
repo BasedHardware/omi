@@ -1,6 +1,8 @@
+import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {OmiBackend} from './omiNative';
 
 export type ConversationProjection = {
+  capturedAtMs?: number;
   kind: 'conversation';
   id: string;
   title: string;
@@ -509,6 +511,9 @@ export async function loadConversations(
       record.discarded,
       `Conversation ${index} discarded`,
     );
+    if (!isOptionalCaptureTimestamp(record.capturedAtMs)) {
+      throw new Error(`Conversation ${index} capturedAtMs is malformed`);
+    }
     const starred = boolean(record.starred, `Conversation ${index} starred`);
     const visibility = string(
       record.visibility,
@@ -523,6 +528,9 @@ export async function loadConversations(
     }
     return {
       kind: 'conversation' as const,
+      ...(record.capturedAtMs === undefined
+        ? {}
+        : {capturedAtMs: record.capturedAtMs}),
       id,
       title,
       summary,

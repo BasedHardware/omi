@@ -490,11 +490,14 @@ export const createPostgresListenFinalizationRepository = (
 export function createPostgresDeviceSessionUploadRepository(options: PostgresListenFinalizationRepositoryOptions): DeviceSessionUploadRepository {
   const parse = (value: unknown): DeviceSessionUpload | null => {
     if (value === null) return null;
-    const row = exactRow(value, ["id", "deviceId", "deviceName", "codec", "state", "byteCount", "chunkCount", "startedAt", "endedAt"]);
+    const hasCapturedAt = typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "capturedAtMs");
+    const row = exactRow(value, ["id", "deviceId", "deviceName", "codec", "state", "byteCount", "chunkCount", "startedAt", "endedAt", ...(hasCapturedAt ? ["capturedAtMs"] : [])]);
+    const capturedAtMs = hasCapturedAt ? integer(row.capturedAtMs) : undefined;
+    if (capturedAtMs !== undefined && (capturedAtMs < 0 || capturedAtMs > 8_640_000_000_000_000)) fail("persistence_failed");
     if (typeof row.id !== "string" || !DEVICE_UPLOAD_SESSION_ID.test(row.id)
       || typeof row.deviceId !== "string" || (row.deviceName !== null && typeof row.deviceName !== "string")
       || (row.state !== "open" && row.state !== "complete")) fail("persistence_failed");
-    return Object.freeze({ id: row.id as string, deviceId: row.deviceId as string, deviceName: row.deviceName as string | null,
+    return Object.freeze({ ...(capturedAtMs === undefined ? {} : { capturedAtMs }), id: row.id as string, deviceId: row.deviceId as string, deviceName: row.deviceName as string | null,
       codec: integer(row.codec), state: row.state as "open" | "complete", byteCount: integer(row.byteCount),
       chunkCount: integer(row.chunkCount), startedAt: integer(row.startedAt), endedAt: row.endedAt === null ? null : integer(row.endedAt) });
   };
@@ -523,10 +526,10 @@ export function createPostgresDeviceSessionUploadRepository(options: PostgresLis
         sample_rate: 16000, channels: 1,
       }));
       const result = await query(context, {
-        name: "listen.audio.open", text: "SELECT omi_memory.open_listen_audio_upload($1::uuid,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,$11) AS session",
+        name: "listen.audio.open", text: "SELECT omi_memory.open_listen_audio_upload($1::uuid,$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,$11,$12::bigint) AS session",
         values: [input.captureId, input.deviceId, input.deviceName, input.codec, request.session_id, request.conversation_id,
           request.started_at, request.codec, request.sample_rate, sessionHash(context.account_id, request, request.started_at),
-          stateHash(context.account_id, request.session_id, LISTEN_CAPTURE_OPEN_VERSION, "active", request.started_at)],
+          stateHash(context.account_id, request.session_id, LISTEN_CAPTURE_OPEN_VERSION, "active", request.started_at), input.capturedAtMs ?? null],
       });
       if (result === null) fail("persistence_failed");
       return result as DeviceSessionUpload;

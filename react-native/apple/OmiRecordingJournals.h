@@ -1,4 +1,5 @@
 #import "OmiRecordingLog.h"
+#import "OmiRecordingPolicy.h"
 #import <CommonCrypto/CommonDigest.h>
 
 static NSString *OmiRecordingDigest(NSString *value) {
@@ -105,9 +106,11 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
     if (value == nil) { OmiRecordingError(error); return nil; }
     [values addObject:value];
   }
-  return @{ @"handle":entry[@"id"], @"captureId":entry[@"id"], @"deviceId":entry[@"input"][@"deviceId"],
+  NSMutableDictionary *result = [@{ @"handle":entry[@"id"], @"captureId":entry[@"id"], @"deviceId":entry[@"input"][@"deviceId"],
     @"deviceName":entry[@"input"][@"deviceName"], @"codec":entry[@"input"][@"codec"],
-    @"sessionId":entry[@"sessionId"] ?: NSNull.null, @"entries":values };
+    @"sessionId":entry[@"sessionId"] ?: NSNull.null, @"entries":values } mutableCopy];
+  if (entry[@"input"][@"capturedAtMs"] != nil) result[@"capturedAtMs"] = entry[@"input"][@"capturedAtMs"];
+  return result;
 }
 - (NSData *)record:(unsigned char)kind payload:(NSData *)payload {
   NSMutableData *record = [NSMutableData dataWithBytes:&kind length:1]; [record appendData:payload]; return record;
@@ -120,8 +123,10 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   if (![device isKindOfClass:NSString.class] || device.length == 0 || device.length > 256
       || (name != NSNull.null && (![name isKindOfClass:NSString.class] || [name length] > 256))
       || ![codec isKindOfClass:NSNumber.class] || codec.doubleValue < 0 || codec.doubleValue > 255 || codec.doubleValue != codec.integerValue) { OmiRecordingError(error); return nil; }
+  if (!OmiRecordingCapturedAtValid(input[@"capturedAtMs"])) { OmiRecordingError(error); return nil; }
   NSString *identifier = NSUUID.UUID.UUIDString.lowercaseString;
-  NSDictionary *metadata = @{ @"deviceId":device, @"deviceName":name, @"codec":codec };
+  NSMutableDictionary *metadata = [@{ @"deviceId":device, @"deviceName":name, @"codec":codec } mutableCopy];
+  if (input[@"capturedAtMs"] != nil) metadata[@"capturedAtMs"] = input[@"capturedAtMs"];
   OmiRecordingLog *log = [self open:owner identifier:identifier error:error];
   if (log == nil) return nil;
   if ([log append:[self record:1 payload:[NSJSONSerialization dataWithJSONObject:metadata options:0 error:error]] error:error] == nil) { [log close]; return nil; }
@@ -159,7 +164,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
     NSData *first = records[0];
     if (first.length < 2 || ((const unsigned char *)first.bytes)[0] != 1) { [log close]; OmiRecordingError(error); return nil; }
     id input = [NSJSONSerialization JSONObjectWithData:[first subdataWithRange:NSMakeRange(1, first.length - 1)] options:0 error:error];
-    if (![input isKindOfClass:NSDictionary.class]) { [log close]; OmiRecordingError(error); return nil; }
+    if (![input isKindOfClass:NSDictionary.class] || !OmiRecordingCapturedAtValid(input[@"capturedAtMs"])) { [log close]; OmiRecordingError(error); return nil; }
     NSMutableDictionary *entry = [@{ @"id":identifier, @"owner":[owner copy], @"input":input, @"log":log } mutableCopy];
     for (NSUInteger index = 1; index < records.count; index++) {
       NSData *record = records[index];
@@ -204,6 +209,7 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
     id body = [NSJSONSerialization JSONObjectWithData:[request[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:error];
     if (![body isKindOfClass:NSDictionary.class] || ![body[@"captureId"] isEqual:entry[@"id"]]
         || ![body[@"deviceId"] isEqual:entry[@"input"][@"deviceId"]] || ![body[@"codec"] isEqual:entry[@"input"][@"codec"]]
+        || !OmiRecordingCapturedAtMatches(entry[@"input"][@"capturedAtMs"], body[@"capturedAtMs"])
         || ![(body[@"deviceName"] ?: NSNull.null) isEqual:entry[@"input"][@"deviceName"]]) { OmiRecordingError(error); return nil; }
   } else {
     NSString *session = entry[@"sessionId"];
@@ -222,7 +228,8 @@ static NSString *OmiRecordingUUIDPattern = @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
   NSDictionary *session = [body isKindOfClass:NSDictionary.class] ? body[@"session"] : nil;
   NSString *identifier = [session isKindOfClass:NSDictionary.class] ? session[@"id"] : nil;
   if (!OmiRecordingMatches(identifier, OmiRecordingUUIDPattern) || ![session[@"deviceId"] isEqual:entry[@"input"][@"deviceId"]]
-    || ![session[@"codec"] isEqual:entry[@"input"][@"codec"]] || (entry[@"sessionId"] != nil && ![entry[@"sessionId"] isEqual:identifier])) return OmiRecordingError(error);
+    || ![session[@"codec"] isEqual:entry[@"input"][@"codec"]]
+    || !OmiRecordingCapturedAtMatches(entry[@"input"][@"capturedAtMs"], session[@"capturedAtMs"]) || (entry[@"sessionId"] != nil && ![entry[@"sessionId"] isEqual:identifier])) return OmiRecordingError(error);
   if (entry[@"sessionId"] == nil) {
     if (![self budget:512 creating:NO error:error] || [entry[@"log"] append:[self record:2 payload:[identifier dataUsingEncoding:NSUTF8StringEncoding]] error:error] == nil) return NO;
     entry[@"sessionId"] = identifier;

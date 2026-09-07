@@ -1040,3 +1040,37 @@ test('task reads forward opaque cursors and classify stale cursor responses', as
   );
   expect(paths).toEqual(['/v1/tasks?cursor=opaque%2B%2F%3D']);
 });
+
+test('conversation capture provenance is optional and never replaces server timestamps', async () => {
+  const result = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        conversationPage([{...conversation, capturedAtMs: 0}]),
+      ),
+    })),
+  );
+  expect(result.items[0]!.capturedAtMs).toBe(0);
+  expect(result.items[0]!.startedAt).toBe(
+    new Date(conversation.startedAt).toISOString(),
+  );
+  const legacy = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(conversationPage([conversation])),
+    })),
+  );
+  expect(legacy.items[0]).not.toHaveProperty('capturedAtMs');
+  for (const capturedAtMs of [null, -1, 1.5, '1000', 8640000000000001]) {
+    await expect(
+      loadConversations(
+        backendFor(() => ({
+          status: 200,
+          body: JSON.stringify(
+            conversationPage([{...conversation, capturedAtMs}]),
+          ),
+        })),
+      ),
+    ).rejects.toThrow('capturedAtMs');
+  }
+});

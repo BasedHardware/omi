@@ -415,22 +415,24 @@ class OmiBleController(
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray,
       ) {
+        val capturedAtMs = System.currentTimeMillis()
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
           if (characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID) && firstAudio.receive(value.size)) emitSnapshot()
-          if (characteristic.uuid == BUTTON_UUID) handleButton(value) else handleValue(characteristic, value)
+          if (characteristic.uuid == BUTTON_UUID) handleButton(value) else handleValue(characteristic, value, capturedAtMs)
         }
       }
 
       @Deprecated("Deprecated in API 33")
       override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        val capturedAtMs = System.currentTimeMillis()
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return
           }
           if (characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID) && firstAudio.receive(characteristic.value?.size ?: 0)) emitSnapshot()
-          if (characteristic.uuid == BUTTON_UUID) characteristic.value?.let { handleButton(it) } else handleValue(characteristic)
+          if (characteristic.uuid == BUTTON_UUID) characteristic.value?.let { handleButton(it) } else characteristic.value?.let { handleValue(characteristic, it, capturedAtMs) }
         }
       }
 
@@ -604,7 +606,7 @@ class OmiBleController(
     handleValue(characteristic, value)
   }
 
-  private fun handleValue(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+  private fun handleValue(characteristic: BluetoothGattCharacteristic, value: ByteArray, capturedAtMs: Long? = null) {
     val id = connectedDeviceId ?: return
     OmiDeviceInformation.decode(characteristic.uuid, value)?.let { (field, decoded) ->
       results[id]?.let { results[id] = it.copy(information = it.information + (field to decoded)) }
@@ -672,12 +674,13 @@ class OmiBleController(
         emitSnapshot()
       }
       UUID.fromString(OMI_AUDIO_UUID) -> codec?.let { codecId ->
-        if (!OmiBleLease.recordingReady(connectionState == "connected", audioNotifying, true)) return
+        if (value.isEmpty() || !OmiBleLease.recordingReady(connectionState == "connected", audioNotifying, true)) return
         emit("audio", Arguments.createMap().apply {
           putString("deviceId", id)
           putString("connectionId", currentGeneration.toString())
           putInt("codec", codecId)
           putString("payloadBase64", Base64.encodeToString(value, Base64.NO_WRAP))
+          if (capturedAtMs != null && capturedAtMs in 0L..8640000000000000L) putDouble("capturedAtMs", capturedAtMs.toDouble())
         })
       }
     }

@@ -666,3 +666,28 @@ describe("device session ingest", () => {
     expect(body.session).not.toHaveProperty("transcript");
   });
 });
+
+test("capture provenance preserves absence and exact millisecond bounds", () => {
+  const create = {
+    captureId: crypto.randomUUID(),
+    deviceId: "pendant",
+    codec: 1,
+  };
+  expect(parseDeviceSessionCreate(create)).not.toHaveProperty("capturedAtMs");
+  for (const capturedAtMs of [0, 1, 8640000000000000]) {
+    expect(
+      parseDeviceSessionCreate({ ...create, capturedAtMs })?.capturedAtMs
+    ).toBe(capturedAtMs);
+  }
+  for (const capturedAtMs of [
+    null,
+    -1,
+    0.5,
+    NaN,
+    Infinity,
+    "1",
+    8640000000000001,
+  ]) {
+    expect(parseDeviceSessionCreate({ ...create, capturedAtMs })).toBeNull();
+  }
+});
