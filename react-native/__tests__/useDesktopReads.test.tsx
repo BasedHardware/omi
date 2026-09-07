@@ -322,6 +322,26 @@ test('a task failure makes the read phase unavailable even when other domains su
 
   const reads = await renderReads({enabled: true});
   expect(reads.latest().readsPhase).toBe('unavailable');
+  expect(reads.latest().allHomeReadsUnavailable).toBe(false);
+  reads.unmount();
+});
+
+test('allHomeReadsUnavailable is only conversation and memory errors', async () => {
+  const outcomes = successOutcomes([]);
+  outcomes.conversations = {
+    status: 'error',
+    error: desktopBackendUnavailableCopy,
+  };
+  outcomes.memories = {
+    status: 'error',
+    error: desktopBackendUnavailableCopy,
+  };
+  readsMock.mockResolvedValue(outcomes);
+
+  const reads = await renderReads({enabled: true});
+  expect(reads.latest().allHomeReadsUnavailable).toBe(true);
+  expect(reads.latest().readOutcomes?.tasks.status).toBe('success');
+  expect(reads.latest().readsPhase).toBe('unavailable');
   reads.unmount();
 });
 

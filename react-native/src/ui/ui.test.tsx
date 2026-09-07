@@ -830,11 +830,32 @@ test('coverage copy wins over a complete Home search miss', () => {
     'memoryNotice ===\n                                        desktopBackendUnavailableCopy',
   );
   expect(orchestrator).toContain(
-    'taskNotice ===\n                                        desktopBackendUnavailableCopy',
+    'taskNotice === desktopBackendUnavailableCopy',
   );
   expect(orchestrator).toContain('<OutcomeStatus');
   expect(orchestrator).toContain('label="Tasks"');
   expect(orchestrator).toContain('outcome={readOutcomes.tasks}');
+  const unavailableGate = orchestrator.indexOf('!allHomeReadsUnavailable && (');
+  const tasksBlock = orchestrator.indexOf(
+    '{readOutcomes !== null && (\n                                <OutcomeStatus',
+  );
+  expect(unavailableGate).toBeGreaterThan(-1);
+  expect(tasksBlock).toBeGreaterThan(unavailableGate);
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).toContain(
+    'label="Conversations"',
+  );
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).toContain(
+    'label="Memories"',
+  );
+  expect(orchestrator.slice(unavailableGate, tasksBlock)).not.toContain(
+    'label="Tasks"',
+  );
+  expect(orchestrator.slice(tasksBlock, tasksBlock + 400)).toContain(
+    'label="Tasks"',
+  );
+  expect(orchestrator.slice(tasksBlock, tasksBlock + 400)).not.toContain(
+    'allHomeReadsUnavailable',
+  );
   expect(orchestrator).toContain('recapCoverageCopy=');
   expect(orchestrator).toContain('taskCoverageCopy=');
   expect(orchestrator).toContain("readStatusCopy(\n                'Recaps'");

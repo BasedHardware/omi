@@ -1439,16 +1439,17 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       label="Memories"
                                       outcome={readOutcomes.memories}
                                     />
-                                    <OutcomeStatus
-                                      continueUnavailable={
-                                        taskNotice ===
-                                        desktopBackendUnavailableCopy
-                                      }
-                                      label="Tasks"
-                                      outcome={readOutcomes.tasks}
-                                    />
                                   </View>
                                 )}
+                              {readOutcomes !== null && (
+                                <OutcomeStatus
+                                  continueUnavailable={
+                                    taskNotice === desktopBackendUnavailableCopy
+                                  }
+                                  label="Tasks"
+                                  outcome={readOutcomes.tasks}
+                                />
+                              )}
                             </View>
                           }
                           header={
