@@ -148,6 +148,27 @@ export function projectionTimestamp(
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
 }
 
+export function homeSearchItems(
+  reads: DesktopReadProjection[],
+  tasks: readonly TaskProjection[] | null,
+  query: string,
+): DesktopReadProjection[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  const matches = (item: DesktopReadProjection): boolean =>
+    normalized === '' ||
+    item.searchableText.toLocaleLowerCase().includes(normalized);
+  return [...reads.filter(matches), ...(tasks ?? []).filter(matches)].sort(
+    (left, right) => {
+      const leftTs = projectionTimestamp(left);
+      const rightTs = projectionTimestamp(right);
+      return (
+        (rightTs ?? Number.NEGATIVE_INFINITY) -
+        (leftTs ?? Number.NEGATIVE_INFINITY)
+      );
+    },
+  );
+}
+
 export function timelineGroups(
   items: DesktopReadProjection[],
   nowEpochMilliseconds: number,

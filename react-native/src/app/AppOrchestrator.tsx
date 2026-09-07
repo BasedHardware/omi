@@ -42,6 +42,7 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   desktopRecoveryCopy,
+  homeSearchItems,
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
@@ -367,12 +368,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [readOutcomes, route]);
 
   const homeResults = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
-    return reads.filter(
-      item =>
-        query === '' || item.searchableText.toLocaleLowerCase().includes(query),
+    return homeSearchItems(
+      reads,
+      readOutcomes !== null && readOutcomes.tasks.status === 'success'
+        ? readOutcomes.tasks.value.items
+        : null,
+      searchQuery,
     );
-  }, [reads, searchQuery]);
+  }, [readOutcomes, reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
   const homeSearchEmptyTitle = savedDataEmptyTitle(
     readOutcomes !== null && readOutcomes.conversations.status === 'success'

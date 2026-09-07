@@ -17,6 +17,7 @@ import {
   desktopReadErrorCopy,
   desktopReadsCanRetry,
   desktopRecoveryCopy,
+  homeSearchItems,
   loadConversations,
   loadDesktopReads,
   loadMemories,
@@ -346,6 +347,63 @@ describe('desktopRecoveryCopy', () => {
         success(),
       ),
     ).toBe(desktopBackendServiceCopy);
+  });
+});
+
+describe('homeSearchItems', () => {
+  const conversation: DesktopReadProjection = {
+    kind: 'conversation',
+    id: 'conversation-search',
+    title: 'Morning walk',
+    summary: 'Discussed the launch.',
+    searchableText: 'Morning walk\nDiscussed the launch.',
+    createdAt: '2026-08-14T01:00:00.000Z',
+    updatedAt: '2026-08-14T02:00:00.000Z',
+    startedAt: '2026-08-14T01:00:00.000Z',
+    finishedAt: '2026-08-14T01:30:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const task: DesktopReadProjection = {
+    kind: 'task',
+    id: 'task-search',
+    title: 'Ship the desktop chrome',
+    summary: 'Pending',
+    searchableText: 'Ship the desktop chrome',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'manual',
+    provenance: [],
+    sortOrder: 0,
+    indentLevel: 0,
+    createdAt: Date.parse('2026-08-14T03:00:00.000Z'),
+    updatedAt: Date.parse('2026-08-14T03:00:00.000Z'),
+    revision: '1',
+  };
+
+  test('includes matching tasks instead of only conversation and memory rows', () => {
+    expect(
+      homeSearchItems([conversation], [task], 'desktop chrome').map(
+        item => item.id,
+      ),
+    ).toEqual(['task-search']);
+    expect(
+      homeSearchItems([conversation], [task], 'walk').map(item => item.id),
+    ).toEqual(['conversation-search']);
+    expect(
+      homeSearchItems([], [task], 'desktop chrome').map(item => item.id),
+    ).toEqual(['task-search']);
+  });
+
+  test('omits tasks when the task page did not load', () => {
+    expect(homeSearchItems([conversation], null, 'desktop chrome')).toEqual([]);
   });
 });
 
