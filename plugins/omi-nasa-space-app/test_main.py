@@ -132,7 +132,13 @@ class MockTransport(httpx.AsyncBaseTransport):
 
         if "/planetary/apod" in url_str:
             if self.apod_not_found:
-                return httpx.Response(404, json={"code": 404, "msg": "Date out of range."})
+                return httpx.Response(
+                    400,
+                    json={
+                        "code": 400,
+                        "msg": "Date must be between Jun 16, 1995 and 2026-09-07.",
+                    },
+                )
             if self.apod_status == 200:
                 return httpx.Response(200, json=SAMPLE_APOD_PAYLOAD)
             return httpx.Response(self.apod_status, text="Error fetching APOD")
@@ -140,7 +146,9 @@ class MockTransport(httpx.AsyncBaseTransport):
         elif "/neo/rest/v1/feed" in url_str:
             if self.neo_status == 200:
                 if self.neo_empty:
-                    return httpx.Response(200, json={"element_count": 0, "near_earth_objects": {}})
+                    return httpx.Response(
+                        200, json={"element_count": 0, "near_earth_objects": {}}
+                    )
                 return httpx.Response(200, json=SAMPLE_NEO_PAYLOAD)
             return httpx.Response(self.neo_status, text="Error fetching NeoWs")
 
@@ -149,7 +157,9 @@ class MockTransport(httpx.AsyncBaseTransport):
                 if self.search_empty:
                     return httpx.Response(200, json={"collection": {"items": []}})
                 return httpx.Response(200, json=SAMPLE_IMAGE_SEARCH_PAYLOAD)
-            return httpx.Response(self.search_status, text="Error searching NASA images")
+            return httpx.Response(
+                self.search_status, text="Error searching NASA images"
+            )
 
         return httpx.Response(404, json={"message": "Not Found"})
 
@@ -209,7 +219,8 @@ def test_health_degraded_images_failure(monkeypatch):
         assert data["upstream_nasa_api"] == "unreachable"
 
 
-def test_health_degraded_apod_failure(monkeypatch):
+def test_health_unaffected_by_apod_status_preserves_quota(monkeypatch):
+    """Ensure /health probes only the keyless images API and does not burn APOD/DEMO_KEY quota."""
     mock_client = httpx.AsyncClient(
         transport=MockTransport(apod_status=500),
         headers={"User-Agent": "OmiTestApp/1.0"},
@@ -219,8 +230,8 @@ def test_health_degraded_apod_failure(monkeypatch):
         response = c.get("/health")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "degraded"
-        assert data["upstream_nasa_api"] == "unreachable"
+        assert data["status"] == "healthy"
+        assert data["upstream_nasa_api"] == "reachable"
 
 
 def test_omi_tools_manifest(client):
@@ -266,7 +277,8 @@ def test_get_astronomy_picture_historical_date(client):
     assert "Pelican Nebula" in data["result"]
 
 
-def test_get_astronomy_picture_not_found(monkeypatch):
+def test_get_astronomy_picture_out_of_range_date_400(monkeypatch):
+    """Ensure out-of-range dates returning HTTP 400 from NASA APOD are handled gracefully."""
     mock_client = httpx.AsyncClient(
         transport=MockTransport(apod_not_found=True),
         headers={"User-Agent": "OmiTestApp/1.0"},
@@ -275,7 +287,32 @@ def test_get_astronomy_picture_not_found(monkeypatch):
     with TestClient(app) as c:
         response = c.post("/tools/get-astronomy-picture", json={"date": "1990-01-01"})
         assert response.status_code == 200
-        assert "No NASA Astronomy Picture of the Day found for date '1990-01-01'" in response.json()["result"]
+        result = response.json()["result"]
+        assert (
+            "No NASA Astronomy Picture of the Day found for date '1990-01-01'" in result
+        )
+        assert "Date must be between Jun 16, 1995" in result
+
+
+def test_get_astronomy_picture_not_found_404(monkeypatch):
+    """Ensure upstream HTTP 404 responses are handled gracefully."""
+
+    class Apod404Transport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"message": "Not Found"})
+
+    mock_client = httpx.AsyncClient(
+        transport=Apod404Transport(),
+        headers={"User-Agent": "OmiTestApp/1.0"},
+    )
+    monkeypatch.setattr("main.http_client", mock_client)
+    with TestClient(app) as c:
+        response = c.post("/tools/get-astronomy-picture", json={"date": "1996-01-01"})
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert (
+            "No NASA Astronomy Picture of the Day found for date '1996-01-01'" in result
+        )
 
 
 def test_get_astronomy_picture_invalid_date_format(client):
@@ -316,7 +353,10 @@ def test_get_astronomy_picture_video_with_thumbnail(monkeypatch):
         assert response.status_code == 200
         result = response.json()["result"]
         assert "Watch Video" in result
-        assert "[Video Thumbnail](https://img.youtube.com/vi/sample123/hqdefault.jpg)" in result
+        assert (
+            "[Video Thumbnail](https://img.youtube.com/vi/sample123/hqdefault.jpg)"
+            in result
+        )
 
 
 def test_get_astronomy_picture_upstream_failure(monkeypatch):
@@ -343,7 +383,9 @@ def test_get_near_earth_asteroids_success(client):
 
 
 def test_get_near_earth_asteroids_hazardous_filter(client):
-    response = client.post("/tools/get-near-earth-asteroids", json={"limit": 5, "hazardous_only": True})
+    response = client.post(
+        "/tools/get-near-earth-asteroids", json={"limit": 5, "hazardous_only": True}
+    )
     assert response.status_code == 200
     data = response.json()
     text = data["result"]
@@ -382,7 +424,9 @@ def test_get_near_earth_asteroids_upstream_failure(monkeypatch):
 
 
 def test_search_nasa_media_success(client):
-    response = client.post("/tools/search-nasa-media", json={"query": "James Webb", "limit": 2})
+    response = client.post(
+        "/tools/search-nasa-media", json={"query": "James Webb", "limit": 2}
+    )
     assert response.status_code == 200
     data = response.json()
     assert "result" in data
@@ -400,7 +444,9 @@ def test_search_nasa_media_empty(monkeypatch):
     )
     monkeypatch.setattr("main.http_client", mock_client)
     with TestClient(app) as c:
-        response = c.post("/tools/search-nasa-media", json={"query": "nonexistentobject123xyz"})
+        response = c.post(
+            "/tools/search-nasa-media", json={"query": "nonexistentobject123xyz"}
+        )
         assert response.status_code == 200
         assert "No NASA multimedia records found" in response.json()["result"]
 
@@ -411,7 +457,9 @@ def test_search_nasa_media_empty_query_rejected(client):
 
 
 def test_search_nasa_media_invalid_limit(client):
-    response = client.post("/tools/search-nasa-media", json={"query": "Mars", "limit": 50})
+    response = client.post(
+        "/tools/search-nasa-media", json={"query": "Mars", "limit": 50}
+    )
     assert response.status_code == 422
 
 

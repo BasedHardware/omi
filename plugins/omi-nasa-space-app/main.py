@@ -16,7 +16,6 @@ import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.middleware.cors import CORSMiddleware
 import httpx
 
 from models import (
@@ -209,14 +208,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 @app.get("/")
 async def root() -> Dict[str, Any]:
@@ -236,29 +227,24 @@ async def root() -> Dict[str, Any]:
 
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
-    """Health check endpoint with cached probe to NASA upstream APIs."""
+    """Health check endpoint probing keyless NASA upstream (images-api.nasa.gov).
+
+    Probes the keyless images API to verify upstream NASA connectivity without
+    consuming rate-limited NASA_API_KEY or DEMO_KEY quota during routine
+    container/deployment healthchecks.
+    """
     cached_status = cache.get("health_upstream_status")
 
     if cached_status is None:
         upstream_ok = False
         client = get_http_client()
         try:
-            images_task = client.get(
+            resp = await client.get(
                 f"{NASA_IMAGES_BASE_URL}/search",
                 params={"q": "sun", "media_type": "image"},
                 timeout=3.5,
             )
-            api_task = client.get(
-                f"{NASA_API_BASE_URL}/planetary/apod",
-                params={"api_key": NASA_API_KEY},
-                timeout=3.5,
-            )
-            images_resp, api_resp = await asyncio.gather(
-                images_task, api_task, return_exceptions=True
-            )
-            images_ok = not isinstance(images_resp, Exception) and images_resp.status_code == 200
-            api_ok = not isinstance(api_resp, Exception) and api_resp.status_code == 200
-            upstream_ok = images_ok and api_ok
+            upstream_ok = resp.status_code == 200
         except Exception as e:
             logger.warning("NASA upstream health probe failed: %s", e)
         cached_status = upstream_ok
@@ -324,7 +310,7 @@ async def omi_tools_manifest() -> Dict[str, Any]:
             },
             {
                 "name": "search_nasa_media",
-                "description": "Search NASA's official 140,000+ photo and mission archive (Hubble, James Webb Space Telescope, Mars rovers, Apollo, nebulae).",
+                "description": "Search NASA's official photo and mission archive (Hubble, James Webb Space Telescope, Mars rovers, Apollo, nebulae).",
                 "endpoint": "/tools/search-nasa-media",
                 "method": "POST",
                 "auth_required": False,
@@ -371,9 +357,25 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
             resp = await client.get(
                 f"{NASA_API_BASE_URL}/planetary/apod", params=params
             )
-            if resp.status_code == 404:
+            if resp.status_code in (400, 404):
+                error_detail = ""
+                try:
+                    err_json = resp.json()
+                    if isinstance(err_json, dict):
+                        error_detail = (
+                            err_json.get("msg")
+                            or err_json.get("error", {}).get("message")
+                            or ""
+                        )
+                except Exception:
+                    pass
+                target = f" for date '{date_str}'" if date_str else ""
+                if error_detail:
+                    return ChatToolResponse(
+                        result=f"No NASA Astronomy Picture of the Day found{target}: {error_detail}"
+                    )
                 return ChatToolResponse(
-                    result=f"No NASA Astronomy Picture of the Day found for date '{date_str}'."
+                    result=f"No NASA Astronomy Picture of the Day found{target}."
                 )
             if resp.status_code != 200:
                 raise HTTPException(
@@ -416,7 +418,9 @@ async def get_astronomy_picture(payload: ApodRequest) -> ChatToolResponse:
     explanation = apod.explanation.strip()
     if len(explanation) > 500:
         cutoff = explanation[:497].rfind(" ")
-        explanation = explanation[:cutoff] + "..." if cutoff > 0 else explanation[:497] + "..."
+        explanation = (
+            explanation[:cutoff] + "..." if cutoff > 0 else explanation[:497] + "..."
+        )
     lines.append(f"\n{explanation}\n")
 
     links = []
@@ -496,13 +500,21 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
         time_raw = None
         if close_data:
             first_approach = close_data[0]
-            time_raw = first_approach.get("close_approach_date_full") or first_approach.get("close_approach_date")
+            time_raw = first_approach.get(
+                "close_approach_date_full"
+            ) or first_approach.get("close_approach_date")
             try:
-                miss_km = float(first_approach.get("miss_distance", {}).get("kilometers", 0.0))
+                miss_km = float(
+                    first_approach.get("miss_distance", {}).get("kilometers", 0.0)
+                )
             except (ValueError, TypeError):
                 miss_km = 0.0
             try:
-                velocity_kmh = float(first_approach.get("relative_velocity", {}).get("kilometers_per_hour", 0.0))
+                velocity_kmh = float(
+                    first_approach.get("relative_velocity", {}).get(
+                        "kilometers_per_hour", 0.0
+                    )
+                )
             except (ValueError, TypeError):
                 velocity_kmh = 0.0
 
@@ -512,8 +524,12 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
         parsed_asteroids.append(
             AsteroidItem(
                 name=a.get("name", "Unknown Asteroid"),
-                estimated_diameter_min_m=float(diam_info.get("estimated_diameter_min", 0.0)),
-                estimated_diameter_max_m=float(diam_info.get("estimated_diameter_max", 0.0)),
+                estimated_diameter_min_m=float(
+                    diam_info.get("estimated_diameter_min", 0.0)
+                ),
+                estimated_diameter_max_m=float(
+                    diam_info.get("estimated_diameter_max", 0.0)
+                ),
                 is_potentially_hazardous=is_hazard,
                 close_approach_time=time_raw,
                 miss_distance_km=miss_km,
@@ -522,7 +538,9 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
         )
 
     if not parsed_asteroids:
-        filter_note = " classified as potentially hazardous" if payload.hazardous_only else ""
+        filter_note = (
+            " classified as potentially hazardous" if payload.hazardous_only else ""
+        )
         return ChatToolResponse(
             result=f"No near-Earth asteroids{filter_note} detected for today ({today_str})."
         )
@@ -532,7 +550,9 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
     selected = parsed_asteroids[: payload.limit]
 
     total_count = cached_data.get("element_count", len(raw_asteroids))
-    hazard_count = sum(1 for a in raw_asteroids if a.get("is_potentially_hazardous_asteroid"))
+    hazard_count = sum(
+        1 for a in raw_asteroids if a.get("is_potentially_hazardous_asteroid")
+    )
 
     lines = [
         f"☄️ **NASA Near-Earth Asteroid Tracking — {today_str}**",
@@ -540,7 +560,11 @@ async def get_near_earth_asteroids(payload: AsteroidFeedRequest) -> ChatToolResp
     ]
 
     for idx, item in enumerate(selected, 1):
-        status_flag = "⚠️ **POTENTIALLY HAZARDOUS**" if item.is_potentially_hazardous else "🟢 Safe Trajectory"
+        status_flag = (
+            "⚠️ **POTENTIALLY HAZARDOUS**"
+            if item.is_potentially_hazardous
+            else "🟢 Safe Trajectory"
+        )
         avg_diam = (item.estimated_diameter_min_m + item.estimated_diameter_max_m) / 2.0
         time_display = item.close_approach_time.strftime("%Y-%m-%d %H:%M UTC")
         lines.append(
@@ -572,9 +596,7 @@ async def search_nasa_media(payload: NasaSearchRequest) -> ChatToolResponse:
             "page_size": payload.limit,
         }
         try:
-            resp = await client.get(
-                f"{NASA_IMAGES_BASE_URL}/search", params=params
-            )
+            resp = await client.get(f"{NASA_IMAGES_BASE_URL}/search", params=params)
             if resp.status_code != 200:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,

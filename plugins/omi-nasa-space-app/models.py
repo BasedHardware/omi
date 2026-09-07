@@ -75,7 +75,11 @@ class AsteroidItem(BaseModel):
     @classmethod
     def parse_close_approach_time(cls, v: Any) -> datetime:
         if isinstance(v, datetime):
-            return v.astimezone(timezone.utc) if v.tzinfo else v.replace(tzinfo=timezone.utc)
+            return (
+                v.astimezone(timezone.utc)
+                if v.tzinfo
+                else v.replace(tzinfo=timezone.utc)
+            )
         if isinstance(v, str):
             v_str = v.strip()
             # Try formats returned by NASA NeoWs
@@ -88,7 +92,11 @@ class AsteroidItem(BaseModel):
             # Try standard ISO parsing
             try:
                 dt = datetime.fromisoformat(v_str)
-                return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                return (
+                    dt.astimezone(timezone.utc)
+                    if dt.tzinfo
+                    else dt.replace(tzinfo=timezone.utc)
+                )
             except ValueError:
                 pass
         raise ValueError(f"Unable to parse close_approach_time timestamp: {v}")
@@ -140,7 +148,7 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
     def __init__(self, **data: Any):
-        # Support response alias if passed
+        # Backward-compatibility alias shim for legacy plugin callers passing 'response' instead of 'result' (e.g. plugins/basic conventions)
         if "response" in data and "result" not in data:
             data["result"] = data.pop("response")
         super().__init__(**data)

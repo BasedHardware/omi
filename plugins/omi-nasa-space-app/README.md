@@ -21,7 +21,7 @@ This plugin exposes three unauthenticated, high-utility function-calling tools v
    - Provides estimated diameters (meters), relative velocities (km/h), close approach miss distances (km), and hazard status.
 
 3. **`search_nasa_media`** (`POST /tools/search-nasa-media`)
-   - Searches NASA's official 140,000+ photo and mission archive (Hubble, James Webb Space Telescope, Mars rovers, Apollo, nebulae, exoplanets).
+   - Searches NASA's official photo and mission archive (Hubble, James Webb Space Telescope, Mars rovers, Apollo, nebulae, exoplanets).
    - Returns mission summaries, NASA IDs, capture dates, and image preview links.
 
 ---
@@ -74,5 +74,5 @@ Deployable to Railway, Heroku, or any standard container environment:
 - **Procfile**: `web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}`
 - **railway.toml**: Nixpacks deployment with healthcheck path `/health`
 - **Environment Variables**:
-  - `NASA_API_KEY`: Optional custom NASA API key (defaults to `DEMO_KEY`)
+  - `NASA_API_KEY`: Custom NASA API key from https://api.nasa.gov (recommended for production deployments to expand quota beyond `DEMO_KEY`'s 30 req/hour limit; defaults to `DEMO_KEY`). Note that `/health` probes only the unthrottled, keyless `images-api.nasa.gov` endpoint to prevent automated container healthchecks from exhausting API key quotas.
   - `NASA_REQUEST_TIMEOUT`: Outbound HTTP request timeout in seconds (default `10.0`)
