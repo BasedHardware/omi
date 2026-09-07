@@ -124,6 +124,8 @@ test('old plane keeps every software path on api.omi.me', () => {
   expect(isCaptureBackendPath('/v1/conversations')).toBe(true);
   expect(isCaptureBackendPath('/v1/memories')).toBe(true);
   expect(isCaptureBackendPath('/v1/tasks')).toBe(true);
+  expect(isCaptureBackendPath('/v1/tasks/ops')).toBe(true);
+  expect(isCaptureBackendPath('/v1/tasks/ops?idempotencyKey=1')).toBe(true);
   expect(isCaptureBackendPath('/v1/apps')).toBe(false);
   expect(isCaptureBackendPath('/v1/conversations?limit=50&offset=0')).toBe(
     true,
@@ -139,6 +141,19 @@ test('old plane keeps every software path on api.omi.me', () => {
       v5BackendUrl: workerOrigin,
     }),
   ).toEqual({ok: true, origin: workerOrigin});
+  expect(
+    resolveNativeRequestOrigin({
+      path: '/v1/tasks/ops',
+      softwarePlane: 'new',
+      v5BackendUrl: workerOrigin,
+    }),
+  ).toEqual({ok: true, origin: workerOrigin});
+  expect(
+    resolveNativeRequestOrigin({
+      path: '/v1/chat-messages',
+      softwarePlane: 'new',
+    }),
+  ).toEqual({ok: false, reason: 'unconfigured'});
   expect(
     resolveNativeRequestOrigin({
       path: '/v1/apps',

@@ -27,6 +27,7 @@ import {
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
+import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
 
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
@@ -70,6 +71,55 @@ function SettingRow({
   );
 }
 
+function BackendPlaneRow({
+  busy,
+  onSelect,
+  plane,
+  stampedOrigin,
+}: {
+  busy: boolean;
+  onSelect: (plane: SoftwarePlane) => void;
+  plane: SoftwarePlane;
+  stampedOrigin: string | null;
+}) {
+  const copy =
+    plane === 'new'
+      ? stampedOrigin != null
+        ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
+        : 'New is selected, but no valid stamped v5 origin is configured.'
+      : 'Old backend uses your existing Omi account and api.omi.me.';
+  return (
+    <View style={styles.cloudRow}>
+      <View style={styles.cloudRowBody}>
+        <Text style={styles.cloudRowTitle}>Backend</Text>
+        <Text style={styles.cloudRowMeta}>{copy}</Text>
+      </View>
+      <View>
+        {(['old', 'new'] as const).map(option => (
+          <FocusPressable
+            accessibilityLabel={
+              option === 'new' ? 'Use New backend' : 'Use Old backend'
+            }
+            accessibilityRole="button"
+            accessibilityState={{selected: plane === option}}
+            disabled={busy}
+            key={option}
+            onPress={() => onSelect(option)}
+            style={({pressed}) => [
+              styles.cloudAction,
+              settingsStyles.touchAction,
+              pressed && styles.pressed,
+            ]}>
+            <Text style={styles.cloudActionText}>
+              {option === 'new' ? 'New backend' : 'Old backend'}
+            </Text>
+          </FocusPressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function SettingsPage({
   onSignIn,
   onSignOut,
@@ -92,8 +142,34 @@ export function SettingsPage({
   );
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [softwarePlane, setSoftwarePlane] = useState<SoftwarePlane | null>(
+    null,
+  );
+  const [stampedV5Origin, setStampedV5Origin] = useState<string | null>(null);
   const loadGeneration = useRef(0);
   const mounted = useRef(false);
+
+  const reloadSoftwarePlane = useCallback(async () => {
+    const backend = omiBackend;
+    if (
+      backend?.getSoftwarePlane === undefined ||
+      backend.setSoftwarePlane === undefined
+    ) {
+      setSoftwarePlane(null);
+      setStampedV5Origin(null);
+      return;
+    }
+    const [plane, origin] = await Promise.all([
+      backend.getSoftwarePlane(),
+      backend.stampedV5BackendOrigin === undefined
+        ? Promise.resolve(null)
+        : backend.stampedV5BackendOrigin(),
+    ]);
+    setSoftwarePlane(parseSoftwarePlane(plane));
+    setStampedV5Origin(
+      typeof origin === 'string' && origin.length > 0 ? origin : null,
+    );
+  }, []);
 
   const reload = useCallback(async () => {
     if (!mounted.current) {
@@ -177,10 +253,29 @@ export function SettingsPage({
   useEffect(() => {
     mounted.current = true;
     reload().catch(() => undefined);
+    reloadSoftwarePlane().catch(() => undefined);
     return () => {
       mounted.current = false;
     };
-  }, [reload]);
+  }, [reload, reloadSoftwarePlane]);
+
+  const selectSoftwarePlane = async (plane: SoftwarePlane) => {
+    const backend = omiBackend;
+    if (backend?.setSoftwarePlane === undefined || pending !== null) {
+      return;
+    }
+    setPending('software-plane');
+    setActionError(null);
+    try {
+      const next = parseSoftwarePlane(await backend.setSoftwarePlane(plane));
+      setSoftwarePlane(next);
+      await reload();
+    } catch (reason) {
+      setActionError(desktopReadErrorCopy(reason));
+    } finally {
+      setPending(null);
+    }
+  };
 
   const runAction = async (id: string, action: () => Promise<void>) => {
     if (pending !== null) {
@@ -417,6 +512,16 @@ export function SettingsPage({
 
   return (
     <ScrollView contentContainerStyle={styles.destinationPage}>
+      {!browser && softwarePlane !== null && (
+        <BackendPlaneRow
+          busy={pending === 'software-plane'}
+          onSelect={plane => {
+            selectSoftwarePlane(plane).catch(() => undefined);
+          }}
+          plane={softwarePlane}
+          stampedOrigin={stampedV5Origin}
+        />
+      )}
       <View accessibilityRole="tablist" style={styles.destinationTabs}>
         {sections
           .filter(label => !browser || label !== 'Developer')

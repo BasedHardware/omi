@@ -1,5 +1,6 @@
 package com.rnruntime
 
+import android.content.Context
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -101,6 +102,26 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       } catch (error: TransportException) { promise.reject(error.code, error.message) }
       catch (_: Exception) { promise.reject("OMI_HTTP_UNCONFIGURED", "Native HTTP configuration is unavailable") }
     }
+  }
+
+  @ReactMethod
+  fun getSoftwarePlane(promise: Promise) {
+    promise.resolve(resolvedSoftwarePlane())
+  }
+
+  @ReactMethod
+  fun setSoftwarePlane(plane: String, promise: Promise) {
+    val value = if (plane == "new") "new" else "old"
+    if (!softwarePlaneStore().edit().putString(OmiBackendTransport.SOFTWARE_PLANE_KEY, value).commit()) {
+      promise.reject("OMI_HTTP_UNCONFIGURED", "Native backend selection could not be saved")
+      return
+    }
+    promise.resolve(value)
+  }
+
+  @ReactMethod
+  fun stampedV5BackendOrigin(promise: Promise) {
+    promise.resolve(validatedV5URL(System.getenv()["OMI_V5_BACKEND_URL"].orEmpty())?.toString())
   }
 
   @ReactMethod
@@ -520,16 +541,27 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       emitSessionInvalidated()
       return null
     }
-    val v5URL = environment["OMI_V5_BACKEND_URL"].orEmpty()
+    val stamp = validatedV5URL(environment["OMI_V5_BACKEND_URL"].orEmpty())
+    val plane = resolvedSoftwarePlane(stamp != null)
+    if (OmiBackendTransport.softwarePlaneIsNew(plane) && stamp == null) return null
     return BackendPolicy(
       url = URI(CLOUD_ORIGIN),
       token = cloud,
       clientId = "omi-android",
       kind = CredentialKind.Cloud,
-      captureOriginRequired = v5URL.isNotEmpty(),
-      captureUrl = if (v5URL.isNotEmpty()) validatedV5URL(v5URL) else null,
+      captureOriginRequired = OmiBackendTransport.softwarePlaneIsNew(plane),
+      captureUrl = stamp,
     )
   }
+
+  private fun softwarePlaneStore() =
+    reactApplicationContext.getSharedPreferences(OmiBackendTransport.SOFTWARE_PLANE_PREFERENCES, Context.MODE_PRIVATE)
+
+  private fun resolvedSoftwarePlane(stampedValid: Boolean = validatedV5URL(System.getenv()["OMI_V5_BACKEND_URL"].orEmpty()) != null) =
+    OmiBackendTransport.resolvedSoftwarePlane(
+      softwarePlaneStore().getString(OmiBackendTransport.SOFTWARE_PLANE_KEY, null),
+      stampedValid,
+    )
 
   private fun isCloudHost(host: String?): Boolean {
     return host?.lowercase(Locale.US) == "api.omi.me"

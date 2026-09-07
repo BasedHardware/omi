@@ -28,7 +28,6 @@ import {
   stepMotionDuration,
 } from './desktopMotion';
 import {
-  CLOUD_BACKEND_ORIGIN,
   parseSoftwarePlane,
   resolveNativeRequestOrigin,
 } from '../v5BackendOrigin';
@@ -173,5 +172,5 @@ test('a valid stamped origin defaults fresh installs to the new plane', () => {
       path: '/v1/chat-messages',
       softwarePlane: 'new',
     }),
-  ).toEqual({ok: true, origin: CLOUD_BACKEND_ORIGIN});
+  ).toEqual({ok: false, reason: 'unconfigured'});
 });
