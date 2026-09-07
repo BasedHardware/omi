@@ -61,9 +61,13 @@ static NSString *OmiSoftwarePlaneValue(void) {
   return OmiSoftwarePlaneIsNew() ? @"new" : @"old";
 }
 
+static NSString *OmiBackendRoute(NSString *path) {
+  NSRange delimiter = [path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"?#"]];
+  return delimiter.location == NSNotFound ? path : [path substringToIndex:delimiter.location];
+}
+
 static BOOL OmiIsCaptureBackendPath(NSString *path) {
-  NSURLComponents *components = [NSURLComponents componentsWithString:path];
-  NSString *route = components.path;
+  NSString *route = OmiBackendRoute(path);
   return [route isEqualToString:@"/v1/settings"] ||
       [route isEqualToString:@"/v1/chat-messages"] ||
       [route hasPrefix:@"/v1/chat-generations/"] ||
@@ -452,8 +456,7 @@ static BOOL OmiApplyAuthorization(NSMutableURLRequest *request, OmiBackendPolicy
 }
 
 static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
-  NSURLComponents *components = [NSURLComponents componentsWithString:path];
-  NSString *route = components.path;
+  NSString *route = OmiBackendRoute(path);
   return ([method isEqualToString:@"GET"] &&
       ([route isEqualToString:@"/v1/conversations"] ||
        [route isEqualToString:@"/v1/memories"] ||

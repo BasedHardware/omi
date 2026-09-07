@@ -671,6 +671,39 @@ test('rejects an empty memory cursor before issuing a read', async () => {
   );
 });
 
+test('accepts ratified partial completeness instead of treating honest pages as malformed', async () => {
+  const memories = {
+    ...page([memory], 'recall-completeness-v1'),
+    completeness: {
+      version: 'recall-completeness-v1',
+      status: 'partial',
+      reasons: ['source_bound'],
+    },
+  };
+  const tasks = {
+    ...page([task], 'tasks-completeness-v1'),
+    completeness: {
+      version: 'tasks-completeness-v1',
+      status: 'partial',
+      reasons: ['source_bound'],
+    },
+  };
+  await expect(
+    loadMemories(
+      backendFor(() => ({status: 200, body: JSON.stringify(memories)})),
+    ),
+  ).resolves.toMatchObject({
+    items: [expect.objectContaining({id: 'memory1_abc'})],
+    page: {completenessStatus: 'partial', reasons: ['source_bound']},
+  });
+  await expect(
+    loadTasks(backendFor(() => ({status: 200, body: JSON.stringify(tasks)}))),
+  ).resolves.toMatchObject({
+    items: [expect.objectContaining({id: 'task1_abc'})],
+    page: {completenessStatus: 'partial', reasons: ['source_bound']},
+  });
+});
+
 test('preserves an incomplete task projection and its reasons', async () => {
   const response = {
     ...page([task], 'tasks-completeness-v1'),
