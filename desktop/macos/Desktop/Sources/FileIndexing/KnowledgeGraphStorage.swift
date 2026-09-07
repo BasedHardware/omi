@@ -175,3 +175,22 @@ actor KnowledgeGraphStorage {
     }
   }
 }
+
+// MARK: - Schema
+
+/// Migrations for the local knowledge-graph tables, registered from
+/// `RewindDatabase` alongside the rest of the schema.
+enum LocalKGSchema {
+  static func registerMigrations(on migrator: inout DatabaseMigrator) {
+    // A Brain Map rebuild cites what each relationship came from; the edge
+    // table predates that and only carried the node's citations.
+    migrator.registerMigration("addLocalKGEdgeCitations") { db in
+      guard try db.columns(in: "local_kg_edges").contains(where: { $0.name == "memoryIdsJson" }) == false else {
+        return
+      }
+      try db.alter(table: "local_kg_edges") { t in
+        t.add(column: "memoryIdsJson", .text)
+      }
+    }
+  }
+}

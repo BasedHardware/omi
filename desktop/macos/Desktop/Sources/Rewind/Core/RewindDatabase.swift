@@ -2640,7 +2640,7 @@ actor RewindDatabase {
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
     Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
-    Self.registerLocalKGEdgeCitations(on: &migrator)
+    LocalKGSchema.registerMigrations(on: &migrator)
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
@@ -2710,19 +2710,6 @@ actor RewindDatabase {
     }
     try db.alter(table: "transcription_sessions") { t in
       t.add(column: name, type)
-    }
-  }
-
-  /// A Brain Map rebuild cites what each relationship came from; the edge
-  /// table predates that and only carried the node's citations.
-  static func registerLocalKGEdgeCitations(on migrator: inout DatabaseMigrator) {
-    migrator.registerMigration("addLocalKGEdgeCitations") { db in
-      guard try db.columns(in: "local_kg_edges").contains(where: { $0.name == "memoryIdsJson" }) == false else {
-        return
-      }
-      try db.alter(table: "local_kg_edges") { t in
-        t.add(column: "memoryIdsJson", .text)
-      }
     }
   }
 

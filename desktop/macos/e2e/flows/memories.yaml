@@ -43,6 +43,8 @@ covers:
   # The desktop-side rebuild the Rebuild control falls back to when the server refuses (S8b).
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/BrainMapLocalRebuild.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+MemoryAtlas.swift
+  - desktop/macos/Desktop/Sources/NotificationWaiter.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
 preconditions:

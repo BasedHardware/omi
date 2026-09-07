@@ -343,6 +343,23 @@ enum BrainMapLocalGraphMerge {
   }
 }
 
+// MARK: - Outcome
+
+/// How an accepted Brain Map rebuild ended, for the automation bridge and the logs.
+struct MemoryAtlasRebuildOutcome: Equatable, Sendable {
+  enum Path: String, Sendable {
+    /// The server rebuilt and this Mac waited for it.
+    case server
+    /// The server refused; this Mac rebuilt from the same sources.
+    case local
+  }
+  let succeeded: Bool
+  let path: Path
+  let nodeCount: Int
+  let edgeCount: Int
+  let detail: String
+}
+
 // MARK: - The rebuild itself
 
 /// Rebuilds the Brain Map on this Mac from everything the account knows.

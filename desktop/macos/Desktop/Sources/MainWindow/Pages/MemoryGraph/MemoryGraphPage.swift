@@ -487,21 +487,6 @@ class MemoryGraphViewModel: ObservableObject {
   /// limit, and a server without the route at all.
   static let serverRebuildRefusals: Set<Int> = [404, 405, 409, 429]
 
-  /// How an accepted rebuild ended, for the automation bridge and the logs.
-  struct RebuildOutcome: Equatable, Sendable {
-    enum Path: String, Sendable {
-      /// The server rebuilt and this Mac waited for it.
-      case server
-      /// The server refused; this Mac rebuilt from the same sources.
-      case local
-    }
-    let succeeded: Bool
-    let path: Path
-    let nodeCount: Int
-    let edgeCount: Int
-    let detail: String
-  }
-
   /// Rebuild the atlas graph from everything the account knows, waiting for
   /// the rebuild this call started.
   ///
@@ -555,9 +540,11 @@ class MemoryGraphViewModel: ObservableObject {
   private func performRebuild(
     generation: Int,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async -> RebuildOutcome {
-    func outcome(_ succeeded: Bool, _ path: RebuildOutcome.Path, _ detail: String) -> RebuildOutcome {
-      RebuildOutcome(
+  ) async -> MemoryAtlasRebuildOutcome {
+    func outcome(_ succeeded: Bool, _ path: MemoryAtlasRebuildOutcome.Path, _ detail: String)
+      -> MemoryAtlasRebuildOutcome
+    {
+      MemoryAtlasRebuildOutcome(
         succeeded: succeeded, path: path, nodeCount: graphResponse.atlasNodes.count,
         edgeCount: graphResponse.edges.count, detail: detail)
     }
@@ -671,9 +658,9 @@ class MemoryGraphViewModel: ObservableObject {
   private func rebuildLocally(
     generation: Int,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async -> RebuildOutcome {
-    func outcome(_ succeeded: Bool, _ detail: String) -> RebuildOutcome {
-      RebuildOutcome(
+  ) async -> MemoryAtlasRebuildOutcome {
+    func outcome(_ succeeded: Bool, _ detail: String) -> MemoryAtlasRebuildOutcome {
+      MemoryAtlasRebuildOutcome(
         succeeded: succeeded, path: .local, nodeCount: graphResponse.atlasNodes.count,
         edgeCount: graphResponse.edges.count, detail: detail)
     }
