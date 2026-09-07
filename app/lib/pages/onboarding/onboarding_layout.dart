@@ -12,3 +12,27 @@ double onboardingBottomBlockMaxHeight(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   return size.height * 0.5 - 8;
 }
+
+/// Sizes a bottom-block's copy to the height it is given instead of
+/// scrolling it: at its natural size when it fits, scaled down uniformly
+/// (text, spacing and tiles together) when it does not, so the block never
+/// climbs into the artwork and never needs to scroll. Wrap the copy only —
+/// buttons stay outside at full size.
+class OnboardingFitToHeight extends StatelessWidget {
+  final Widget child;
+
+  const OnboardingFitToHeight({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.bottomCenter,
+          child: SizedBox(width: constraints.maxWidth, child: child),
+        );
+      },
+    );
+  }
+}

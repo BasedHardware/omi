@@ -31,8 +31,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
               child: Container(), // Just takes up space for background image
             ),
 
-            // Stays below the dot-ring backdrop; the tiles scroll if they must
-            // while the Continue button stays pinned.
+            // Stays below the dot-ring backdrop; the title and tiles scale down
+            // if they must while the Continue button stays full size.
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: onboardingBottomBlockMaxHeight(context)),
               child: Container(
@@ -44,7 +44,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Flexible(
-                        child: SingleChildScrollView(
+                        child: OnboardingFitToHeight(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [

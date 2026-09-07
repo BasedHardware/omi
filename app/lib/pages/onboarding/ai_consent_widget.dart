@@ -41,7 +41,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
     return Column(
       children: [
         Expanded(child: Container()),
-        // Stays below the device artwork; the copy scrolls if it must.
+        // Stays below the device artwork; the copy scales down if it must.
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: onboardingBottomBlockMaxHeight(context)),
           child: Container(
@@ -54,8 +54,9 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Flexible(
-                    child: SingleChildScrollView(
+                    child: OnboardingFitToHeight(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
