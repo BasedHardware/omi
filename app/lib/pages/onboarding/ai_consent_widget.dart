@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/onboarding/onboarding_layout.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -40,13 +41,12 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
     return Column(
       children: [
         Expanded(child: Container()),
+        // Stays below the device artwork; the copy scrolls if it must.
         ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: mediaQuery.size.height - mediaQuery.padding.top - 16,
-          ),
+          constraints: BoxConstraints(maxHeight: onboardingBottomBlockMaxHeight(context)),
           child: Container(
             width: double.infinity,
-            padding: EdgeInsets.fromLTRB(32, 26, 32, mediaQuery.padding.bottom + 8),
+            padding: EdgeInsets.fromLTRB(32, 16, 32, mediaQuery.padding.bottom + 8),
             child: SafeArea(
               top: false,
               child: Column(
@@ -68,13 +68,13 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
                               fontFamily: 'Manrope',
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           Text(
                             context.l10n.consentDataMessage,
                             style:
-                                const TextStyle(color: Colors.white, fontSize: 15, height: 1.5, fontFamily: 'Manrope'),
+                                const TextStyle(color: Colors.white, fontSize: 14, height: 1.45, fontFamily: 'Manrope'),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           RichText(
                             text: TextSpan(
                               style: TextStyle(
@@ -104,7 +104,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     height: 56,
