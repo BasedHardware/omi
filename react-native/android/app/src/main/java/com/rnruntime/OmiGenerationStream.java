@@ -15,6 +15,8 @@ public final class OmiGenerationStream {
     HttpURLConnection open(String lastEventId) throws Exception;
   }
 
+  public interface Sender { void send(HttpURLConnection connection) throws Exception; }
+
   public interface ResponseObserver {
     void received(int status) throws Exception;
   }
@@ -34,8 +36,13 @@ public final class OmiGenerationStream {
   private volatile HttpURLConnection connection;
   private String lastEventId;
   private long deadline;
+  private final boolean omi;
+  private int receivedBytes;
 
-  public OmiGenerationStream(String lastEventId) {
+  public OmiGenerationStream(String lastEventId) { this(lastEventId, false); }
+
+  public OmiGenerationStream(String lastEventId, boolean omi) {
+    this.omi = omi;
     if (lastEventId != null && (lastEventId.isEmpty() || lastEventId.length() > 1024 ||
         lastEventId.indexOf('\r') >= 0 || lastEventId.indexOf('\n') >= 0 || lastEventId.indexOf('\0') >= 0)) {
       throw new IllegalArgumentException("Invalid event cursor");
@@ -50,13 +57,27 @@ public final class OmiGenerationStream {
   }
 
   public Result run(Opener opener, Predicate<String> terminal, ResponseObserver observer) throws Exception {
-    deadline = System.nanoTime() + TimeUnit.HOURS.toNanos(1);
-    for (int attempt = 0; attempt < 6; attempt++) {
+    return run(opener, terminal, observer, connection -> {});
+  }
+
+  public Result run(Opener opener, Predicate<String> terminal, ResponseObserver observer, Sender sender) throws Exception {
+    java.util.Timer timer = omi ? new java.util.Timer(true) : null;
+    if (timer != null) timer.schedule(new java.util.TimerTask() { public void run() { cancel(); } }, 150_000);
+    try { return runInternal(opener, terminal, observer, sender); }
+    finally { if (timer != null) timer.cancel(); }
+  }
+
+  private Result runInternal(Opener opener, Predicate<String> terminal, ResponseObserver observer, Sender sender) throws Exception {
+    deadline = System.nanoTime() + (omi ? TimeUnit.SECONDS.toNanos(150) : TimeUnit.HOURS.toNanos(1));
+    int attempts = omi ? 1 : 6;
+    for (int attempt = 0; attempt < attempts; attempt++) {
       if (System.nanoTime() > deadline) throw new IOException("Generation exceeded time limit");
       if (cancelled.getCount() == 0) throw new IOException("Generation cancelled");
       HttpURLConnection active = opener.open(lastEventId);
       connection = active;
       try {
+        if (cancelled.getCount() == 0) throw new IOException("Generation cancelled");
+        sender.send(active);
         if (cancelled.getCount() == 0) throw new IOException("Generation cancelled");
         int status = active.getResponseCode();
         observer.received(status);
@@ -70,20 +91,28 @@ public final class OmiGenerationStream {
         if (type == null || !type.toLowerCase(java.util.Locale.US).startsWith("text/event-stream")) {
           throw new ProtocolException("Generation response is not an event stream");
         }
-        String frame = terminalFrame(active.getInputStream(), terminal);
+        String frame = terminalFrame(bounded(active.getInputStream()), terminal);
         if (frame != null) return new Result(status, frame, retry);
       } catch (ProtocolException error) {
         throw error;
       } catch (IOException error) {
-        if (cancelled.getCount() == 0 || attempt == 5) throw error;
+        if (cancelled.getCount() == 0 || attempt == attempts - 1) throw error;
       } finally {
         active.disconnect();
         connection = null;
       }
-      if (attempt == 5) break;
+      if (attempt == attempts - 1) break;
       if (cancelled.await(250L << attempt, TimeUnit.MILLISECONDS)) throw new IOException("Generation cancelled");
     }
     throw new IOException("Generation ended without a terminal frame");
+  }
+
+  private InputStream bounded(InputStream input) {
+    return new java.io.FilterInputStream(input) {
+      public int read() throws IOException { int value = super.read(); if (value >= 0) count(1); return value; }
+      public int read(byte[] buffer, int offset, int length) throws IOException { int n = in.read(buffer, offset, length); if (n > 0) count(n); return n; }
+      private void count(int n) throws IOException { if (omi && (receivedBytes += n) > 3_145_728) throw new ProtocolException("Omi response exceeds limit"); }
+    };
   }
 
   private String terminalFrame(InputStream input, Predicate<String> terminal) throws IOException {
@@ -102,7 +131,13 @@ public final class OmiGenerationStream {
       if (line.isEmpty()) {
         if (eventId != null) lastEventId = eventId.isEmpty() ? null : eventId;
         if (data.length() > 0) {
-          if (terminal.test(data.substring(0, data.length() - 1))) return frame + "\n";
+          String payload = data.substring(0, data.length() - 1);
+          if (omi) {
+            try { payload = StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(payload))).toString(); }
+            catch (Exception error) { throw new ProtocolException("Invalid Omi terminal frame"); }
+          }
+          if (terminal.test(payload)) return frame + "\n";
+          if (omi) throw new ProtocolException("Invalid Omi terminal message");
         }
         frame.setLength(0);
         data.setLength(0);
@@ -110,12 +145,12 @@ public final class OmiGenerationStream {
         continue;
       }
       frame.append(line).append('\n');
-      if (frame.length() > 1_048_576) throw new ProtocolException("Generation frame exceeds limit");
+      if (frame.length() > (omi ? 3_145_728 : 1_048_576)) throw new ProtocolException("Generation frame exceeds limit");
       int colon = line.indexOf(':');
       String name = colon < 0 ? line : line.substring(0, colon);
       String value = colon < 0 ? "" : line.substring(colon + 1);
       if (value.startsWith(" ")) value = value.substring(1);
-      if (name.equals("data")) data.append(value).append('\n');
+      if (name.equals(omi ? "done" : "data")) data.append(value).append('\n');
       if (name.equals("id") && value.indexOf('\0') < 0) {
         if (value.length() > 1024) throw new ProtocolException("Generation cursor exceeds limit");
         eventId = value;
@@ -136,18 +171,18 @@ public final class OmiGenerationStream {
         return value.toString();
       }
       value.append((char) item);
-      if (value.length() > 1_048_576) throw new ProtocolException("Generation line exceeds limit");
+      if (value.length() > (omi ? 3_145_728 : 1_048_576)) throw new ProtocolException("Generation line exceeds limit");
     }
     return value.length() == 0 ? null : value.toString();
   }
 
-  private static String body(InputStream input) throws IOException {
-    try (InputStream stream = input) {
+  private String body(InputStream input) throws IOException {
+    try (InputStream stream = bounded(input)) {
       java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
       byte[] buffer = new byte[4096];
       int count;
       while ((count = stream.read(buffer)) != -1) {
-        if (bytes.size() + count > 1_048_576) throw new ProtocolException("Generation response exceeds limit");
+        if (bytes.size() + count > (omi ? 3_145_728 : 1_048_576)) throw new ProtocolException("Generation response exceeds limit");
         bytes.write(buffer, 0, count);
       }
       return bytes.toString("UTF-8");

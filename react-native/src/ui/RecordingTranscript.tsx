@@ -9,7 +9,7 @@ export function RecordingTranscript({
   revision,
 }: {
   sessionId: string;
-  revision: string;
+  revision?: string;
 }) {
   const {result, reload} = useRecordingTranscript(sessionId, revision);
   return (

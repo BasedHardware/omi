@@ -93,6 +93,17 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   @ReactMethod
+  fun getApiContract(promise: Promise) {
+    submit(promise) {
+      try {
+        val policy = resolvedPolicy(false) ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Native HTTP configuration is unavailable")
+        promise.resolve(if (policy.kind == CredentialKind.Cloud && !policy.captureOriginRequired) "omi" else "canonical")
+      } catch (error: TransportException) { promise.reject(error.code, error.message) }
+      catch (_: Exception) { promise.reject("OMI_HTTP_UNCONFIGURED", "Native HTTP configuration is unavailable") }
+    }
+  }
+
+  @ReactMethod
   fun createRecordingId(promise: Promise) {
     promise.resolve(java.util.UUID.randomUUID().toString())
   }
@@ -236,6 +247,57 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
   }
 
   @ReactMethod
+  fun sendOmiChat(requestId: String, text: String, promise: Promise) {
+    if (!Regex("^[A-Za-z0-9._:-]{1,128}$").matches(requestId) || text.isBlank() || text.toByteArray(Charsets.UTF_8).size > 65_536) {
+      promise.reject("OMI_HTTP_INVALID_REQUEST", "Omi chat request is invalid"); return
+    }
+    val key = "omi-chat:$requestId"
+    val stream = OmiGenerationStream(null, true)
+    val active = ActiveGeneration(stream, promise)
+    synchronized(retirement) {
+      if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }
+      if (generations.putIfAbsent(key, active) != null) { promise.reject("OMI_HTTP_INVALID_REQUEST", "Omi chat request is already active"); return }
+    }
+    submit(promise) {
+      try {
+        var policy: BackendPolicy? = null
+        val body = JSONObject().put("text", text).put("file_ids", org.json.JSONArray()).toString().toByteArray(Charsets.UTF_8)
+        val result = stream.run({ _ ->
+          val selected = resolvedPolicy() ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Omi chat is unavailable")
+          if (selected.kind != CredentialKind.Cloud || selected.captureOriginRequired) throw TransportException("OMI_HTTP_BACKEND_CHANGED", "The selected backend changed")
+          policy = selected
+          val base = requestBaseURL(selected, "/v2/messages") ?: throw TransportException("OMI_HTTP_UNCONFIGURED", "Omi chat is unavailable")
+          OmiBackendTransport.openConnection(URL(base.toURL(), "/v2/messages")).apply {
+            requestMethod = "POST"; connectTimeout = 15_000; readTimeout = 150_000; doOutput = true
+            setRequestProperty("authorization", "Bearer ${selected.token}")
+            setRequestProperty("content-type", "application/json")
+            setRequestProperty("accept", "text/event-stream")
+            setFixedLengthStreamingMode(body.size)
+          }
+        }, { data -> runCatching { JSONObject(data); true }.getOrDefault(false) }, { status ->
+          policy?.let { if (status == 401 && OmiCloudSession.invalidateToken(reactApplicationContext, it.token, retirement) { !disposed }) emitSessionInvalidated() }
+        }, { connection -> requireActive(); connection.outputStream.use { it.write(body) } })
+        if (active.finished.compareAndSet(false, true)) promise.resolve(Arguments.createMap().apply {
+          putString("id", requestId); putInt("status", result.status); putString("body", result.body)
+          if (result.retryAfterSeconds == null) putNull("retryAfterSeconds") else putInt("retryAfterSeconds", result.retryAfterSeconds)
+        })
+      } catch (error: Exception) {
+        if (active.finished.compareAndSet(false, true)) {
+          if (error is TransportException) promise.reject(error.code, error.message)
+          else promise.reject("OMI_HTTP_TRANSPORT", "Omi chat transport failed")
+        }
+      } finally { generations.remove(key, active) }
+    }
+  }
+
+  @ReactMethod
+  fun cancelOmiChat(requestId: String, promise: Promise) {
+    if (!Regex("^[A-Za-z0-9._:-]{1,128}$").matches(requestId)) { promise.reject("OMI_HTTP_INVALID_REQUEST", "Omi chat request is invalid"); return }
+    generations.remove("omi-chat:$requestId")?.let { cancelGeneration(it) }
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun generationEvents(generationId: String, lastEventId: String?, promise: Promise) {
     val path = generationPath(generationId)
     if (path == null) {
@@ -249,7 +311,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
     val active = ActiveGeneration(stream, promise)
     synchronized(retirement) {
     if (disposed) { promise.reject("OMI_HTTP_CANCELLED", "Native backend is disposed"); return }
-    if (generations.putIfAbsent(generationId, active) != null) {
+    if (generations.putIfAbsent("canonical:$generationId", active) != null) {
       promise.reject("OMI_HTTP_INVALID_REQUEST", "Generation request is already active")
       return
     }
@@ -292,7 +354,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
           else promise.reject("OMI_HTTP_TRANSPORT", "Native generation transport failed")
         }
       } finally {
-        generations.remove(generationId, active)
+        generations.remove("canonical:$generationId", active)
       }
     }
   }
@@ -304,7 +366,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       promise.reject("OMI_HTTP_INVALID_REQUEST", "Native generation request is invalid")
       return
     }
-    val active = generations[generationId]
+    val active = generations["canonical:$generationId"]
     submit(promise) {
       try {
         val response = performRequest(Arguments.createMap().apply {
@@ -313,7 +375,7 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
           putString("path", path)
         })
         if (response.getInt("status") !in setOf(202, 204)) throw TransportException("OMI_HTTP_TRANSPORT", "Generation cancellation was not accepted")
-        if (active != null && generations.remove(generationId, active)) cancelGeneration(active)
+        if (active != null && generations.remove("canonical:$generationId", active)) cancelGeneration(active)
         promise.resolve(null)
       } catch (error: Exception) {
         if (error is TransportException) promise.reject(error.code, error.message)
@@ -354,6 +416,13 @@ class OmiBackendModule(context: ReactApplicationContext) : ReactContextBaseJavaM
       "OMI_HTTP_UNCONFIGURED",
       "Native HTTP configuration is unavailable",
     )
+    if (value.hasKey("expectedApiContract")) {
+      if (value.getType("expectedApiContract") != com.facebook.react.bridge.ReadableType.String) throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native API contract is invalid")
+      val expected = value.getString("expectedApiContract")
+      if (expected !in setOf("omi", "canonical")) throw TransportException("OMI_HTTP_INVALID_REQUEST", "Native API contract is invalid")
+      val actual = if (policy.kind == CredentialKind.Cloud && !policy.captureOriginRequired) "omi" else "canonical"
+      if (expected != actual) throw TransportException("OMI_HTTP_BACKEND_CHANGED", "The selected backend changed")
+    }
     val requestId = value.getString("id").orEmpty()
     val method = value.getString("method").orEmpty()
     val path = value.getString("path").orEmpty()

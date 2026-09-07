@@ -156,27 +156,40 @@ test('legacy reads without an epoch stay read-only', async () => {
   await ReactTestRenderer.act(async () => app.renderer.unmount());
 });
 
-test('sign-out during identity minting retires the write before transport', async () => {
-  let resolve!: (value: typeof prepared) => void;
-  prepare.mockReturnValue(
-    new Promise(value => {
-      resolve = value;
-    }),
-  );
-  const app = await mount();
-  await ReactTestRenderer.act(async () => {
-    app.state.onTaskToggle('task');
-  });
-  await ReactTestRenderer.act(async () => {
-    app.renderer.update(<Harness {...app.props} enabled={false} />);
-  });
-  await ReactTestRenderer.act(async () => {
-    resolve(prepared);
-  });
-  expect(send).not.toHaveBeenCalled();
-  expect(app.state.busyTaskId).toBeNull();
-  await ReactTestRenderer.act(async () => app.renderer.unmount());
-});
+test.each([false, true])(
+  'sign-out during preparation retires the write before transport (old=%s)',
+  async old => {
+    let resolve!: (value: typeof prepared) => void;
+    prepare.mockReturnValue(
+      new Promise(value => {
+        resolve = value;
+      }),
+    );
+    const app = await mount({
+      status: 'success',
+      value: old
+        ? {
+            ...read,
+            apiContract: 'omi',
+            accountEpoch: null,
+            items: [{...read.items[0]!, revision: null}],
+          }
+        : read,
+    });
+    await ReactTestRenderer.act(async () => {
+      app.state.onTaskToggle('task');
+    });
+    await ReactTestRenderer.act(async () => {
+      app.renderer.update(<Harness {...app.props} enabled={false} />);
+    });
+    await ReactTestRenderer.act(async () => {
+      resolve(prepared);
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(app.state.busyTaskId).toBeNull();
+    await ReactTestRenderer.act(async () => app.renderer.unmount());
+  },
+);
 
 test('permanent epoch refusal keeps the edit visible without retry', async () => {
   send.mockResolvedValue({
@@ -208,4 +221,29 @@ test('permanent epoch refusal keeps the edit visible without retry', async () =>
   });
   expect(prepare.mock.calls[1][1].accountEpoch).toBe(9);
   await ReactTestRenderer.act(async () => app.renderer.unmount());
+});
+
+test('old task read enables mutation without fabricating canonical epoch or revision', async () => {
+  const oldRead: TaskRead = {
+    ...read,
+    apiContract: 'omi',
+    accountEpoch: null,
+    items: [{...read.items[0]!, revision: null}],
+  };
+  const app = await mount({status: 'success', value: oldRead});
+  try {
+    expect(app.state.writesAvailable).toBe(true);
+    await ReactTestRenderer.act(async () => app.state.onTaskToggle('task'));
+    expect(prepare).toHaveBeenCalledWith(expect.anything(), {
+      apiContract: 'omi',
+      recordId: 'task',
+      baseRevision: null,
+      accountEpoch: null,
+      patch: {completed: true},
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(app.refreshTasks).toHaveBeenCalledTimes(1);
+  } finally {
+    await ReactTestRenderer.act(async () => app.renderer.unmount());
+  }
 });

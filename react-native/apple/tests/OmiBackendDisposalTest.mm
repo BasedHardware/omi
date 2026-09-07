@@ -5,7 +5,8 @@
 - (void)invalidate {}
 - (void)sendEventWithName:(NSString *)name body:(id)body { abort(); }
 @end
-BOOL OmiAuthEnvironmentCloudTokensIgnored(void) { return YES; }
+static BOOL ignoreTestEnvironment = YES;
+BOOL OmiAuthEnvironmentCloudTokensIgnored(void) { return ignoreTestEnvironment; }
 void OmiAuthSetEnvironmentCloudTokensIgnored(BOOL value) {}
 BOOL OmiAuthShippingSessionIgnored(void) { return YES; }
 void OmiAuthSetShippingSessionIgnored(BOOL value) {}
@@ -46,8 +47,75 @@ NSString *OmiAuthResolvedFirebaseApiKey(void) { return @""; }
 - (void)recordingOwner:(void (^)(NSDictionary *))completion allowCached:(BOOL)allowCached rejecter:(RCTPromiseRejectBlock)reject { self.pendingOwner = completion; }
 @end
 
+@interface DeferredChatBackend : OmiBackendModule
+@property(nonatomic, copy) void (^pendingPolicy)(OmiBackendPolicy *, NSError *);
+@end
+@implementation DeferredChatBackend
+- (void)resolveBackendPolicyWithCompletion:(void (^)(OmiBackendPolicy *, NSError *))completion { self.pendingPolicy = completion; }
+@end
+
+static void testSelectedContract(void) {
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  NSDictionary *previous = [defaults volatileDomainForName:NSArgumentDomain];
+  @try {
+    ignoreTestEnvironment = NO;
+    NSDictionary *environment = @{@"OMI_CLOUD_API_TOKEN":@"synthetic-contract-token"};
+    [defaults setVolatileDomain:@{OmiSoftwarePlaneDefaultsKey:@"new"} forName:NSArgumentDomain];
+    assert(OmiResolvedBackendPolicy(environment) == nil);
+    NSMutableDictionary *configured = [environment mutableCopy];
+    configured[@"OMI_V5_BACKEND_URL"] = @"https://synthetic.workers.dev";
+    assert(OmiResolvedBackendPolicy(configured).captureOriginRequired);
+    configured[@"OMI_V5_BACKEND_URL"] = @"https://untrusted.invalid";
+    assert(OmiResolvedBackendPolicy(configured) == nil);
+    [defaults setVolatileDomain:@{OmiSoftwarePlaneDefaultsKey:@"old"} forName:NSArgumentDomain];
+    OmiBackendPolicy *old = OmiResolvedBackendPolicy(environment);
+    assert(old != nil && old.kind == OmiBackendCredentialKindCloud && !old.captureOriginRequired);
+  } @finally {
+    ignoreTestEnvironment = YES;
+    [defaults setVolatileDomain:previous forName:NSArgumentDomain];
+  }
+}
+
+static void testPendingOmiCancellation(void) {
+  for (NSNumber *dispose in @[@NO, @YES]) {
+    DeferredChatBackend *module = [DeferredChatBackend new];
+    __block NSUInteger rejected = 0;
+    [module sendOmiChatWithId:@"pending-chat" text:@"Synthetic" resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_HTTP_CANCELLED"]); rejected++; }];
+    assert(module.generations.count == 1);
+    if (dispose.boolValue) [module invalidate];
+    else [module cancelOmiChatWithId:@"pending-chat" resolver:^(id value) {} rejecter:^(NSString *code, NSString *message, NSError *error) { abort(); }];
+    assert(rejected == 1 && module.generations.count == 0);
+    module.pendingPolicy(nil, nil);
+    assert(rejected == 1 && module.generations.count == 0);
+    [module invalidate];
+  }
+}
+
+static void testOmiFrames(void) {
+  NSString *done = [NSString stringWithFormat:@"done: %@\n\n", [[@"{\"id\":\"message\"}" dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0]];
+  for (NSString *frame in @[done, @"done: invalid!\n\n", [done stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet], [@"x" stringByPaddingToLength:3 * 1024 * 1024 + 1 withString:@"x" startingAtIndex:0]]) {
+    __block NSUInteger accepted = 0, rejected = 0, cleaned = 0;
+    OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:^(id value) { accepted++; } reject:^(NSString *code, NSString *message, NSError *error) { rejected++; } cleanup:^{ cleaned++; }];
+    delegate.omiChat = YES; delegate.responseStatus = 200; delegate.requestId = @"test";
+    [delegate URLSession:nil dataTask:nil didReceiveData:[frame dataUsingEncoding:NSUTF8StringEncoding]];
+    [delegate URLSession:nil task:nil didCompleteWithError:nil];
+    assert(accepted == ([frame isEqual:done] ? 1 : 0));
+    assert(accepted + rejected == 1 && cleaned == 1 && delegate.reconnects == 0);
+    [delegate cancel]; assert(cleaned == 1);
+  }
+  __block NSUInteger accepted = 0, rejected = 0;
+  OmiGenerationDelegate *delegate = [[OmiGenerationDelegate alloc] initWithResolve:^(id value) { accepted++; } reject:^(NSString *code, NSString *message, NSError *error) { rejected++; } cleanup:^{}];
+  delegate.omiChat = YES; delegate.responseStatus = 200; delegate.requestId = @"test";
+  [delegate cancel];
+  [delegate URLSession:nil dataTask:nil didReceiveData:[done dataUsingEncoding:NSUTF8StringEncoding]];
+  assert(accepted == 0 && rejected == 1);
+}
+
 int main() {
   @autoreleasepool {
+    testSelectedContract();
+    testOmiFrames();
+    testPendingOmiCancellation();
     NSString *identifier = NSUUID.UUID.UUIDString;
     NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent:identifier];
     NSString *tag = [@"omi-disposal-test-" stringByAppendingString:identifier];
@@ -65,6 +133,13 @@ int main() {
     [module.session invalidateAndCancel];
     DisposalSession *network = [DisposalSession new];
     module.session = (NSURLSession *)network;
+    __block NSUInteger contractRejected = 0;
+    for (id expected in @[@"omi", @42]) {
+      [module performNativeRequest:@{@"id":@"contract", @"path":@"/v3/action-items/task", @"method":@"PATCH", @"expectedApiContract":expected} receipt:nil expectedOrigin:nil expectedLogin:nil resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) {
+        assert([code isEqual:[expected isKindOfClass:NSString.class] ? @"OMI_HTTP_BACKEND_CHANGED" : @"OMI_HTTP_INVALID_REQUEST"]); contractRejected++;
+      }];
+    }
+    assert(contractRejected == 2 && network.task == nil);
     __block NSUInteger httpRejected = 0;
     [module performNativeRequest:@{@"id":@"pending", @"path":@"/v1/conversations", @"method":@"GET"} receipt:nil expectedOrigin:nil expectedLogin:nil resolver:^(id value) { abort(); } rejecter:^(NSString *code, NSString *message, NSError *error) { assert([code isEqual:@"OMI_HTTP_CANCELLED"]); httpRejected++; }];
     assert(network.task.resumes == 1);

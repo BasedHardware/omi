@@ -19,6 +19,9 @@ export function ReadStatus({
   if (page.complete && page.completenessStatus === 'complete') {
     return null;
   }
+  if (!page.hasMore && page.completenessStatus === 'unknown') {
+    return null;
+  }
   const detail = page.hasMore
     ? page.nextCursor === null
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`

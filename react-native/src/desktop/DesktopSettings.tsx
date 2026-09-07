@@ -273,8 +273,40 @@ export function DesktopSettings({
     return next;
   };
 
+  const advanced = (
+    <Row
+      copy={
+        softwarePlaneLocked
+          ? 'Stop the active response before switching backends.'
+          : prefs.softwarePlane === 'new'
+          ? prefs.stampedV5Origin != null
+            ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
+            : 'New is selected, but no valid stamped v5 origin is configured.'
+          : 'Old backend uses your existing Omi account and api.omi.me.'
+      }
+      title="Backend"
+      trailing={
+        <Segmented
+          disabled={softwarePlaneLocked}
+          onChange={value => {
+            runAction(async () => {
+              await setPref(
+                'softwarePlane',
+                value === 'New backend' ? 'new' : 'old',
+              );
+              onWorkspaceReload?.();
+            });
+          }}
+          options={['Old backend', 'New backend'] as const}
+          value={prefs.softwarePlane === 'new' ? 'New backend' : 'Old backend'}
+        />
+      }
+    />
+  );
+
   const general = (
     <>
+      {advanced}
       <Row
         copy={
           permissions.screen === 'granted'
@@ -513,34 +545,6 @@ export function DesktopSettings({
         actionLabel="Update"
       />
     </>
-  );
-
-  const advanced = (
-    <Row
-      copy={
-        softwarePlaneLocked
-          ? 'Stop the active response before switching backends.'
-          : prefs.softwarePlane === 'new'
-          ? prefs.stampedV5Origin != null
-            ? 'New sends v5 chat, capture, conversations, memories, tasks, and settings to the stamped origin. Account, apps, and privacy controls still use production api.omi.me.'
-            : 'New is selected, but no valid stamped v5 origin is configured.'
-          : 'Old uses production api.omi.me. This v5 desktop requires New for chat, memories, and tasks.'
-      }
-      title="Backend"
-      trailing={
-        <Segmented
-          disabled={softwarePlaneLocked}
-          onChange={value => {
-            runAction(async () => {
-              await setPref('softwarePlane', value === 'new' ? 'new' : 'old');
-              onWorkspaceReload?.();
-            });
-          }}
-          options={['old', 'new'] as const}
-          value={prefs.softwarePlane}
-        />
-      }
-    />
   );
 
   const about = (
