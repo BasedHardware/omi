@@ -114,7 +114,9 @@ Cloud Linux after `d65bcf3fcb`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `f8ddd69f8b`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested non-retryable and native unsupported task writes still omit Retry, and now say task editing is unavailable instead of "This change was not accepted." Conflict, stale-epoch, and generic permanent refusals keep their current copy.
 
-Cloud Linux after the native chat-send unavailable copy slice: native `OMI_DEV_BACKEND_UNSUPPORTED` send throws latch Ask and use unavailable copy instead of "Message not sent. Check your connection and try again." Nested HTTP 404/unsupported already did. Transport throws still use connection copy. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `8d8a7186da`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Native `OMI_DEV_BACKEND_UNSUPPORTED` send throws latch Ask and use unavailable copy instead of "Message not sent. Check your connection and try again." Nested HTTP 404/unsupported already did. Transport throws still use connection copy.
+
+Cloud Linux after the account-setting write unavailable copy slice: nested non-retryable `/v1/users/*` writes, including example-platform `development_backend_unsupported`, say the account setting is unavailable instead of "This saved data is not available" or "Settings change could not be saved. Try again." GET `/v1/users/*` slices keep saved-data copy. Local preference failures still say Try again. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

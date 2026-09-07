@@ -1,5 +1,6 @@
 import type {OmiBackend} from './omiNative';
 import {
+  desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
@@ -145,6 +146,8 @@ async function cloudRequest(
     const unavailable = new Error(
       path.startsWith('/v1/apps')
         ? desktopAppsUnavailableCopy
+        : method === 'POST' && path.startsWith('/v1/users/')
+        ? desktopAccountSettingUnavailableCopy
         : desktopBackendUnavailableCopy,
     ) as Error & {retryable: boolean};
     unavailable.retryable = false;

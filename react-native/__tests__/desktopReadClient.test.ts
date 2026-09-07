@@ -12,6 +12,7 @@ import {
   desktopProjectionUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopAppsUnavailableCopy,
+  desktopAccountSettingUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
   desktopReadsCanRetry,
@@ -42,6 +43,7 @@ import {
   loadAccountSettings,
   loadConnectors,
   myApps,
+  optInTrainingData,
   parseCloudApp,
   parseCloudApps,
   parseCloudProfile,
@@ -279,6 +281,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(desktopReadErrorCopy(new Error(desktopAppsUnavailableCopy))).toBe(
     desktopAppsUnavailableCopy,
   );
+  expect(
+    desktopReadErrorCopy(new Error(desktopAccountSettingUnavailableCopy)),
+  ).toBe(desktopAccountSettingUnavailableCopy);
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -1141,6 +1146,36 @@ test('loadAccountSettings nested non-retryable 503s keep slices independent with
     expect.objectContaining({plan: 'plus', status: 'active'}),
   );
   expect(snapshot.storeRecordingPermission).toBe(true);
+});
+
+test('nested non-retryable account setting writes use unavailable copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  const error = await optInTrainingData(backend).catch(reason => reason);
+  expect(error).toMatchObject({
+    message: desktopAccountSettingUnavailableCopy,
+    retryable: false,
+  });
+  expect(cloudErrorCanRetry(error)).toBe(false);
+});
+
+test('omitted account setting 503 stays a retryable write failure', async () => {
+  const backend = backendFor(() => ({
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  }));
+  const error = await optInTrainingData(backend).catch(e => e);
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe(
+    'desktop-training-opt-in-write failed (503)',
+  );
+  expect(cloudErrorCanRetry(error)).toBe(true);
 });
 
 test('enableCloudApp requires a real ok status and does not treat errors as installed', async () => {

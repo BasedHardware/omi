@@ -6,6 +6,7 @@ import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
 import {
+  desktopAccountSettingUnavailableCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
 } from '../desktopReadClient';
@@ -91,6 +92,12 @@ jest.mock('../desktopSettingsClient', () => {
 });
 
 jest.mock('../desktopCloudClient', () => ({
+  cloudErrorCanRetry: (error: unknown) =>
+    !(
+      error instanceof Error &&
+      'retryable' in error &&
+      (error as {retryable?: unknown}).retryable === false
+    ),
   loadAccountSettings: jest.fn(async () => {
     throw new Error('unused');
   }),
@@ -1342,6 +1349,60 @@ test('Settings does not expose cloud mutations when account values failed to loa
   expect(
     renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
   ).toHaveLength(0);
+});
+
+test('nested non-retryable account setting writes omit Try again', async () => {
+  const {loadAccountSettings, setStoreRecordingPermission} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadAccountSettings: jest.Mock;
+    setStoreRecordingPermission: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValue({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: false,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: false,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  setStoreRecordingPermission.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAccountSettingUnavailableCopy), {
+      retryable: false,
+    }),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Update')[0]!
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    desktopAccountSettingUnavailableCopy,
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Settings change could not be saved. Try again.',
+  );
 });
 
 test('actual desktop Tasks controls toggle and edit through shared mutation callbacks', () => {

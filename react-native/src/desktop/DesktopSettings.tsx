@@ -4,11 +4,13 @@ import {Animated, ScrollView, Switch, Text, View} from 'react-native';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {
+  cloudErrorCanRetry,
   loadAccountSettings,
   setPrivateCloudSync,
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
 } from '../desktopCloudClient';
+import {desktopReadErrorCopy} from '../desktopReadClient';
 import {
   defaultDesktopPreferences,
   loadDesktopPreferences,
@@ -256,9 +258,11 @@ export function DesktopSettings({
           setActionStatus(null);
         }
       },
-      () => {
+      (reason: unknown) => {
         if (seq === actionSeqRef.current) {
-          setActionStatus(failure);
+          setActionStatus(
+            cloudErrorCanRetry(reason) ? failure : desktopReadErrorCopy(reason),
+          );
         }
       },
     );
