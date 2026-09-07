@@ -388,6 +388,14 @@ test('maps ratified public recovery without automatically retrying', () => {
     chatErrorCopy(new ChatBackendError(404, 'not_found', false, 'none', null)),
   ).toBe('This request cannot be completed.');
   expect(
+    chatErrorCopy(new ChatBackendError(403, 'forbidden', false, 'none', null)),
+  ).toBe('Chat is not available for this account.');
+  expect(
+    chatHistoryErrorCopy(
+      new ChatBackendError(403, 'forbidden', false, 'none', null),
+    ),
+  ).toBe('Chat is not available for this account.');
+  expect(
     chatHistoryErrorCopy(
       new ChatBackendError(401, 'unauthorized', false, 'reauthenticate', null),
     ),

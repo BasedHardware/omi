@@ -4,6 +4,7 @@ import {
   conversationGroupLabel,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
+  desktopBackendForbiddenCopy,
   desktopCloudBaseURL,
   desktopLocalBackendServiceCopy,
   desktopProjectionUnavailableCopy,
@@ -257,6 +258,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   expect(
     desktopReadErrorCopy(new Error('Conversations response is malformed')),
   ).toBe('This saved data could not be loaded. Retry without changing it.');
+  expect(desktopReadErrorCopy(new Error(desktopBackendForbiddenCopy))).toBe(
+    desktopBackendForbiddenCopy,
+  );
 });
 
 describe('desktopRecoveryCopy', () => {
@@ -854,6 +858,26 @@ test('maps a cloud 401 to typed unauthorized copy without fabricating rows', asy
   expect(result.memories).toEqual({
     status: 'error',
     error: desktopBackendUnauthorizedCopy,
+  });
+});
+
+test('maps a cloud 403 to typed grant-denied copy without treating an empty body as success', async () => {
+  const backend = backendFor(() => ({
+    status: 403,
+    body: JSON.stringify({items: []}),
+  }));
+  const result = await loadDesktopReads(backend);
+  expect(result.conversations).toEqual({
+    status: 'error',
+    error: desktopBackendForbiddenCopy,
+  });
+  expect(result.memories).toEqual({
+    status: 'error',
+    error: desktopBackendForbiddenCopy,
+  });
+  expect(result.tasks).toEqual({
+    status: 'error',
+    error: desktopBackendForbiddenCopy,
   });
 });
 

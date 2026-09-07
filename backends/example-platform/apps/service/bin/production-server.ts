@@ -88,6 +88,8 @@ export async function startProductionServer(
         mcp_handler: () => Response.json({ error: "unavailable" }, { status: 503, headers: { "cache-control": "no-store" } }),
         tasks: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
         conversations: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
+        chat: { authorization, codecRootSecret: config.codecKey, cursorSigningKeyset },
+        settings: { authorization },
         device_sessions: authorization,
         device_ownership_key: config.codecKey,
         transcription_source: createDeepgramTranscriptionSource({
@@ -186,7 +188,7 @@ export async function runProductionServer(
   try {
     const running = await startProductionServer(env, factories, controller.signal);
     clearTimeout(startupDeadline);
-    if (!controller.signal.aborted) console.info("omi-platform ready: memories.read, tasks, device audio uploads");
+    if (!controller.signal.aborted) console.info("omi-platform ready: memories.read, tasks, device audio uploads, conversations.read, chat.read, settings");
     await requested;
     await running.stop();
     return 0;

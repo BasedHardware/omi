@@ -197,6 +197,8 @@ export const desktopLocalBackendServiceCopy =
   'The configured local Omi service is unavailable. Check its connection, then retry.';
 export const desktopProjectionUnavailableCopy =
   'This saved data is not available from the selected Omi service yet. Retry after its persisted projection is connected.';
+export const desktopBackendForbiddenCopy =
+  'This saved data is not available for this account.';
 const desktopReadFailureCopy =
   'This saved data could not be loaded. Retry without changing it.';
 const desktopRecoveryGenericCopy =
@@ -213,7 +215,8 @@ export function desktopRecoveryCopy(
         outcome.error === desktopBackendUnauthorizedCopy ||
         outcome.error === desktopBackendServiceCopy ||
         outcome.error === desktopLocalBackendServiceCopy ||
-        outcome.error === desktopProjectionUnavailableCopy)
+        outcome.error === desktopProjectionUnavailableCopy ||
+        outcome.error === desktopBackendForbiddenCopy)
     ) {
       return outcome.error;
     }
@@ -259,6 +262,7 @@ export function desktopReadErrorCopy(error: unknown): string {
       desktopBackendServiceCopy,
       desktopLocalBackendServiceCopy,
       desktopProjectionUnavailableCopy,
+      desktopBackendForbiddenCopy,
       desktopReadFailureCopy,
     ].includes(message)
     ? message
@@ -375,6 +379,9 @@ async function read(
       };
       unauthorized.code = 'unauthorized';
       throw unauthorized;
+    }
+    if (response.status === 403) {
+      throw new Error(desktopBackendForbiddenCopy);
     }
     if (response.status === 503 && response.body !== null) {
       try {

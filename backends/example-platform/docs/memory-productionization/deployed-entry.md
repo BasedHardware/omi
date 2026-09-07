@@ -16,11 +16,14 @@ Build from this backend directory with
 `docker build --platform linux/amd64 -t omi-platform-dev .`.
 
 This increment serves authenticated canonical memory reads, task reads and
-mutations, and indexed device audio uploads. All three use the same database
-generation and Firebase authorization configuration inside the readiness and
-shutdown boundary. Audio upload completion does not certify transcription or
-conversation formation. Chat and authenticated MCP remain unavailable; MCP
-returns 503. This is not full backend parity or production qualification.
+mutations, indexed device audio uploads, conversation reads, chat history
+reads, granted main-chat session composition on the first conversation page, and Settings GET. All of them use the same database generation and Firebase authorization
+configuration inside the readiness and shutdown boundary. Audio upload completion
+does not certify transcription or conversation formation. Chat writes, generation
+SSE, Settings identity/entitlement producers, attachments and authenticated MCP
+remain unavailable; MCP returns 503. Missing `chat.read` is 403, not an empty
+successful transcript. Signed-in Settings without a producer is 503, not a 200
+profile invented from the Firebase token. This is not full backend parity or production qualification.
 
 Required configuration:
 

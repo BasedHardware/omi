@@ -38,6 +38,7 @@ import {
 import type {
   ChatMessageRecord,
   ChatMessagesStore,
+  StoredChatMessage,
   WritableChatMessageType,
 } from "../stores/chat-messages-store";
 import type {
@@ -302,7 +303,7 @@ export const chatMessagePayloadHash = (create: ParsedCreate): string => {
   return `sha256:${createHash("sha256").update(canonicalJson(subject), "utf8").digest("hex")}`;
 };
 
-const parseHistoryQuery = (request: Request): {
+export const parseHistoryQuery = (request: Request): {
   readonly limit: number;
   readonly olderCursor: string | null;
 } | null => {
@@ -328,7 +329,7 @@ const TERMINAL_KINDS = new Set(["done", "failed", "cancelled"]);
 const isTerminal = (event: ChatGenerationEvent): boolean => TERMINAL_KINDS.has(event.frame.kind);
 
 type ChatGenerationOutcome = "completed" | "cancelled" | null;
-type ChatWireMessage = ChatMessageRecord & {
+export type ChatWireMessage = ChatMessageRecord & {
   readonly generationOutcome: ChatGenerationOutcome;
 };
 
@@ -345,19 +346,16 @@ const sameCanonicalMessage = (left: ChatMessageRecord, right: ChatMessageRecord)
  * row deliberately does not duplicate that state, so an orphan or a mismatched
  * terminal fails closed instead of silently becoming a completed answer.
  */
-const projectHistoryMessage = (
-  accountId: string,
+export const projectLoadedHistoryMessage = (
   message: ChatMessageRecord,
-  messages: ChatMessagesStore,
-  events: ChatGenerationEventsStore,
+  stored: StoredChatMessage | null,
+  generationEvents: readonly ChatGenerationEvent[] | null,
 ): ChatWireMessage => {
   if (message.sender !== "ai") return withGenerationOutcome(message, null);
-  const stored = messages.readMessage(accountId, message.id);
   if (stored === null || stored.generationId === null
     || !sameCanonicalMessage(stored.message, message)) {
     throw new TypeError("canonical assistant has no matching generation identity");
   }
-  const generationEvents = events.listAfter(accountId, stored.generationId, null);
   const terminals = generationEvents?.filter(isTerminal) ?? [];
   if (terminals.length !== 1) {
     throw new TypeError("canonical assistant has no unique terminal event");
@@ -372,6 +370,20 @@ const projectHistoryMessage = (
     message,
     terminal.frame.kind === "done" ? "completed" : "cancelled",
   );
+};
+
+export const projectHistoryMessage = (
+  accountId: string,
+  message: ChatMessageRecord,
+  messages: Pick<ChatMessagesStore, "readMessage">,
+  events: Pick<ChatGenerationEventsStore, "listAfter">,
+): ChatWireMessage => {
+  if (message.sender !== "ai") return projectLoadedHistoryMessage(message, null, null);
+  const stored = messages.readMessage(accountId, message.id);
+  const generationEvents = stored?.generationId === undefined || stored.generationId === null
+    ? null
+    : events.listAfter(accountId, stored.generationId, null);
+  return projectLoadedHistoryMessage(message, stored, generationEvents);
 };
 
 type ExternalChatGenerationEvent = ChatGenerationEvent & {

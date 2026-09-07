@@ -119,9 +119,7 @@ export function TasksPage({
       ) : error !== null ? (
         <View style={styles.projectionEmpty}>
           <Text style={styles.projectionEmptyTitle}>Tasks unavailable</Text>
-          <Text style={styles.projectionEmptyCopy}>
-            Saved tasks could not be loaded.
-          </Text>
+          <Text style={styles.projectionEmptyCopy}>{error}</Text>
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.projectionEmpty}>
