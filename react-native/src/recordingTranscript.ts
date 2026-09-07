@@ -91,7 +91,7 @@ export function useRecordingTranscript(
       resume.current =
         result.sessionId === sessionId &&
         result.status === 'loaded' &&
-        result.value.state !== 'completed'
+        (result.value.state === 'queued' || result.value.state === 'running')
           ? sessionId
           : null;
       setReload(value => value + 1);

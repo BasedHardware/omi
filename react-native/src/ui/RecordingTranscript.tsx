@@ -49,7 +49,11 @@ export function RecordingTranscript({
           accessibilityLiveRegion="polite"
           style={styles.conversationDetailSummary}>
           {result.value.state === 'failed'
-            ? 'This recording could not be transcribed.'
+            ? result.value.errorCode === 'attempt_limit'
+              ? 'Transcription stopped after repeated failures. This recording cannot be retried.'
+              : result.value.errorCode === 'invalid_audio'
+              ? 'This recording could not be decoded for transcription. It cannot be retried.'
+              : 'This recording could not be transcribed. It cannot be retried.'
             : result.value.state === 'queued'
             ? 'Transcription is queued.'
             : 'Transcription is in progress.'}

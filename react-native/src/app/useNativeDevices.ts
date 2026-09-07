@@ -474,7 +474,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               }
               if (transcript.state === 'failed') {
                 setDeviceScanMessage(
-                  'Recording saved, but transcription failed. Open its transcript to retry.',
+                  'Recording saved, but transcription failed. Open its transcript for details.',
                 );
               } else if (transcript.state !== 'completed') {
                 setDeviceScanMessage(
@@ -486,7 +486,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             } catch {
               if (canReport()) {
                 setDeviceScanMessage(
-                  'Recording saved, but transcription could not finish. Open its transcript to retry.',
+                  'Recording saved, but transcription could not finish. Open its transcript to check its status.',
                 );
               }
             } finally {
