@@ -336,6 +336,33 @@ def test_screenshot_writes_base64_output_and_keeps_json_stdout(config_path: Path
     assert payload["result"]["image_base64_redacted"] is True
 
 
+def test_screenshot_exports_long_text_response(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Text fallback must not fail merely because the text is too long for a filename."""
+    _configure_local_profile(config_path)
+    text = "Screenshot description " * 100
+    output = tmp_path / "shot.txt"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(text)))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(output)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert output.read_text() == text
+    assert json.loads(result.stdout)["bytes"] == len(text.encode())
+
+
+def test_screenshot_copies_existing_file_response(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    source = tmp_path / "source.jpg"
+    source.write_bytes(b"synthetic-image")
+    output = tmp_path / "copy.jpg"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(output)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert output.read_bytes() == source.read_bytes()
+
+
 def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
     _configure_local_profile(config_path)
     output = tmp_path / "pending.jpg"
