@@ -71,7 +71,8 @@ uvicorn main:app --reload --port 8000
 
 - **Interactive Dashboard**: Open [http://localhost:8000/](http://localhost:8000/)
 - **Omi Manifest**: [http://localhost:8000/.well-known/omi-tools.json](http://localhost:8000/.well-known/omi-tools.json)
-- **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+- **Deployment Health Check**: [http://localhost:8000/health](http://localhost:8000/health) (I/O-free local probe)
+- **Upstream Diagnostic Probe**: [http://localhost:8000/health/upstream](http://localhost:8000/health/upstream)
 
 ---
 
@@ -79,7 +80,7 @@ uvicorn main:app --reload --port 8000
 
 ### Hermetic Unit Tests (100% Offline & Mocked)
 
-Runs 29 hermetic unit tests with 0 network I/O in < 3 seconds:
+Runs 37 hermetic unit tests with 0 network I/O in < 3 seconds:
 
 ```bash
 python -m pytest test_main.py -v

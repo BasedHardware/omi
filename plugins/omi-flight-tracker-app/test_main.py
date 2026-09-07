@@ -19,6 +19,7 @@ if str(CURRENT_DIR) not in sys.path:
 
 import httpx
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import main
 from main import (
@@ -28,7 +29,7 @@ from main import (
     bearing_to_compass,
     cache,
     calculate_bearing_deg,
-    compute_bounding_box,
+    compute_bounding_boxes,
     format_flight_entry,
     haversine_distance_km,
     rate_limiter,
@@ -141,56 +142,102 @@ class TestFlightTrackerApp(unittest.TestCase):
 
     # --- Health Probe Tests ---
 
+    def test_health_local_io_free(self):
+        """Health check returns immediately with local healthy status without blocking."""
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "healthy")
+        self.assertEqual(data["service"], "omi-flight-tracker-app")
+
     @patch("httpx.AsyncClient.get")
-    def test_health_healthy(self, mock_get):
-        """Health check returns healthy when upstream OpenSky responds."""
+    def test_health_upstream_healthy(self, mock_get):
+        """Diagnostic upstream health check returns healthy when OpenSky responds."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_get.return_value = mock_response
 
-        response = self.client.get("/health")
+        response = self.client.get("/health/upstream")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "healthy")
         self.assertTrue(data["upstream_connected"])
 
     @patch("httpx.AsyncClient.get")
-    def test_health_degraded(self, mock_get):
-        """Health check reports degraded on upstream exception."""
+    def test_health_upstream_degraded(self, mock_get):
+        """Diagnostic upstream health check reports degraded on upstream exception."""
         mock_get.side_effect = httpx.RequestError("Connection timeout")
 
-        response = self.client.get("/health")
+        response = self.client.get("/health/upstream")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "degraded")
         self.assertFalse(data["upstream_connected"])
 
+    # --- Model Validation Tests ---
+
+    def test_chat_tool_response_exactly_one_validator(self):
+        """ChatToolResponse requires exactly one of result or error."""
+        # Valid
+        r1 = ChatToolResponse(result="Valid result")
+        self.assertIsNotNone(r1.result)
+        r2 = ChatToolResponse(error="Valid error")
+        self.assertIsNotNone(r2.error)
+
+        # Invalid: neither
+        with self.assertRaises(ValidationError):
+            ChatToolResponse()
+
+        # Invalid: both
+        with self.assertRaises(ValidationError):
+            ChatToolResponse(result="Result", error="Error")
+
+    def test_track_flight_request_padded_callsign(self):
+        """Rejects callsign that trims to fewer than 2 characters."""
+        with self.assertRaises(ValidationError):
+            TrackFlightRequest(callsign="  A  ")
+
+        req = TrackFlightRequest(callsign="  ual123  ")
+        self.assertEqual(req.callsign, "UAL123")
+
+    def test_airspace_activity_request_whitespace_normalized(self):
+        """Whitespace-only country and location are normalized to None."""
+        req = AirspaceActivityRequest(country="   ", location="   ")
+        self.assertIsNone(req.country)
+        self.assertIsNone(req.location)
+
     # --- Geographic & Aviation Math Tests ---
 
     def test_haversine_distance_calculation(self):
         """Haversine formula calculates known distance accurately."""
-        # Distance NYC (40.7128, -74.0060) to London (51.5074, -0.1278) is approx 5570 km
         dist = haversine_distance_km(40.7128, -74.0060, 51.5074, -0.1278)
         self.assertAlmostEqual(dist, 5570.0, delta=50.0)
 
     def test_calculate_bearing_and_compass(self):
         """Bearing calculation accurately maps to 16-point cardinal compass."""
-        # Due north
         bearing_n = calculate_bearing_deg(0.0, 0.0, 1.0, 0.0)
         self.assertAlmostEqual(bearing_n, 0.0, delta=1.0)
         self.assertEqual(bearing_to_compass(bearing_n), "N")
 
-        # Due east
         bearing_e = calculate_bearing_deg(0.0, 0.0, 0.0, 1.0)
         self.assertAlmostEqual(bearing_e, 90.0, delta=1.0)
         self.assertEqual(bearing_to_compass(bearing_e), "E")
 
-    def test_compute_bounding_box(self):
-        """Bounding box calculation preserves coordinate bounds."""
-        lamin, lomin, lamax, lomax = compute_bounding_box(40.0, -74.0, radius_km=50.0)
-        self.assertTrue(-90.0 <= lamin < lamax <= 90.0)
-        self.assertTrue(-180.0 <= lomin < lomax <= 180.0)
-        self.assertAlmostEqual((lamax - lamin) * 111.0 / 2.0, 50.0, delta=5.0)
+    def test_compute_bounding_boxes_antimeridian_split(self):
+        """Splits search radius into two bounding boxes when crossing ±180° antimeridian."""
+        # Standard search
+        boxes_standard = compute_bounding_boxes(40.0, -74.0, radius_km=50.0)
+        self.assertEqual(len(boxes_standard), 1)
+
+        # Search near antimeridian +179.8° with 50km radius
+        boxes_wrap_east = compute_bounding_boxes(0.0, 179.8, radius_km=50.0)
+        self.assertEqual(len(boxes_wrap_east), 2)
+        self.assertAlmostEqual(boxes_wrap_east[0][3], 180.0)  # Box 1 ends at 180
+        self.assertAlmostEqual(boxes_wrap_east[1][1], -180.0) # Box 2 starts at -180
+
+        # Search near antimeridian -179.8° with 50km radius
+        boxes_wrap_west = compute_bounding_boxes(0.0, -179.8, radius_km=50.0)
+        self.assertEqual(len(boxes_wrap_west), 2)
 
     def test_resolve_coordinates_valid(self):
         """Resolves direct coordinates and known city names."""
@@ -222,7 +269,7 @@ class TestFlightTrackerApp(unittest.TestCase):
 
     # --- Tool 1: get_flights_overhead ---
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_flights_overhead_success(self, mock_fetch):
         """Tool returns nearby overhead flights formatted in Markdown."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -242,7 +289,7 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIn("UAL123", data["result"])
         self.assertIn("United States", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_flights_overhead_by_city_name(self, mock_fetch):
         """Tool resolves city name and queries overhead flights."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -254,7 +301,7 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIsNone(data["error"])
         self.assertIn("BAW28", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_flights_overhead_empty(self, mock_fetch):
         """Tool returns graceful message when no flights are overhead."""
         mock_fetch.return_value = (1700000000, [])
@@ -276,7 +323,7 @@ class TestFlightTrackerApp(unittest.TestCase):
 
     # --- Tool 2: track_flight_by_callsign ---
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_track_flight_by_callsign_success(self, mock_fetch):
         """Tracks active flight by exact callsign."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -290,7 +337,21 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIn("United States", data["result"])
         self.assertIn("Climbing", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
+    def test_track_flight_exact_match_no_partial_substring(self, mock_fetch):
+        """Searching 'BAW2' must NOT match 'BAW28' (exact match required)."""
+        mock_fetch.return_value = (1700000000, MOCK_STATES)
+
+        payload = {"callsign": "BAW2"}
+        response = self.client.post("/tools/track_flight_by_callsign", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNone(data["error"])
+        # Should NOT return BAW28; should report not detected
+        self.assertIn("was not detected in active airspace", data["result"])
+        self.assertNotIn("Live Tracking: Flight BAW28", data["result"])
+
+    @patch("main.fetch_single_opensky_bbox")
     def test_track_flight_by_icao(self, mock_fetch):
         """Tracks flight by 6-char ICAO address."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -301,7 +362,7 @@ class TestFlightTrackerApp(unittest.TestCase):
         data = response.json()
         self.assertIn("UAL123", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_track_flight_not_found(self, mock_fetch):
         """Returns helpful message when callsign is not in active airspace."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -320,7 +381,7 @@ class TestFlightTrackerApp(unittest.TestCase):
 
     # --- Tool 3: get_airspace_activity ---
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_airspace_activity_global(self, mock_fetch):
         """Summarizes global airspace volume and top active flights."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -334,7 +395,7 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIn("**Airborne**: 2", data["result"])
         self.assertIn("**On Ground**: 1", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_airspace_activity_country_filter(self, mock_fetch):
         """Filters airspace report by country of origin."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
@@ -346,18 +407,26 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIn("BAW28", data["result"])
         self.assertNotIn("UAL123", data["result"])
 
-    @patch("main.fetch_opensky_states")
+    @patch("main.fetch_single_opensky_bbox")
     def test_get_airspace_activity_altitude_filter(self, mock_fetch):
         """Filters aircraft by minimum barometric altitude."""
         mock_fetch.return_value = (1700000000, MOCK_STATES)
 
-        # UAL123 is at 10,500m, BAW28 is at 1,500m
         payload = {"min_altitude_meters": 5000.0}
         response = self.client.post("/tools/get_airspace_activity", json=payload)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("UAL123", data["result"])
         self.assertNotIn("BAW28", data["result"])
+
+    def test_get_airspace_activity_unsupported_location_rejected(self):
+        """Rejects unsupported location rather than silently returning global data."""
+        payload = {"location": "AtlantisCity123"}
+        response = self.client.post("/tools/get_airspace_activity", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNotNone(data["error"])
+        self.assertIn("not in the built-in city registry", data["error"])
 
     # --- Upstream Error Handling Tests ---
 
@@ -389,6 +458,20 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertIsNotNone(data["error"])
         self.assertIn("temporarily unavailable", data["error"])
 
+    @patch("httpx.AsyncClient.get")
+    def test_upstream_http_status_error_caught(self, mock_get):
+        """Catches non-429 4xx HTTPStatusError and returns clean tool error."""
+        req = httpx.Request("GET", "https://opensky-network.org/api/states/all")
+        resp = httpx.Response(status_code=400, request=req)
+        mock_get.side_effect = httpx.HTTPStatusError("Bad Request", request=req, response=resp)
+
+        payload = {"callsign": "UAL123"}
+        response = self.client.post("/tools/track_flight_by_callsign", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNotNone(data["error"])
+        self.assertIn("OpenSky upstream API returned error 400", data["error"])
+
     # --- LRU Cache & Rate Limiting Unit Tests ---
 
     def test_lru_cache_operations(self):
@@ -398,7 +481,6 @@ class TestFlightTrackerApp(unittest.TestCase):
         test_cache.set("b", 2, ttl=10.0)
         self.assertEqual(test_cache.get("a"), 1)
 
-        # Accessing 'a' makes 'b' least recently used; adding 'c' evicts 'b'
         test_cache.set("c", 3, ttl=10.0)
         self.assertEqual(test_cache.get("a"), 1)
         self.assertIsNone(test_cache.get("b"))
@@ -407,20 +489,22 @@ class TestFlightTrackerApp(unittest.TestCase):
     def test_lru_cache_ttl_expiry(self):
         """LRU cache expires items past TTL."""
         test_cache = LRUCache()
-        test_cache.set("short_lived", "value", ttl=-1.0)  # already expired
+        test_cache.set("short_lived", "value", ttl=-1.0)
         self.assertIsNone(test_cache.get("short_lived"))
 
-    def test_lru_cache_deep_copy_isolation(self):
-        """Mutating a cached object does not pollute the cache."""
+    def test_lru_cache_shallow_container_mutation_isolation(self):
+        """Mutating a returned container does not pollute the cache."""
         test_cache = LRUCache()
-        original_data = {"flights": ["UAL123", "BAW28"]}
+        original_data = (1700000000, [["a1", "UAL123"], ["b2", "BAW28"]])
         test_cache.set("key", original_data, ttl=10.0)
 
         retrieved = test_cache.get("key")
-        retrieved["flights"].append("POLLUTED_FLIGHT")
+        # Attempt to append to retrieved list
+        retrieved[1].append(["c3", "POLLUTED_FLIGHT"])
 
         second_retrieval = test_cache.get("key")
-        self.assertNotIn("POLLUTED_FLIGHT", second_retrieval["flights"])
+        callsigns = [f[1] for f in second_retrieval[1]]
+        self.assertNotIn("POLLUTED_FLIGHT", callsigns)
 
     def test_sliding_window_rate_limiter(self):
         """Rate limiter blocks requests that exceed threshold within window."""
@@ -430,13 +514,26 @@ class TestFlightTrackerApp(unittest.TestCase):
         self.assertFalse(rl.is_rate_limited(ip))
         self.assertFalse(rl.is_rate_limited(ip))
         self.assertFalse(rl.is_rate_limited(ip))
-        # 4th request exceeds max_requests
         self.assertTrue(rl.is_rate_limited(ip))
+
+    def test_sliding_window_rate_limiter_evicts_idle(self):
+        """Rate limiter evicts idle entries when tracking capacity is exceeded."""
+        rl = SlidingWindowRateLimiter(max_requests=10, window_seconds=1.0)
+        rl.max_tracked_ips = 5
+
+        # Populate with 10 IPs having old timestamps
+        for i in range(10):
+            rl.history[f"10.0.0.{i}"] = [time.monotonic() - 10.0]
+
+        self.assertEqual(len(rl.history), 10)
+        # Calling is_rate_limited triggers eviction
+        rl.is_rate_limited("10.0.0.99")
+        self.assertLessEqual(len(rl.history), 5)
 
     def test_trusted_proxy_forwarded_ip_used(self):
         """Extracts client IP from X-Forwarded-For if peer is in trusted proxies."""
         request = MagicMock()
-        request.client.host = "127.0.0.1"  # Default trusted
+        request.client.host = "127.0.0.1"
         request.headers = {"X-Forwarded-For": "203.0.113.195, 10.0.0.1"}
 
         client_ip = rate_limiter.get_client_ip(request)
@@ -445,7 +542,7 @@ class TestFlightTrackerApp(unittest.TestCase):
     def test_untrusted_proxy_forwarded_ip_ignored(self):
         """Ignores spoofed X-Forwarded-For if peer is not in trusted proxies."""
         request = MagicMock()
-        request.client.host = "198.51.100.42"  # Untrusted external IP
+        request.client.host = "198.51.100.42"
         request.headers = {"X-Forwarded-For": "203.0.113.195"}
 
         client_ip = rate_limiter.get_client_ip(request)

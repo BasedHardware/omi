@@ -3,16 +3,24 @@ Pydantic data models for Omi OpenSky Flight Tracker Integration App.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ChatToolResponse(BaseModel):
     """
     Standard Omi response format for chat tool endpoints.
-    Either `result` contains the voice-optimized response or `error` details the issue.
+    Enforces that exactly one of `result` or `error` is provided.
     """
     result: Optional[str] = None
     error: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_exactly_one_field(self) -> "ChatToolResponse":
+        has_result = self.result is not None
+        has_error = self.error is not None
+        if has_result == has_error:
+            raise ValueError("ChatToolResponse must specify exactly one of 'result' or 'error'.")
+        return self
 
 
 class FlightsOverheadRequest(BaseModel):
@@ -56,6 +64,16 @@ class FlightsOverheadRequest(BaseModel):
                 return None
         return v
 
+    @model_validator(mode="after")
+    def validate_coordinate_pair(self) -> "FlightsOverheadRequest":
+        has_lat = self.latitude is not None
+        has_lon = self.longitude is not None
+        if has_lat != has_lon:
+            raise ValueError("Both 'latitude' and 'longitude' must be provided together.")
+        if not has_lat and not self.location:
+            raise ValueError("Either ('latitude', 'longitude') or a 'location' name must be provided.")
+        return self
+
 
 class TrackFlightRequest(BaseModel):
     """Request model for tracking a specific flight by callsign or ICAO 24-bit address."""
@@ -70,8 +88,8 @@ class TrackFlightRequest(BaseModel):
     @classmethod
     def normalize_callsign(cls, v: str) -> str:
         cleaned = v.strip().upper()
-        if not cleaned:
-            raise ValueError("Callsign cannot be empty.")
+        if len(cleaned) < 2:
+            raise ValueError("Callsign must be at least 2 characters long after trimming.")
         return cleaned
 
 
@@ -98,3 +116,12 @@ class AirspaceActivityRequest(BaseModel):
         le=25,
         description="Maximum number of aircraft to list in the regional summary."
     )
+
+    @field_validator("country", "location")
+    @classmethod
+    def normalize_optional_strings(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v

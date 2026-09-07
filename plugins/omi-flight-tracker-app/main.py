@@ -73,7 +73,7 @@ KNOWN_METRO_COORDINATES: Dict[str, Tuple[float, float]] = {
     "vienna": (48.2082, 16.3738),
 }
 
-# --- Bounded LRU Cache with Deep-Copy Isolation ---
+# --- Bounded LRU Cache with Shallow Container Protection ---
 class LRUCache:
     def __init__(self, capacity: int = MAX_CACHE_ENTRIES):
         self.capacity = capacity
@@ -88,13 +88,29 @@ class LRUCache:
             del self.cache[key]
             return None
         self.cache.move_to_end(key)
-        return copy.deepcopy(val)
+        # Return shallow copy of containers to prevent caller mutation without allocating deep copies
+        if isinstance(val, tuple):
+            return tuple(list(item) if isinstance(item, (list, tuple)) else item for item in val)
+        elif isinstance(val, list):
+            return list(val)
+        elif isinstance(val, dict):
+            return dict(val)
+        return val
 
     def set(self, key: str, val: Any, ttl: float = OPENSKY_CACHE_TTL) -> None:
         now = time.monotonic()
         if key in self.cache:
             self.cache.move_to_end(key)
-        self.cache[key] = (now + ttl, copy.deepcopy(val))
+        # Store immutable or protected snapshot
+        if isinstance(val, tuple):
+            stored_val = tuple(tuple(item) if isinstance(item, list) else item for item in val)
+        elif isinstance(val, list):
+            stored_val = tuple(val)
+        elif isinstance(val, dict):
+            stored_val = copy.deepcopy(val)
+        else:
+            stored_val = val
+        self.cache[key] = (now + ttl, stored_val)
         if len(self.cache) > self.capacity:
             self.cache.popitem(last=False)
 
@@ -104,12 +120,13 @@ class LRUCache:
 
 cache = LRUCache()
 
-# --- Rate Limiter with Trusted Proxy Isolation ---
+# --- Rate Limiter with Trusted Proxy Isolation & Bounded History ---
 class SlidingWindowRateLimiter:
     def __init__(self, max_requests: int = RATE_LIMIT_REQUESTS, window_seconds: float = RATE_LIMIT_WINDOW_SECONDS):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.history: Dict[str, List[float]] = {}
+        self.max_tracked_ips = 500
         self.trusted_proxies: List[ipaddress.IPv4Network | ipaddress.IPv6Network] = self._load_trusted_proxies()
 
     def _load_trusted_proxies(self) -> List[ipaddress.IPv4Network | ipaddress.IPv6Network]:
@@ -147,10 +164,28 @@ class SlidingWindowRateLimiter:
                     pass
         return peer_ip
 
+    def _evict_idle_entries(self, now: float) -> None:
+        valid_from = now - self.window_seconds
+        idle_ips = [
+            ip for ip, timestamps in self.history.items()
+            if not timestamps or timestamps[-1] <= valid_from
+        ]
+        for ip in idle_ips:
+            del self.history[ip]
+        # If still over limit, drop oldest
+        if len(self.history) > self.max_tracked_ips:
+            excess = len(self.history) - self.max_tracked_ips
+            for ip in list(self.history.keys())[:excess]:
+                del self.history[ip]
+
     def is_rate_limited(self, client_ip: str) -> bool:
         now = time.monotonic()
-        timestamps = self.history.get(client_ip, [])
         valid_from = now - self.window_seconds
+
+        if len(self.history) > self.max_tracked_ips:
+            self._evict_idle_entries(now)
+
+        timestamps = self.history.get(client_ip, [])
         timestamps = [ts for ts in timestamps if ts > valid_from]
         if len(timestamps) >= self.max_requests:
             self.history[client_ip] = timestamps
@@ -164,20 +199,26 @@ rate_limiter = SlidingWindowRateLimiter()
 
 # --- Geographic & Aviation Math Helpers ---
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculates great-circle distance between two GPS coordinates in kilometers."""
+    """Calculates great-circle distance between two GPS coordinates in kilometers (antimeridian safe)."""
     r = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
+    # Normalize dlambda to [-pi, pi] across antimeridian
+    dlambda = (dlambda + math.pi) % (2.0 * math.pi) - math.pi
+
     a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return r * c
 
 
 def calculate_bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculates initial compass bearing from observer (lat1, lon1) to aircraft (lat2, lon2) in degrees."""
+    """Calculates initial compass bearing from observer to aircraft in degrees (antimeridian safe)."""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dlambda = math.radians(lon2 - lon1)
+    # Normalize dlambda to [-pi, pi] across antimeridian
+    dlambda = (dlambda + math.pi) % (2.0 * math.pi) - math.pi
+
     y = math.sin(dlambda) * math.cos(phi2)
     x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlambda)
     initial_bearing = math.atan2(y, x)
@@ -194,17 +235,34 @@ def bearing_to_compass(bearing: float) -> str:
     return compass_points[idx]
 
 
-def compute_bounding_box(lat: float, lon: float, radius_km: float) -> Tuple[float, float, float, float]:
-    """Computes (lamin, lomin, lamax, lomax) for OpenSky API filtering."""
+def compute_bounding_boxes(lat: float, lon: float, radius_km: float) -> List[Tuple[float, float, float, float]]:
+    """
+    Computes list of (lamin, lomin, lamax, lomax) bounding boxes.
+    If the search radius crosses the antimeridian (±180°), splits into two separate bounding boxes.
+    """
     delta_lat = radius_km / 111.0
     cos_lat = max(0.01, math.cos(math.radians(lat)))
     delta_lon = radius_km / (111.0 * cos_lat)
 
     lamin = max(-90.0, lat - delta_lat)
     lamax = min(90.0, lat + delta_lat)
-    lomin = max(-180.0, lon - delta_lon)
-    lomax = min(180.0, lon + delta_lon)
-    return lamin, lomin, lamax, lomax
+    raw_lomin = lon - delta_lon
+    raw_lomax = lon + delta_lon
+
+    if raw_lomin < -180.0:
+        # Crosses antimeridian to the west: split into [lomin+360, 180] and [-180, lomax]
+        return [
+            (lamin, raw_lomin + 360.0, lamax, 180.0),
+            (lamin, -180.0, lamax, min(180.0, raw_lomax)),
+        ]
+    elif raw_lomax > 180.0:
+        # Crosses antimeridian to the east: split into [lomin, 180] and [-180, lomax-360]
+        return [
+            (lamin, max(-180.0, raw_lomin), lamax, 180.0),
+            (lamin, -180.0, lamax, raw_lomax - 360.0),
+        ]
+    else:
+        return [(lamin, max(-180.0, raw_lomin), lamax, min(180.0, raw_lomax))]
 
 
 def resolve_coordinates(
@@ -325,10 +383,10 @@ def format_flight_entry(
 
 
 # --- OpenSky Network Client ---
-async def fetch_opensky_states(
-    bbox: Optional[Tuple[float, float, float, float]] = None
+async def fetch_single_opensky_bbox(
+    bbox: Optional[Tuple[float, float, float, float]]
 ) -> Tuple[int, List[List[Any]]]:
-    """Fetches real-time ADS-B states from OpenSky with caching."""
+    """Fetches real-time ADS-B states for a single bounding box with caching."""
     cache_key = f"opensky_states_{bbox}" if bbox else "opensky_states_global"
     cached = cache.get(cache_key)
     if cached is not None:
@@ -364,11 +422,55 @@ async def fetch_opensky_states(
             result = (timestamp, raw_states)
             cache.set(cache_key, result, ttl=OPENSKY_CACHE_TTL)
             return result
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code == 429:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="OpenSky flight radar is temporarily rate-limited due to high traffic. Please retry in 15 seconds."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"OpenSky upstream API returned error {status_code}."
+        )
     except httpx.RequestError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Network error communicating with OpenSky Network: {str(exc)}"
         )
+
+
+async def fetch_opensky_states(
+    bbox: Optional[Tuple[float, float, float, float]] = None
+) -> Tuple[int, List[List[Any]]]:
+    """Fetches real-time ADS-B states from OpenSky."""
+    return await fetch_single_opensky_bbox(bbox)
+
+
+async def fetch_opensky_states_for_boxes(
+    boxes: List[Tuple[float, float, float, float]]
+) -> Tuple[int, List[List[Any]]]:
+    """Fetches states across one or multiple bounding boxes (handling antimeridian splits)."""
+    if not boxes:
+        return await fetch_single_opensky_bbox(None)
+    if len(boxes) == 1:
+        return await fetch_single_opensky_bbox(boxes[0])
+
+    # Multiple bounding boxes (antimeridian wrap)
+    combined_states: List[List[Any]] = []
+    seen_icaos = set()
+    latest_time = 0
+
+    for box in boxes:
+        ts, states = await fetch_single_opensky_bbox(box)
+        latest_time = max(latest_time, ts)
+        for s in states:
+            icao = s[0]
+            if icao not in seen_icaos:
+                seen_icaos.add(icao)
+                combined_states.append(s)
+
+    return latest_time, combined_states
 
 
 # --- FastAPI Application ---
@@ -410,7 +512,6 @@ async def root():
                 --bg: #0b0f19;
                 --card-bg: #161f30;
                 --accent: #38bdf8;
-                --accent-hover: #0ea5e9;
                 --text: #f8fafc;
                 --text-muted: #94a3b8;
                 --border: #334155;
@@ -540,13 +641,23 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint probing upstream OpenSky Network status."""
-    cached_status = cache.get("health_status")
+    """Local, I/O-free deployment health check probe for Railway and Docker."""
+    return {
+        "status": "healthy",
+        "service": "omi-flight-tracker-app",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/health/upstream")
+async def health_upstream():
+    """Diagnostic health check probing upstream OpenSky Network status with caching."""
+    cached_status = cache.get("upstream_health_status")
     if cached_status is not None:
         return cached_status
 
     upstream_ok = True
-    message = "OpenSky Network flight tracker integration is healthy and operational."
+    message = "OpenSky Network flight tracker upstream is healthy and operational."
     try:
         # Probe OpenSky with a small 0.1 degree bounding box over London Heathrow
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -568,7 +679,7 @@ async def health():
         "upstream_connected": upstream_ok,
         "message": message,
     }
-    cache.set("health_status", status_data, ttl=60.0)
+    cache.set("upstream_health_status", status_data, ttl=60.0)
     return status_data
 
 
@@ -669,12 +780,14 @@ async def get_flights_overhead(req: FlightsOverheadRequest) -> ChatToolResponse:
     except ValueError as err:
         return ChatToolResponse(error=str(err))
 
-    bbox = compute_bounding_box(obs_lat, obs_lon, req.radius_km)
+    boxes = compute_bounding_boxes(obs_lat, obs_lon, req.radius_km)
 
     try:
-        timestamp, raw_states = await fetch_opensky_states(bbox)
+        timestamp, raw_states = await fetch_opensky_states_for_boxes(boxes)
     except HTTPException as exc:
         return ChatToolResponse(error=exc.detail)
+    except Exception as exc:
+        return ChatToolResponse(error=f"Error fetching flight data: {str(exc)}")
 
     if not raw_states:
         return ChatToolResponse(
@@ -717,23 +830,25 @@ async def get_flights_overhead(req: FlightsOverheadRequest) -> ChatToolResponse:
 
 @app.post("/tools/track_flight_by_callsign", response_model=ChatToolResponse)
 async def track_flight_by_callsign(req: TrackFlightRequest) -> ChatToolResponse:
-    """Tool: Tracks a flight in real time by callsign or ICAO address."""
+    """Tool: Tracks a flight in real time by callsign or ICAO address (exact match only)."""
     target = req.callsign.upper()
 
     try:
         timestamp, raw_states = await fetch_opensky_states(bbox=None)
     except HTTPException as exc:
         return ChatToolResponse(error=exc.detail)
+    except Exception as exc:
+        return ChatToolResponse(error=f"Error fetching flight tracking data: {str(exc)}")
 
     if not raw_states:
         return ChatToolResponse(error="No flight telemetry currently available from OpenSky Network.")
 
-    # Search for matching callsign or icao24
+    # Search for exact matching callsign or icao24 (no partial substring match)
     matches: List[List[Any]] = []
     for state in raw_states:
         callsign = (state[1] or "").strip().upper()
         icao = (state[0] or "").strip().upper()
-        if callsign == target or icao == target or target in callsign:
+        if callsign == target or icao == target:
             matches.append(state)
 
     if not matches:
@@ -769,15 +884,36 @@ async def get_airspace_activity(req: AirspaceActivityRequest) -> ChatToolRespons
 
     if req.location:
         norm = req.location.strip().lower()
+        coords = None
+        matched_name = req.location.strip().title()
         if norm in KNOWN_METRO_COORDINATES:
-            lat, lon = KNOWN_METRO_COORDINATES[norm]
-            bbox = compute_bounding_box(lat, lon, radius_km=100.0)
-            area_label = f"Greater {req.location.strip().title()} Airspace (100km radius)"
+            coords = KNOWN_METRO_COORDINATES[norm]
+        else:
+            for k, c in KNOWN_METRO_COORDINATES.items():
+                if k in norm or norm in k:
+                    coords = c
+                    matched_name = k.title()
+                    break
+
+        if not coords:
+            return ChatToolResponse(
+                error=(
+                    f"Location '{req.location}' is not in the built-in city registry. "
+                    "Please choose a supported metro area such as London, New York, Frankfurt, Tokyo, Paris, or Atlanta."
+                )
+            )
+
+        lat, lon = coords
+        boxes = compute_bounding_boxes(lat, lon, radius_km=100.0)
+        bbox = boxes[0] if boxes else None
+        area_label = f"Greater {matched_name} Airspace (100km radius)"
 
     try:
         timestamp, raw_states = await fetch_opensky_states(bbox=bbox)
     except HTTPException as exc:
         return ChatToolResponse(error=exc.detail)
+    except Exception as exc:
+        return ChatToolResponse(error=f"Error fetching airspace activity data: {str(exc)}")
 
     if not raw_states:
         return ChatToolResponse(result=f"No active aircraft currently reported for {area_label}.")
