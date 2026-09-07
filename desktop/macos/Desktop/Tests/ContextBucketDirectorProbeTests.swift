@@ -227,6 +227,14 @@
       XCTAssertTrue(ContextDirectorEligibility.permitsEvaluation(of: eligible))
       XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: noFacts))
       XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: zeroWorthiness))
+      XCTAssertTrue(ContextDirectorEligibility.permitsJITEvaluation(of: eligible))
+      XCTAssertFalse(ContextDirectorEligibility.permitsJITEvaluation(of: noFacts))
+      XCTAssertTrue(
+        ContextDirectorEligibility.permitsJITEvaluation(of: zeroWorthiness),
+        "planned JIT matching is grounded on validated facts, not director worthiness")
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: eligible), .jitThenLegacyDirector)
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: noFacts), .skip)
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: zeroWorthiness), .jitOnly)
     }
 
     func testReplayReturnsEffectiveSilenceForZeroWorthinessWithoutModel() async throws {
