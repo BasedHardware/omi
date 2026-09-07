@@ -205,9 +205,12 @@ type AppTileModel = {
   status: string;
 };
 
-function cloudAppStatus(app: CloudApp): string {
+function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
   if (app.connectedAccounts.length > 0) {
     return 'Connected';
+  }
+  if (!installKnown) {
+    return '';
   }
   if (app.enabled) {
     return 'Installed';
@@ -225,13 +228,16 @@ function cloudAppSource(app: CloudApp): string {
   return app.description;
 }
 
-function tilesFromCatalog(apps: CloudApp[]): AppTileModel[] {
+function tilesFromCatalog(
+  apps: CloudApp[],
+  installKnown: boolean,
+): AppTileModel[] {
   return apps.map(app => ({
     Icon: Puzzle,
     id: app.id,
     name: app.name,
     source: cloudAppSource(app),
-    status: cloudAppStatus(app),
+    status: cloudAppStatus(app, installKnown),
   }));
 }
 
@@ -245,7 +251,9 @@ function AppTile({item}: {item: AppTileModel}) {
         </View>
         <Text style={styles.rowTitle}>{item.name}</Text>
         <Text style={styles.rowMeta}>{item.source}</Text>
-        <Text style={styles.appStatus}>{item.status}</Text>
+        {item.status.length > 0 ? (
+          <Text style={styles.appStatus}>{item.status}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -278,7 +286,7 @@ export function AppsPage({session}: {session: DesktopSession}) {
         if (!active) {
           return;
         }
-        setTiles(tilesFromCatalog(snapshot.apps));
+        setTiles(tilesFromCatalog(snapshot.apps, snapshot.enabledIds !== null));
         setEnabledError(snapshot.enabledError);
         setError(null);
       })

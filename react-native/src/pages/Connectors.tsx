@@ -29,6 +29,16 @@ import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 
+function appRowMeta(app: CloudApp, installKnown: boolean): string {
+  return [
+    app.category.length > 0 ? app.category : null,
+    app.author.length > 0 ? app.author : null,
+    installKnown ? (app.enabled ? 'Installed' : 'Not installed') : null,
+  ]
+    .filter(item => item !== null)
+    .join(' · ');
+}
+
 export function ConnectorsPage({
   onSignIn,
   signingIn = false,
@@ -167,6 +177,8 @@ export function ConnectorsPage({
     await reload();
   };
 
+  const installKnown = snapshot !== null && snapshot.enabledIds !== null;
+
   return (
     <ScrollView contentContainerStyle={styles.destinationPage}>
       <View style={[styles.destinationSections, styles.cloudSections]}>
@@ -227,54 +239,51 @@ export function ConnectorsPage({
               {section.items.length === 0 ? (
                 <Text style={styles.projectionEmptyCopy}>{section.empty}</Text>
               ) : (
-                section.items.map(app => (
-                  <View
-                    key={`${section.key}-${app.id}`}
-                    style={styles.cloudRow}>
-                    <View style={styles.cloudRowBody}>
-                      <Text style={styles.cloudRowTitle}>{app.name}</Text>
-                      {app.description.length > 0 && (
-                        <Text numberOfLines={2} style={styles.cloudRowMeta}>
-                          {app.description}
+                section.items.map(app => {
+                  const meta = appRowMeta(app, installKnown);
+                  return (
+                    <View
+                      key={`${section.key}-${app.id}`}
+                      style={styles.cloudRow}>
+                      <View style={styles.cloudRowBody}>
+                        <Text style={styles.cloudRowTitle}>{app.name}</Text>
+                        {app.description.length > 0 && (
+                          <Text numberOfLines={2} style={styles.cloudRowMeta}>
+                            {app.description}
+                          </Text>
+                        )}
+                        {meta.length > 0 && (
+                          <Text style={styles.cloudRowMeta}>{meta}</Text>
+                        )}
+                      </View>
+                      <FocusPressable
+                        accessibilityLabel={
+                          app.enabled
+                            ? `Remove ${app.name}`
+                            : `Install ${app.name}`
+                        }
+                        accessibilityRole="button"
+                        disabled={pendingId !== null}
+                        onPress={() => {
+                          setEnabled(app, !app.enabled).catch(() => undefined);
+                        }}
+                        style={({pressed}) => [
+                          styles.cloudAction,
+                          pressed && styles.pressed,
+                        ]}>
+                        <Text style={styles.cloudActionText}>
+                          {pendingId === app.id
+                            ? app.enabled
+                              ? 'Removing…'
+                              : 'Installing…'
+                            : app.enabled
+                            ? 'Remove'
+                            : 'Install'}
                         </Text>
-                      )}
-                      <Text style={styles.cloudRowMeta}>
-                        {[
-                          app.category.length > 0 ? app.category : null,
-                          app.author.length > 0 ? app.author : null,
-                          app.enabled ? 'Installed' : 'Not installed',
-                        ]
-                          .filter(item => item !== null)
-                          .join(' · ')}
-                      </Text>
+                      </FocusPressable>
                     </View>
-                    <FocusPressable
-                      accessibilityLabel={
-                        app.enabled
-                          ? `Remove ${app.name}`
-                          : `Install ${app.name}`
-                      }
-                      accessibilityRole="button"
-                      disabled={pendingId !== null}
-                      onPress={() => {
-                        setEnabled(app, !app.enabled).catch(() => undefined);
-                      }}
-                      style={({pressed}) => [
-                        styles.cloudAction,
-                        pressed && styles.pressed,
-                      ]}>
-                      <Text style={styles.cloudActionText}>
-                        {pendingId === app.id
-                          ? app.enabled
-                            ? 'Removing…'
-                            : 'Installing…'
-                          : app.enabled
-                          ? 'Remove'
-                          : 'Install'}
-                      </Text>
-                    </FocusPressable>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           ))

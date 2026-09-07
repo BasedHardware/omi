@@ -546,9 +546,40 @@ test('nested non-retryable Apps enabled reads do not claim catalogue apps are in
   );
   expect(textOf(renderer)).not.toContain('No installed apps.');
   expect(textOf(renderer)).toContain('Owned app');
-  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('Not installed');
   expect(labelsOf(renderer)).toContain('Install Owned app');
   expect(labelsOf(renderer)).not.toContain('Remove Owned app');
+});
+
+test('successful empty Apps enabled reads still report catalogue apps as not installed', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: false},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).toContain('No installed apps.');
+  expect(labelsOf(renderer)).toContain('Install Owned app');
 });
 
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
