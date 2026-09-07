@@ -1086,12 +1086,12 @@ struct ConversationDetailView: View {
           : {
             selectedSegmentForNaming = segment
           },
-        onTimestampTapped: Self.showsCapturePlayback(for: displayConversation.source, in: .transcript)
+        onMomentTapped: Self.showsCapturePlayback(for: displayConversation.source, in: .transcript)
           ? {
-            Task { _ = await capturePlayback.seekToMoment(wallOffset: segment.start) }
+            Task { await capturePlayback.playFromMoment(wallOffset: segment.start) }
           }
           : nil,
-        isTimestampPlayable: canSeekCaptureMoment(segment)
+        isMomentPlayable: canSeekCaptureMoment(segment)
       )
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.xs)
@@ -1119,8 +1119,12 @@ struct ConversationDetailView: View {
     return artifact.artifactOffset(forWallOffset: segment.start) != nil
   }
 
+  /// The highlighted bubble is the transport's current position, so it also
+  /// marks where a paused or scrubbed player will resume, not only live playback.
   private var activeCaptureTranscriptSegmentID: String? {
-    guard capturePlayback.isPlaybackRequested, let resolution = capturePlayback.resolution else { return nil }
+    guard capturePlayback.isPlaybackRequested || capturePlayback.currentTime > 0,
+      let resolution = capturePlayback.resolution
+    else { return nil }
     return CaptureTranscriptFollowPolicy.activeSegmentID(
       atPlaybackOffset: capturePlayback.currentTime,
       resolution: resolution,
@@ -1659,8 +1663,7 @@ private struct ConversationCapturePlaybackSection: View {
 
         if playback.duration > 0 {
           HStack(spacing: OmiSpacing.sm) {
-            ProgressView(value: min(playback.currentTime, playback.duration), total: playback.duration)
-              .accessibilityLabel("Capture playback progress")
+            CapturePlaybackScrubber(playback: playback)
             Text("\(Self.playbackTimestamp(playback.currentTime)) / \(Self.playbackTimestamp(playback.duration))")
               .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundStyle(Ink.secondary)
@@ -1699,6 +1702,72 @@ private struct ConversationCapturePlaybackSection: View {
   private static func playbackTimestamp(_ offset: TimeInterval) -> String {
     let totalSeconds = max(0, Int(offset))
     return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+  }
+}
+
+/// Draggable transport position. Drawn with named tokens rather than a system
+/// `Slider` so the fill never picks up the machine's accent hue (INV-UI-1) and
+/// it sits on the glass like the rest of the page chrome.
+private struct CapturePlaybackScrubber: View {
+  @ObservedObject var playback: CapturePlaybackController
+
+  private static let trackHeight: CGFloat = 4
+  private static let thumbDiameter: CGFloat = 12
+  private static let hitHeight: CGFloat = 20
+  private static let keyboardStep: TimeInterval = 5
+
+  var body: some View {
+    GeometryReader { geometry in
+      let width = geometry.size.width
+      let progress = CapturePlaybackScrubPolicy.progress(
+        currentTime: playback.currentTime, duration: playback.duration)
+      let thumbCenter = width * progress
+
+      ZStack(alignment: .leading) {
+        Capsule()
+          .fill(Ink.rowFillHover)
+          .frame(height: Self.trackHeight)
+        Capsule()
+          .fill(Ink.accent)
+          .frame(width: max(0, thumbCenter), height: Self.trackHeight)
+        Circle()
+          .fill(Ink.accent)
+          .frame(width: Self.thumbDiameter, height: Self.thumbDiameter)
+          .scaleEffect(playback.isScrubbing ? 1.25 : 1)
+          .offset(x: thumbCenter - Self.thumbDiameter / 2)
+      }
+      .frame(width: width, height: Self.hitHeight)
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { value in
+            playback.scrub(toPlaybackOffset: offset(forLocationX: value.location.x, width: width))
+          }
+          .onEnded { value in
+            let target = offset(forLocationX: value.location.x, width: width)
+            Task { await playback.endScrubbing(atPlaybackOffset: target) }
+          }
+      )
+    }
+    .frame(height: Self.hitHeight)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Capture playback position")
+    .accessibilityValue(Self.accessibilityTimestamp(playback.currentTime))
+    .accessibilityAdjustableAction { direction in
+      let delta = direction == .increment ? Self.keyboardStep : -Self.keyboardStep
+      let target = playback.currentTime + delta
+      Task { await playback.seek(toPlaybackOffset: target) }
+    }
+    .accessibilityIdentifier("chat-first-capture-scrubber")
+  }
+
+  private func offset(forLocationX x: CGFloat, width: CGFloat) -> TimeInterval {
+    CapturePlaybackScrubPolicy.playbackOffset(forLocationX: x, width: width, duration: playback.duration)
+  }
+
+  private static func accessibilityTimestamp(_ offset: TimeInterval) -> String {
+    let totalSeconds = max(0, Int(offset))
+    return "\(totalSeconds / 60) minutes \(totalSeconds % 60) seconds"
   }
 }
 

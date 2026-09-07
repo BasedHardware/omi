@@ -426,6 +426,96 @@ final class CaptureArchiveTests: XCTestCase {
       ))
   }
 
+  func testScrubPolicyMapsTrackGeometryToClampedMediaTime() {
+    XCTAssertEqual(
+      CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 200, duration: 40), 10, accuracy: 0.001)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: -30, width: 200, duration: 40), 0)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 500, width: 200, duration: 40), 40)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 0, duration: 40), 0)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.playbackOffset(forLocationX: 50, width: 200, duration: 0), 0)
+
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 10, duration: 40), 0.25, accuracy: 0.001)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 90, duration: 40), 1)
+    XCTAssertEqual(CapturePlaybackScrubPolicy.progress(currentTime: 5, duration: 0), 0)
+  }
+
+  func testScrubbingPublishesThePointerPositionAndSeeksOnceOnRelease() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [
+        .fileFallback(CapturePlaybackFile(id: "local", signedURL: audioURL, duration: 3))
+      ]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-scrub"))
+
+    controller.scrub(toPlaybackOffset: 1.5)
+    XCTAssertTrue(controller.isScrubbing)
+    XCTAssertEqual(controller.currentTime, 1.5, accuracy: 0.001)
+
+    // A drag past the end clamps to the clip instead of publishing an impossible position.
+    controller.scrub(toPlaybackOffset: 12)
+    XCTAssertEqual(controller.currentTime, 3, accuracy: 0.001)
+
+    let finished = await controller.endScrubbing(atPlaybackOffset: 2)
+    XCTAssertTrue(finished)
+    XCTAssertFalse(controller.isScrubbing)
+    XCTAssertEqual(controller.currentTime, 2, accuracy: 0.001)
+    XCTAssertFalse(controller.isPlaybackRequested, "Scrubbing repositions; it does not start playback")
+
+    // Resuming after a scrub continues from the scrubbed position rather than restarting at zero.
+    let resumedPastScrub = expectation(description: "playback resumes from the scrubbed position")
+    let observation = controller.$currentTime
+      .filter { $0 > 2.05 }
+      .prefix(1)
+      .sink { _ in resumedPastScrub.fulfill() }
+    XCTAssertTrue(controller.playOrPause())
+    await fulfillment(of: [resumedPastScrub], timeout: 3)
+    XCTAssertGreaterThan(controller.currentTime, 2.05)
+    withExtendedLifetime(observation) {}
+    controller.clear()
+    XCTAssertFalse(controller.isScrubbing)
+  }
+
+  func testBubbleTapSeeksTheAggregateMomentAndStartsPlayback() async throws {
+    let audioURL = try temporaryAudioFile(durationSeconds: 3)
+    defer { try? FileManager.default.removeItem(at: audioURL) }
+    // Wall clock 10s...13s maps onto media 0s...3s.
+    let artifact = CapturePlaybackArtifact(
+      signedURL: audioURL, duration: 3,
+      spans: [CaptureAudioURLSpan(fileID: "local", wallOffset: 10, artifactOffset: 0, length: 3)]
+    )
+    let controller = CapturePlaybackController(
+      provider: CapturePlaybackProviderFake(resolutions: [.readyAggregate(artifact)]))
+    _ = await controller.prepare(for: archiveCapture(id: "omi-bubble"))
+
+    // A bubble outside every captured span is not playable, so it must not start audio.
+    let gapAccepted = await controller.playFromMoment(wallOffset: 20)
+    XCTAssertFalse(gapAccepted)
+    XCTAssertFalse(controller.isPlaybackRequested)
+    XCTAssertEqual(controller.currentTime, 0)
+
+    let accepted = await controller.playFromMoment(wallOffset: 11)
+    XCTAssertTrue(accepted)
+    XCTAssertTrue(controller.isPlaybackRequested)
+    XCTAssertGreaterThanOrEqual(controller.currentTime, 1 - 0.001)
+    XCTAssertLessThan(controller.currentTime, 1.5)
+
+    // Tapping another bubble while playing jumps without pausing.
+    let jumped = await controller.playFromMoment(wallOffset: 12)
+    XCTAssertTrue(jumped)
+    XCTAssertTrue(controller.isPlaybackRequested)
+    XCTAssertGreaterThanOrEqual(controller.currentTime, 2 - 0.001)
+    controller.clear()
+  }
+
+}
+
+private func temporaryAudioFile(durationSeconds: Int) throws -> URL {
+  let audioURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("capture-playback-\(UUID().uuidString)")
+    .appendingPathExtension("wav")
+  try silentWaveData(durationSeconds: durationSeconds).write(to: audioURL)
+  return audioURL
 }
 
 private func silentWaveData(durationSeconds: Int) -> Data {

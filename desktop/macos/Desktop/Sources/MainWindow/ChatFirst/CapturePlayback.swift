@@ -113,6 +113,23 @@ enum CaptureFocusAcknowledgementPolicy {
   }
 }
 
+/// Pure geometry for the transport scrubber so a drag maps to media time the
+/// same way in tests and on screen.
+enum CapturePlaybackScrubPolicy {
+  /// Fraction of the track the current position occupies, clamped to 0...1.
+  static func progress(currentTime: TimeInterval, duration: TimeInterval) -> Double {
+    guard duration > 0, currentTime.isFinite else { return 0 }
+    return min(max(currentTime / duration, 0), 1)
+  }
+
+  /// Media offset for a pointer location along a track of the given width.
+  static func playbackOffset(forLocationX x: CGFloat, width: CGFloat, duration: TimeInterval) -> TimeInterval {
+    guard width > 0, duration > 0 else { return 0 }
+    let fraction = min(max(Double(x / width), 0), 1)
+    return fraction * duration
+  }
+}
+
 struct LiveCapturePlaybackProvider: CapturePlaybackProviding {
   func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution {
     guard !capture.isLocked else { return .locked }
@@ -182,8 +199,14 @@ final class CapturePlaybackController: ObservableObject {
   @Published private(set) var currentTime: TimeInterval = 0
   @Published private(set) var duration: TimeInterval = 0
   @Published private(set) var playbackError: String?
+  /// True while the user drags the scrubber. The periodic time observer must
+  /// not overwrite the dragged position with the player's stale one.
+  @Published private(set) var isScrubbing = false
 
   private let provider: any CapturePlaybackProviding
+  /// Seeks that AVFoundation has not confirmed yet. Observer ticks are ignored
+  /// meanwhile so the transport never snaps back to the pre-seek position.
+  private var inFlightSeeks = 0
   private var player: AVPlayer?
   private var timeObserver: Any?
   private var playerCancellables: Set<AnyCancellable> = []
@@ -272,8 +295,34 @@ final class CapturePlaybackController: ObservableObject {
   func seekToMoment(wallOffset: TimeInterval) async -> Bool {
     guard case .readyAggregate(let artifact) = resolution,
       let target = artifact.artifactOffset(forWallOffset: wallOffset),
-      let player
+      player != nil
     else { return false }
+    return await seek(toPlaybackOffset: target)
+  }
+
+  /// A transcript bubble tap: jump to that moment and make sure audio is
+  /// playing. A seek that cannot be translated changes nothing, so a tap on a
+  /// gap never restarts playback somewhere unrelated.
+  @discardableResult
+  func playFromMoment(wallOffset: TimeInterval) async -> Bool {
+    guard await seekToMoment(wallOffset: wallOffset) else { return false }
+    if !isPlaybackRequested {
+      playOrPause()
+    }
+    return true
+  }
+
+  /// Seeks the media timeline directly. Works for the aggregate artifact and
+  /// the single-file fallback alike because the offset is already media time.
+  /// The new position is published before AVFoundation confirms it so the
+  /// transport and transcript highlight respond to the gesture, not the codec.
+  @discardableResult
+  func seek(toPlaybackOffset offset: TimeInterval) async -> Bool {
+    guard let player else { return false }
+    let target = clampedPlaybackOffset(offset)
+    currentTime = target
+    inFlightSeeks += 1
+    defer { inFlightSeeks -= 1 }
 
     let time = CMTime(seconds: target, preferredTimescale: 600)
     return await withCheckedContinuation { continuation in
@@ -281,6 +330,26 @@ final class CapturePlaybackController: ObservableObject {
         continuation.resume(returning: finished)
       }
     }
+  }
+
+  /// Scrub gesture: the thumb follows the pointer immediately; the real seek
+  /// happens once when the drag ends so AVFoundation is not flooded.
+  func scrub(toPlaybackOffset offset: TimeInterval) {
+    guard player != nil else { return }
+    isScrubbing = true
+    currentTime = clampedPlaybackOffset(offset)
+  }
+
+  @discardableResult
+  func endScrubbing(atPlaybackOffset offset: TimeInterval) async -> Bool {
+    isScrubbing = false
+    return await seek(toPlaybackOffset: offset)
+  }
+
+  private func clampedPlaybackOffset(_ offset: TimeInterval) -> TimeInterval {
+    guard offset.isFinite else { return 0 }
+    let upperBound = duration > 0 ? duration : offset
+    return min(max(offset, 0), max(0, upperBound))
   }
 
   private func installPlayer(url: URL, expectedDuration: TimeInterval) {
@@ -362,7 +431,7 @@ final class CapturePlaybackController: ObservableObject {
       queue: .main
     ) { [weak self] time in
       Task { @MainActor [weak self] in
-        guard let self else { return }
+        guard let self, !self.isScrubbing, self.inFlightSeeks == 0 else { return }
         let seconds = time.seconds
         if seconds.isFinite {
           self.currentTime = max(0, seconds)
@@ -388,5 +457,6 @@ final class CapturePlaybackController: ObservableObject {
     currentTime = 0
     duration = 0
     playbackError = nil
+    isScrubbing = false
   }
 }

@@ -1,0 +1,3 @@
+{
+  "change": "Added a draggable scrubber to conversation audio playback, and clicking any transcript bubble now jumps the audio to that sentence and starts playing"
+}

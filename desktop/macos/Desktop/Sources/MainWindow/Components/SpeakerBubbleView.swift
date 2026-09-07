@@ -7,8 +7,12 @@ struct SpeakerBubbleView: View {
   let isUser: Bool
   var personName: String? = nil
   var onSpeakerTapped: (() -> Void)? = nil
-  var onTimestampTapped: (() -> Void)? = nil
-  var isTimestampPlayable = false
+  /// Capture transcripts: jump playback to this segment. Both the bubble and
+  /// its timestamp trigger it; other sources pass nil and stay read-only.
+  var onMomentTapped: (() -> Void)? = nil
+  var isMomentPlayable = false
+
+  @State private var isBubbleHovered = false
 
   /// Get speaker color based on speaker ID
   private var bubbleColor: Color {
@@ -85,15 +89,32 @@ struct SpeakerBubbleView: View {
         // in an NSTextView-backed StyledTextLayoutEngine, which is extremely expensive.
         // With 400 segments in a conversation, this caused 2+ second main thread hangs.
         // Users can still copy the full transcript via the "Copy" button in the header.
-        Text(segment.text)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.primary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-              .fill(bubbleColor)
-          )
+        if let onMomentTapped, isMomentPlayable {
+          // The whole sentence is the seek target, not only the small
+          // timestamp under it: a listener re-reading a line wants to hear it.
+          Button(action: onMomentTapped) {
+            messageBubble
+              .overlay(
+                RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+                  .stroke(Ink.accent.opacity(isBubbleHovered ? 0.55 : 0), lineWidth: 1)
+              )
+              .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+          }
+          .buttonStyle(.plain)
+          .help("Play from \(formatTime(segment.start))")
+          .accessibilityLabel("Play transcript from \(formatTime(segment.start)): \(segment.text)")
+          .accessibilityIdentifier("transcript_bubble_button_\(segment.id)")
+          .onHover { hovering in
+            isBubbleHovered = hovering
+            if hovering {
+              NSCursor.pointingHand.push()
+            } else {
+              NSCursor.pop()
+            }
+          }
+        } else {
+          messageBubble
+        }
 
         // Translations from backend
         if !segment.translations.isEmpty {
@@ -114,18 +135,18 @@ struct SpeakerBubbleView: View {
         // Capture transcripts reuse their existing timestamps as precise
         // playback controls. Other conversation sources keep the ordinary
         // read-only timestamp without acquiring capture-specific chrome.
-        if let onTimestampTapped {
-          Button(action: onTimestampTapped) {
+        if let onMomentTapped {
+          Button(action: onMomentTapped) {
             HStack(spacing: OmiSpacing.xxs) {
               Image(systemName: "play.circle")
               Text(formatTime(segment.start))
             }
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(isTimestampPlayable ? Ink.primary : Ink.secondary)
+            .foregroundColor(isMomentPlayable ? Ink.primary : Ink.secondary)
           }
           .buttonStyle(.plain)
-          .disabled(!isTimestampPlayable)
-          .help(isTimestampPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
+          .disabled(!isMomentPlayable)
+          .help(isMomentPlayable ? "Play from this moment" : "Timestamped playback is still preparing")
           .accessibilityLabel("Play transcript from \(formatTime(segment.start))")
         } else {
           Text(formatTime(segment.start))
@@ -140,6 +161,18 @@ struct SpeakerBubbleView: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+  }
+
+  private var messageBubble: some View {
+    Text(segment.text)
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(Ink.primary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+          .fill(bubbleColor)
+      )
   }
 
   private var avatar: some View {
