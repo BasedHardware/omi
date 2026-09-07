@@ -21,6 +21,10 @@ import {
   type ChatMessageRecord,
   type StoredChatMessage,
 } from "../../apps/service/stores/chat-messages-store";
+import {
+  MAIN_CHAT_CONVERSATION_ID,
+  type ChatConversationSessionItem,
+} from "../../apps/service/composition/chat-conversation-sessions";
 import type { PostgresTransactionPool } from "./connection";
 import {
   PostgresRepositoryError,
@@ -32,6 +36,7 @@ export interface ChatReadStorage {
   listHistory(query: ChatHistoryQuery): Promise<ChatHistoryStorePage>;
   readMessage(messageId: string): Promise<StoredChatMessage | null>;
   listGenerationEvents(generationId: string): Promise<readonly ChatGenerationEvent[] | null>;
+  listConversationSessions(): Promise<readonly ChatConversationSessionItem[]>;
 }
 
 const fail = (): never => {
@@ -103,6 +108,50 @@ const parseEvent = (value: unknown): ChatGenerationEvent => {
     createdAt,
     frame: parseFrame(row.frame),
   });
+};
+
+const parseConversationSession = (value: unknown): ChatConversationSessionItem => {
+  const row = record(value);
+  const createdAt = integer(row?.createdAt);
+  const updatedAt = integer(row?.updatedAt);
+  const startedAt = integer(row?.startedAt);
+  const finishedAt = row?.finishedAt === null ? null : integer(row?.finishedAt);
+  if (row === null
+    || row.id !== MAIN_CHAT_CONVERSATION_ID
+    || typeof row.title !== "string" || row.title.length === 0 || row.title.length > 240
+    || typeof row.overview !== "string" || row.overview.length === 0 || row.overview.length > 240
+    || createdAt === null || updatedAt === null || startedAt === null
+    || updatedAt < createdAt || startedAt !== createdAt
+    || (finishedAt !== null && finishedAt < createdAt)
+    || row.source !== "chat"
+    || (row.status !== "completed" && row.status !== "in_progress")
+    || row.discarded !== false || row.starred !== false
+    || row.visibility !== "private" || row.isLocked !== false
+    || row.folderId !== null || row.revision !== null) {
+    return fail();
+  }
+  return Object.freeze({
+    id: MAIN_CHAT_CONVERSATION_ID,
+    title: row.title,
+    overview: row.overview,
+    createdAt,
+    updatedAt,
+    startedAt,
+    finishedAt,
+    source: "chat",
+    status: row.status,
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: null,
+  });
+};
+
+const parseConversationSessions = (value: unknown): readonly ChatConversationSessionItem[] => {
+  if (!Array.isArray(value) || value.length > 1) return fail();
+  return Object.freeze(value.map(parseConversationSession));
 };
 
 const parseHistoryPage = (value: unknown): ChatHistoryStorePage => {
@@ -185,6 +234,15 @@ export async function withAuthorizedChatRead<Result>(
           const events = rows[0]!.events;
           if (!Array.isArray(events)) return fail();
           return Object.freeze(events.map(parseEvent));
+        },
+        async listConversationSessions() {
+          const rows = await connection.query({
+            name: "chat.read_conversation_sessions",
+            text: "SELECT omi_memory.read_chat_conversation_sessions() AS sessions",
+            values: [],
+          });
+          if (rows.length !== 1) return fail();
+          return parseConversationSessions(rows[0]!.sessions);
         },
       };
       const result = await project(storage);

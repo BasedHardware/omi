@@ -17,7 +17,7 @@ Build from this backend directory with
 
 This increment serves authenticated canonical memory reads, task reads and
 mutations, indexed device audio uploads, conversation reads, chat history
-reads, and Settings GET. All of them use the same database generation and Firebase authorization
+reads, granted main-chat session composition on the first conversation page, and Settings GET. All of them use the same database generation and Firebase authorization
 configuration inside the readiness and shutdown boundary. Audio upload completion
 does not certify transcription or conversation formation. Chat writes, generation
 SSE, Settings identity/entitlement producers, attachments and authenticated MCP

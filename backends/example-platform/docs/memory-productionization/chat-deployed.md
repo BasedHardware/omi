@@ -21,12 +21,13 @@ answer. Human rows keep `generationOutcome: null`.
 real entitlement producer exists.
 
 Verification uses `bun run check:deployed` for grant denial, empty-page shape,
-projection fail-closed behavior, route pairing and the production import
-closure, and `bun run test:postgres` for actual application-role reads, account
-isolation, unique-terminal assistant outcomes and grant revocation. Docker is
+projection fail-closed behavior, string generation frames, route pairing and the
+production import closure, and `bun run test:postgres` for actual application-role
+reads, account isolation, unique-terminal assistant outcomes, grant revocation
+and conversation-list composition of `chat:chat-main`. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
-Do not apply migration 55 or deploy this entry until the existing operator
+Do not apply migrations 55-56 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
 migrations 1–54.

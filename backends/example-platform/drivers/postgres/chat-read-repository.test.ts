@@ -172,3 +172,93 @@ test("unreadable stored chat history fails closed instead of inventing an empty 
     }),
   )).rejects.toMatchObject({ code: "persistence_failed" });
 });
+
+test("a string generation frame fails closed instead of completing an assistant row", async () => {
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_generation_events"
+          ? [{ events: [{ id: "evt-done", generationId: "gen", sequence: 1, createdAt: 1, frame: "{\"kind\":\"done\"}" }] }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listGenerationEvents("gen"),
+  )).rejects.toMatchObject({ code: "persistence_failed" });
+});
+
+test("unreadable chat conversation sessions fail closed instead of inventing chat:chat-main", async () => {
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{ sessions: { id: "chat:chat-main" } }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).rejects.toMatchObject({ code: "persistence_failed" });
+});
+
+test("granted empty chat conversation sessions stay an empty list", async () => {
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{ sessions: [] }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).resolves.toEqual([]);
+});
