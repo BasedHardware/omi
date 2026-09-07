@@ -253,20 +253,24 @@ function AppTile({item}: {item: AppTileModel}) {
 
 export function AppsPage({session}: {session: DesktopSession}) {
   const [tiles, setTiles] = useState<AppTileModel[] | null>();
+  const [enabledError, setEnabledError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (session !== 'ready') {
       setTiles(undefined);
+      setEnabledError(null);
       setError(null);
       return;
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
       setTiles(null);
+      setEnabledError(null);
       setError(null);
       return;
     }
     setTiles(undefined);
+    setEnabledError(null);
     setError(null);
     let active = true;
     loadConnectors(backend)
@@ -275,11 +279,13 @@ export function AppsPage({session}: {session: DesktopSession}) {
           return;
         }
         setTiles(tilesFromCatalog(snapshot.apps));
+        setEnabledError(snapshot.enabledError);
         setError(null);
       })
       .catch(reason => {
         if (active) {
           setTiles(null);
+          setEnabledError(null);
           setError(desktopReadErrorCopy(reason));
         }
       });
@@ -298,10 +304,19 @@ export function AppsPage({session}: {session: DesktopSession}) {
               ? desktopAppsUnavailableCopy
               : 'Apps could not be loaded.'}
           </EmptyCopy>
-        ) : tiles.length === 0 ? (
-          <EmptyCopy>No apps are available.</EmptyCopy>
         ) : (
-          tiles.map(item => <AppTile item={item} key={item.id} />)
+          <>
+            {enabledError !== null ? (
+              <EmptyCopy>{enabledError}</EmptyCopy>
+            ) : null}
+            {tiles.length === 0 ? (
+              enabledError === null ? (
+                <EmptyCopy>No apps are available.</EmptyCopy>
+              ) : null
+            ) : (
+              tiles.map(item => <AppTile item={item} key={item.id} />)
+            )}
+          </>
         )}
       </ScrollView>
     </View>

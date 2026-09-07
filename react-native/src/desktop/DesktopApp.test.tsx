@@ -1164,6 +1164,70 @@ test('nested non-retryable Apps catalogue failures do not claim a load blip', as
   expect(renderedText(renderer)).not.toContain('Google Calendar');
 });
 
+test('nested non-retryable Apps enabled failures do not claim an empty catalogue', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [],
+    enabledError: desktopAppsUnavailableCopy,
+    enabledIds: null,
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(desktopAppsUnavailableCopy);
+  expect(renderedText(renderer)).not.toContain('No apps are available.');
+});
+
+test('nested non-retryable Apps enabled failures keep catalogue tiles without Installed', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: desktopAppsUnavailableCopy,
+    enabledIds: null,
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(desktopAppsUnavailableCopy);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('Not connected');
+  expect(tree).not.toContain('Installed');
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(
