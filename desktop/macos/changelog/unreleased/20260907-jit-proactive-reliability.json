@@ -1,0 +1,3 @@
+{
+  "change": "Improved proactive JIT notifications so reasoning requests stay within the backend budget and failures retain actionable diagnostics"
+}
