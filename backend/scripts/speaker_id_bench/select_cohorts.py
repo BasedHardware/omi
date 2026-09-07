@@ -48,7 +48,13 @@ def main() -> None:
     sel = {
         "cohortA": {u: {"main": main[u][0], "legacy": [r for r, _ in legacy[u]]} for u in cohortA},
         "cohortB": {u: {"main": main[u][0], "additional": [r for r, _ in additional[u]]} for u in cohortB},
-        "cohortC": {f"{u}/{p}": {"samples": [r for r, _ in persons[u][p]]} for u, p in cohortC},
+        "cohortC": {
+            f"{u}/{p}": {
+                "samples": [r for r, _ in persons[u][p]],
+                **({"main": main[u][0]} if u in main else {}),
+            }
+            for u, p in cohortC
+        },
         "impostors": {u: main[u][0] for u in impostors},
     }
     json.dump(sel, open("selection.json", "w"), indent=1)

@@ -3,16 +3,19 @@
 Measures the enrolled-voiceprint verification policy (`utils/stt/speaker_match.py`)
 against real enrollments in `gs://speech-profiles`, using the same
 `pyannote/wespeaker-voxceleb-resnet34-LM` model the diarizer's `/v2/embedding` serves.
-It replaces production measurement periods: any change to the threshold, margin, clip
-policy or embedding model should be run through here first (about 15 minutes on an
-Apple-silicon laptop).
+It provides offline evidence for changes to the threshold, margin, clip policy or
+embedding model (about 15 minutes on an Apple-silicon laptop). It does not establish
+live accuracy: segment overlap, diarization errors, candidate selection, and session
+lifecycle also affect production decisions.
 
 Cohorts
 
 - **A** the user's current `speech_profile.wav` vs their legacy `samples/*.wav`
   (older enrollment, median 101 days apart) — cross-session, cross-era positives.
 - **B** `speech_profile.wav` vs the user's `additional_profile_recordings/`.
-- **C** taught persons with two or more samples, leave-one-out.
+- **C** taught persons with two or more samples, leave-one-out. Include each
+  available owner profile for owner-versus-person comparisons even when that owner
+  is outside A, B, and the impostor pool.
 - **Impostors** 400 random other users' profiles.
 
 Outputs, per cohort and clip length (whole / 2 s / 5 s / 10 s): false-reject and
