@@ -37,9 +37,9 @@ part of capture idempotency: a lost initial acknowledgement still replays the or
 capture UUID and immutable device fields exactly once within its original ownership.
 
 The Worker currently has no canonical account-epoch authority and returns 503
-`capture_ownership_unavailable` for this endpoint. Its existing D1/R2 routes and data
-remain available, but receipt-backed native journaling cannot silently fall back to
-them. A paired canonical capture and conversation migration is still required there.
+nested `{error:{code:"capture_ownership_unavailable",retryable:false,action:"none"}}`
+for this endpoint. Its existing D1/R2 routes and data remain available, but
+receipt-backed native journaling cannot silently fall back to them. A paired canonical capture and conversation migration is still required there.
 The production memory shell mounts `GET /v1/device-sessions/ownership` as its own
 door so `ownership` is not treated as a UUID session id.
 

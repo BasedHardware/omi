@@ -327,8 +327,12 @@ describe("device session ingest", () => {
       headers: authenticatedHeaders,
     });
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      error: { code: "capture_ownership_unavailable" },
+    expect(await response.json()).toEqual({
+      error: {
+        code: "capture_ownership_unavailable",
+        retryable: false,
+        action: "none",
+      },
     });
   });
   test("opens, stores bytes in the bound bucket, and lists metadata only", async () => {

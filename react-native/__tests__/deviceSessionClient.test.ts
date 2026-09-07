@@ -221,14 +221,27 @@ test('does not treat nested non-retryable capture 503s as transient', async () =
   ).toBe(false);
   expect(
     isTransientDeviceSessionError(
+      new DeviceSessionBackendError(
+        503,
+        'capture_ownership_unavailable',
+        false,
+      ),
+    ),
+  ).toBe(false);
+  expect(
+    isTransientDeviceSessionError(
       new DeviceSessionBackendError(503, 'service_unavailable', true),
     ),
   ).toBe(true);
   expect(
-    isTransientDeviceSessionError(new DeviceSessionBackendError(503, 'unknown')),
+    isTransientDeviceSessionError(
+      new DeviceSessionBackendError(503, 'unknown'),
+    ),
   ).toBe(true);
   expect(
-    isTransientDeviceSessionError(new DeviceSessionBackendError(500, 'unknown')),
+    isTransientDeviceSessionError(
+      new DeviceSessionBackendError(500, 'unknown'),
+    ),
   ).toBe(true);
 });
 

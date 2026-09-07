@@ -916,7 +916,7 @@ export const v1Routes: readonly CoreRoute[] = [
     method: "GET",
     path: "/v1/device-sessions/ownership",
     handle: () =>
-      backendError("capture_ownership_unavailable", "retry", 503, true),
+      backendError("capture_ownership_unavailable", "none", 503),
   },
   {
     method: "POST",
