@@ -85,6 +85,12 @@ omi auth refresh                # force a Firebase refresh (no-op for API keys)
 omi auth logout                 # wipe the credential
 ```
 
+An API-key login candidate is checked before replacing the saved credentials.
+If verification rejects it with HTTP 401 or 403, the existing profile and active
+profile selection remain unchanged. Other HTTP errors retain the existing
+store-and-warn behavior. A transport failure leaves saved credentials unchanged;
+browser OAuth is a separate flow.
+
 You can also set `OMI_API_KEY` in the environment to bypass on-disk config
 entirely — handy in containers and CI:
 
