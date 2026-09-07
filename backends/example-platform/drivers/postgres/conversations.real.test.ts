@@ -87,6 +87,7 @@ realTest(
       );
 
       const failures: string[] = [];
+      const loadedPageSizes: number[] = [];
       const appPool: PostgresTransactionPool = {
         withTransaction: (options, callback) =>
           pool
@@ -96,43 +97,60 @@ realTest(
                 text: "SET LOCAL ROLE omi_platform_application",
                 values: [],
               });
-              return callback(connection);
+              return callback({
+                ...connection,
+                async query(statement) {
+                  const rows = await connection.query(statement);
+                  if (
+                    statement.name === "conversations.read_page" &&
+                    rows[0]?.snapshot
+                  )
+                    loadedPageSizes.push(
+                      (rows[0].snapshot as any).records.length
+                    );
+                  return rows;
+                },
+              });
             })
             .catch((error) => {
               failures.push(String(error.code ?? error.message));
               throw error;
             }),
       };
-      const runtime = createPostgresFirebaseConversationReadRuntime({
-        authorization: {
-          pool: appPool,
-          project_id: project,
-          application_id: app,
-          runtime_mode: "deployed",
-          context_ttl_seconds: 60,
-          database_generation_digest: generation,
-          id_token_adapter: {
-            verification_source: "firebase_production",
-            async verifyIdToken(token) {
-              const selected = token.startsWith("other") ? `other-${uid}` : uid;
-              return {
-                aud: project,
-                iss: `https://securetoken.google.com/${project}`,
-                sub: selected,
-                uid: selected,
-                iat: now() - 10,
-                auth_time: now() - 10,
-                exp: now() + 600,
-              };
+      const makeRuntime = () =>
+        createPostgresFirebaseConversationReadRuntime({
+          authorization: {
+            pool: appPool,
+            project_id: project,
+            application_id: app,
+            runtime_mode: "deployed",
+            context_ttl_seconds: 60,
+            database_generation_digest: generation,
+            id_token_adapter: {
+              verification_source: "firebase_production",
+              async verifyIdToken(token) {
+                const selected = token.startsWith("other")
+                  ? `other-${uid}`
+                  : uid;
+                return {
+                  aud: project,
+                  iss: `https://securetoken.google.com/${project}`,
+                  sub: selected,
+                  uid: selected,
+                  iat: now() - 10,
+                  auth_time: now() - 10,
+                  exp: now() + 600,
+                };
+              },
             },
           },
-        },
-        codecRootSecret: new Uint8Array(32).fill(7),
-        cursorSigningKeyset: {
-          active_key_id: "test",
-          keys: [{ key_id: "test", secret: new Uint8Array(32).fill(8) }],
-        },
-      });
+          codecRootSecret: new Uint8Array(32).fill(7),
+          cursorSigningKeyset: {
+            active_key_id: "test",
+            keys: [{ key_id: "test", secret: new Uint8Array(32).fill(8) }],
+          },
+        });
+      let runtime = makeRuntime();
       const call = (query = "", token = "header.payload.signature") =>
         runtime.executeRequest(
           new Request(
@@ -170,6 +188,9 @@ realTest(
           );
         return id;
       };
+      await expect(
+        Promise.resolve(owner.unsafe("SELECT omi_memory.read_listen_conversation_snapshot()"))
+      ).rejects.toMatchObject({ code: "42883" });
       const delayed = await insert(account, null, "", false);
       const queued = await insert(account, null, "");
       const failed = await insert(account, "failed", "must remain hidden");
@@ -194,6 +215,15 @@ realTest(
         ["failed", ""],
       ]);
       const cursor = page.window.nextCursor;
+      runtime = makeRuntime();
+      expect(
+        (
+          await call(
+            "?cursor=" + encodeURIComponent(cursor),
+            "other.payload.signature"
+          )
+        ).status
+      ).toBe(400);
 
       const next = (await (
         await call(`?limit=100&cursor=${encodeURIComponent(cursor)}`)
@@ -268,6 +298,78 @@ realTest(
         isLocked: true,
       });
       await owner.unsafe(
+        `WITH inserted AS (INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash)
+          SELECT $1,id::text,id::text,clock_timestamp()-interval '2 seconds','omi','21',16000,1,$2 FROM (SELECT gen_random_uuid() AS id FROM generate_series(1,10020)) ids RETURNING account_id,session_id)
+        INSERT INTO omi_memory.listen_capture_audio_uploads(account_id,session_id,capture_id,device_id,codec_id,upload_completed_at)
+        SELECT account_id,session_id,session_id::uuid,'large-account-device',21,clock_timestamp() FROM inserted`,
+        [account, "1".repeat(64)]
+      );
+      loadedPageSizes.length = 0;
+      let nextCursor: string | null = null;
+      const seen = new Set<string>();
+      do {
+        const response = await call(
+          "?limit=100" +
+            (nextCursor === null
+              ? ""
+              : "&cursor=" + encodeURIComponent(nextCursor))
+        );
+        expect(response.status, failures.join(",")).toBe(200);
+        const result = (await response.json()) as any;
+        for (const item of result.items) {
+          expect(seen.has(item.id)).toBe(false);
+          seen.add(item.id);
+        }
+        nextCursor = result.window.nextCursor;
+      } while (nextCursor !== null);
+      expect(seen.size).toBe(10026);
+      expect(Math.max(...loadedPageSizes)).toBeLessThanOrEqual(102);
+      const tail = await owner.unsafe(
+        "SELECT session_id FROM omi_memory.listen_capture_sessions WHERE account_id=$1 ORDER BY conversation_sequence DESC LIMIT 1",
+        [account]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_audio_transcriptions(account_id,session_id,state,attempts,available_at,updated_at,provider_result) VALUES($1,$2,'completed',1,clock_timestamp(),clock_timestamp(),NULL)",
+        [account, tail[0]!.session_id]
+      );
+      expect((await call("?limit=100")).status).toBe(200);
+      await owner.unsafe(
+        "UPDATE omi_memory.listen_audio_transcriptions SET state='queued' WHERE account_id=$1 AND session_id=$2",
+        [account, tail[0]!.session_id]
+      );
+      const expiring = (await (await call("?limit=1")).json()) as any;
+      const expiringHash = createHash("sha256")
+        .update(expiring.window.nextCursor)
+        .digest("hex");
+      await owner.unsafe(
+        "UPDATE omi_memory.listen_conversation_cursor_positions SET expires_at=0 WHERE account_id=$1 AND cursor_hash=$2",
+        [account, expiringHash]
+      );
+      expect(
+        (
+          await call(
+            "?cursor=" + encodeURIComponent(expiring.window.nextCursor)
+          )
+        ).status
+      ).toBe(400);
+      await owner.unsafe(
+        "UPDATE omi_memory.listen_conversation_cursor_positions SET expires_at=floor(extract(epoch FROM clock_timestamp()))+900 WHERE account_id=$1",
+        [account]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_conversation_cursor_positions(account_id,cursor_hash,binding_digest,revision,sequence,expires_at) SELECT $1,lpad(n::text,64,'a'),repeat('f',64),1,1,floor(extract(epoch FROM clock_timestamp()))+900 FROM generate_series(1,10000-(SELECT count(*)::int FROM omi_memory.listen_conversation_cursor_positions WHERE account_id=$1)) n",
+        [account]
+      );
+      expect((await call("?limit=3")).status).toBe(503);
+      await owner.unsafe(
+        "UPDATE omi_memory.listen_conversation_cursor_positions SET expires_at=0 WHERE account_id=$1 AND binding_digest=repeat('f',64)",
+        [account]
+      );
+      expect((await call("?limit=3")).status).toBe(200);
+      expect((await call("?offset=100&limit=2")).status).toBe(200);
+      expect((await call("?limit=0")).status).toBe(400);
+      expect((await call("?limit=1&limit=2")).status).toBe(400);
+      await owner.unsafe(
         "UPDATE omi_memory.listen_audio_transcriptions SET provider_result=NULL WHERE account_id=$1 AND session_id=$2",
         [account, silent]
       );
@@ -288,5 +390,5 @@ realTest(
       await owner.end();
     }
   },
-  30000
+  120000
 );
