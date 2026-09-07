@@ -175,6 +175,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const {
     deviceBusy,
     deviceScanMessage,
+    rememberedDevice,
+    rememberedBusy,
+    forgetRememberedDevice,
     nativeSnapshot,
     scanForOmi,
     toggleDevice,
@@ -756,6 +759,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           </View>
 
           <DeviceSession
+            rememberedDevice={rememberedDevice}
+            rememberedBusy={rememberedBusy}
+            onForgetRemembered={forgetRememberedDevice}
             bluetoothStatusColor={bluetoothStatusColor}
             deviceBusy={deviceBusy}
             deviceScanMessage={deviceScanMessage}
@@ -797,6 +803,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           chatError={chatError}
           deviceContent={
             <DeviceSession
+              rememberedDevice={rememberedDevice}
+              rememberedBusy={rememberedBusy}
+              onForgetRemembered={forgetRememberedDevice}
               bluetoothStatusColor={bluetoothStatusColor}
               deviceBusy={deviceBusy}
               deviceScanMessage={deviceScanMessage}
@@ -952,6 +961,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         devicePanel={
           devicePanelOpen ? (
             <DeviceSession
+              rememberedDevice={rememberedDevice}
+              rememberedBusy={rememberedBusy}
+              onForgetRemembered={forgetRememberedDevice}
               bluetoothStatusColor={bluetoothStatusColor}
               deviceBusy={deviceBusy}
               deviceScanMessage={deviceScanMessage}
@@ -1200,6 +1212,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                           header={
                             <View style={styles.homeOverview}>
                               <DeviceSession
+                                rememberedDevice={rememberedDevice}
+                                rememberedBusy={rememberedBusy}
+                                onForgetRemembered={forgetRememberedDevice}
                                 deviceBusy={deviceBusy}
                                 deviceScanMessage={deviceScanMessage}
                                 nativeSnapshot={nativeSnapshot}

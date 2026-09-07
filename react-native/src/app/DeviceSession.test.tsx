@@ -94,3 +94,85 @@ test.each(['affordance', 'compact', 'overview'] as const)(
     await act(async () => renderer.unmount());
   },
 );
+
+test.each(['affordance', 'compact', 'overview'] as const)(
+  '%s exposes explicit remembered-device actions without inventing a scan result',
+  async variant => {
+    const onToggle = jest.fn(),
+      onForget = jest.fn(),
+      onScan = jest.fn();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          nativeSnapshot={null}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+          onForgetRemembered={onForget}
+          onScan={onScan}
+          onToggle={onToggle}
+        />,
+      );
+    });
+    try {
+      expect(onToggle).not.toHaveBeenCalled();
+      expect(onScan).not.toHaveBeenCalled();
+      act(() =>
+        renderer.root
+          .findAll(
+            node => node.props.accessibilityLabel === 'Reconnect My Omi',
+          )[0]!
+          .props.onPress(),
+      );
+      expect(onToggle).toHaveBeenCalledWith('saved-id', false);
+      act(() =>
+        renderer.root
+          .findAll(
+            node => node.props.accessibilityLabel === 'Forget My Omi',
+          )[0]!
+          .props.onPress(),
+      );
+      expect(onForget).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(renderer.toJSON())).not.toContain('dBm');
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  },
+);
+
+test.each(['compact', 'overview'] as const)(
+  '%s never invents signal strength for a retrieved device',
+  async variant => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          nativeSnapshot={{
+            bluetooth: 'poweredOn',
+            devices: [{id: 'saved-id', name: 'My Omi', connected: false}],
+            connectedDeviceId: null,
+            phase: 'disconnected',
+            capture: 'idle',
+            lastEvent: '',
+            microphone: 'unknown',
+            notifications: 'unknown',
+          }}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    try {
+      const output = JSON.stringify(renderer.toJSON());
+      expect(output).toContain('Signal unavailable');
+      expect(output).not.toContain('dBm');
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  },
+);

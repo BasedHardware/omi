@@ -48,7 +48,7 @@ private val MIC_GAIN_UUID = UUID.fromString("19b10012-e8f2-537e-4f6c-d104768a121
 private val CHARGING_UUID = UUID.fromString("19b10013-e8f2-537e-4f6c-d104768a1214")
 private val CLIENT_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
-private data class OmiDevice(val id: String, val name: String, val rssi: Int, val battery: Int? = null, val information: Map<String, String> = emptyMap(), val features: Long? = null, val ledBrightness: Int? = null, val microphoneGain: Int? = null, val charging: Boolean? = null)
+private data class OmiDevice(val id: String, val name: String, val rssi: Int?, val battery: Int? = null, val information: Map<String, String> = emptyMap(), val features: Long? = null, val ledBrightness: Int? = null, val microphoneGain: Int? = null, val charging: Boolean? = null)
 
 private sealed class GattOp {
   data class Write(val characteristic: BluetoothGattCharacteristic, val value: Int) : GattOp()
@@ -317,6 +317,7 @@ class OmiBleController(
           connectionState = if (connected) "connected" else "disconnected"
           lastEvent = if (connected) "Connected to Omi" else "Omi connection failed: $status"
           if (connected) {
+            if (results[id] == null) results[id] = OmiDevice(id, runCatching { gatt.device.name }.getOrNull() ?: "Omi", null)
             val started = runCatching { gatt.discoverServices() }.getOrElse { error ->
               if (error is SecurityException) cancelReconnect()
               retireConnection("Omi service discovery failed")
@@ -813,7 +814,7 @@ class OmiBleController(
   private fun deviceMap(device: OmiDevice): WritableMap = Arguments.createMap().apply {
     putString("id", device.id)
     putString("name", device.name)
-    putInt("rssi", device.rssi)
+    device.rssi?.let { putInt("rssi", it) }
     putBoolean("buttonSupported", connectedDeviceId == device.id && buttonNotifying && OmiDeviceControls.buttonSupported(device.features))
     putBoolean("connected", connectionState == "connected" && connectedDeviceId == device.id)
     val haptic = if (connectionState == "connected" && connectedDeviceId == device.id) gatt?.getService(HAPTIC_SERVICE_UUID)?.getCharacteristic(HAPTIC_UUID) else null
