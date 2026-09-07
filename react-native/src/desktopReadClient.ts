@@ -223,6 +223,8 @@ export const desktopProjectionUnavailableCopy =
   'This saved data is not available from the selected Omi service yet. Retry after its persisted projection is connected.';
 export const desktopBackendUnavailableCopy =
   'This saved data is not available from the selected Omi service yet.';
+export const desktopAppsUnavailableCopy =
+  'Apps are not available from the selected Omi service yet.';
 export const desktopBackendForbiddenCopy =
   'This saved data is not available for this account.';
 const desktopReadFailureCopy =
@@ -311,6 +313,7 @@ export function desktopReadErrorCopy(error: unknown): string {
       desktopLocalBackendServiceCopy,
       desktopProjectionUnavailableCopy,
       desktopBackendUnavailableCopy,
+      desktopAppsUnavailableCopy,
       desktopBackendForbiddenCopy,
       desktopReadFailureCopy,
     ].includes(message)

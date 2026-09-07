@@ -1,8 +1,10 @@
 import type {OmiBackend} from './omiNative';
 import {
+  desktopAppsUnavailableCopy,
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
+  desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
 } from './desktopReadClient';
 
@@ -97,6 +99,31 @@ function parseJson(body: string | null, label: string): unknown {
   }
 }
 
+function nestedErrorRetryable(body: string | null): boolean | null {
+  if (body === null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: {retryable?: unknown} | string;
+    };
+    if (parsed.error !== null && typeof parsed.error === 'object') {
+      return typeof parsed.error.retryable === 'boolean'
+        ? parsed.error.retryable
+        : null;
+    }
+  } catch {}
+  return null;
+}
+
+export function cloudErrorCanRetry(error: unknown): boolean {
+  return !(
+    error instanceof Error &&
+    'retryable' in error &&
+    (error as {retryable?: unknown}).retryable === false
+  );
+}
+
 async function cloudRequest(
   backend: OmiBackend,
   id: string,
@@ -110,6 +137,18 @@ async function cloudRequest(
     };
     unauthorized.code = 'unauthorized';
     throw unauthorized;
+  }
+  if (
+    response.status !== 200 &&
+    nestedErrorRetryable(response.body) === false
+  ) {
+    const unavailable = new Error(
+      path.startsWith('/v1/apps')
+        ? desktopAppsUnavailableCopy
+        : desktopBackendUnavailableCopy,
+    ) as Error & {retryable: boolean};
+    unavailable.retryable = false;
+    throw unavailable;
   }
   if (response.status !== 200) {
     throw new Error(`${id} failed (${response.status})`);
@@ -526,11 +565,7 @@ const serviceSettingsLoadFailureCopy =
   'Settings could not be loaded. Try again.';
 
 export function serviceSettingsCanRetry(error: unknown): boolean {
-  return !(
-    error instanceof Error &&
-    'retryable' in error &&
-    (error as {retryable?: unknown}).retryable === false
-  );
+  return cloudErrorCanRetry(error);
 }
 
 export function serviceSettingsErrorCopy(error: unknown): string {
@@ -580,23 +615,6 @@ export type ServiceSettingsSnapshot = {
   entitlement: {limitKey: string; used: number; limit: number | null} | null;
 };
 
-function nestedSettingsRetryable(body: string | null): boolean | null {
-  if (body === null) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(body) as {
-      error?: {retryable?: unknown} | string;
-    };
-    if (parsed.error !== null && typeof parsed.error === 'object') {
-      return typeof parsed.error.retryable === 'boolean'
-        ? parsed.error.retryable
-        : null;
-    }
-  } catch {}
-  return null;
-}
-
 export async function loadServiceSettings(
   backend: OmiBackend,
 ): Promise<ServiceSettingsSnapshot> {
@@ -616,7 +634,7 @@ export async function loadServiceSettings(
     const unavailable = new Error(serviceSettingsUnavailableCopy) as Error & {
       retryable: boolean;
     };
-    unavailable.retryable = nestedSettingsRetryable(response.body) !== false;
+    unavailable.retryable = nestedErrorRetryable(response.body) !== false;
     throw unavailable;
   }
   if (response.status !== 200) {

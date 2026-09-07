@@ -14,6 +14,7 @@ import {
   loadConnectors,
   myApps,
   serviceApps,
+  cloudErrorCanRetry,
   cloudSessionUnavailableCopy,
   type CloudApp,
   type ConnectorsSnapshot,
@@ -39,6 +40,7 @@ export function ConnectorsPage({
     'loading' | 'signed-out' | 'ready' | 'error'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [appsCanRetry, setAppsCanRetry] = useState(true);
   const [snapshot, setSnapshot] = useState<ConnectorsSnapshot | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function ConnectorsPage({
         // stay retryable instead of stranding the page on Loading forever.
         setSnapshot(null);
         setError(desktopBackendServiceCopy);
+        setAppsCanRetry(true);
         setPhase('error');
         return;
       }
@@ -83,10 +86,12 @@ export function ConnectorsPage({
       const next = await loadConnectors(backend);
       setSnapshot(next);
       setError(null);
+      setAppsCanRetry(true);
       setPhase('ready');
     } catch (reason) {
       setSnapshot(null);
       setError(desktopReadErrorCopy(reason));
+      setAppsCanRetry(cloudErrorCanRetry(reason));
       setPhase('error');
     }
   }, []);
@@ -197,7 +202,8 @@ export function ConnectorsPage({
             )}
             {phase === 'error' &&
               Platform.OS !== 'web' &&
-              error !== desktopBackendConfigurationCopy && (
+              error !== desktopBackendConfigurationCopy &&
+              appsCanRetry && (
                 <FocusPressable
                   accessibilityLabel="Retry apps"
                   accessibilityRole="button"

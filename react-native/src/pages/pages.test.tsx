@@ -395,6 +395,55 @@ test.each([-1, 1.5])(
   },
 );
 
+test.each([
+  [
+    {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+  [
+    {
+      code: 'not_found',
+      retryable: false,
+      action: 'none',
+    },
+  ],
+])(
+  'nested non-retryable Apps catalogue 503s do not offer Retry (%j)',
+  async error => {
+    mockAuth.hasCloudSession.mockResolvedValue(true);
+    mockBackend.request.mockResolvedValue({
+      id: 'desktop-apps-read',
+      status: 503,
+      body: JSON.stringify({error}),
+    });
+    const renderer = await renderPage(ConnectorsPage);
+    expect(textOf(renderer)).toContain(
+      'Apps are not available from the selected Omi service yet.',
+    );
+    expect(textOf(renderer)).not.toContain(
+      'This saved data could not be loaded. Retry without changing it.',
+    );
+    expect(labelsOf(renderer)).not.toContain('Retry apps');
+  },
+);
+
+test('omitted Apps 503 retryable still offers Retry', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockResolvedValue({
+    id: 'desktop-apps-read',
+    status: 503,
+    body: '{"error":"service_unavailable"}',
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain(
+    'This saved data could not be loaded. Retry without changing it.',
+  );
+  expect(labelsOf(renderer)).toContain('Retry apps');
+});
+
 test('browser Apps does not offer an unusable native sign-in or installation retry', async () => {
   const previous = Platform.OS;
   Object.defineProperty(Platform, 'OS', {value: 'web', configurable: true});

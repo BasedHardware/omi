@@ -11,6 +11,7 @@ import {
   desktopLocalBackendServiceCopy,
   desktopProjectionUnavailableCopy,
   desktopBackendUnavailableCopy,
+  desktopAppsUnavailableCopy,
   desktopBackendServiceCopy,
   desktopReadErrorCopy,
   desktopReadsCanRetry,
@@ -33,6 +34,7 @@ import type {
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 import {omiAuth as browserOmiAuth} from '../src/omiNative.web';
 import {
+  cloudErrorCanRetry,
   disableCloudApp,
   enableCloudApp,
   exploreApps,
@@ -267,6 +269,9 @@ test('maps native cloud-first backend failures to actionable, credential-safe co
   );
   expect(desktopReadErrorCopy(new Error(desktopBackendUnavailableCopy))).toBe(
     desktopBackendUnavailableCopy,
+  );
+  expect(desktopReadErrorCopy(new Error(desktopAppsUnavailableCopy))).toBe(
+    desktopAppsUnavailableCopy,
   );
 });
 
@@ -1060,6 +1065,76 @@ test('loadConnectors merges enabled ids and keeps owner filtering honest', async
     'catalog-app-1',
   ]);
   expect(serviceApps(snapshot).map(app => app.id)).toEqual(['catalog-app-1']);
+});
+
+test('loadConnectors nested non-retryable 503s are unavailable without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadConnectors(backend)).rejects.toMatchObject({
+    message: desktopAppsUnavailableCopy,
+    retryable: false,
+  });
+  expect(cloudErrorCanRetry({message: desktopAppsUnavailableCopy})).toBe(true);
+  expect(
+    cloudErrorCanRetry(
+      Object.assign(new Error(desktopAppsUnavailableCopy), {
+        retryable: false,
+      }),
+    ),
+  ).toBe(false);
+});
+
+test('loadAccountSettings nested non-retryable 503s keep slices independent without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'development_backend_unsupported',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(request => {
+    if (request.path === '/v1/users/profile') {
+      return {status: 503, body};
+    }
+    if (request.path === '/v1/users/me/subscription') {
+      return {
+        status: 200,
+        body: JSON.stringify({plan: 'plus', status: 'active'}),
+      };
+    }
+    if (request.path === '/v1/users/store-recording-permission') {
+      return {
+        status: 200,
+        body: JSON.stringify({store_recording_permission: true}),
+      };
+    }
+    if (request.path === '/v1/users/training-data-opt-in') {
+      return {status: 200, body: JSON.stringify({opted_in: false})};
+    }
+    if (request.path === '/v1/users/private-cloud-sync') {
+      return {
+        status: 200,
+        body: JSON.stringify({private_cloud_sync_enabled: false}),
+      };
+    }
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {status: 200, body: JSON.stringify({})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadAccountSettings(backend);
+  expect(snapshot.profile).toBeNull();
+  expect(snapshot.profileError).toBe(desktopBackendUnavailableCopy);
+  expect(snapshot.subscription).toEqual(
+    expect.objectContaining({plan: 'plus', status: 'active'}),
+  );
+  expect(snapshot.storeRecordingPermission).toBe(true);
 });
 
 test('enableCloudApp requires a real ok status and does not treat errors as installed', async () => {
