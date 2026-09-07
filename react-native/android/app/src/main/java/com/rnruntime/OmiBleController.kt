@@ -68,7 +68,7 @@ class OmiBleController(
   private var connectedDeviceId: String? = null
   private var gatt: BluetoothGatt? = null
   private var connectionState = "disconnected"
-  private var scanActive = false
+  private val scanLease = OmiBleLease.Scan<WritableArray>()
   private var lastEvent = "Bluetooth adapter not checked"
   private val firstAudio = OmiBleLease.FirstAudio()
   private val reconnect = OmiBleLease.Reconnect()
@@ -76,8 +76,6 @@ class OmiBleController(
   private var buttonNotifying = false
   private var audioNotifying = false
   private var codec: Int? = null
-  private var scanGeneration = 0
-  private var pendingScan: ((WritableArray) -> Unit)? = null
   private var pendingConnect: ((Boolean, String) -> Unit)? = null
   private val gattQueue = ArrayDeque<GattOp>()
   private var gattBusy = false
@@ -128,7 +126,7 @@ class OmiBleController(
   private val scanCallback = object : ScanCallback() {
     override fun onScanResult(callbackType: Int, result: ScanResult) {
       synchronized(this@OmiBleController) {
-        if (!scanActive) return
+        if (!scanLease.active()) return
         val device = result.device
         val discovered = OmiDevice(
           id = device.address,
@@ -151,10 +149,9 @@ class OmiBleController(
 
     override fun onScanFailed(errorCode: Int) {
       synchronized(this@OmiBleController) {
-        if (!scanActive) return
-        scanActive = false
+        if (!scanLease.active()) return
         lastEvent = "BLE scan failed: $errorCode"
-        finishScan()
+        scanLease.fail(IllegalStateException("Bluetooth scan failed"))
       }
     }
   }
@@ -213,49 +210,51 @@ class OmiBleController(
 
   @SuppressLint("MissingPermission")
   @Synchronized
-  fun startScan(timeoutSeconds: Int?, serviceUuids: List<String>, onDone: (WritableArray) -> Unit) {
-    pendingScan?.invoke(devices())
-    pendingScan = onDone
-    if (!canScan()) {
-      finishScan()
-      return
-    }
-    val bleScanner = scanner ?: run {
-      lastEvent = "Bluetooth LE scanner is unavailable"
-      finishScan()
-      return
-    }
-    val keepId = connectedDeviceId
-    val kept = if (connectionState != "disconnected" && keepId != null) results[keepId] else null
-    results.clear()
-    if (kept != null) {
-      results[kept.id] = kept
-    }
-    val filters = serviceUuids.ifEmpty { listOf(OMI_SERVICE_UUID) }.map {
-      ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(it)).build()
-    }
-    bleScanner.startScan(filters, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
-    scanActive = true
-    lastEvent = "Scanning for Omi devices"
-    val generation = ++scanGeneration
-    val timeout = (timeoutSeconds ?: 8).coerceAtLeast(0)
-    handler.postDelayed({
-      synchronized(this) {
-        if (generation == scanGeneration) {
-          stopScanInternal()
-          lastEvent = if (results.isEmpty()) "No Omi devices found" else "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
-          finishScan()
-        }
+  fun startScan(timeoutSeconds: Int?, serviceUuids: List<String>, onDone: (WritableArray) -> Unit, onError: () -> Unit) {
+    stopScanInternal()
+    scanLease.begin({ onDone(it) }, { onError() })
+    try {
+      if (!canScan()) {
+        finishScan()
+        return
       }
-    }, timeout * 1000L)
+      val bleScanner = scanner ?: run {
+        lastEvent = "Bluetooth LE scanner is unavailable"
+        finishScan()
+        return
+      }
+      val keepId = connectedDeviceId
+      val kept = if (connectionState != "disconnected" && keepId != null) results[keepId] else null
+      results.clear()
+      if (kept != null) {
+        results[kept.id] = kept
+      }
+      val filters = serviceUuids.ifEmpty { listOf(OMI_SERVICE_UUID) }.map {
+        ScanFilter.Builder().setServiceUuid(ParcelUuid.fromString(it)).build()
+      }
+      bleScanner.startScan(filters, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanCallback)
+      lastEvent = "Scanning for Omi devices"
+      val generation = scanLease.started()
+      val timeout = (timeoutSeconds ?: 8).coerceAtLeast(0)
+      handler.postDelayed({
+        synchronized(this) {
+          if (scanLease.accepts(generation)) {
+            if (stopScanInternal()) lastEvent = if (results.isEmpty()) "No Omi devices found" else "Found ${results.size} Omi device${if (results.size == 1) "" else "s"}"
+          }
+        }
+      }, timeout * 1000L)
+    } catch (error: RuntimeException) {
+      lastEvent = "Bluetooth scan could not start"
+      scanLease.fail(error)
+    }
   }
 
   @SuppressLint("MissingPermission")
   @Synchronized
-  fun stopScan() {
-    stopScanInternal()
-    lastEvent = "Omi scan stopped"
-    finishScan()
+  fun stopScan(): Boolean {
+    val stopped = stopScanInternal()
+    if (stopped) lastEvent = "Omi scan stopped"
+    return stopped
   }
 
   @SuppressLint("MissingPermission")
@@ -818,16 +817,14 @@ class OmiBleController(
   }
 
   @SuppressLint("MissingPermission")
-  private fun stopScanInternal() {
-    if (scanActive) scanner?.stopScan(scanCallback)
-    scanActive = false
-    scanGeneration += 1
+  private fun stopScanInternal(): Boolean {
+    val stopped = scanLease.stop({ scanner?.stopScan(scanCallback) }, ::devices)
+    if (!stopped) lastEvent = "Bluetooth scan could not be stopped"
+    return stopped
   }
 
   private fun finishScan() {
-    val done = pendingScan
-    pendingScan = null
-    done?.invoke(devices())
+    scanLease.stop({}, ::devices)
   }
 
   private fun finishConnect(ok: Boolean, message: String) {

@@ -69,13 +69,13 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   @ReactMethod
   fun startScan(timeoutSeconds: Int?, serviceUuids: ReadableArray?, promise: Promise) {
     val uuids = buildList { serviceUuids?.let { values -> for (index in 0 until values.size()) values.getString(index)?.let(::add) } }
-    ble.startScan(timeoutSeconds, uuids, promise::resolve)
+    ble.startScan(timeoutSeconds, uuids, promise::resolve) { promise.reject("OMI_SCAN_FAILED", "Bluetooth scan failed") }
   }
 
   @ReactMethod
   fun stopScan(promise: Promise) {
-    ble.stopScan()
-    promise.resolve(null)
+    if (ble.stopScan()) promise.resolve(null)
+    else promise.reject("OMI_SCAN_FAILED", "Bluetooth scan could not be stopped")
   }
 
   @ReactMethod

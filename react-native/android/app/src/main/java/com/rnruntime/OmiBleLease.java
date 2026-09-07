@@ -13,6 +13,41 @@ final class OmiBleLease {
   synchronized boolean acceptsGatt(long token, Object current, Object callback) { return current != null && current == callback && accepts(token); }
   synchronized long operation() { return ++operation; }
   synchronized boolean operationPending(long token, long ticket) { return accepts(token) && operation == ticket; }
+  static final class Scan<T> {
+    private long generation;
+    private boolean active;
+    private java.util.function.Consumer<T> pending;
+    private java.util.function.Consumer<RuntimeException> rejected;
+    void begin(java.util.function.Consumer<T> callback, java.util.function.Consumer<RuntimeException> failure) {
+      if (pending != null) throw new IllegalStateException("Previous scan is pending");
+      pending = callback;
+      rejected = failure;
+    }
+    long started() { active = true; return ++generation; }
+    boolean active() { return active; }
+    boolean accepts(long token) { return active && generation == token; }
+    boolean stop(Runnable stopHardware, java.util.function.Supplier<T> result) {
+      boolean wasActive = active;
+      active = false;
+      generation++;
+      java.util.function.Consumer<T> callback = pending;
+      java.util.function.Consumer<RuntimeException> failure = rejected;
+      pending = null;
+      rejected = null;
+      try { if (wasActive) stopHardware.run(); }
+      catch (RuntimeException error) { if (failure != null) failure.accept(error); return false; }
+      if (callback != null) callback.accept(result.get());
+      return true;
+    }
+    void fail(RuntimeException error) {
+      active = false;
+      generation++;
+      java.util.function.Consumer<RuntimeException> failure = rejected;
+      pending = null;
+      rejected = null;
+      if (failure != null) failure.accept(error);
+    }
+  }
   static final class FirstAudio {
     static final int WINDOW_MS = 4000;
     private long generation;
