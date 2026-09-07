@@ -100,6 +100,12 @@ enum MemoryAtlasIslands {
   /// sits on, and leaving it out would hand its land to whichever named
   /// neighbourhood happens to be nearest.
   static func coastlines(members: [Int: [CGPoint]]) -> [Int: [Ring]] {
+    coastlines(members: members, keepingUninhabitedRings: false)
+  }
+
+  /// `keepingUninhabitedRings` returns the traced rings before the inhabitancy
+  /// rule below; it exists so a test can prove the rule had something to remove.
+  static func coastlines(members: [Int: [CGPoint]], keepingUninhabitedRings: Bool) -> [Int: [Ring]] {
     let groups = members.keys.sorted()
     guard !groups.isEmpty else { return [:] }
 
@@ -140,18 +146,37 @@ enum MemoryAtlasIslands {
       // instead of stepping along the cells that produced it.
       let mask = blurred(
         ownership(of: Int32(group), owner: owner, best: best, runnerUp: runnerUp))
-      let rings = trace(mask)
+      let traced = trace(mask)
         .filter { abs(area(of: $0)) >= floor }
         .map { $0.map(normalize) }
-        // Land with nobody on it is not territory. The blurred field can put
-        // a lobe or a sliver where the group's influence merely spills, and a
-        // lake traced inside an island comes back as a ring of its own; both
-        // drew as a zone with no entity in it. A ring that holds none of the
-        // group's members is dropped here, once, where the members are known.
-        .filter { ring in (members[group] ?? []).contains { memoryAtlasCoastlineContains([ring], $0) } }
+      let rings = keepingUninhabitedRings ? traced : inhabited(traced, group: group, members: members)
       if !rings.isEmpty { result[group] = rings }
     }
     return result
+  }
+
+  /// Land with nobody on it is not territory.
+  ///
+  /// The blurred field can put a lobe or a sliver where the group's influence
+  /// merely spills, and a lake traced inside an island comes back as a ring of
+  /// its own; both drew as a zone with no entity in it. A ring holding none of
+  /// the group's members is land only if it is a lake inside one of the
+  /// group's islands where another group lives: that hole must stay, drawn by
+  /// even-odd fill, or the island would be painted over the other group's
+  /// ground. A lake nobody lives in is dropped, and the island fills in over
+  /// it rather than drawing an outline around an empty place.
+  private static func inhabited(_ rings: [Ring], group: Int, members: [Int: [CGPoint]]) -> [Ring] {
+    let own = members[group] ?? []
+    let others = members.filter { $0.key != group }.flatMap(\.value)
+    let land = rings.filter { ring in own.contains { memoryAtlasCoastlineContains([ring], $0) } }
+    let lakes = rings.filter { ring in
+      guard let first = ring.first, !own.contains(where: { memoryAtlasCoastlineContains([ring], $0) }) else {
+        return false
+      }
+      return land.contains { memoryAtlasCoastlineContains([$0], first) }
+        && others.contains { memoryAtlasCoastlineContains([ring], $0) }
+    }
+    return land + lakes
   }
 
   // MARK: - Field

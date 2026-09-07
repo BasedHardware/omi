@@ -455,13 +455,17 @@ enum MemoryAtlasNeighbourhoodLabels {
         visible.contains(candidate)
           && !occupied.contains(where: { $0.intersects(candidate.insetBy(dx: -8, dy: -7)) })
       }
-      let fitted = allowed.min { lhs, rhs in
-        // Fewest marks covered wins; ties keep the candidate order, which is
-        // nearest the island's middle first.
-        let lhsCovered = marks.count(where: { $0.intersects(lhs.insetBy(dx: -2, dy: -2)) })
-        let rhsCovered = marks.count(where: { $0.intersects(rhs.insetBy(dx: -2, dy: -2)) })
-        return lhsCovered < rhsCovered
+      // Only the marks that can touch a candidate at all are counted, and each
+      // candidate is scored once rather than inside the comparator: on a large
+      // account this pass ran millions of rectangle intersections per layout.
+      let candidateExtent = allowed.reduce(CGRect.null) { $0.union($1) }.insetBy(dx: -2, dy: -2)
+      let nearbyMarks = marks.filter { $0.intersects(candidateExtent) }
+      let scored = allowed.map { candidate in
+        (rect: candidate, covered: nearbyMarks.count(where: { $0.intersects(candidate.insetBy(dx: -2, dy: -2)) }))
       }
+      // Fewest marks covered wins; ties keep the candidate order, which is
+      // nearest the island's middle first.
+      let fitted = scored.min { $0.covered < $1.covered }?.rect
       // Last resort when the caller insists: the middle of whatever part of the
       // island is on screen, shoved inside the canvas. It may sit on an entity
       // name, which is the lesser of the two wrongs — a territory with no name

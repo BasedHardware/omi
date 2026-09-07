@@ -97,6 +97,9 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(snapshot.nodeByID[catalogNode.id]?.isCatalog, true)
     XCTAssertNotEqual(snapshot.nodeByID[catalogNode.id]?.clusterRank, 0)
     XCTAssertEqual(snapshot.edges.count, 1)
+    // Zoom and label policy size themselves by the entities, not by the
+    // catalog records that are neither drawn nor selectable.
+    XCTAssertEqual(snapshot.entityCount, 2)
   }
 
   func testCatalogSearchMatchesWinTheirTierWithoutIDPrefixCoupling() {
@@ -1264,20 +1267,6 @@ final class MemoryAtlasLayoutTests: XCTestCase {
         isFullyLabelled: false, isInspect: false, isFocus: false, isSmallAtlas: false
       )
     )
-  }
-
-  private func atlasSource() throws -> String {
-    let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let packageDirectory = testsDirectory.deletingLastPathComponent()
-    let sourceURL =
-      packageDirectory
-      .appendingPathComponent("Sources")
-      .appendingPathComponent("MainWindow")
-      .appendingPathComponent("Pages")
-      .appendingPathComponent("MemoryGraph")
-      .appendingPathComponent("CanonicalMemoryAtlasView.swift")
-    // omi-test-quality: source-inspection -- static contract: a SwiftUI subview's rendered height is not observable from a unit test, so the footer's no-flexible-child rule is asserted on source; the layout behavior itself is covered by the placement tests above.
-    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
   private func fiveTypeGraph() -> KnowledgeGraphResponse {

@@ -14,14 +14,14 @@ enum MemoryAtlasRenderPlanner {
     matchingEdges: [MemoryAtlasEdgePlacement]? = nil
   ) -> MemoryAtlasRenderPlan {
     let fullyLabelledZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(
-      nodeCount: snapshot.nodes.count
+      nodeCount: snapshot.entityCount
     )
     let isFullyLabelled = !compact && zoom >= fullyLabelledZoom
     let usesCanvasLabels =
       !compact
       && zoom
         >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
-          nodeCount: snapshot.nodes.count
+          nodeCount: snapshot.entityCount
         )
     let detailLevel: MemoryAtlasDetailLevel =
       if zoom < MemoryAtlasZoomPolicy.neighborhoodZoom {
@@ -42,7 +42,7 @@ enum MemoryAtlasRenderPlanner {
     // only add more of it as fidelity increases.
     let maximumNodeLimit: Int =
       if isFullyLabelled {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: 1_200
@@ -74,10 +74,10 @@ enum MemoryAtlasRenderPlanner {
     // past overview are generous: zooming in is asking for names, and the
     // smaller circles should get theirs as soon as there is room beside them
     // rather than at the last level.
-    let isSmallAtlas = !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
+    let isSmallAtlas = !compact && snapshot.entityCount <= MemoryAtlasZoomPolicy.smallAtlasCeiling
     let labelsPerCluster: Int =
       if isSmallAtlas {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: compact ? 2 : 3
@@ -89,7 +89,7 @@ enum MemoryAtlasRenderPlanner {
       }
     let labelLimit: Int =
       if isSmallAtlas {
-        snapshot.nodes.count
+        snapshot.entityCount
       } else {
         switch detailLevel {
         case .overview: 12

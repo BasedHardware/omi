@@ -133,6 +133,10 @@ struct MemoryAtlasNeighbourhood: Identifiable, Equatable {
 
 struct MemoryAtlasSnapshot {
   let nodes: [MemoryAtlasNodePlacement]
+  /// How many of `nodes` are entities. Catalog records are memories that
+  /// produced no entity; they are neither drawn nor selectable, so every zoom
+  /// and label policy sized by "how big is this map" counts entities only.
+  let entityCount: Int
   let edges: [MemoryAtlasEdgePlacement]
   let anchorNodeID: String?
   /// Largest first. Empty on maps too small or too sparse to have regions.
@@ -157,6 +161,7 @@ struct MemoryAtlasSnapshot {
     neighbourhoods: [MemoryAtlasNeighbourhood] = []
   ) {
     self.nodes = nodes
+    self.entityCount = nodes.count(where: { !$0.isCatalog })
     self.edges = edges
     self.anchorNodeID = anchorNodeID
     self.neighbourhoods = neighbourhoods

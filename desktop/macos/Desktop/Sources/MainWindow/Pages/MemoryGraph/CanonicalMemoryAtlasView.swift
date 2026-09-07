@@ -24,6 +24,17 @@ extension Notification.Name {
   static let desktopAutomationMemoryAtlasRebuildRequested = Notification.Name(
     "desktopAutomationMemoryAtlasRebuildRequested"
   )
+  /// Posted by the surface that takes a rebuild request, synchronously while the
+  /// request is delivered, with `accepted` (Bool) and, when refused, `reason`.
+  /// Nothing posted means no Brain Map surface is mounted to take it.
+  static let desktopAutomationMemoryAtlasRebuildAcknowledged = Notification.Name(
+    "desktopAutomationMemoryAtlasRebuildAcknowledged"
+  )
+  /// Posted when an accepted rebuild ends, with `MemoryGraphViewModel.RebuildOutcome`
+  /// under `outcome`.
+  static let desktopAutomationMemoryAtlasRebuildFinished = Notification.Name(
+    "desktopAutomationMemoryAtlasRebuildFinished"
+  )
   static let desktopAutomationMemoryAtlasSelectRequested = Notification.Name(
     "desktopAutomationMemoryAtlasSelectRequested"
   )
@@ -154,9 +165,7 @@ struct CanonicalMemoryAtlasPage: View {
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_page")
     .task { await viewModel.prepareCanonicalAtlas() }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) {
-      notification in
-      guard (notification.userInfo?["target"] as? String ?? "page") == "page" else { return }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) { _ in
       Task { await viewModel.rebuildCanonicalAtlas() }
     }
     .onAppear {
@@ -203,9 +212,7 @@ struct CanonicalMemoryAtlasTabView: View {
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
     .task { await viewModel.prepareCanonicalAtlas() }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) {
-      notification in
-      guard (notification.userInfo?["target"] as? String ?? "page") == "page" else { return }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasRebuildRequested)) { _ in
       Task { await viewModel.rebuildCanonicalAtlas() }
     }
     .onAppear {
@@ -1246,7 +1253,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   static let drawsTerritories = false
 
   private var isSmallAtlas: Bool {
-    !compact && snapshot.nodes.count <= MemoryAtlasZoomPolicy.smallAtlasCeiling
+    !compact && snapshot.entityCount <= MemoryAtlasZoomPolicy.smallAtlasCeiling
   }
 
   private func nodeRadius(for placement: MemoryAtlasNodePlacement) -> CGFloat {
@@ -1648,7 +1655,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private var maximumZoom: CGFloat {
-    MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: compact)
+    MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.entityCount, compact: compact)
   }
 
   private var isFullyLabelledMode: Bool {
@@ -1768,6 +1775,9 @@ private struct CanonicalMemoryAtlasSurface: View {
     // apparently blank area select an omitted node and open its inspector.
     let visibleIDs = visibleNodes.isEmpty ? nil : Set(visibleNodes.map { $0.id })
     for placement in snapshot.nodes {
+      // Catalog records are never drawn, so a tap where one sits is a tap on
+      // blank ground, whatever the render plan happened to include.
+      if placement.isCatalog { continue }
       if let visibleIDs, !visibleIDs.contains(placement.id) { continue }
       let rendered = point(for: placement.normalizedPosition, in: size)
       let distance = hypot(rendered.x - location.x, rendered.y - location.y)

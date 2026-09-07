@@ -133,7 +133,7 @@ enum ViewExporter {
 
   /// Must equal the number of entries in the `standaloneViewAt` registry above;
   /// `runBatch` iterates `0..<count`, so a mismatch spawns failing "unknown-N" exports.
-  static var standaloneViewCount: Int { 15 }
+  static var standaloneViewCount: Int { 13 }
 
   // MARK: - Full page registry (sidebar + content)
 

@@ -12,6 +12,11 @@ struct MemoryAtlasEvidence: Identifiable, Equatable {
   let id: String
   let content: String
   let createdAt: Date?
+  /// Whether the row goes somewhere when pressed. A memory opens on the
+  /// Memories page and a conversation in its transcript; the whole-account
+  /// sources (the people list, the goals) name where an entity came from and
+  /// have no single record to open.
+  var isOpenable = true
 
   /// Resolves cited memory ids against whatever the memories layer has loaded,
   /// preserving that order so the inspector reads newest-first like the list.
@@ -75,9 +80,10 @@ struct MemoryAtlasEvidence: Identifiable, Equatable {
   static func source(for citation: Citation) -> MemoryAtlasEvidence? {
     switch citation {
     case .people:
-      return MemoryAtlasEvidence(id: Citation.peopleID, content: "From the people you have saved", createdAt: nil)
+      return MemoryAtlasEvidence(
+        id: Citation.peopleID, content: "From the people you have saved", createdAt: nil, isOpenable: false)
     case .goals:
-      return MemoryAtlasEvidence(id: Citation.goalsID, content: "From your goals", createdAt: nil)
+      return MemoryAtlasEvidence(id: Citation.goalsID, content: "From your goals", createdAt: nil, isOpenable: false)
     case .memory, .conversation:
       return nil
     }
@@ -203,8 +209,17 @@ struct MemoryAtlasDetailPanel: View {
         .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     } else {
-      ForEach(evidence) { item in
+      ForEach(evidence.filter(\.isOpenable)) { item in
         evidenceRow(item)
+      }
+      // The whole-account sources say where an entity came from; they are
+      // plain statements, not rows that pretend to open something.
+      ForEach(evidence.filter { !$0.isOpenable }) { item in
+        Text(item.content)
+          .scaledFont(size: 11)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .accessibilityIdentifier("memory_atlas_evidence_source")
       }
       if unresolvedEvidenceCount > 0 {
         // Evidence resolves against the full local cache, so a remaining gap

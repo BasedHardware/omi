@@ -45,15 +45,23 @@ final class MemoryAtlasIslandsTests: XCTestCase {
 
   /// Every island holds at least one of the group's members.
   ///
-  /// A ring of members leaves a lake in the middle of their island, and the
-  /// tracer returns that lake as a ring of its own; the field's blur can also
-  /// spill a sliver of land past the last member. Both drew on the map as a
-  /// zone with nobody in it, which reads as the map inventing a place.
+  /// A wide ring of members leaves a lake in the middle of their island, and
+  /// the tracer returns that lake as a ring of its own; it drew on the map as
+  /// a zone with nobody in it, which reads as the map inventing a place. The
+  /// members here sit far enough apart, on a circle wide enough, that the
+  /// centre is below sea level, and the test first proves the tracer really
+  /// produced that lake, so removing the inhabitancy rule fails it.
   func testAnIslandWithNoMemberOnItIsNotDrawn() {
-    let ring = (0..<24).map { index -> CGPoint in
-      let angle = Double(index) / 24 * 2 * Double.pi
-      return CGPoint(x: 0.5 + 0.12 * CGFloat(cos(angle)), y: 0.5 + 0.12 * CGFloat(sin(angle)))
-    }
+    let ring = wideRing()
+    let centre = CGPoint(x: 0.5, y: 0.5)
+
+    let traced = MemoryAtlasIslands.coastlines(members: [0: ring], keepingUninhabitedRings: true)[0] ?? []
+    let lakes = traced.filter { island in !ring.contains { memoryAtlasCoastlineContains([island], $0) } }
+    XCTAssertFalse(lakes.isEmpty, "the geometry must produce a ring nobody is on, or this test proves nothing")
+    XCTAssertTrue(
+      lakes.contains { memoryAtlasCoastlineContains([$0], centre) },
+      "the uninhabited ring is the lake in the middle")
+
     let coastlines = MemoryAtlasIslands.coastlines(members: [0: ring])
 
     let rings = coastlines[0] ?? []
@@ -62,6 +70,35 @@ final class MemoryAtlasIslandsTests: XCTestCase {
       XCTAssertTrue(
         ring.contains { memoryAtlasCoastlineContains([island], $0) },
         "An island with no member on it must not be drawn")
+    }
+    XCTAssertTrue(
+      memoryAtlasCoastlineContains(rings, centre),
+      "a lake nobody lives in fills in rather than drawing an outline around an empty place")
+  }
+
+  /// A lake another group lives in stays a lake.
+  ///
+  /// Dropping every uninhabited ring would fill the outer group's island over
+  /// the inner group's ground; the hole is kept, so even-odd fill leaves the
+  /// centre to the group that is actually there.
+  func testALakeAnotherGroupLivesInStaysAHoleInTheIsland() {
+    let ring = wideRing()
+    let centre = CGPoint(x: 0.5, y: 0.5)
+    let coastlines = MemoryAtlasIslands.coastlines(members: [0: ring, 1: cluster(around: centre)])
+
+    XCTAssertFalse(memoryAtlasCoastlineContains(coastlines[0] ?? [], centre), "the centre is not the ring's ground")
+    XCTAssertTrue(memoryAtlasCoastlineContains(coastlines[1] ?? [], centre), "it is the inner group's")
+    XCTAssertTrue(
+      memoryAtlasCoastlineContains(coastlines[0] ?? [], ring[0]),
+      "and the ring still owns the ground its members stand on")
+  }
+
+  /// Sixty-four members on a circle of radius 0.2: neighbours 0.02 apart, so
+  /// the field reaches about 0.05 and the centre, four reaches away, is water.
+  private func wideRing() -> [CGPoint] {
+    (0..<64).map { index -> CGPoint in
+      let angle = Double(index) / 64 * 2 * Double.pi
+      return CGPoint(x: 0.5 + 0.2 * CGFloat(cos(angle)), y: 0.5 + 0.2 * CGFloat(sin(angle)))
     }
   }
 
