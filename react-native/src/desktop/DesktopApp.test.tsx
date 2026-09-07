@@ -4,6 +4,7 @@ import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {ScrollView, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
+import {TaskPagination} from '../ui/TaskPagination';
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -1195,4 +1196,29 @@ test('desktop General settings mounts the live device composition slot', async (
   });
   expect(renderedText(renderer)).toContain('Live device controls');
   await act(async () => renderer.unmount());
+});
+
+test('actual desktop task page exposes the shared pagination action', () => {
+  const onLoadMore = jest.fn();
+  const renderer = renderDesktop({
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice={null}
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .props.onPress(),
+  );
+  act(() =>
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Load more tasks')[0]!
+      .props.onPress(),
+  );
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
 });

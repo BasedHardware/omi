@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
+import {TaskPagination} from '../ui/TaskPagination';
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
@@ -9,11 +10,18 @@ jest.mock('react-native', () => {
     ({children, ...elementProps}: {children?: React.ReactNode}) =>
       ReactRuntime.createElement(name, elementProps, children);
   return {
-    FlatList: ({data, renderItem, ListHeaderComponent, ...listProps}: any) =>
+    FlatList: ({
+      data,
+      renderItem,
+      ListHeaderComponent,
+      ListFooterComponent,
+      ...listProps
+    }: any) =>
       ReactRuntime.createElement(
         'FlatList',
         listProps,
         ListHeaderComponent,
+        ListFooterComponent,
         data.map((item: any, index: number) =>
           ReactRuntime.cloneElement(renderItem({item, index}), {
             key: item.key ?? item.id,
@@ -237,4 +245,49 @@ test('task edits wait for authoritative props and preserve a failed draft for re
   act(() => control('Reopen Updated task').props.onPress());
   expect(onTaskToggle).toHaveBeenCalledWith('task-1');
   expect(control('Save task description').props.disabled).toBe(true);
+});
+
+test('mobile task footer exposes pending pagination and its action', () => {
+  const onLoadMore = jest.fn();
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskPagination: (
+      <TaskPagination
+        hasMore
+        busy={false}
+        notice={null}
+        onLoadMore={onLoadMore}
+      />
+    ),
+  });
+  act(() =>
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Load more tasks')[0]!
+      .props.onPress(),
+  );
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...buildProps({
+          activeRoute: 'tasks',
+          taskPagination: (
+            <TaskPagination
+              hasMore
+              busy
+              notice="Try again"
+              onLoadMore={onLoadMore}
+            />
+          ),
+        })}
+      />,
+    ),
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more tasks',
+    )[0]!.props.disabled,
+  ).toBe(true);
+  expect(renderedText(renderer)).toContain('Try again');
+  act(() => renderer.unmount());
 });
