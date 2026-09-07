@@ -197,6 +197,82 @@ test('a complete empty history may claim nothing is saved', async () => {
   ).toHaveLength(0);
 });
 
+test('later-page Rewind unavailability keeps frames and omits Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  expect(label(view, 'Load more history')).toBeDefined();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_UNAVAILABLE'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
+  expect(content(view)).not.toContain('Screen history could not be loaded.');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('later-page Rewind auth failures keep frames and omit Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_AUTH'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain('Sign in again to open your screen history.');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('generic later-page Rewind failures still offer Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce(
+    new Error('private filesystem path'),
+  );
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'Screen history could not be loaded. Try again.',
+  );
+  expect(content(view)).not.toContain('private filesystem path');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(label(view, 'Load more history')).toBeDefined();
+});
+
+test('later-page Rewind unavailability does not claim an empty history', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_UNAVAILABLE'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
+  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
 test('an incomplete empty history does not claim nothing is saved', async () => {
   mockRewind.listFrames.mockResolvedValueOnce({
     frames: [],

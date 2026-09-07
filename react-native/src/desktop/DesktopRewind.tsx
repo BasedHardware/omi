@@ -31,13 +31,22 @@ type Rewind = {
   ): Promise<{id: string; mimeType: 'image/jpeg'; base64: string}>;
 };
 
+function errorCode(error: unknown): string | undefined {
+  return (error as {code?: string} | null)?.code;
+}
+
 function errorCopy(error: unknown) {
-  const code = (error as {code?: string} | null)?.code;
+  const code = errorCode(error);
   if (code === 'OMI_REWIND_UNAVAILABLE')
     return 'No local Rewind history is available for this account on this Mac.';
   if (code === 'OMI_REWIND_AUTH')
     return 'Sign in again to open your screen history.';
   return 'Screen history could not be loaded. Try again.';
+}
+
+export function rewindLaterPageCanRetry(error: unknown): boolean {
+  const code = errorCode(error);
+  return code !== 'OMI_REWIND_UNAVAILABLE' && code !== 'OMI_REWIND_AUTH';
 }
 
 export function DesktopRewind({
@@ -146,7 +155,12 @@ export function DesktopRewind({
       });
       setCursor(page.nextCursor);
     } catch (failure) {
-      if (epoch.current === current) setError(errorCopy(failure));
+      if (epoch.current === current) {
+        setError(errorCopy(failure));
+        if (!rewindLaterPageCanRetry(failure)) {
+          setCursor(null);
+        }
+      }
     } finally {
       if (epoch.current === current) {
         loading.current = false;

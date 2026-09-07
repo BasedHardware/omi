@@ -96,7 +96,9 @@ Cloud Linux after `1941186ad7`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `ee83ece2a4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Later `GET /v1/chat-messages` failures no longer replace loaded messages with a full-page error. Nested non-retryable later pages keep loaded rows, show unavailable copy, and omit Load older. Generic later-page failures keep Load older. An empty first page with a remaining older cursor still does not claim "No messages in this chat yet."
 
-Cloud Linux after the composer resting-stage honesty slice: an empty composer with a later-history failure no longer treats that as the resting "I'm ready." stage. Nested non-retryable later pages keep the history stage and the unavailable copy instead of "Nothing's waiting on you." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `b3470ebc06`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. An empty composer with a later-history failure no longer treats that as the resting "I'm ready." stage. Nested non-retryable later pages keep the history stage and the unavailable copy instead of "Nothing's waiting on you."
+
+Cloud Linux after the Rewind later-page honesty slice: later Rewind pages that fail with `OMI_REWIND_UNAVAILABLE` or `OMI_REWIND_AUTH` keep already loaded frames, show that unavailable copy, and omit Load more instead of advertising another page against a door that cannot succeed. Generic later-page failures keep Load more. An incomplete empty first page that then hits that capability failure still does not claim "No captures saved yet." Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
