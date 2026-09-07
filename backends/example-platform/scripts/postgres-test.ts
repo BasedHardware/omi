@@ -17,6 +17,7 @@ import {
 } from "./postgres-test-lifecycle";
 import {
   ensureOwnedVolume, inspectOwnedContainer, inspectOwnedVolume, isLinuxAmd64Image,
+  postgresTestCommandExitCode,
   removeOwnedContainer, removeOwnedVolume, verifyOwnedContainerConfiguration,
   type PostgresTestCommandRunner,
 } from "./postgres-test-resources";
@@ -49,7 +50,7 @@ const command = (
     stderr: options.inherit ? "inherit" : "pipe",
   });
   return {
-    exitCode: result.exitCode,
+    exitCode: postgresTestCommandExitCode(result),
     stdout: result.stdout?.toString().trim() ?? "",
     stderr: result.stderr?.toString().trim() ?? "",
   };

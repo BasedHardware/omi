@@ -8,6 +8,11 @@ export interface PostgresTestCommandResult {
 
 export type PostgresTestCommandRunner = (args: readonly string[]) => PostgresTestCommandResult;
 
+export const postgresTestCommandExitCode = (result: {
+  readonly success: boolean;
+  readonly exitCode: number | null;
+}): number => result.success ? 0 : result.exitCode || 1;
+
 const fail = (code: string): never => { throw new Error(code); };
 
 const volumeOwnership = (state: PostgresTestState): string =>
