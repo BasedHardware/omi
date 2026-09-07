@@ -9961,7 +9961,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return '${name}s röstprofil';
+    return 'Röstprofil för $name';
   }
 
   @override

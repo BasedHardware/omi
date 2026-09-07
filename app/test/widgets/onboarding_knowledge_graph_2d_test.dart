@@ -36,7 +36,7 @@ void main() {
     final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     expect(bytes, isNotNull);
 
-    var sawNonBlack = false;
+    var sawWhite = false;
     var sawPurple = false;
     var sawCyan = false;
     final data = bytes!.buffer.asUint8List();
@@ -46,12 +46,14 @@ void main() {
       final b = data[i + 2];
       final a = data[i + 3];
       if (a == 0) continue;
-      if (r > 8 || g > 8 || b > 8) sawNonBlack = true;
+      // Edges are white at 0.28 alpha over black (~71 grey); only the node
+      // circles and labels reach near-white, so the bar sits above the edges.
+      if (r > 128 && g > 128 && b > 128) sawWhite = true;
       if (r > 80 && b > 80 && g < 40) sawPurple = true;
       if (g > 180 && b > 180 && r < 80) sawCyan = true;
     }
 
-    expect(sawNonBlack, isTrue);
+    expect(sawWhite, isTrue);
     expect(sawPurple, isFalse);
     expect(sawCyan, isFalse);
   });

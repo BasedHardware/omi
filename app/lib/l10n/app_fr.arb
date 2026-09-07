@@ -575,7 +575,6 @@
     "permissionsRequired": "Autorisations requises",
     "permissionsRequiredDesc": "Cette application a besoin des autorisations Bluetooth et Localisation pour fonctionner correctement. Veuillez les activer dans les paramètres.",
     "openSettings": "Ouvrir les paramètres",
-    "wantDifferentName": "Voulez-vous utiliser un autre nom ?",
     "whatsYourName": "Comment vous appelez-vous ?",
     "speakTranscribeSummarize": "Parlez. Transcrivez. Résumez.",
     "signInWithApple": "Se connecter avec Apple",

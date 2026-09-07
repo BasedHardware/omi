@@ -43,15 +43,15 @@ Widget _wrapOnboarding(AuthenticationProvider authProvider, SpeechProfileProvide
       ChangeNotifierProvider<AuthenticationProvider>.value(value: authProvider),
       ChangeNotifierProvider<SpeechProfileProvider>.value(value: speechProfileProvider),
     ],
-    child: MaterialApp(
-      localizationsDelegates: const [
+    child: const MaterialApp(
+      localizationsDelegates: [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      home: const OnboardingWrapper(),
+      home: OnboardingWrapper(),
     ),
   );
 }

@@ -333,6 +333,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
     gateway_feature_mode = "off" if cfg.provider_mode == "offline" else "gateway"
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
+        # The developer's own harness may fill unset keys from backend/.env
+        # (a local-only MODULATE_API_KEY); the JIT-QA stack never sets this.
+        "OMI_HARNESS_PERSONAL_ENV": "1",
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
         "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
         "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_url}/_local/storage",

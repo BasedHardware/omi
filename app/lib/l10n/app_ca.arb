@@ -575,7 +575,6 @@
     "permissionsRequired": "Permisos necessaris",
     "permissionsRequiredDesc": "Aquesta aplicació necessita permisos de Bluetooth i ubicació per funcionar correctament. Activeu-los a la configuració.",
     "openSettings": "Obrir configuració",
-    "wantDifferentName": "Voleu que us anomeni d'una altra manera?",
     "whatsYourName": "Com et dius?",
     "speakTranscribeSummarize": "Parlar. Transcriure. Resumir.",
     "signInWithApple": "Iniciar sessió amb Apple",

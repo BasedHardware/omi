@@ -485,15 +485,21 @@ class SpeechProfileProvider extends ChangeNotifier
 
         // Store frame: use storeFramePacket for Omi/OpenGlass (expects header),
         // or append frames directly for other devices (raw frames)
+        final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
         if (paddingLeft > 0) {
+          // Omi/OpenGlass split one Opus packet across BLE notifications;
+          // only a frame storeFramePacket has finished assembling decodes,
+          // so the meter reads the newest complete frame rather than the
+          // fragment that just arrived.
+          final framesBefore = audioStorage.frames.length;
           audioStorage.storeFramePacket(value);
+          if (audioStorage.frames.length > framesBefore) {
+            _updateMicLevelFromDeviceFrame(audioStorage.frames.last);
+          }
         } else {
           audioStorage.frames.add(value);
+          _updateMicLevelFromDeviceFrame(trimmedValue);
         }
-
-        final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
-
-        _updateMicLevelFromDeviceFrame(trimmedValue);
 
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(trimmedValue);

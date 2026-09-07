@@ -199,7 +199,9 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> onLocalEmulatorSignIn(Function() onSignIn) async {
     if (!localEmulatorSignInEnabled(Env.profile)) return;
     if (loading) return;
-    setLoadingState(true);
+    // `loading` reads this provider's own flag, so the guard above and the
+    // spinner only work when the transitions go through setLoading.
+    setLoading(true);
     try {
       final credential = await AuthService.instance.signInWithLocalEmulatorUser();
       if (credential != null && _hasFirebaseUser) {
@@ -215,7 +217,7 @@ class AuthenticationProvider extends BaseProvider {
         globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
       );
     }
-    setLoadingState(false);
+    setLoading(false);
   }
 
   Future<String?> _getIdToken() async {

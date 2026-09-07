@@ -575,7 +575,6 @@
     "permissionsRequired": "권한 필요",
     "permissionsRequiredDesc": "이 앱은 제대로 작동하려면 블루투스 및 위치 권한이 필요합니다. 설정에서 활성화하세요.",
     "openSettings": "설정 열기",
-    "wantDifferentName": "다른 이름으로 부르시겠습니까?",
     "whatsYourName": "이름이 무엇인가요?",
     "speakTranscribeSummarize": "말하기. 변환. 요약.",
     "signInWithApple": "Apple로 로그인",

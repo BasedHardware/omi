@@ -68,16 +68,22 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                   ),
                 ),
                 const SizedBox(height: 28),
-                Text(
-                  context.l10n.youreAllSet,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
+                // Scaled down rather than wrapped, so a long locale keeps the
+                // one-line heading the layout above and below is spaced for.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    context.l10n.youreAllSet,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                      fontFamily: 'Manrope',
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
                 const Spacer(flex: 3),
                 SizedBox(

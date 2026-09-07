@@ -53,16 +53,24 @@ void main() {
   });
 
   testWidgets('copy that overflows shrinks its text scale until it fits, at full width', (tester) async {
-    await _pump(tester, maxHeight: 120, copy: _longCopy);
+    await _pump(tester, maxHeight: 220, copy: _longCopy);
 
     final scale = _scaleOf(tester);
     expect(scale, lessThan(1.0));
-    expect(scale, greaterThanOrEqualTo(0.6));
+    expect(scale, greaterThan(0.6));
 
     final copyBox = tester.renderObject<RenderBox>(find.byKey(const Key('copy')));
     expect(copyBox.size.width, 320);
-    // Nothing scrolls: no scroll view is part of the fit.
+    // Nothing scrolls while a readable scale fits the copy.
     expect(find.byType(SingleChildScrollView), findsNothing);
+  });
+
+  testWidgets('copy that still overflows at the smallest readable scale scrolls instead of clipping', (tester) async {
+    await _pump(tester, maxHeight: 80, copy: _longCopy);
+
+    expect(_scaleOf(tester), closeTo(0.6, 0.001));
+    // The floor holds; the rest of the copy is reachable, not cut off.
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
 
   testWidgets('copy grows back toward its natural size when it is given more height', (tester) async {

@@ -59,10 +59,11 @@ class _OnboardingPreviewFlowState extends State<_OnboardingPreviewFlow> {
   static const int kSignIn = 1;
   static const int kConsent = 2;
   static const int kName = 3;
-  static const int kLanguage = 4;
-  static const int kFoundUs = 5;
-  static const int kPermissions = 6;
-  static const int kComplete = 7;
+  // No language step: production defaults the primary language to English
+  // on the name step, so the preview mirrors the flow users actually see.
+  static const int kFoundUs = 4;
+  static const int kPermissions = 5;
+  static const int kComplete = 6;
   static const int kLast = kComplete;
 
   int _index = kSplash;
@@ -87,8 +88,6 @@ class _OnboardingPreviewFlowState extends State<_OnboardingPreviewFlow> {
         return PreviewConsentStep(goNext: _goNext);
       case kName:
         return PreviewNameStep(goNext: _goNext);
-      case kLanguage:
-        return PreviewLanguageStep(goNext: _goNext);
       case kFoundUs:
         return PreviewFoundUsStep(goNext: _goNext);
       case kPermissions:

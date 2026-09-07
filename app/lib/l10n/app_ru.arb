@@ -575,7 +575,6 @@
     "permissionsRequired": "Требуются разрешения",
     "permissionsRequiredDesc": "Этому приложению нужны разрешения Bluetooth и Местоположение для правильной работы. Пожалуйста, включите их в настройках.",
     "openSettings": "Открыть настройки",
-    "wantDifferentName": "Хотите использовать другое имя?",
     "whatsYourName": "Как вас зовут?",
     "speakTranscribeSummarize": "Говорите. Расшифровывайте. Резюмируйте.",
     "signInWithApple": "Войти с Apple",

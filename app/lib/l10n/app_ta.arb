@@ -1782,10 +1782,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "உங்கள் பெயர் என்ன?",
     "@whatsYourName": {
         "description": "Question asking for user's name"

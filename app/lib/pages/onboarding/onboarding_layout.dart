@@ -19,6 +19,11 @@ double onboardingBottomBlockMaxHeight(BuildContext context) {
 /// (iteratively, from a post-frame measurement) until the block fits. Lines
 /// keep wrapping at the full block width, so nothing shrinks into a narrow
 /// column. Wrap the copy only — buttons stay outside at full size.
+///
+/// The scale never goes below [_minTextScale]; copy that still does not fit
+/// there (a long locale on a short screen, fixed-height rows the scale cannot
+/// shrink) scrolls inside the block instead of being clipped, so every
+/// permission row and privacy sentence stays reachable.
 class OnboardingFitToHeight extends StatefulWidget {
   final Widget child;
 
@@ -34,6 +39,7 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
   final GlobalKey _contentKey = GlobalKey();
   double _textScale = 1.0;
   double? _fittedWidth;
+  bool _scrolls = false;
 
   void _measure(double maxHeight) {
     if (!mounted) return;
@@ -42,8 +48,16 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
     final height = box.size.height;
     final overflows = height > maxHeight + 0.5;
     final hasSlack = _textScale < 1.0 && height < maxHeight - 0.5;
-    if (!overflows && !hasSlack) return;
+    if (!overflows && !hasSlack) {
+      if (_scrolls && !overflows) setState(() => _scrolls = false);
+      return;
+    }
     final next = (_textScale * maxHeight / height).clamp(_minTextScale, 1.0);
+    final atFloor = overflows && next <= _minTextScale + 0.0001 && _textScale <= _minTextScale + 0.0001;
+    if (atFloor) {
+      if (!_scrolls) setState(() => _scrolls = true);
+      return;
+    }
     if ((next - _textScale).abs() < 0.005) return;
     setState(() => _textScale = next);
   }
@@ -62,25 +76,32 @@ class _OnboardingFitToHeightState extends State<OnboardingFitToHeight> {
         if (_fittedWidth != width) {
           _fittedWidth = width;
           _textScale = 1.0;
+          _scrolls = false;
         }
         if (maxHeight.isFinite) {
           WidgetsBinding.instance.addPostFrameCallback((_) => _measure(maxHeight));
         }
         final mediaQuery = MediaQuery.of(context);
+        final scaled = MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: TextScaler.linear(mediaQuery.textScaler.scale(1.0) * _textScale),
+          ),
+          child: KeyedSubtree(
+            key: _contentKey,
+            child: SizedBox(width: width, child: widget.child),
+          ),
+        );
+        if (_scrolls) {
+          // Still too tall at the smallest readable scale: scroll rather than
+          // clip, so nothing below the fold is silently lost.
+          return SingleChildScrollView(child: scaled);
+        }
         return ClipRect(
           child: OverflowBox(
             alignment: Alignment.bottomCenter,
             minHeight: 0,
             maxHeight: double.infinity,
-            child: MediaQuery(
-              data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(mediaQuery.textScaler.scale(1.0) * _textScale),
-              ),
-              child: KeyedSubtree(
-                key: _contentKey,
-                child: SizedBox(width: width, child: widget.child),
-              ),
-            ),
+            child: scaled,
           ),
         );
       },

@@ -575,7 +575,6 @@
     "permissionsRequired": "ต้องการสิทธิ์",
     "permissionsRequiredDesc": "แอปนี้ต้องการสิทธิ์ Bluetooth และตำแหน่งเพื่อทำงานอย่างถูกต้อง กรุณาเปิดใช้งานในการตั้งค่า",
     "openSettings": "เปิดการตั้งค่า",
-    "wantDifferentName": "ต้องการใช้ชื่ออื่นไหม?",
     "whatsYourName": "คุณชื่ออะไร?",
     "speakTranscribeSummarize": "พูด ถอดเสียง สรุป",
     "signInWithApple": "ลงชื่อเข้าใช้ด้วย Apple",

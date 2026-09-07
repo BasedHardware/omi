@@ -40,7 +40,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   // provider.isInitialising ever becomes true — without this, a rapid double
   // tap on Redo/Get Started during that network round-trip could start two
   // concurrent sessions.
-  bool _isCheckingAvailability = false;
+  bool _isStartingRecording = false;
 
   @override
   void initState() {
@@ -129,9 +129,86 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     );
   }
 
+  Future<void> _startRecordingLocked(
+    SpeechProfileProvider provider,
+    Future<void> Function() restartDeviceRecording,
+    Future<void> Function() stopDeviceRecording,
+  ) async {
+    // Pre-flight: don't enter the recording UI at all if the streaming
+    // primary is known down — otherwise the socket connects and audio uploads, but no
+    // question/progress ever arrives (see STT_UNAVAILABLE handling below,
+    // which only fires after already sitting in a dead recording screen).
+    final available = await isSttAvailable();
+    if (!available) {
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () {},
+          context.l10n.connectionError,
+          context.l10n.connectionErrorDesc,
+          okButtonText: context.l10n.ok,
+          singleButton: true,
+        ),
+        barrierDismissible: false,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    // Check if user has set primary language, if not, show dialog
+    if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+      await LanguageSelectionDialog.show(context);
+    }
+
+    bool usePhoneMic = false;
+
+    // Check if device is connected and supports opus
+    final currentDevice = provider.device;
+    if (currentDevice != null) {
+      try {
+        BleAudioCodec codec = await _getAudioCodec();
+        if (!codec.isOpusSupported()) {
+          // Device doesn't support opus, use phone mic
+          usePhoneMic = true;
+        }
+      } catch (e) {
+        // Device disconnected, use phone mic
+        usePhoneMic = true;
+      }
+    } else {
+      // No device connected, use phone mic
+      usePhoneMic = true;
+    }
+
+    await stopDeviceRecording();
+    bool success = await provider.initialise(
+      finalizedCallback: restartDeviceRecording,
+      processConversationCallback: () async {
+        await Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
+      },
+      usePhoneMic: usePhoneMic,
+    );
+    if (!success) {
+      // Initialization failed, error dialog will be shown
+      await restartDeviceRecording();
+      return;
+    }
+    provider.forceCompletionTimer = Timer(
+      Duration(seconds: provider.maxDuration),
+      () {
+        provider.finalize();
+      },
+    );
+    provider.updateStartedRecording(true);
+    _questionAnimationController.forward();
+  }
+
   @override
   Widget build(BuildContext context) {
-    Future restartDeviceRecording() async {
+    Future<void> restartDeviceRecording() async {
       Logger.debug("restartDeviceRecording $mounted");
       if (mounted) {
         Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
@@ -141,88 +218,24 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
       }
     }
 
-    Future stopDeviceRecording() async {
+    Future<void> stopDeviceRecording() async {
       Logger.debug("stopDeviceRecording $mounted");
       if (mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
       }
     }
 
+    // Held from the first tap until the socket/microphone session is up (or
+    // gave up), so a second tap while `provider.isInitialising` is still false
+    // cannot start a concurrent session.
     Future<void> startRecording(SpeechProfileProvider provider) async {
-      if (_isCheckingAvailability) return;
-      setState(() => _isCheckingAvailability = true);
-
-      // Pre-flight: don't enter the recording UI at all if the streaming
-      // primary is known down — otherwise the socket connects and audio uploads, but no
-      // question/progress ever arrives (see STT_UNAVAILABLE handling below,
-      // which only fires after already sitting in a dead recording screen).
-      final available = await isSttAvailable();
-      if (mounted) setState(() => _isCheckingAvailability = false);
-      if (!available) {
-        if (!context.mounted) return;
-        await showDialog(
-          context: context,
-          builder: (c) => getDialog(
-            context,
-            () => Navigator.pop(context),
-            () {},
-            context.l10n.connectionError,
-            context.l10n.connectionErrorDesc,
-            okButtonText: context.l10n.ok,
-            singleButton: true,
-          ),
-          barrierDismissible: false,
-        );
-        return;
+      if (_isStartingRecording) return;
+      setState(() => _isStartingRecording = true);
+      try {
+        await _startRecordingLocked(provider, restartDeviceRecording, stopDeviceRecording);
+      } finally {
+        if (mounted) setState(() => _isStartingRecording = false);
       }
-
-      if (!context.mounted) return;
-      // Check if user has set primary language, if not, show dialog
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-        await LanguageSelectionDialog.show(context);
-      }
-
-      bool usePhoneMic = false;
-
-      // Check if device is connected and supports opus
-      final currentDevice = provider.device;
-      if (currentDevice != null) {
-        try {
-          BleAudioCodec codec = await _getAudioCodec();
-          if (!codec.isOpusSupported()) {
-            // Device doesn't support opus, use phone mic
-            usePhoneMic = true;
-          }
-        } catch (e) {
-          // Device disconnected, use phone mic
-          usePhoneMic = true;
-        }
-      } else {
-        // No device connected, use phone mic
-        usePhoneMic = true;
-      }
-
-      await stopDeviceRecording();
-      bool success = await provider.initialise(
-        finalizedCallback: restartDeviceRecording,
-        processConversationCallback: () async {
-          await Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
-        },
-        usePhoneMic: usePhoneMic,
-      );
-      if (!success) {
-        // Initialization failed, error dialog will be shown
-        await restartDeviceRecording();
-        return;
-      }
-      provider.forceCompletionTimer = Timer(
-        Duration(seconds: provider.maxDuration),
-        () {
-          provider.finalize();
-        },
-      );
-      provider.updateStartedRecording(true);
-      _questionAnimationController.forward();
     }
 
     return PopScope(
@@ -434,7 +447,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                                 const SizedBox(height: 20),
                                 if (SharedPreferencesUtil().hasSpeakerProfile)
-                                  (provider.isInitialising || _isCheckingAvailability)
+                                  (provider.isInitialising || _isStartingRecording)
                                       ? const CircularProgressIndicator(color: Colors.white)
                                       : Padding(
                                           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -515,7 +528,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                           ? Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                if (provider.isInitialising || _isCheckingAvailability)
+                                if (provider.isInitialising || _isStartingRecording)
                                   const CircularProgressIndicator(color: Colors.white)
                                 else
                                   _capsuleButton(

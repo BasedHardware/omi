@@ -1763,7 +1763,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get getStarted => '开始';
 
   @override
-  String get onboardingSplashTagline => '你的第二大脑.';
+  String get onboardingSplashTagline => '你的第二大脑。';
 
   @override
   String get allDone => '全部完成！';

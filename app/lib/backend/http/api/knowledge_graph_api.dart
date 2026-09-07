@@ -36,40 +36,11 @@ class KnowledgeGraphApi {
     );
 
     if (response != null && response.statusCode == 200) {
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      // Keep server snake_case (`node_type`, `source_id`). Generated toJson()
-      // camelCases those keys and the map then draws an empty or edgeless graph.
-      if (decoded['nodes'] is List) return decoded;
-      return wire.GeneratedKnowledgeGraphResponse.fromJson(decoded).toJson();
+      // Nodes and edges are free-form maps on the wire type, so the server's
+      // snake_case keys (`node_type`, `source_id`) survive the round trip.
+      return wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
-  }
-
-  /// Return-only extraction from free text. Used when onboarding rebuild has
-  /// nothing in the memory store yet (speech-profile listen is not the
-  /// CaptureProvider conversation).
-  static Future<Map<String, dynamic>> extractKnowledgeGraph(String text, {String? userName}) async {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return {'nodes': <dynamic>[], 'edges': <dynamic>[]};
-    final body = <String, dynamic>{
-      'text': trimmed,
-      'include_existing': false,
-    };
-    if (userName != null && userName.trim().isNotEmpty) {
-      body['user_name'] = userName.trim();
-    }
-    final response = await makeApiCall(
-      url: '$_baseUrl/extract',
-      headers: {},
-      body: jsonEncode(body),
-      method: 'POST',
-      timeout: const Duration(seconds: 60),
-      retries: 0,
-    );
-    if (response != null && response.statusCode == 200) {
-      return jsonDecode(response.body) as Map<String, dynamic>;
-    }
-    throw Exception('Failed to extract knowledge graph: ${response?.body}');
   }
 
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {

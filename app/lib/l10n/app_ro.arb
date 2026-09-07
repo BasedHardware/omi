@@ -575,7 +575,6 @@
     "permissionsRequired": "Permisiuni necesare",
     "permissionsRequiredDesc": "Această aplicație necesită permisiuni Bluetooth și Locație. Activați-le din setări.",
     "openSettings": "Deschide setările",
-    "wantDifferentName": "Vrei să folosești alt nume?",
     "whatsYourName": "Cum te cheamă?",
     "speakTranscribeSummarize": "Vorbește. Transcrie. Rezumă.",
     "signInWithApple": "Conectare cu Apple",
@@ -3250,5 +3249,5 @@
     "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe",
     "play": "Redă",
     "redo": "Reia",
-    "speechProfileOwnerTitle": "Profilul vocal al lui {name}"
+    "speechProfileOwnerTitle": "Profilul vocal pentru {name}"
 }

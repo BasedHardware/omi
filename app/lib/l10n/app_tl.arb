@@ -1782,10 +1782,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Gusto mo bang gamitin ang ibang pangalan?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Ano ang iyong pangalan?",
     "@whatsYourName": {
         "description": "Question asking for user's name"

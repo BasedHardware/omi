@@ -227,6 +227,25 @@ class _HoldForLocalEmulator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The raw recognizer replaces a Material button, which carried button
+    // semantics and keyboard activation; both are put back here so a screen
+    // reader or a hardware keyboard can still trigger the ordinary tap path.
+    return FocusableActionDetector(
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          onPressed();
+          return null;
+        }),
+      },
+      child: Semantics(
+        button: true,
+        onTap: onPressed,
+        child: _gestures(),
+      ),
+    );
+  }
+
+  Widget _gestures() {
     return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
       gestures: <Type, GestureRecognizerFactory>{

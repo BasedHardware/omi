@@ -575,7 +575,6 @@
     "permissionsRequired": "İzinler gerekli",
     "permissionsRequiredDesc": "Bu uygulamanın düzgün çalışması için Bluetooth ve Konum izinlerine ihtiyacı var. Lütfen ayarlardan bunları etkinleştirin.",
     "openSettings": "Ayarları Aç",
-    "wantDifferentName": "Farklı bir isimle mi anılmak istiyorsunuz?",
     "whatsYourName": "Adın ne?",
     "speakTranscribeSummarize": "Konuş. Transkripsiyonu Oluştur. Özetle.",
     "signInWithApple": "Apple ile Giriş Yap",

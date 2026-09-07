@@ -575,7 +575,6 @@
     "permissionsRequired": "Потрібні дозволи",
     "permissionsRequiredDesc": "Цей додаток потребує дозволів Bluetooth та Місцезнаходження для правильної роботи. Будь ласка, увімкніть їх у налаштуваннях.",
     "openSettings": "Відкрити налаштування",
-    "wantDifferentName": "Хочете, щоб до вас звертались інакше?",
     "whatsYourName": "Як вас звати?",
     "speakTranscribeSummarize": "Говоріть. Транскрибуйте. Підсумовуйте.",
     "signInWithApple": "Увійти через Apple",

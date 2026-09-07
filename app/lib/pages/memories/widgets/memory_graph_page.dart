@@ -330,12 +330,28 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     _repaintNotifier.value++;
   }
 
+  /// True once the graph holds something other than the user's own node —
+  /// classified the way `_populateGraph` does, so a server-issued user node id
+  /// does not read as generated content and stop the polling early.
   bool _nodesHaveContent(List<dynamic> nodes) {
     return nodes.any((node) {
       if (node is! Map) return false;
       final id = (node['id'] ?? '').toString();
-      return id.isNotEmpty && id != 'user-node';
+      if (id.isEmpty || id == 'user-node') return false;
+      return !_isUserLikeNode(node);
     });
+  }
+
+  static Set<String> _knownUserLabels() {
+    final userName = SharedPreferencesUtil().givenName;
+    final userLabel = userName.isNotEmpty ? userName : 'Me';
+    return <String>{'me', 'the user', userLabel.trim().toLowerCase()};
+  }
+
+  static bool _isUserLikeNode(Map<dynamic, dynamic> nodeData) {
+    final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
+    final nodeType = (nodeData['node_type'] ?? nodeData['nodeType'] ?? '').toString().trim().toLowerCase();
+    return _knownUserLabels().contains(label) || nodeType == 'user';
   }
 
   Future<Map<String, dynamic>?> _fallbackGraphIfReady() async {
@@ -469,12 +485,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     final userName = SharedPreferencesUtil().givenName;
     final userLabel = userName.isNotEmpty ? userName : 'Me';
-    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
-      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] ?? nodeData['nodeType'] ?? '').toString().trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
-    }
+    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) => _isUserLikeNode(nodeData);
 
     String? primaryUserId;
     for (final nodeData in nodes) {

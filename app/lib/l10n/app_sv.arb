@@ -575,7 +575,6 @@
     "permissionsRequired": "Behörigheter krävs",
     "permissionsRequiredDesc": "Denna app behöver Bluetooth- och platsbehörigheter för att fungera korrekt. Aktivera dem i inställningarna.",
     "openSettings": "Öppna inställningar",
-    "wantDifferentName": "Vill du kallas något annat?",
     "whatsYourName": "Vad heter du?",
     "speakTranscribeSummarize": "Tala. Transkribera. Sammanfatta.",
     "signInWithApple": "Logga in med Apple",
@@ -3250,5 +3249,5 @@
     "couldNotLoadKnowledgeGraph": "Kunde inte läsa in kunskapsgrafen",
     "play": "Spela upp",
     "redo": "Gör om",
-    "speechProfileOwnerTitle": "{name}s röstprofil"
+    "speechProfileOwnerTitle": "Röstprofil för {name}"
 }

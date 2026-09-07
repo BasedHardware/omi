@@ -575,7 +575,6 @@
     "permissionsRequired": "Käyttöoikeudet vaaditaan",
     "permissionsRequiredDesc": "Tämä sovellus tarvitsee Bluetooth- ja sijaintioikeudet toimiakseen oikein. Ota ne käyttöön asetuksissa.",
     "openSettings": "Avaa asetukset",
-    "wantDifferentName": "Haluatko käyttää eri nimeä?",
     "whatsYourName": "Mikä on nimesi?",
     "speakTranscribeSummarize": "Puhu. Litteroi. Tee yhteenveto.",
     "signInWithApple": "Kirjaudu Applella",

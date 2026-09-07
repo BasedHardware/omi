@@ -575,7 +575,6 @@
     "permissionsRequired": "الأذونات مطلوبة",
     "permissionsRequiredDesc": "يحتاج هذا التطبيق إلى أذونات البلوتوث والموقع للعمل بشكل صحيح. يرجى تمكينها في الإعدادات.",
     "openSettings": "فتح الإعدادات",
-    "wantDifferentName": "تريد أن يُناديك باسم آخر؟",
     "whatsYourName": "ما اسمك؟",
     "speakTranscribeSummarize": "تحدث. انسخ. لخص.",
     "signInWithApple": "تسجيل الدخول باستخدام Apple",

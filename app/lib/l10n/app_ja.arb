@@ -575,7 +575,6 @@
     "permissionsRequired": "権限が必要です",
     "permissionsRequiredDesc": "このアプリが正しく機能するにはBluetoothと位置情報の権限が必要です。設定で有効にしてください。",
     "openSettings": "設定を開く",
-    "wantDifferentName": "別の名前を使いますか？",
     "whatsYourName": "お名前は何ですか？",
     "speakTranscribeSummarize": "話す。文字起こし。要約。",
     "signInWithApple": "Appleでサインイン",

@@ -575,7 +575,6 @@
     "permissionsRequired": "Õigused nõutavad",
     "permissionsRequiredDesc": "See rakendus vajab nõuetekohaseks toimimiseks Bluetoothi ja asukoha lube. Palun lubage need seadetes.",
     "openSettings": "Ava seaded",
-    "wantDifferentName": "Soovite kasutada muud nime?",
     "whatsYourName": "Mis on teie nimi?",
     "speakTranscribeSummarize": "Räägi. Transkribeeri. Võta kokku.",
     "signInWithApple": "Logi sisse Apple'iga",

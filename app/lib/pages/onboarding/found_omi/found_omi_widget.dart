@@ -118,74 +118,87 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // The grid and the "Other" field are fixed-height, so when the keyboard
+    // resizes the page on a compact device the block can be taller than what
+    // is left. It stays bottom-anchored and scrolls (reversed, so Continue
+    // is the part that stays in view) instead of overflowing.
     return Column(
       children: [
-        // Background area - takes remaining space for background image
-        Expanded(child: Container()),
-
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10),
-                OnboardingStepTitle(context.l10n.whereDidYouHearAboutOmi),
-                const SizedBox(height: 20),
-                _sourceGrid(context),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeInOut,
-                  alignment: Alignment.center,
-                  child: _isOtherSelected
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: _OtherField(
-                            controller: _otherController,
-                            focusNode: _otherFocusNode,
-                            onChanged: (_) => setState(() {}),
-                            onClose: _deselectOther,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _canContinue
-                        ? () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            final source = _isOtherSelected ? _otherController.text.trim() : _selectedSource!;
-                            SharedPreferencesUtil().foundOmiSource = source;
-                            updateUserOnboardingState(acquisitionSource: source);
-                            PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
-                            widget.goNext();
-                          }
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _canContinue ? Colors.white : Colors.grey[800],
-                      foregroundColor: _canContinue ? Colors.black : Colors.grey[600],
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+        Expanded(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: SingleChildScrollView(
+              reverse: true,
+              child: _bottomBlock(context),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _bottomBlock(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            OnboardingStepTitle(context.l10n.whereDidYouHearAboutOmi),
+            const SizedBox(height: 20),
+            _sourceGrid(context),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeInOut,
+              alignment: Alignment.center,
+              child: _isOtherSelected
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _OtherField(
+                        controller: _otherController,
+                        focusNode: _otherFocusNode,
+                        onChanged: (_) => setState(() {}),
+                        onClose: _deselectOther,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _canContinue
+                    ? () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        final source = _isOtherSelected ? _otherController.text.trim() : _selectedSource!;
+                        SharedPreferencesUtil().foundOmiSource = source;
+                        updateUserOnboardingState(acquisitionSource: source);
+                        PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
+                        widget.goNext();
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _canContinue ? Colors.white : Colors.grey[800],
+                  foregroundColor: _canContinue ? Colors.black : Colors.grey[600],
+                  disabledBackgroundColor: Colors.grey[800],
+                  disabledForegroundColor: Colors.grey[600],
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                  elevation: 0,
+                ),
+                child: Text(
+                  context.l10n.continueButton,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 }

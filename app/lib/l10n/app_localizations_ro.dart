@@ -10004,7 +10004,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String speechProfileOwnerTitle(String name) {
-    return 'Profilul vocal al lui $name';
+    return 'Profilul vocal pentru $name';
   }
 
   @override

@@ -27,11 +27,15 @@ Future<bool> userHasSpeakerProfile() async {
 /// streaming primary surfaces as an upfront error dialog instead of a dead
 /// recording screen with no questions/progress ever arriving.
 Future<bool> isSttAvailable() async {
+  // Short and single-shot: this gate sits in front of the Start button, and
+  // the default 30 s timeout with one retry would hold it for a minute.
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/speech-profile/stt-availability',
     headers: {},
     method: 'GET',
     body: '',
+    timeout: const Duration(seconds: 8),
+    retries: 0,
   );
   // Fail open: a hiccup on the check itself shouldn't block a working flow —
   // the existing STT_UNAVAILABLE detection after repeated failed connects is

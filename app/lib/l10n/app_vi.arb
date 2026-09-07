@@ -575,7 +575,6 @@
     "permissionsRequired": "Yêu cầu quyền",
     "permissionsRequiredDesc": "Ứng dụng này cần quyền Bluetooth và Vị trí để hoạt động đúng cách. Vui lòng bật chúng trong cài đặt.",
     "openSettings": "Mở cài đặt",
-    "wantDifferentName": "Muốn được gọi bằng tên khác?",
     "whatsYourName": "Tên bạn là gì?",
     "speakTranscribeSummarize": "Nói. Phiên âm. Tóm tắt.",
     "signInWithApple": "Đăng nhập bằng Apple",

@@ -36,7 +36,14 @@ class OnboardingPageTransition extends StatelessWidget {
       switchInCurve: Curves.easeIn,
       switchOutCurve: Curves.easeOut,
       transitionBuilder: (widgetChild, animation) {
-        return FadeTransition(opacity: animation, child: widgetChild);
+        // A page is hit-testable only once fully faded in: a quick second tap
+        // must not land on a button that is still invisible (incoming) or on
+        // its way out (outgoing).
+        return AnimatedBuilder(
+          animation: animation,
+          builder: (context, child) => IgnorePointer(ignoring: animation.value < 1, child: child),
+          child: FadeTransition(opacity: animation, child: widgetChild),
+        );
       },
       layoutBuilder: (currentChild, previousChildren) {
         return Stack(
@@ -103,11 +110,14 @@ class _DelayedFadeInState extends State<_DelayedFadeIn> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: _visible ? 1 : 0,
-      duration: widget.duration,
-      curve: Curves.easeIn,
-      child: widget.child,
+    return IgnorePointer(
+      ignoring: !_visible,
+      child: AnimatedOpacity(
+        opacity: _visible ? 1 : 0,
+        duration: widget.duration,
+        curve: Curves.easeIn,
+        child: widget.child,
+      ),
     );
   }
 }

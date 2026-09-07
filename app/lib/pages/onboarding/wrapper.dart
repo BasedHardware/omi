@@ -110,6 +110,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void initState() {
     _controller = TabController(
       length: 12,
+      // A session that expired re-enters here to sign in again, not to watch
+      // the splash a second time.
+      initialIndex: widget.forceAuthPage ? kAuthPage : kSplashPage,
       vsync: this,
     ); // Splash, Auth, AiConsent, Name, FoundOmi, Permissions, Review, Welcome, FindDevices, (SpeechProfile), (KnowledgeGraph), Complete
     _controller!.addListener(() {
@@ -267,12 +270,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         goNext: () {
           // Onboarding no longer asks the user to pick a language — default
           // everyone to English instead (users can still change it later
-          // from Settings). Fire-and-forget so this network call never
-          // blocks the onboarding flow from advancing.
-          context.read<HomeProvider>().updateUserPrimaryLanguage(
-                'en',
-                userProvider: context.read<UserProvider>(),
-              );
+          // from Settings). The default is applied locally first so a failed
+          // or slow server write cannot leave the language unset and let a
+          // later speech-profile visit reopen the picker this flow removed;
+          // the network call is fire-and-forget so it never blocks advancing.
+          final homeProvider = context.read<HomeProvider>();
+          homeProvider.assumePrimaryLanguageLocally('en');
+          homeProvider.updateUserPrimaryLanguage(
+            'en',
+            userProvider: context.read<UserProvider>(),
+          );
           _goNext(); // Go to Found Omi page
           IntercomManager.instance.updateUser(
             FirebaseAuth.instance.currentUser?.email,

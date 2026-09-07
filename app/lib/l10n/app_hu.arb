@@ -575,7 +575,6 @@
     "permissionsRequired": "Engedélyek szükségesek",
     "permissionsRequiredDesc": "Ez az alkalmazás Bluetooth és helymeghatározási engedélyekre van szüksége a megfelelő működéshez. Kérlek, engedélyezd őket a beállításokban.",
     "openSettings": "Beállítások megnyitása",
-    "wantDifferentName": "Máshogy szeretnéd, hogy hívjanak?",
     "whatsYourName": "Mi a neved?",
     "speakTranscribeSummarize": "Beszélj. Átírás. Összefoglalás.",
     "signInWithApple": "Bejelentkezés Apple-lel",

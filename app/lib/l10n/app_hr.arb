@@ -1782,10 +1782,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "wantDifferentName": "Želiš li da ide sa nečim drugačijim?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
-    },
     "whatsYourName": "Koje je tvoje ime?",
     "@whatsYourName": {
         "description": "Question asking for user's name"
