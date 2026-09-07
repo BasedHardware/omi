@@ -51,11 +51,13 @@ export function TasksPage({
   onDismissTaskMutation,
   writesAvailable,
   taskNotice = null,
+  onRefresh,
 }: TaskMutationProps & {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
   taskPagination?: React.ReactNode;
   taskNotice?: string | null;
+  onRefresh?: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -114,6 +116,18 @@ export function TasksPage({
         onDismissTaskMutation={onDismissTaskMutation}
         busyTaskId={busyTaskId}
       />
+      {onRefresh && error !== desktopBackendUnavailableCopy && (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh tasks"
+          disabled={loading}
+          onPress={onRefresh}
+          style={{minHeight: 44, justifyContent: 'center'}}>
+          <Text style={styles.projectionEmptyCopy}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Text>
+        </FocusPressable>
+      )}
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />

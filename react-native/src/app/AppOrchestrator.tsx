@@ -1590,6 +1590,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ) : route === 'Memories' ? (
                   <MemoriesPage
                     loading={readsPhase === 'initial-loading'}
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
                     outcome={routeOutcome}
                   />
                 ) : route === 'Tasks' ? (
@@ -1598,6 +1601,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     taskNotice={taskNotice}
                     {...taskMutations}
                     loading={readsPhase === 'initial-loading'}
+                    onRefresh={() => {
+                      void refreshReads(false);
+                    }}
                     outcome={routeOutcome}
                   />
                 ) : route === 'Connectors' ? (

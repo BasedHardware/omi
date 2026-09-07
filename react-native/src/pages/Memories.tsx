@@ -35,9 +35,11 @@ function formatMemoryDate(timestamp: number | null): string {
 export function MemoriesPage({
   outcome,
   loading,
+  onRefresh,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
+  onRefresh?: () => void;
 }) {
   const loaded = useMemo(
     () =>
@@ -167,6 +169,18 @@ export function MemoriesPage({
           value={query}
         />
       </View>
+      {onRefresh && error !== desktopBackendUnavailableCopy && (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh memories"
+          disabled={loading || loadingMore}
+          onPress={onRefresh}
+          style={{minHeight: 44, justifyContent: 'center'}}>
+          <Text style={styles.projectionEmptyCopy}>
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </Text>
+        </FocusPressable>
+      )}
       {loading && outcome === null ? (
         <View style={styles.projectionEmpty}>
           <ActivityIndicator color="#888888" />

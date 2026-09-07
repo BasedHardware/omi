@@ -427,3 +427,49 @@ test('nested non-retryable later task pages do not claim more are available in a
   expect(copy).not.toContain('More tasks are available.');
   act(() => renderer.unmount());
 });
+
+test('nested non-retryable task reads omit Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'error',
+          error: desktopBackendUnavailableCopy,
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(taskPageText(renderer)).toContain(desktopBackendUnavailableCopy);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ),
+  ).toHaveLength(0);
+  act(() => renderer.unmount());
+});
+
+test('retryable task reads still offer Refresh', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          status: 'error',
+          error:
+            'This saved data could not be loaded. Retry without changing it.',
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh tasks',
+    ).length,
+  ).toBeGreaterThan(0);
+  act(() => renderer.unmount());
+});

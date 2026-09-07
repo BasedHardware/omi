@@ -205,6 +205,50 @@ test('memory grant denial shows the typed error instead of an empty library', ()
   expect(textOf(view)).not.toContain('No memories yet.');
 });
 
+test('nested non-retryable memory reads omit Refresh', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error: desktopBackendUnavailableCopy,
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(textOf(view)).toContain(desktopBackendUnavailableCopy);
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh memories',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retryable memory reads still offer Refresh', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'error',
+          error:
+            'This saved data could not be loaded. Retry without changing it.',
+        }}
+        loading={false}
+        onRefresh={jest.fn()}
+      />,
+    );
+  });
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Refresh memories',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('incomplete empty memories do not claim a complete library', () => {
   let view!: Renderer.ReactTestRenderer;
   act(() => {
