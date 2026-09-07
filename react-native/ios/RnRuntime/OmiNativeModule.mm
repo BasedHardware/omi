@@ -1,4 +1,6 @@
 #import "OmiNativeModule.h"
+#import "../../macos/RnRuntime-macOS/OmiBackendModule.h"
+#import <React/RCTBridge.h>
 #import "../../apple/OmiDeviceInformation.h"
 #import "../../apple/OmiBleSession.h"
 #import "../../apple/OmiDeviceControls.h"
@@ -173,7 +175,7 @@ RCT_REMAP_METHOD(startScan,
     keepId = retained.identifier.UUIDString;
     kept = self.devices[keepId];
     if (kept == nil) {
-      kept = [self deviceDictionary:keepId name:retained.name rssi:@0];
+      kept = [self deviceDictionary:keepId name:retained.name rssi:nil];
     }
   }
   [self.devices removeAllObjects];
@@ -211,6 +213,22 @@ RCT_REMAP_METHOD(stopScan,
   resolve(nil);
 }
 
+- (void)rememberedAction:(NSString *)action resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  NSString *identifier = self.connectedPeripheral.identifier.UUIDString;
+  NSUInteger generation = self.connectionGeneration;
+  BOOL ready = OmiBleRecordingReady([self.connectionState isEqual:@"connected"], self.audioNotifying, self.codec != nil);
+  if ([action isEqual:@"save"] && !ready) { reject(@"OMI_REMEMBERED_DEVICE", @"Connect your Omi before remembering it", nil); return; }
+  NSDictionary *device = identifier == nil ? nil : @{@"id":identifier, @"name":self.devices[identifier][@"name"] ?: @"Omi"};
+  OmiBackendModule *backend = [self.bridge moduleForClass:OmiBackendModule.class];
+  if (backend == nil) { reject(@"OMI_REMEMBERED_DEVICE", @"Remembered device storage is unavailable", nil); return; }
+  [backend rememberedDevice:action device:device current:^BOOL {
+    return ![action isEqual:@"save"] || (self.connectionGeneration == generation && [self.connectedPeripheral.identifier.UUIDString isEqual:identifier] && OmiBleRecordingReady([self.connectionState isEqual:@"connected"], self.audioNotifying, self.codec != nil));
+  } resolver:resolve rejecter:reject];
+}
+RCT_REMAP_METHOD(getRememberedDevice, rememberedGet:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) { [self rememberedAction:@"get" resolver:resolve rejecter:reject]; }
+RCT_REMAP_METHOD(rememberConnectedDevice, rememberedSave:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) { [self rememberedAction:@"save" resolver:resolve rejecter:reject]; }
+RCT_REMAP_METHOD(forgetRememberedDevice, rememberedForget:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) { [self rememberedAction:@"forget" resolver:resolve rejecter:reject]; }
+
 RCT_REMAP_METHOD(connectDevice,
                  connectDeviceWithId:(NSString *)identifier
                  resolver:(RCTPromiseResolveBlock)resolve
@@ -220,6 +238,11 @@ RCT_REMAP_METHOD(connectDevice,
 
 - (void)beginConnection:(NSString *)identifier recovering:(BOOL)recovering resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
   CBPeripheral *peripheral = self.peripherals[identifier];
+  if (peripheral == nil && self.central.state == CBManagerStatePoweredOn) {
+    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:identifier];
+    if (uuid != nil) peripheral = [self.central retrievePeripheralsWithIdentifiers:@[uuid]].firstObject;
+    if (peripheral != nil) self.peripherals[identifier] = peripheral;
+  }
   if (peripheral == nil || self.central.state != CBManagerStatePoweredOn || [self.retiringPeripherals containsObject:peripheral]) {
     reject(@"OMI_DEVICE_UNAVAILABLE", @"Omi device is unavailable", nil);
     return;
@@ -433,6 +456,7 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     return;
   }
   NSString *identifier = peripheral.identifier.UUIDString;
+  if (self.devices[identifier] == nil) self.devices[identifier] = [self deviceDictionary:identifier name:peripheral.name ?: @"Omi" rssi:nil];
   if (characteristic == self.settingCharacteristics[OmiButtonUUID]) {
     if (self.buttonNotifying && self.audioNotifying && OmiButtonSupported(self.devices[identifier][@"features"]) && OmiButtonDoublePress(characteristic.value))
       [self emit:@"button" body:@{ @"deviceId":identifier, @"connectionId":[NSString stringWithFormat:@"%lu", (unsigned long)self.connectionGeneration], @"action":@"doublePress" }];
@@ -575,10 +599,10 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
   NSMutableDictionary *device = [@{
     @"id": identifier,
     @"name": [name isKindOfClass:[NSString class]] ? name : @"Omi",
-    @"rssi": rssi ?: @0,
     @"connected": @([self.connectionState isEqualToString:@"connected"] &&
                     [self.connectedPeripheral.identifier.UUIDString isEqualToString:identifier]),
   } mutableCopy];
+  if (rssi != nil) device[@"rssi"] = rssi;
   for (NSString *field in @[ @"features", @"ledBrightness", @"microphoneGain", @"charging" ]) {
     if (self.devices[identifier][field] != nil) device[field] = self.devices[identifier][field];
   }

@@ -437,7 +437,7 @@ static NSDictionary *OmiAuthJWTPayload(NSString *token) {
 }
 
 static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNumber *expiresIn,
-                                NSString *localId, NSString *firebaseApiKey, NSString *journalLogin, NSDictionary *recordingOwner) {
+                                NSString *localId, NSString *firebaseApiKey, NSString *journalLogin, NSDictionary *recordingOwner, NSDictionary *rememberedDevice) {
   NSDictionary *payload = OmiAuthJWTPayload(idToken);
   NSNumber *expiry = [payload[@"exp"] isKindOfClass:NSNumber.class]
       ? payload[@"exp"]
@@ -454,6 +454,7 @@ static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNum
     @"journalLogin" : journalLogin.length > 0 ? journalLogin : NSUUID.UUID.UUIDString.lowercaseString,
   } mutableCopy];
   if (recordingOwner != nil) session[@"recordingOwner"] = recordingOwner;
+  if (rememberedDevice != nil) session[@"rememberedDevice"] = rememberedDevice;
   NSData *data = [NSJSONSerialization dataWithJSONObject:session options:0 error:nil];
   if (data == nil) return NO;
   NSMutableDictionary *attributes = [@{
@@ -487,7 +488,7 @@ static NSInteger OmiAuthStoreSessionIfCurrent(
     NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
         ? current[@"refreshToken"] : nil;
     if (!OmiAuthRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return -1;
-    return OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey, current[@"journalLogin"], current[@"recordingOwner"]) ? 1 : 0;
+    return OmiAuthStoreSession(idToken, refreshToken, expiresIn, localId, firebaseApiKey, current[@"journalLogin"], current[@"recordingOwner"], current[@"rememberedDevice"]) ? 1 : 0;
   }
 }
 
@@ -723,7 +724,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     NSString *refreshToken = [tokens[@"refreshToken"] isKindOfClass:NSString.class] ? tokens[@"refreshToken"] : nil;
     if (firebaseError != nil || firebaseIdToken.length == 0 || refreshToken.length == 0 ||
         !OmiAuthStoreSession(firebaseIdToken, refreshToken, tokens[@"expiresIn"],
-                             tokens[@"localId"], firebaseKey, nil, nil)) {
+                             tokens[@"localId"], firebaseKey, nil, nil, nil)) {
       [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
                         message:@"Omi cloud could not establish a Firebase session" error:firebaseError
                         resolve:resolve reject:reject];

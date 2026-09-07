@@ -225,7 +225,7 @@ static BOOL OmiStoreOwnKeychainCloudSessionIfCurrent(
     NSString *currentRefreshToken = [current[@"refreshToken"] isKindOfClass:NSString.class]
         ? current[@"refreshToken"] : nil;
     if (!OmiCloudRefreshTokensEqual(currentRefreshToken, expectedRefreshToken)) return NO;
-    return OmiStoreOwnKeychainCloudSession(session);
+    return OmiStoreOwnKeychainCloudSession(OmiRememberedRefreshSession(session, current));
   }
 }
 
@@ -632,6 +632,7 @@ didCompleteWithError:(NSError *)error {
 @end
 
 @interface OmiBackendModule () <NSURLSessionTaskDelegate>
+@property(nonatomic) NSUInteger rememberedGeneration;
 @property(nonatomic, strong) OmiRecordingJournals *recordingJournals;
 @property(nonatomic, strong) dispatch_queue_t journalQueue;
 @property(nonatomic, strong) NSURLSession *session;
@@ -727,6 +728,34 @@ RCT_REMAP_METHOD(createWriteId,
     [value appendFormat:@"%02x", bytes[index]];
   }
   resolve(value);
+}
+
+- (void)rememberedDevice:(NSString *)action device:(NSDictionary *)device current:(BOOL (^)(void))current resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
+  NSString *login = OmiRecordingLogin();
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSUInteger ticket = ++self.rememberedGeneration;
+    if (login == nil) { if (![action isEqual:@"save"]) resolve(nil); else reject(@"OMI_REMEMBERED_DEVICE", @"A native login is required", nil); return; }
+    NSDictionary *saved = OmiOwnKeychainCloudSession()[@"rememberedDevice"];
+    void (^finish)(NSDictionary *) = ^(NSDictionary *owner) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        @synchronized(OmiAuthKeychainLock()) {
+          NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+          if (!OmiRememberedCurrent(ticket, self.rememberedGeneration, login, session[@"journalLogin"], current()) || (owner != nil && ![owner[@"origin"] isEqual:OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString])) { reject(@"OMI_REMEMBERED_DEVICE", @"Device or login changed", nil); return; }
+          NSDictionary *selected = nil;
+          if ([action isEqual:@"save"]) {
+            if (!OmiRememberedIdentity(device[@"id"], device[@"name"])) { reject(@"OMI_REMEMBERED_DEVICE", @"Device identity is unavailable", nil); return; }
+            selected = @{@"id":device[@"id"], @"name":device[@"name"], @"origin":owner[@"origin"], @"login":login, @"ownerKey":owner[@"ownerKey"]};
+            session[@"rememberedDevice"] = selected;
+          } else if ([action isEqual:@"forget"]) [session removeObjectForKey:@"rememberedDevice"];
+          else if ([saved isKindOfClass:NSDictionary.class] && OmiRememberedIdentity(saved[@"id"], saved[@"name"]) && [saved[@"origin"] isEqual:owner[@"origin"]] && [saved[@"ownerKey"] isEqual:owner[@"ownerKey"]] && [saved[@"login"] isEqual:login]) selected = saved;
+          if (![action isEqual:@"get"] && !OmiStoreOwnKeychainCloudSession(session)) { reject(@"OMI_REMEMBERED_DEVICE", @"Device preference could not be saved", nil); return; }
+          resolve(selected == nil ? nil : @{@"id":selected[@"id"], @"name":selected[@"name"]});
+        }
+      });
+    };
+    if ([action isEqual:@"save"] || ([action isEqual:@"get"] && saved != nil)) [self recordingOwner:finish allowCached:NO rejecter:reject];
+    else finish(nil);
+  });
 }
 
 - (void)ensureRecordingJournals {

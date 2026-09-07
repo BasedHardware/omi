@@ -87,7 +87,7 @@ export type DeviceStorageStatus = {
 export type Device = {
   id: string;
   name: string;
-  rssi: number;
+  rssi?: number;
   connected: boolean;
   battery?: number;
   features?: number;
@@ -140,6 +140,9 @@ export type OmiNativeEvent =
   | {type: 'snapshot'; snapshot: NativeSnapshot};
 
 export type OmiNative = {
+  getRememberedDevice?(): Promise<{id: string; name: string} | null>;
+  rememberConnectedDevice?(): Promise<{id: string; name: string}>;
+  forgetRememberedDevice?(): Promise<void>;
   getSnapshot(): Promise<NativeSnapshot>;
   getBluetoothState(): Promise<BluetoothState>;
   requestPermissions(): Promise<{
