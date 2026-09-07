@@ -69,8 +69,19 @@ test("verified completion atomically queues once, persists transcription and pro
   await processDeviceTranscriptions(env.DB, env.ATTACHMENTS, ai, 105);
   expect(calls).toBe(1);
   expect(
-    (await readDeviceTranscription(env.DB, "record-owner", session.id))?.text
-  ).toBe("The meeting is tomorrow.");
+    await readDeviceTranscription(env.DB, "record-owner", session.id)
+  ).toEqual({
+    sessionId: session.id,
+    state: "completed",
+    text: "The meeting is tomorrow.",
+    segments: JSON.stringify([
+      { start: 0, end: 1, text: "The meeting is tomorrow." },
+    ]),
+    language: "en",
+    discardedLeadingPackets: 0,
+    errorCode: null,
+    updatedAt: expect.any(Number),
+  });
   expect(
     await readDeviceTranscription(env.DB, "another-owner", session.id)
   ).toBeNull();

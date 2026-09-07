@@ -193,6 +193,71 @@ export async function processDeviceTranscriptions(
   }
 }
 
+export type DeviceTranscriptionRow = {
+  sessionId: string;
+  state: string;
+  text: string | null;
+  segments: string | null;
+  language: string | null;
+  discardedLeadingPackets: number;
+  errorCode: string | null;
+  updatedAt: number;
+};
+
+export type DeviceTranscriptionProjection = {
+  sessionId: string;
+  state: "queued" | "running" | "completed" | "failed";
+  text: string | null;
+  segments: unknown[];
+  language: string | null;
+  discardedLeadingPackets: number;
+  errorCode: string | null;
+  updatedAt: number;
+};
+
+export function projectDeviceTranscription(
+  row: DeviceTranscriptionRow | null
+): DeviceTranscriptionProjection | null {
+  if (row === null) return null;
+  if (
+    typeof row.sessionId !== "string" ||
+    (row.state !== "queued" &&
+      row.state !== "running" &&
+      row.state !== "completed" &&
+      row.state !== "failed") ||
+    !(row.text === null || typeof row.text === "string") ||
+    (row.state === "completed" && typeof row.text !== "string") ||
+    !(row.language === null || typeof row.language === "string") ||
+    !(row.errorCode === null || typeof row.errorCode === "string") ||
+    !Number.isSafeInteger(row.updatedAt) ||
+    row.updatedAt < 0 ||
+    !Number.isSafeInteger(row.discardedLeadingPackets) ||
+    row.discardedLeadingPackets < 0
+  ) {
+    return null;
+  }
+  let segments: unknown = [];
+  if (row.segments !== null) {
+    if (typeof row.segments !== "string") return null;
+    try {
+      segments = JSON.parse(row.segments);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(segments)) return null;
+  return {
+    sessionId: row.sessionId,
+    state: row.state,
+    text: row.text,
+    segments,
+    language: row.language,
+    discardedLeadingPackets: row.discardedLeadingPackets,
+    errorCode: row.errorCode,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export async function readDeviceTranscription(
   db: D1Database,
   accountId: string,
@@ -203,14 +268,5 @@ export async function readDeviceTranscription(
       "SELECT session_id AS sessionId, state, text, segments, language, discarded_leading_packets AS discardedLeadingPackets, error_code AS errorCode, updated_at AS updatedAt FROM device_transcriptions WHERE session_id = ? AND account_id = ?"
     )
     .bind(sessionId, accountId)
-    .first<{
-      sessionId: string;
-      state: string;
-      text: string | null;
-      segments: string | null;
-      language: string | null;
-      discardedLeadingPackets: number;
-      errorCode: string | null;
-      updatedAt: number;
-    }>();
+    .first<DeviceTranscriptionRow>();
 }
