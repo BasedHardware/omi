@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-event-gated-operation-deadline",
+  "violated_contract": "A bounded discovery operation must complete when its time budget expires even when its input stream produces no further events.",
+  "canonical_prevention": "Own the completion timer independently of input delivery, and release the discovery subscription and scan in one finally boundary. Drive the production scanner with a quiet adapter and a controlled timer in regression tests.",
+  "canonical_prevention_artifact": ["sdks/device/typescript/src/ble/scan.test.ts"],
+  "evidence_prs": [],
+  "scope_hints": ["sdks/device/typescript/**"],
+  "status": "open"
+}
