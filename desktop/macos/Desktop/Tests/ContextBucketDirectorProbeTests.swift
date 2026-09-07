@@ -111,7 +111,9 @@
       // once and never read.
       XCTAssertEqual(captured?.cacheKey, "director:v1")
       XCTAssertEqual(captured?.cacheKey, ContextPromptCacheKey.director)
-      XCTAssertEqual(captured?.maxCompletionTokens, 800)
+      XCTAssertEqual(
+        captured?.maxCompletionTokens,
+        ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens)
       XCTAssertFalse(captured?.authorizationSnapshotWasPresent ?? true)
       XCTAssertEqual(captured?.schemaKeys, Set(["type", "properties", "required", "additionalProperties"]))
       XCTAssertEqual(result["decision"], "suggest")
