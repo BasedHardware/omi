@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DeviceTranscriptionRecord, DeviceTranscriptionRepository } from "../../apps/service/listen/device-transcription";
 import { parsePrerecordedTranscription } from "../../apps/service/listen/prerecorded-transcription";
-import { parseDeviceSessionUploadCreate, DEVICE_UPLOAD_SESSION_ID, type DeviceSessionUpload, type DeviceSessionUploadRepository } from "../../apps/service/stores/device-session-upload";
+import { parseDeviceSessionUploadCreate, validateDeviceSessionUploadBatch, DEVICE_UPLOAD_SESSION_ID, type DeviceSessionUpload, type DeviceSessionUploadRepository } from "../../apps/service/stores/device-session-upload";
 import { isProxy } from "node:util/types";
 
 import {
@@ -536,6 +536,11 @@ export function createPostgresDeviceSessionUploadRepository(options: PostgresLis
       if (!Number.isSafeInteger(index) || index < 0 || index > 65535 || !(bytes instanceof Uint8Array)
         || bytes.length < 1 || bytes.length > 1048576) throw new TypeError("invalid_device_request");
       return query(context, { name: "listen.audio.append", text: "SELECT omi_memory.append_listen_audio_upload($1,$2,$3::bytea) AS session", values: [id(sessionId), index, new Uint8Array(bytes)] });
+    },
+    appendBatch(context, sessionId, chunks) {
+      validateDeviceSessionUploadBatch(chunks);
+      const encoded = chunks.map(chunk => ({ chunkIndex: chunk.index, bytesBase64: Buffer.from(chunk.bytes).toString("base64") }));
+      return query(context, { name: "listen.audio.append_batch", text: "SELECT omi_memory.append_listen_audio_upload_batch($1,$2::text::jsonb) AS session", values: [id(sessionId), JSON.stringify(encoded)] });
     },
     complete: (context, sessionId) => query(context, { name: "listen.audio.complete", text: "SELECT omi_memory.complete_listen_audio_upload($1) AS session", values: [id(sessionId)] }),
   });

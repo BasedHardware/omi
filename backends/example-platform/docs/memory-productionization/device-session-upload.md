@@ -44,7 +44,7 @@ them. A paired canonical capture and conversation migration is still required th
 | Request | Result |
 | --- | --- |
 | `POST /v1/device-sessions` with `captureId`, `deviceId`, optional `deviceName`, and numeric `codec` | 201 `{session}`; UUID-v4 `captureId` is stable client retry identity, and the server chooses the session ID |
-| `POST /v1/device-sessions/:id/audio` with `chunkIndex` and `bytesBase64` | 200 `{session}` after the exact indexed bytes and counters commit together |
+| `POST /v1/device-sessions/:id/audio` with `{chunks:[{chunkIndex,bytesBase64},...]}` | 200 `{session}` after every indexed packet in the batch is durable; exact full or prefix replay does not increment counters twice |
 | `POST /v1/device-sessions/:id/complete` | 200 `{session}` after upload completion commits; exact replay retains the original completion timestamp |
 | `GET /v1/device-sessions/:id` | 200 `{session}`, or 404 for an unknown session in the authenticated account |
 | Bodyless `POST /v1/device-sessions/:id/transcribe` | 202 `{transcription}` while queued/running; 200 for completed/failed; requires a fresh authenticated request and sealed upload |
@@ -52,8 +52,9 @@ them. A paired canonical capture and conversation migration is still required th
 
 Changed immutable creation fields, different bytes at an existing index, skipped
 indices, and new bytes after completion return 409. Matching chunk replay remains
-valid after completion. Limits match the existing client/Worker protocol: 1 MiB
-per chunk, 8 MiB per recording, and 65,536 contiguous zero-based chunks. Invalid
+valid after completion. A batch contains 1–128 consecutive packets, at most 1 MiB
+of decoded audio in total, and at most 2 MiB of encoded JSON. The session retains
+the 8-MiB limit and 65,536 contiguous zero-based packet indices. Invalid
 JSON, noncanonical base64, substituted transcript fields, and invalid UUIDs fail
 before mutation. Errors retain the client `{error:{code}}` envelope. Timestamps
 are Unix seconds on the session; transcript `updatedAt` retains the existing
@@ -116,15 +117,17 @@ defines the timed utterance response. The model adapter and container tests do n
 by themselves prove live provider credentials, physical-device audio, or deployed
 end-to-end transcription.
 
-The listener must accept the encoded 1-MiB audio request (up to 1,398,256 bytes);
+The listener must accept the encoded batch request (up to 2,097,152 bytes);
 the route independently bounds its streamed JSON body and propagates cancellation
 to the serializable database operation. Runtime composition must retain the same
 readiness, concurrency, and shutdown gates as the other deployed routes.
 
-The current client sends one HTTP request per BLE packet and awaits its indexed
-acknowledgment. Each request rechecks Firebase/account authorization and commits a
-PostgreSQL transaction. Durable retry tests do not prove sustained device upload
-throughput across network latency; queue growth and drain require a real-device
-measurement. Future batching must preserve every packet boundary and index,
-because the audio assembler consumes distinct BLE packets rather than a joined
-byte stream. No packet batching is implemented in this increment.
+Migration 0052 accepts each portable packet batch in one authorized transaction;
+an error in a later packet rolls back earlier packets and counters in that batch.
+Worker claims every batch index atomically before writing its separate R2 objects.
+Partial R2 failure leaves the claims pending, blocks completion, and permits exact
+retry; no different bytes can replace a claimed index. Both paths preserve each
+original BLE packet for the shared audio assembler. The client retains its batch
+until the server response and native journal acknowledgment succeed. Batching
+reduces per-packet HTTP and authorization overhead, but sustained queue drain and
+recording throughput still require measurement with real hardware and network latency.

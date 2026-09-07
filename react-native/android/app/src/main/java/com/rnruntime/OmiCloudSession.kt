@@ -43,6 +43,32 @@ object OmiCloudSession {
 
   fun currentRevision() = revision.get()
 
+  @Synchronized fun journalLogin(context: Context): String? {
+    val session = read(context) ?: return null
+    val existing = session.optString("journalLogin")
+    if (existing.isNotEmpty()) return existing
+    val generated = java.util.UUID.randomUUID().toString()
+    session.put("journalLogin", generated)
+    save(context, session)
+    return generated
+  }
+
+  @Synchronized internal fun cachedToken(context: Context): String? = read(context)?.optString("idToken")?.ifEmpty { null }
+
+  @Synchronized internal fun recordingOwner(context: Context, origin: String): OmiRecordingOwner? {
+    val session = read(context) ?: return null
+    val owner = session.optJSONObject("recordingOwner") ?: return null
+    if (owner.optString("origin") != origin || owner.optString("login") != session.optString("journalLogin")) return null
+    return OmiRecordingOwner(owner.getString("ownerKey"), owner.getString("receipt"), origin, owner.getString("login"))
+  }
+
+  @Synchronized internal fun storeRecordingOwner(context: Context, owner: OmiRecordingOwner) {
+    val session = read(context) ?: error("Recording login is unavailable")
+    check(owner.login == session.optString("journalLogin"))
+    session.put("recordingOwner", JSONObject().put("ownerKey", owner.ownerKey).put("receipt", owner.receipt).put("origin", owner.origin).put("login", owner.login))
+    save(context, session)
+  }
+
   fun cancelAttempt(expectedRevision: Long) {
     synchronized(attemptLock) { revision.compareAndSet(expectedRevision, expectedRevision + 1) }
   }
@@ -52,7 +78,7 @@ object OmiCloudSession {
     check(preferences(context).edit().remove("session").putBoolean("signedOut", true).commit())
   }
 
-  @Synchronized fun hasSession(context: Context): Boolean = token(context) != null
+  @Synchronized fun hasSession(context: Context): Boolean = read(context) != null || token(context) != null
 
   @Synchronized fun invalidateToken(context: Context, failedToken: String): Boolean {
     val session = read(context)
@@ -79,6 +105,8 @@ object OmiCloudSession {
       throw error
     }
     val next = session(refreshed.getString("id_token"), refreshed.getString("refresh_token"), refreshed.getString("expires_in"))
+    next.put("journalLogin", session.optString("journalLogin").ifEmpty { java.util.UUID.randomUUID().toString() })
+    session.optJSONObject("recordingOwner")?.let { next.put("recordingOwner", it) }
     save(context, next)
     return next.getString("idToken")
   }
@@ -105,6 +133,7 @@ object OmiCloudSession {
     require(seconds in 1..86_400)
     return JSONObject().put("idToken", token).put("refreshToken", refresh)
       .put("expiresAt", System.currentTimeMillis() + seconds * 1000)
+      .put("journalLogin", java.util.UUID.randomUUID().toString())
   }
 
   fun form(values: Map<String, String>) = values.entries.joinToString("&") {

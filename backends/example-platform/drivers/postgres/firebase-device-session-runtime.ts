@@ -6,12 +6,12 @@ import { deviceTranscriptionProjection } from "../../apps/service/listen/device-
 import { transcribeDeviceSession } from "./device-transcription";
 import { isProxy } from "node:util/types";
 import { PostgresRepositoryError } from "./transaction";
-import { DEVICE_UPLOAD_MAX_BODY, DEVICE_UPLOAD_SESSION_ID, parseDeviceSessionUploadAudio, parseDeviceSessionUploadCreate } from "../../apps/service/stores/device-session-upload";
+import { DEVICE_UPLOAD_MAX_BODY, DEVICE_UPLOAD_MAX_BATCH_BODY, DEVICE_UPLOAD_SESSION_ID, parseDeviceSessionUploadBatch, parseDeviceSessionUploadCreate } from "../../apps/service/stores/device-session-upload";
 
 const error = (status: number, code: string) => Response.json({ error: { code } }, {
   status, headers: { "cache-control": "no-store", ...(status === 503 ? { "retry-after": "1" } : {}) },
 });
-async function body(request: Request): Promise<unknown> {
+async function body(request: Request, maximumBytes = DEVICE_UPLOAD_MAX_BODY): Promise<unknown> {
   if (request.body === null) throw new TypeError("invalid_device_request");
   const reader = request.body.getReader();
   const cancel = () => { void reader.cancel().catch(() => undefined); };
@@ -25,7 +25,7 @@ async function body(request: Request): Promise<unknown> {
       request.signal.throwIfAborted();
       if (chunk.done) break;
       bytes += chunk.value.length;
-      if (bytes > DEVICE_UPLOAD_MAX_BODY) throw new TypeError("invalid_device_request");
+      if (bytes > maximumBytes) throw new TypeError("invalid_device_request");
       text += decoder.decode(chunk.value, { stream: true });
     }
     return JSON.parse(text + decoder.decode());
@@ -103,8 +103,8 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
         const context = authorized.context;
         const session = opening ? await repository.open(context, parseDeviceSessionUploadCreate(await body(request)))
           : match![2] === "audio" ? await (async () => {
-            const chunk = parseDeviceSessionUploadAudio(await body(request));
-            return repository.append(context, match![1]!, chunk.index, chunk.bytes);
+            const chunks = parseDeviceSessionUploadBatch(await body(request, DEVICE_UPLOAD_MAX_BATCH_BODY));
+            return repository.appendBatch(context, match![1]!, chunks);
           })()
           : match![2] === "complete" ? await repository.complete(context, match![1]!)
           : await repository.read(context, match![1]!);

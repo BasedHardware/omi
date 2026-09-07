@@ -166,7 +166,7 @@ test('pairs the macOS backend origin and credentials in one validated policy', (
   expect(source).toContain('OmiExamplePlatformRequestSupported');
   expect(source).toContain('OmiDevelopmentBackendUnsupportedResponse');
   expect(source).toContain(
-    'self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)',
+    'policy.kind == OmiBackendCredentialKindExamplePlatform && !OmiExamplePlatformRequestSupported(method, path)',
   );
   expect(source).toContain('omi.backend.softwarePlane');
   expect(source).toContain('OmiSoftwarePlaneIsNew');

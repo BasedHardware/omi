@@ -1,3 +1,5 @@
+#import "../../apple/OmiRecordingJournals.h"
+#import "../../apple/OmiRecordingPolicy.h"
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
 #import "../../apple/OmiRequestTimeout.h"
@@ -196,6 +198,19 @@ static BOOL OmiClearOwnKeychainCloudSession(void) {
   }
   @synchronized (OmiAuthKeychainLock()) {
     return SecItemDelete((__bridge CFDictionaryRef)query) == errSecSuccess;
+  }
+}
+
+static NSString *OmiRecordingLogin(void) {
+  @synchronized (OmiAuthKeychainLock()) {
+    NSDictionary *session = OmiOwnKeychainCloudSession();
+    if (session == nil) return nil;
+    NSString *existing = [session[@"journalLogin"] isKindOfClass:NSString.class] ? session[@"journalLogin"] : nil;
+    if (existing.length > 0) return existing;
+    NSMutableDictionary *updated = [session mutableCopy];
+    NSString *generated = NSUUID.UUID.UUIDString.lowercaseString;
+    updated[@"journalLogin"] = generated;
+    return OmiStoreOwnKeychainCloudSession(updated) ? generated : nil;
   }
 }
 
@@ -617,6 +632,8 @@ didCompleteWithError:(NSError *)error {
 @end
 
 @interface OmiBackendModule () <NSURLSessionTaskDelegate>
+@property(nonatomic, strong) OmiRecordingJournals *recordingJournals;
+@property(nonatomic, strong) dispatch_queue_t journalQueue;
 @property(nonatomic, strong) NSURLSession *session;
 @property(nonatomic, strong) OmiBackendPolicy *policy;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, OmiGenerationDelegate *> *generations;
@@ -644,6 +661,7 @@ RCT_EXPORT_MODULE(OmiBackend)
 }
 
 - (void)emitSessionInvalidated {
+  if (self.journalQueue != nil) dispatch_async(self.journalQueue, ^{ [self.recordingJournals close]; });
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self.hasListeners) {
       [self sendEventWithName:OmiBackendSessionInvalidatedEvent body:@{}];
@@ -711,6 +729,136 @@ RCT_REMAP_METHOD(createWriteId,
   resolve(value);
 }
 
+- (void)ensureRecordingJournals {
+  @synchronized(self) {
+    if (self.recordingJournals != nil) return;
+    self.journalQueue = dispatch_queue_create("omi.recording-journals", DISPATCH_QUEUE_SERIAL);
+    NSString *application = NSBundle.mainBundle.bundleIdentifier ?: @"omi-v5-runtime";
+    NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *root = [[support stringByAppendingPathComponent:application] stringByAppendingPathComponent:@"recording-journals"];
+    self.recordingJournals = [[OmiRecordingJournals alloc] initWithRoot:root keyTag:[application stringByAppendingString:@".recording-key"] currentLogin:^NSString *{ return OmiRecordingLogin(); }];
+  }
+}
+
+- (void)recordingOwner:(void (^)(NSDictionary *))completion allowCached:(BOOL)allowCached rejecter:(RCTPromiseRejectBlock)reject {
+  NSString *login = OmiRecordingLogin();
+  NSString *origin = OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString;
+  if (login == nil || origin == nil) { reject(@"OMI_RECORDING_OWNERSHIP", @"A persistent native login and recording backend are required", nil); return; }
+  RCTPromiseRejectBlock failure = ^(NSString *code, NSString *message, NSError *error) {
+    if (allowCached && OmiRecordingOffline(error) && OmiRecordingSameContext(login, OmiRecordingLogin(), origin,
+        OmiRequestBaseURL(OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment), @"/v1/device-sessions/ownership").absoluteString)) {
+      NSDictionary *cached = OmiOwnKeychainCloudSession()[@"recordingOwner"];
+      if ([cached isKindOfClass:NSDictionary.class] && [cached[@"origin"] isEqual:origin] && [cached[@"login"] isEqual:login]) { completion(cached); return; }
+    }
+    reject(code, message, error);
+  };
+  [self performNativeRequest:@{@"id":@"recording-ownership", @"method":@"GET", @"path":@"/v1/device-sessions/ownership"} receipt:nil expectedOrigin:origin expectedLogin:login resolver:^(NSDictionary *response) {
+    if ([response[@"status"] integerValue] == 503 && [response[@"body"] isKindOfClass:NSString.class]) {
+      id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+      id failure = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
+      if ([failure isKindOfClass:NSDictionary.class] && [failure[@"code"] isEqual:@"capture_ownership_unavailable"]) { reject(@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE", @"Recording ownership is unavailable from this backend", nil); return; }
+    }
+    if ([response[@"status"] integerValue] != 200 || ![login isEqual:OmiRecordingLogin()]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership is unavailable from this backend", nil); return; }
+    NSString *body = [response[@"body"] isKindOfClass:NSString.class] ? response[@"body"] : nil;
+    id parsed = body == nil ? nil : [NSJSONSerialization JSONObjectWithData:body == nil ? nil : [body dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    NSDictionary *ownership = [parsed isKindOfClass:NSDictionary.class] ? parsed[@"ownership"] : nil;
+    if (![ownership isKindOfClass:NSDictionary.class] || !OmiRecordingMatches(ownership[@"ownerKey"], @"^capture-owner-v1:[0-9a-f]{64}$")
+        || !OmiRecordingMatches(ownership[@"receipt"], @"^capture1\\.[0-9a-f]{64}\\.[0-9a-f]{64}$")) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership response is invalid", nil); return; }
+    NSDictionary *owner = @{@"ownerKey":ownership[@"ownerKey"], @"receipt":ownership[@"receipt"], @"origin":origin, @"login":login};
+    @synchronized (OmiAuthKeychainLock()) {
+      NSMutableDictionary *session = [OmiOwnKeychainCloudSession() mutableCopy];
+      if (![session[@"journalLogin"] isEqual:login]) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording login changed", nil); return; }
+      session[@"recordingOwner"] = owner;
+      if (!OmiStoreOwnKeychainCloudSession(session)) { reject(@"OMI_RECORDING_JOURNAL", @"Recording ownership could not be saved", nil); return; }
+    }
+    completion(owner);
+  } rejecter:failure];
+}
+
+RCT_REMAP_METHOD(createRecordingJournal, createRecordingJournalWithInput:(NSDictionary *)input resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    [self recordingOwner:^(NSDictionary *owner) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *error = nil;
+        NSDictionary *entry = [self.recordingJournals create:owner input:input error:&error];
+        if (entry != nil) resolve(entry); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal could not be created", nil);
+      });
+    } allowCached:YES rejecter:reject];
+  });
+}
+
+RCT_REMAP_METHOD(listRecordingJournals, listRecordingJournalsWithResolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    [self recordingOwner:^(NSDictionary *owner) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *error = nil;
+        NSArray *entries = [self.recordingJournals list:owner error:&error];
+        if (entries != nil) resolve(entries); else reject(@"OMI_RECORDING_JOURNAL", @"Saved recordings could not be recovered", nil);
+      });
+    } allowCached:YES rejecter:reject];
+  });
+}
+
+RCT_REMAP_METHOD(readRecordingJournal, readRecordingJournalWithHandle:(NSString *)handle resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSDictionary *entry = [self.recordingJournals read:handle error:&error];
+    if (entry != nil) resolve(entry); else reject(@"OMI_RECORDING_JOURNAL", @"Saved recording could not be read", nil);
+  });
+}
+
+RCT_REMAP_METHOD(appendRecordingJournal, appendRecordingJournalWithHandle:(NSString *)handle entry:(NSString *)entry resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSNumber *sequence = [self.recordingJournals append:handle entry:entry error:&error];
+    if (sequence != nil) resolve(sequence); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal append failed; saved audio was retained", nil);
+  });
+}
+
+RCT_REMAP_METHOD(removeRecordingJournal, removeRecordingJournalWithHandle:(NSString *)handle resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    if ([self.recordingJournals remove:handle error:&error]) resolve(nil); else reject(@"OMI_RECORDING_JOURNAL", @"Recording journal removal failed", nil);
+  });
+}
+
+RCT_REMAP_METHOD(requestRecordingJournal, requestRecordingJournalWithHandle:(NSString *)handle request:(NSDictionary *)request resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureRecordingJournals];
+  dispatch_async(self.journalQueue, ^{
+    NSError *error = nil;
+    NSDictionary *owner = [self.recordingJournals ownerForRequest:handle request:request error:&error];
+    if (owner == nil) { reject(@"OMI_RECORDING_OWNERSHIP", @"Recording journal request is unavailable", nil); return; }
+    [self recordingOwner:^(NSDictionary *fresh) {
+      if (![fresh[@"ownerKey"] isEqual:owner[@"ownerKey"]] || ![fresh[@"origin"] isEqual:owner[@"origin"]] || ![fresh[@"login"] isEqual:owner[@"login"]]) {
+        dispatch_async(self.journalQueue, ^{ [self.recordingJournals close]; });
+        reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed; saved audio was retained", nil);
+        return;
+      }
+    [self performNativeRequest:request receipt:fresh[@"receipt"] expectedOrigin:fresh[@"origin"] expectedLogin:fresh[@"login"] resolver:^(NSDictionary *response) {
+      dispatch_async(self.journalQueue, ^{
+        NSError *failure = nil;
+        if ([response[@"status"] integerValue] == 409 && [response[@"body"] isKindOfClass:NSString.class]) {
+          id envelope = [NSJSONSerialization JSONObjectWithData:[response[@"body"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+          id error = [envelope isKindOfClass:NSDictionary.class] ? envelope[@"error"] : nil;
+          if ([error isKindOfClass:NSDictionary.class] && [error[@"code"] isEqual:@"capture_ownership_changed"]) {
+            [self.recordingJournals close];
+            reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed; saved audio was retained", nil);
+            return;
+          }
+        }
+        if ([self.recordingJournals acknowledgeOpen:handle request:request response:response error:&failure]) resolve(response);
+        else reject(@"OMI_RECORDING_JOURNAL", @"Recording acknowledgement could not be saved", nil);
+      });
+    } rejecter:reject];
+    } allowCached:NO rejecter:reject];
+  });
+}
+
 RCT_REMAP_METHOD(createRecordingId,
                  createRecordingIdWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
@@ -721,9 +869,25 @@ RCT_REMAP_METHOD(request,
                  requestWithValue:(NSDictionary *)value
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  NSString *path = value[@"path"], *method = value[@"method"];
+  BOOL transcribe = [method isEqual:@"POST"] && OmiRecordingMatches(path, @"^/v1/device-sessions/[0-9a-f-]{36}/transcribe$");
+  if (transcribe) {
+    [self ensureRecordingJournals];
+    dispatch_async(self.journalQueue, ^{
+      [self recordingOwner:^(NSDictionary *owner) {
+        [self performNativeRequest:value receipt:owner[@"receipt"] expectedOrigin:owner[@"origin"] expectedLogin:owner[@"login"] resolver:resolve rejecter:reject];
+      } allowCached:NO rejecter:^(NSString *code, NSString *message, NSError *error) {
+        if ([code isEqual:@"OMI_CAPTURE_OWNERSHIP_UNAVAILABLE"]) [self performNativeRequest:value receipt:nil expectedOrigin:nil expectedLogin:nil resolver:resolve rejecter:reject];
+        else reject(code, message, error);
+      }];
+    });
+  } else [self performNativeRequest:value receipt:nil expectedOrigin:nil expectedLogin:nil resolver:resolve rejecter:reject];
+}
+
+- (void)performNativeRequest:(NSDictionary *)value receipt:(NSString *)receipt expectedOrigin:(NSString *)origin expectedLogin:(NSString *)login resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
   if (resolutionError != nil) {
-    reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP session refresh failed", nil);
+    reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP session refresh failed", resolutionError);
     return;
   }
   NSString *requestId = [value[@"id"] isKindOfClass:NSString.class] ? value[@"id"] : nil;
@@ -744,7 +908,11 @@ RCT_REMAP_METHOD(request,
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
     return;
   }
-  if (self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)) {
+  if ((origin != nil && ![origin isEqual:baseURL.absoluteString]) || (login != nil && ![login isEqual:OmiRecordingLogin()])) {
+    reject(@"OMI_RECORDING_OWNERSHIP", @"Recording ownership changed", nil);
+    return;
+  }
+  if (policy.kind == OmiBackendCredentialKindExamplePlatform && !OmiExamplePlatformRequestSupported(method, path)) {
     resolve(OmiDevelopmentBackendUnsupportedResponse(requestId));
     return;
   }
@@ -766,7 +934,7 @@ RCT_REMAP_METHOD(request,
   request.HTTPMethod = method;
   request.timeoutInterval = OmiRequestTimeout(method, url);
   NSSet<NSString *> *forbidden = [NSSet setWithArray:@[
-    @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id"
+    @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id", @"x-omi-capture-ownership"
   ]];
   for (id rawName in headers) {
     id rawValue = headers[rawName];
@@ -785,10 +953,11 @@ RCT_REMAP_METHOD(request,
     return;
   }
   [request setValue:OmiContractVersion forHTTPHeaderField:@"x-omi-contract-version"];
+  if (receipt != nil) [request setValue:receipt forHTTPHeaderField:@"x-omi-capture-ownership"];
   NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
                                               completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
     if (error != nil) {
-      reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP transport failed", nil);
+      reject(@"OMI_HTTP_TRANSPORT", @"Native HTTP transport failed", error);
       return;
     }
     if (![response isKindOfClass:NSHTTPURLResponse.class]) {

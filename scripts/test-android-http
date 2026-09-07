@@ -17,11 +17,19 @@ javac --release 17 -d "$build_dir" \
   "$repo_root/react-native/android/transport-tests/WearableSessionTest.java" \
   "$repo_root/react-native/android/transport-tests/BleLeaseTest.java" \
   "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiDeviceControls.java" \
-  "$repo_root/react-native/android/transport-tests/DeviceControlsTest.java"
+  "$repo_root/react-native/android/transport-tests/DeviceControlsTest.java" \
+  "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiRecordingLog.java" \
+  "$repo_root/react-native/android/transport-tests/RecordingLogTest.java" \
+  "$repo_root/react-native/android/app/src/main/java/com/rnruntime/OmiRecordingPolicy.java" \
+  "$repo_root/react-native/android/transport-tests/RecordingPolicyTest.java"
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.BackendTransportTest
 java -ea -cp "$build_dir" com.rnruntime.AuthPolicyTest
 java -ea --add-modules jdk.httpserver -cp "$build_dir" com.rnruntime.GenerationStreamTest
 java -ea -cp "$build_dir" com.rnruntime.DeviceInformationTest
 java -ea -cp "$build_dir" com.rnruntime.BleLeaseTest
 java -ea -cp "$build_dir" com.rnruntime.DeviceControlsTest
+java -ea -cp "$build_dir" com.rnruntime.RecordingLogTest
+
 java -ea -cp "$build_dir" com.rnruntime.WearableSessionTest
+
+java -ea -cp "$build_dir" com.rnruntime.RecordingPolicyTest

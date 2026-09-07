@@ -133,7 +133,7 @@ test('appends audio bytes and completes without a fake transcript', async () => 
   const appended = await appendDeviceSessionAudio(
     client,
     '11111111-2222-3333-4444-555555555555',
-    new Uint8Array([1, 2, 3]),
+    [new Uint8Array([1, 2, 3])],
     0,
   );
   const completed = await completeDeviceSession(
@@ -145,8 +145,7 @@ test('appends audio bytes and completes without a fake transcript', async () => 
     '/v1/device-sessions/11111111-2222-3333-4444-555555555555/audio',
   );
   expect(JSON.parse(captured[0]?.body ?? '{}')).toEqual({
-    bytesBase64: 'AQID',
-    chunkIndex: 0,
+    chunks: [{bytesBase64: 'AQID', chunkIndex: 0}],
   });
   expect(appended.byteCount).toBe(3);
   expect(completed.state).toBe('complete');
@@ -189,7 +188,7 @@ test.each([
         body: JSON.stringify({session: session(overrides)}),
       })),
       '11111111-2222-3333-4444-555555555555',
-      new Uint8Array([1, 2, 3]),
+      [new Uint8Array([1, 2, 3])],
       0,
     ),
   ).rejects.toThrow();
@@ -252,3 +251,53 @@ test.each(['not-a-uuid', 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE'])(
     expect(handler).not.toHaveBeenCalled();
   },
 );
+
+test('batches preserve every BLE packet and require acknowledgement through the final index', async () => {
+  const captured: NativeHttpRequest[] = [];
+  const client = backend(request => {
+    captured.push(request);
+    return {
+      status: 200,
+      body: JSON.stringify({session: session({chunkCount: 4, byteCount: 6})}),
+    };
+  });
+  await appendDeviceSessionAudio(
+    client,
+    '11111111-2222-3333-4444-555555555555',
+    [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])],
+    2,
+  );
+  expect(JSON.parse(captured[0]!.body!)).toEqual({
+    chunks: [
+      {chunkIndex: 2, bytesBase64: 'AQID'},
+      {chunkIndex: 3, bytesBase64: 'BAUG'},
+    ],
+  });
+  await expect(
+    appendDeviceSessionAudio(
+      backend(() => ({
+        status: 200,
+        body: JSON.stringify({session: session({chunkCount: 3, byteCount: 6})}),
+      })),
+      '11111111-2222-3333-4444-555555555555',
+      [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])],
+      2,
+    ),
+  ).rejects.toThrow('audio batch');
+});
+
+test('rejects over-budget batches before transport', async () => {
+  const send = jest.fn(() => ({status: 200, body: '{}'}));
+  const client = backend(send);
+  for (const [packets, index] of [
+    [[], 0],
+    [[new Uint8Array(0)], 0],
+    [Array.from({length: 129}, () => new Uint8Array([1])), 0],
+    [[new Uint8Array(1048577)], 0],
+    [[new Uint8Array([1]), new Uint8Array([2])], 65535],
+  ] as const)
+    await expect(
+      appendDeviceSessionAudio(client, 'session', packets, index),
+    ).rejects.toThrow();
+  expect(send).not.toHaveBeenCalled();
+});

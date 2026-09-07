@@ -1592,6 +1592,26 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect(upload.id).not.toBe(uploadInput.captureId);
       await expect(uploads.open(context, { ...uploadInput, deviceId: "changed" })).rejects.toMatchObject({ code: "idempotency_conflict" });
       const audio = Uint8Array.of(0, 0, 0, 248, 255, 128);
+      const batchUpload = await uploads.open(context, { ...uploadInput, captureId: crypto.randomUUID() });
+      const packetBatch = Array.from({ length: 3 }, (_, index) => ({ index, bytes: Uint8Array.of(index, 0, 0, 248, 255, 128) }));
+      const batched = await Promise.all([uploads.appendBatch(context, batchUpload.id, packetBatch), uploads.appendBatch(context, batchUpload.id, packetBatch)]);
+      expect(batched.every(item => item?.chunkCount === 3 && item.byteCount === 18)).toBe(true);
+      await expect(uploads.appendBatch(context, batchUpload.id, [packetBatch[0]!, { index: 1, bytes: Uint8Array.of(99) }, packetBatch[2]!]))
+        .rejects.toMatchObject({ code: "idempotency_conflict" });
+      expect(await uploads.read(context, batchUpload.id)).toMatchObject({ chunkCount: 3, byteCount: 18 });
+      const batchRollback = await uploads.open(context, { ...uploadInput, captureId: crypto.randomUUID() });
+      await ownerSql.unsafe(`CREATE FUNCTION omi_memory.reject_qa_batch_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN IF NEW.chunk_index=1 THEN RAISE EXCEPTION 'synthetic second packet failure'; END IF; RETURN NEW; END $fn$;
+        CREATE TRIGGER reject_qa_batch_insert BEFORE INSERT ON omi_memory.listen_capture_audio_chunks FOR EACH ROW EXECUTE FUNCTION omi_memory.reject_qa_batch_insert()`, [], { prepare: false });
+      try {
+        await expect(uploads.appendBatch(context, batchRollback.id, packetBatch)).rejects.toMatchObject({ code: "persistence_failed" });
+        expect(await uploads.read(context, batchRollback.id)).toMatchObject({ chunkCount: 0, byteCount: 0 });
+      } finally {
+        await ownerSql.unsafe("DROP TRIGGER reject_qa_batch_insert ON omi_memory.listen_capture_audio_chunks; DROP FUNCTION omi_memory.reject_qa_batch_insert()", [], { prepare: false });
+      }
+      expect(await uploads.appendBatch(context, batchRollback.id, packetBatch)).toMatchObject({ chunkCount: 3, byteCount: 18 });
+      await uploads.complete(context, batchRollback.id);
+      expect(await uploads.appendBatch(context, batchRollback.id, packetBatch)).toMatchObject({ state: "complete", chunkCount: 3 });
+      await expect(uploads.appendBatch(context, batchRollback.id, [{ index: 3, bytes: audio }])).rejects.toMatchObject({ code: "idempotency_conflict" });
       const uploaded = await Promise.all([uploads.append(context, upload.id, 0, audio), uploads.append(context, upload.id, 0, audio), uploads.append(context, upload.id, 0, audio)]);
       expect(uploaded.every(item => item?.chunkCount === 1 && item.byteCount === audio.length)).toBe(true);
       await expect(uploads.append(context, upload.id, 0, Uint8Array.of(1))).rejects.toMatchObject({ code: "idempotency_conflict" });
@@ -1758,8 +1778,10 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       }
       await expect(uploads.open(context, { ...legacyInput, deviceName: null })).rejects.toMatchObject({ code: "capture_ownership_changed" });
       await expect(uploads.append(context, legacyUpload.id, 0, audio)).rejects.toMatchObject({ code: "capture_ownership_changed" });
+      await expect(uploads.appendBatch(context, legacyUpload.id, [{ index: 0, bytes: audio }])).rejects.toMatchObject({ code: "capture_ownership_changed" });
       await expect(uploads.complete(context, legacyUpload.id)).rejects.toMatchObject({ code: "capture_ownership_changed" });
-      const httpAudio = { chunkIndex: 0, bytesBase64: Buffer.from(audio).toString("base64") };
+      const httpAudio = { chunks: [0, 1].map(chunkIndex => ({ chunkIndex, bytesBase64: Buffer.from(audio).toString("base64") })) };
+      expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio.chunks[0])).status).toBe(400);
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio)).status).toBe(200);
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/complete`, "POST")).status).toBe(200);
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}/audio`, "POST", httpAudio)).status).toBe(200);
@@ -1767,7 +1789,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       expect((await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET", undefined, "other.qa.valid")).status).toBe(403);
       const fetchedUpload = await deviceRequest(`/v1/device-sessions/${httpSession.id}`, "GET");
       expect(fetchedUpload.status).toBe(200);
-      expect(await fetchedUpload.json()).toMatchObject({ session: { state: "complete", byteCount: audio.length, chunkCount: 1 } });
+      expect(await fetchedUpload.json()).toMatchObject({ session: { state: "complete", byteCount: audio.length * 2, chunkCount: 2 } });
 
       const transcriptions = createPostgresDeviceTranscriptionRepository({ pool: appRolePool });
       const newRecording = async () => {
