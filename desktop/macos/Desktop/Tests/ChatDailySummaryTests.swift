@@ -11,7 +11,7 @@ final class ChatDailySummaryTests: XCTestCase {
     var calls = 0
     var clock = Date(timeIntervalSince1970: 1_000)
     var records: [DailySummaryRecord] = []
-    var cards: [(title: String, body: String)] = []
+    var cards: [(title: String, body: String, action: FloatingBarNotificationAction?)] = []
     var owner: String? = "owner-a"
   }
 
@@ -205,7 +205,7 @@ final class ChatDailySummaryTests: XCTestCase {
       now: { box.clock })
     return ChatDailySummaryCoordinator(
       store: store, defaults: defaults, ownerID: { box.owner },
-      cardSink: { _, title, body in box.cards.append((title, body)) })
+      cardSink: { _, title, body, action in box.cards.append((title, body, action)) })
   }
 
   @MainActor
@@ -303,6 +303,47 @@ final class ChatDailySummaryTests: XCTestCase {
     await coordinator.refresh()
     XCTAssertEqual(box.cards.count, 2)
     XCTAssertEqual(box.cards.last?.title, "🚀 A newer day")
+  }
+
+  /// The recap announcement is presentation-only (never journaled — INV-CHAT-1), so its
+  /// tap cannot ride the generic journal lookup in `openNotificationAsChat`: with no
+  /// action, the card was a dead end that opened nothing. The announcement must carry
+  /// the recap route — the same identity the in-chat recap row opens the page with.
+  @MainActor
+  func testAnnouncementCarriesTheRecapPageTapDestination() async throws {
+    let box = Box()
+    box.records = [record(id: "ds_1", date: "2026-09-01")]
+    let coordinator = makeCoordinator(box, defaults: try makeDefaults())
+
+    await coordinator.refresh()
+    XCTAssertEqual(
+      box.cards.first?.action,
+      .openDailyRecap(DailyRecapRouteRef(recordID: "ds_1", date: "2026-09-01")))
+  }
+
+  /// `openNotificationAsChat` early-returns without a live bar window, so a unit
+  /// test cannot drive the tap dispatch. The pinned branches are the wiring from
+  /// the announcement's typed action to the recap route, and the fail-open for
+  /// any other presentation-only card that arrives without one; the route's own
+  /// behavior is covered by `DailyRecapPageTests`.
+  func testNotchCardTapDispatchesTheRecapRoute() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    // omi-test-quality: source-inspection -- static contract: pin the tap-dispatch wiring; see doc comment above.
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+    XCTAssertTrue(
+      source.contains("case .openDailyRecap(let ref):"),
+      "the recap announcement's tap must resolve its own action, not the journal fallthrough")
+    XCTAssertTrue(
+      source.contains("ChatFirstShellNavigation.shared.openDailyRecap(ref)"),
+      "the tap must open the recap page, which presents the main window itself")
+    // The boundary guard: a never-journaled kind with no action must fail open
+    // into the app instead of falling through to a journal lookup that cannot resolve.
+    XCTAssertTrue(
+      source.contains("guard notification.kind.isJournaled else {"),
+      "a presentation-only card without an action must fail open, not die silently")
   }
 
   @MainActor
