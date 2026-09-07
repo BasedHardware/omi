@@ -641,9 +641,14 @@ test('drains queued audio before completing a session', async () => {
   expect(disconnectDone).toBe(true);
 });
 
-test.each([false, true])(
-  'transcription never blocks disconnect and retires its late result when disabled=%s',
-  async retired => {
+test.each([
+  [false, false],
+  [true, false],
+  [false, true],
+  [true, true],
+])(
+  'transcription never blocks disconnect and retires its late result when disabled=%s and terminal=%s',
+  async (retired, terminal) => {
     let finish!: () => void;
     const prior = mockBackend.request.getMockImplementation()!;
     mockBackend.request.mockImplementation(async request => {
@@ -651,6 +656,24 @@ test.each([false, true])(
         await new Promise<void>(resolve => {
           finish = resolve;
         });
+        if (terminal) {
+          return {
+            id: 'terminal',
+            status: 200,
+            body: JSON.stringify({
+              transcription: {
+                sessionId: request.path.split('/')[3],
+                state: 'failed',
+                text: null,
+                segments: [],
+                language: null,
+                errorCode: 'attempt_limit',
+                updatedAt: 123,
+                discardedLeadingPackets: 0,
+              },
+            }),
+          };
+        }
         throw new TypeError('Transcription connection lost');
       }
       return prior(request);
@@ -684,7 +707,9 @@ test.each([false, true])(
     if (retired) expect(hook.latest().deviceScanMessage).toBeNull();
     else
       expect(hook.latest().deviceScanMessage).toBe(
-        'Recording saved, but transcription could not finish. Open its transcript to retry.',
+        terminal
+          ? 'Recording saved, but transcription failed. Open its transcript for details.'
+          : 'Recording saved, but transcription could not finish. Open its transcript to check its status.',
       );
     expect(
       mockBackend.request.mock.calls.filter(([request]) =>
