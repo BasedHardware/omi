@@ -4,6 +4,8 @@ import OmiSupport
 
 /// Recognizes words, with times on the audio's clock, from a local audio file.
 protocol CaptureWordRecognizing: Sendable {
+  /// True when the first call will have to fetch a model before it can listen.
+  var needsModelDownload: Bool { get async }
   func recognizeWords(in audioURL: URL) async throws -> [RecognizedWord]
 }
 
@@ -36,6 +38,10 @@ actor ParakeetCaptureWordRecognizer: CaptureWordRecognizing {
   static let shared = ParakeetCaptureWordRecognizer()
 
   private var manager: AsrManager?
+
+  var needsModelDownload: Bool {
+    manager == nil && !AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: .v3), version: .v3)
+  }
 
   private func loadedManager() async throws -> AsrManager {
     if let manager { return manager }
@@ -128,12 +134,17 @@ struct CaptureTranscriptSyncStore {
     defaults.set(index, forKey: Self.indexKey)
   }
 
+  /// Identity of the audio the sync was made against: every part, in order.
+  static func audioKey(for conversation: ServerConversation) -> String {
+    conversation.audioFiles.map(\.id).joined(separator: ",")
+  }
+
   /// The stored sync applied to a freshly loaded conversation, or nil when
-  /// there is none or it was made against a different audio part.
+  /// there is none or it was made against different audio parts.
   func applied(to conversation: ServerConversation) -> ServerConversation? {
     guard let record = record(for: conversation.id),
-      conversation.audioFiles.count == 1,
-      conversation.audioFiles.first?.id == record.audioFileID
+      !conversation.audioFiles.isEmpty,
+      Self.audioKey(for: conversation) == record.audioFileID
     else { return nil }
     let segments = conversation.transcriptSegments.map { segment -> TranscriptSegment in
       guard let timing = record.timings[segment.backendId ?? segment.id] else { return segment }
@@ -173,6 +184,7 @@ final class CaptureTranscriptResyncer: ObservableObject {
   enum Phase: Equatable {
     case idle
     case downloading
+    case preparingModel
     case listening
     case aligning
     case synced(CaptureTranscriptSyncReport)
@@ -180,13 +192,16 @@ final class CaptureTranscriptResyncer: ObservableObject {
 
     var isBusy: Bool {
       switch self {
-      case .downloading, .listening, .aligning: return true
+      case .downloading, .preparingModel, .listening, .aligning: return true
       case .idle, .synced, .failed: return false
       }
     }
   }
 
   @Published private(set) var phase: Phase = .idle
+  /// Bumped by `reset()`. A resync started for one selection must not paint
+  /// its outcome onto the next one, so every phase change checks it.
+  private var generation = 0
 
   private let recognizer: any CaptureWordRecognizing
   private let fetcher: any CaptureAudioFetching
@@ -203,7 +218,14 @@ final class CaptureTranscriptResyncer: ObservableObject {
   }
 
   func reset() {
+    generation &+= 1
     phase = .idle
+  }
+
+  private func publish(_ next: Phase, for startedGeneration: Int) -> Bool {
+    guard startedGeneration == generation else { return false }
+    phase = next
+    return true
   }
 
   /// Returns the corrected conversation, or nil (with `phase == .failed`)
@@ -213,45 +235,55 @@ final class CaptureTranscriptResyncer: ObservableObject {
     artifact: CapturePlaybackArtifact
   ) async -> ServerConversation? {
     guard !phase.isBusy else { return nil }
+    let startedGeneration = generation
     guard let firstSpan = artifact.spans.first, let startedAt = conversation.startedAt,
-      let audioFileID = conversation.audioFiles.first?.id
+      !conversation.audioFiles.isEmpty
     else {
       phase = .failed(CaptureTranscriptResyncError.noAudio.localizedDescription)
       return nil
     }
+    let audioKey = CaptureTranscriptSyncStore.audioKey(for: conversation)
 
     phase = .downloading
     let localURL: URL
     do {
       localURL = try await fetcher.download(artifact.signedURL)
     } catch {
-      phase = .failed("Couldn't download the audio: \(error.localizedDescription)")
+      _ = publish(.failed("Couldn't download the audio: \(error.localizedDescription)"), for: startedGeneration)
       return nil
     }
     defer { try? FileManager.default.removeItem(at: localURL) }
 
-    phase = .listening
+    if await recognizer.needsModelDownload {
+      guard publish(.preparingModel, for: startedGeneration) else { return nil }
+    } else {
+      guard publish(.listening, for: startedGeneration) else { return nil }
+    }
     let words: [RecognizedWord]
     do {
       words = try await recognizer.recognizeWords(in: localURL)
     } catch {
-      phase = .failed("On-device recognition failed: \(error.localizedDescription)")
+      _ = publish(.failed("On-device recognition failed: \(error.localizedDescription)"), for: startedGeneration)
       return nil
     }
     guard !words.isEmpty else {
-      phase = .failed(CaptureTranscriptResyncError.nothingRecognized.localizedDescription)
+      _ = publish(.failed(CaptureTranscriptResyncError.nothingRecognized.localizedDescription), for: startedGeneration)
       return nil
     }
 
-    phase = .aligning
+    // Alignment is cheap and its result outlives this view (it is stored),
+    // so it runs even when the selection has moved on.
+    _ = publish(.aligning, for: startedGeneration)
     let segments = conversation.transcriptSegments
     let matches = CaptureTranscriptAlignmentPolicy.matches(segments: segments, words: words)
     guard let curve = CaptureTranscriptAlignmentPolicy.offsetCurve(from: matches) else {
       let alignable = segments.filter {
         CaptureTranscriptAlignmentPolicy.normalizedTokens($0.text).count >= CaptureTranscriptAlignmentPolicy.gramSize
       }.count
-      phase = .failed(
-        CaptureTranscriptResyncError.tooFewMatches(matched: matches.count, alignable: alignable).localizedDescription)
+      _ = publish(
+        .failed(
+          CaptureTranscriptResyncError.tooFewMatches(matched: matches.count, alignable: alignable).localizedDescription),
+        for: startedGeneration)
       return nil
     }
     let rebased = CaptureTranscriptAlignmentPolicy.rebase(segments: segments, curve: curve)
@@ -260,9 +292,11 @@ final class CaptureTranscriptResyncer: ObservableObject {
     let mediaStart = startedAt.addingTimeInterval(firstSpan.wallOffset - firstSpan.artifactOffset)
     let synced = conversation.onAudioClock(segments: rebased, startedAt: mediaStart)
 
+    // Worth keeping even if this view moved on: the next open of that capture
+    // applies it. Only the on-screen outcome is gated on the generation.
     store.save(
       CaptureTranscriptSyncRecord(
-        audioFileID: audioFileID,
+        audioFileID: audioKey,
         startedAt: mediaStart.timeIntervalSince1970,
         timings: Dictionary(
           lastWriteWins: rebased.map { ($0.backendId ?? $0.id, .init(start: $0.start, end: $0.end)) }),
@@ -273,7 +307,7 @@ final class CaptureTranscriptResyncer: ObservableObject {
       ),
       for: conversation.id
     )
-    phase = .synced(report)
+    guard publish(.synced(report), for: startedGeneration) else { return nil }
     return synced
   }
 }

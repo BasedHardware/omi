@@ -127,6 +127,8 @@ struct ConversationCapturePlaybackSection: View {
       EmptyView()
     case .downloading:
       resyncLine("Downloading audio to sync the transcript…", systemImage: "arrow.down.circle")
+    case .preparingModel:
+      resyncLine("Preparing the on-device speech model (first time only)…", systemImage: "cpu")
     case .listening:
       resyncLine("Listening to the audio on this Mac to sync the transcript…", systemImage: "ear")
     case .aligning:

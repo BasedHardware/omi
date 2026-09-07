@@ -1051,7 +1051,7 @@ struct ConversationDetailView: View {
         .buttonStyle(.plain)
         .disabled(isRefreshingTranscript || transcriptResync.phase.isBusy)
         .help("Refresh transcript and re-sync it to the audio")
-        .accessibilityLabel("Refresh transcript and audio")
+        .accessibilityLabel("Refresh transcript and re-sync it to the audio")
         .accessibilityIdentifier("conversation-detail-transcript-refresh")
 
         // Copy button

@@ -179,6 +179,57 @@ final class CaptureTranscriptResyncTests: XCTestCase {
     XCTAssertNil(store.record(for: "omi-nomatch"))
   }
 
+  func testResyncStartedForAnotherSelectionKeepsItsOutcomeOffScreen() async throws {
+    let defaults = try isolatedDefaults()
+    let store = CaptureTranscriptSyncStore(defaults: defaults)
+    let segments = [
+      segment("a", "so she said this is something new", start: 100, end: 104),
+      segment("b", "my mom went and apparently it was fine", start: 200, end: 205),
+      segment("c", "like there cannot be a cure for that", start: 300, end: 304),
+    ]
+    let capture = archiveCapture(
+      id: "omi-switch", startedAt: Date(timeIntervalSince1970: 1_000),
+      audioFiles: [CaptureAudioFile(id: "part-1", duration: 900, firstChunkTimestamp: 1_000)], segments: segments)
+    let artifact = CapturePlaybackArtifact(
+      signedURL: URL(fileURLWithPath: "/dev/null"), duration: 900,
+      spans: [CaptureAudioURLSpan(fileID: "part-1", wallOffset: 0, artifactOffset: 0, length: 900)])
+    let recognizer = RecognizerFake(words: spoken(segments.map { ($0.text, $0.start + 5, $0.end + 5) }))
+    let resyncer = CaptureTranscriptResyncer(recognizer: recognizer, fetcher: FetcherFake(), store: store)
+    // The user opens a different capture while this one is being listened to.
+    recognizer.whileListening = { resyncer.reset() }
+
+    let synced = await resyncer.resync(conversation: capture, artifact: artifact)
+
+    XCTAssertNil(synced, "The result must not be painted onto the newly selected capture")
+    XCTAssertEqual(resyncer.phase, .idle)
+    XCTAssertNotNil(store.record(for: "omi-switch"), "The finished sync still helps the next open of that capture")
+  }
+
+  func testStoredSyncKeysOnEveryAudioPart() throws {
+    let defaults = try isolatedDefaults()
+    let store = CaptureTranscriptSyncStore(defaults: defaults)
+    let parts = [
+      CaptureAudioFile(id: "part-1", duration: 10, firstChunkTimestamp: 1_000),
+      CaptureAudioFile(id: "part-2", duration: 10, firstChunkTimestamp: 1_100),
+    ]
+    let capture = archiveCapture(
+      id: "omi-parts", startedAt: Date(timeIntervalSince1970: 1_000), audioFiles: parts,
+      segments: [segment("a", "hello there friend", start: 1, end: 2, backendId: "srv-a")])
+    store.save(
+      CaptureTranscriptSyncRecord(
+        audioFileID: CaptureTranscriptSyncStore.audioKey(for: capture), startedAt: 1_000,
+        timings: ["srv-a": .init(start: 4, end: 5)], matchedSegments: 1, alignableSegments: 1,
+        shiftAtStart: 3, shiftAtEnd: 3),
+      for: capture.id)
+
+    XCTAssertEqual(try XCTUnwrap(store.applied(to: capture)).transcriptSegments[0].start, 4)
+    let withThirdPart = archiveCapture(
+      id: "omi-parts", startedAt: Date(timeIntervalSince1970: 1_000),
+      audioFiles: parts + [CaptureAudioFile(id: "part-3", duration: 10, firstChunkTimestamp: 1_200)],
+      segments: capture.transcriptSegments)
+    XCTAssertNil(store.applied(to: withThirdPart), "A new part changes the media clock")
+  }
+
   func testSyncStoreEvictsTheOldestBeyondCapacity() throws {
     let defaults = try isolatedDefaults()
     let store = CaptureTranscriptSyncStore(defaults: defaults)
@@ -237,6 +288,9 @@ final class CaptureTranscriptResyncTests: XCTestCase {
 private final class RecognizerFake: CaptureWordRecognizing, @unchecked Sendable {
   let words: [RecognizedWord]
   private(set) var recognizedURLs: [URL] = []
+  var needsModelDownload = false
+  /// Runs while "listening", so a test can change the world mid-resync.
+  var whileListening: (@MainActor () -> Void)?
 
   init(words: [RecognizedWord]) {
     self.words = words
@@ -244,6 +298,9 @@ private final class RecognizerFake: CaptureWordRecognizing, @unchecked Sendable 
 
   func recognizeWords(in audioURL: URL) async throws -> [RecognizedWord] {
     recognizedURLs.append(audioURL)
+    if let whileListening {
+      await whileListening()
+    }
     return words
   }
 }
