@@ -18,6 +18,6 @@ puts routed through `enqueue_sd_request` so neither queue can strand an idle
 worker. Power-off write draining and remount sequencing remain owned by
 `sd_card.c`.
 
-Use the NCS 2.9.0 sysbuild lane above for target compilation. Hardware validation
-must separately measure idle/AAD-sleep current and exercise button gestures,
+Use the [NCS 2.9.0 sysbuild lane](../../../scripts/ci/README.md) for target
+compilation. Hardware validation must separately measure idle/AAD-sleep current and exercise button gestures,
 recording/sync, and SD sleep/wake with buffered audio before release.
