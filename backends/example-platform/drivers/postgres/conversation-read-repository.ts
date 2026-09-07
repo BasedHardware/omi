@@ -192,6 +192,9 @@ export async function withAuthorizedConversationRead<Result>(
             lastKind,
             expiresAt
           ) {
+            if (!Number.isSafeInteger(lastUpdatedAtMs) || lastUpdatedAtMs < 0) {
+              throw new PostgresRepositoryError("persistence_failed");
+            }
             await connection.query({
               name: "conversations.save_union_cursor",
               text: "SELECT omi_memory.save_conversation_union_cursor($1,$2,$3::bigint,$4::bigint,$5::timestamptz,$6::bigint,$7,$8,$9::bigint)",
@@ -201,7 +204,7 @@ export async function withAuthorizedConversationRead<Result>(
                 revision,
                 chatSnapshotSequence,
                 lastUpdatedAt,
-                lastUpdatedAtMs,
+                BigInt(lastUpdatedAtMs),
                 lastId,
                 lastKind,
                 expiresAt,

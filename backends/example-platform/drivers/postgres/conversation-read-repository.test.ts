@@ -123,14 +123,14 @@ test("read responses remain private until final clock and cancellation checks pa
   }
 });
 test("union cursor saves bind epoch milliseconds as bigint the same way listen capture already does", async () => {
-  const saved: string[] = [];
+  const saved: Array<{ text: string; values: readonly unknown[] }> = [];
   const connection: CheckedOutPostgresConnection = {
     connectionIdentity: {},
     async execute() {
       return { rowCount: 0 };
     },
     async query(statement) {
-      saved.push(statement.text);
+      saved.push({ text: statement.text, values: statement.values });
       const rows =
         statement.name === "authority.lock_and_revalidate"
           ? [authorityRow()]
@@ -168,9 +168,12 @@ test("union cursor saves bind epoch milliseconds as bigint the same way listen c
       return "ok";
     }
   );
-  expect(saved.some((text) =>
-    text.includes("$5::timestamptz") && text.includes("$6::bigint")
-  )).toBe(true);
+  const unionSave = saved.find((statement) =>
+    statement.text.includes("save_conversation_union_cursor")
+  );
+  expect(unionSave?.text).toContain("$5::timestamptz");
+  expect(unionSave?.text).toContain("$6::bigint");
+  expect(unionSave?.values[5]).toBe(1_757_250_000_000n);
 });
 
 test("an unrelated capability never checks out a conversation connection", async () => {

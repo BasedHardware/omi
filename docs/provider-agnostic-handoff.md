@@ -60,6 +60,8 @@ Cloud Linux after the union-pagination worker-red repair: GitHub `Validate backe
 
 Cloud Linux after `b668170f9c`: real PostgreSQL listen-only cursor capacity is 503. The remaining union failure was the first `limit=1` page after Listen rows exist: `save_conversation_union_cursor` was called without the `$n::timestamptz` / `$n::bigint` casts listen capture already uses, so postgres.js prepared-statement inference could not bind epoch-ms `updatedAt`. The save now uses those casts. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after `3294a293be`: SQL casts alone still 503'd that first union page. postgres.js infers integer JS numbers as int4 before PostgreSQL applies `$6::bigint`, and epoch-ms `updatedAt` overflows int4. The adapter already stringifies `bigint` parameters; union cursor saves now pass epoch milliseconds as `bigint`. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
