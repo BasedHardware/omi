@@ -88,7 +88,9 @@ Cloud Linux after `0baa4b0950`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `8a71bd029b`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Apple, Android, and browser cancellation still do not invent a generation. Nested `{error:{retryable:false}}` and unmounted 404 are `OMI_DEV_BACKEND_UNSUPPORTED` instead of retryable `OMI_HTTP_TRANSPORT`, so Stop copy says the door is unavailable rather than a transient blip. Apple example-platform cancel already rejected before HTTP; Android now does the same. Linux cannot compile Apple `scripts/test-apple-auth`.
 
-Cloud Linux after the desktop Apps gallery honesty slice: nested non-retryable catalogue 503s no longer render as "Apps could not be loaded." The gallery uses the same Apps-unavailable copy as Connectors. Generic catalog failures keep the existing load-failure copy. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `d74db69efc`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Nested non-retryable catalogue 503s no longer render as "Apps could not be loaded." The gallery uses the same Apps-unavailable copy as Connectors. Generic catalog failures keep the existing load-failure copy.
+
+Cloud Linux after the Memories later-page honesty slice: nested non-retryable later `GET /v1/memories` pages no longer claim "More memories could not be loaded." They use the same unavailable copy as conversation and task later pages and omit Load more. Generic later-page failures keep the load-failure copy and Load more. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

@@ -9,11 +9,18 @@ import type {
 } from '../desktopReadClient';
 
 const mockLoad = jest.fn();
-jest.mock('../desktopReadClient', () => ({
-  loadMemories: (...args: unknown[]) => mockLoad(...args),
-}));
+jest.mock('../desktopReadClient', () => {
+  const actual = jest.requireActual(
+    '../desktopReadClient',
+  ) as typeof import('../desktopReadClient');
+  return {
+    ...actual,
+    loadMemories: (...args: unknown[]) => mockLoad(...args),
+  };
+});
 jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
+import {desktopBackendUnavailableCopy} from '../desktopReadClient';
 
 const page = (cursor: string | null): ReadPageState => ({
   windowStatus: cursor ? 'more' : 'complete',
@@ -266,5 +273,57 @@ test('an incomplete empty memory search does not claim a complete miss', () => {
     act(() => {
       view.unmount();
     });
+  }
+});
+
+test('generic later-page memory failures still offer Load more', async () => {
+  mockLoad.mockRejectedValueOnce(new Error('memory page failed'));
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(textOf(view)).toContain('More memories could not be loaded.');
+    expect(textOf(view)).not.toContain(desktopBackendUnavailableCopy);
+    expect(ids(view)).toEqual(['kept-first']);
+    expect(button(view)).toBeDefined();
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('nested non-retryable later memory pages do not claim a load blip', async () => {
+  mockLoad.mockRejectedValueOnce(new Error(desktopBackendUnavailableCopy));
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(textOf(view)).toContain(desktopBackendUnavailableCopy);
+    expect(textOf(view)).not.toContain('More memories could not be loaded.');
+    expect(ids(view)).toEqual(['kept-first']);
+    expect(
+      view.root.findAll(
+        node => node.props.accessibilityLabel === 'Load more memories',
+      ),
+    ).toHaveLength(0);
+  } finally {
+    await act(async () => view.unmount());
   }
 });

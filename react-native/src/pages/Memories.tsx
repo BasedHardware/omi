@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  desktopBackendUnavailableCopy,
   loadMemories,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -53,7 +54,8 @@ export function MemoriesPage({
   );
   const [query, setQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [loadMoreRetryable, setLoadMoreRetryable] = useState(true);
   const generation = useRef(0);
   const activeRequest = useRef(false);
   useEffect(() => {
@@ -62,7 +64,8 @@ export function MemoriesPage({
     setItems(loaded);
     setPage(outcome?.status === 'success' ? outcome.value.page : null);
     setLoadingMore(false);
-    setLoadMoreError(false);
+    setLoadMoreError(null);
+    setLoadMoreRetryable(true);
     return () => {
       generation.current = currentGeneration + 1;
       activeRequest.current = false;
@@ -90,7 +93,8 @@ export function MemoriesPage({
     const attempt = generation.current;
     activeRequest.current = true;
     setLoadingMore(true);
-    setLoadMoreError(false);
+    setLoadMoreError(null);
+    setLoadMoreRetryable(true);
     try {
       const next = await loadMemories(omiBackend, page.nextCursor);
       if (attempt !== generation.current) {
@@ -101,9 +105,17 @@ export function MemoriesPage({
         return [...current, ...next.items.filter(item => !ids.has(item.id))];
       });
       setPage(next.page);
-    } catch {
+    } catch (reason) {
       if (attempt === generation.current) {
-        setLoadMoreError(true);
+        const unavailable =
+          reason instanceof Error &&
+          reason.message === desktopBackendUnavailableCopy;
+        setLoadMoreRetryable(!unavailable);
+        setLoadMoreError(
+          unavailable
+            ? desktopBackendUnavailableCopy
+            : 'More memories could not be loaded.',
+        );
       }
     } finally {
       if (attempt === generation.current) {
@@ -194,25 +206,25 @@ export function MemoriesPage({
                 {(results.length > 0 || filtering) && (
                   <ReadStatus label="Memories" page={page} />
                 )}
-                {page.hasMore && page.nextCursor !== null && (
-                  <FocusPressable
-                    accessibilityLabel="Load more memories"
-                    accessibilityRole="button"
-                    disabled={loadingMore}
-                    onPress={loadMore}
-                    style={({pressed}) => [
-                      styles.loadOlderButton,
-                      pressed && styles.pressed,
-                    ]}>
-                    <Text style={styles.loadOlderText}>
-                      {loadingMore ? 'Loading more…' : 'Load more'}
-                    </Text>
-                  </FocusPressable>
-                )}
+                {page.hasMore &&
+                  page.nextCursor !== null &&
+                  loadMoreRetryable && (
+                    <FocusPressable
+                      accessibilityLabel="Load more memories"
+                      accessibilityRole="button"
+                      disabled={loadingMore}
+                      onPress={loadMore}
+                      style={({pressed}) => [
+                        styles.loadOlderButton,
+                        pressed && styles.pressed,
+                      ]}>
+                      <Text style={styles.loadOlderText}>
+                        {loadingMore ? 'Loading more…' : 'Load more'}
+                      </Text>
+                    </FocusPressable>
+                  )}
                 {loadMoreError && (
-                  <Text style={styles.error}>
-                    More memories could not be loaded.
-                  </Text>
+                  <Text style={styles.error}>{loadMoreError}</Text>
                 )}
               </View>
             )
