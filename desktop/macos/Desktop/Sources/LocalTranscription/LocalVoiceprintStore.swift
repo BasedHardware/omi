@@ -115,7 +115,17 @@ final class LocalVoiceprintStore: @unchecked Sendable {
 
   // MARK: - Audio samples
 
-  static func sampleOwner(_ personId: String?) -> String { personId ?? "user" }
+  /// Directory name for a voice's clips. The id becomes a path component, so anything that
+  /// could climb out of the samples directory is replaced rather than trusted; ids the backend
+  /// mints are UUIDs and pass through unchanged.
+  static func sampleOwner(_ personId: String?) -> String {
+    guard let personId else { return "user" }
+    let safe = String(
+      personId.map { character in
+        character.isLetter || character.isNumber || character == "-" || character == "_" ? character : "_"
+      })
+    return safe.isEmpty || safe == "user" ? "person_\(abs(personId.hashValue))" : safe
+  }
 
   func sampleURL(for file: String) -> URL {
     samplesDirectory.appendingPathComponent(file)

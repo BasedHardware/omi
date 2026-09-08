@@ -112,3 +112,18 @@ extension LocalVoiceprintStoreTests {
     XCTAssertEqual(try AudioClipDecoder.decode16kMono(url: store.sampleURL(for: file)).count, 48_000, accuracy: 64)
   }
 }
+
+extension LocalVoiceprintStoreTests {
+  /// A person id becomes a directory name, so it may never climb out of the samples directory
+  /// or collide with the user's own clips.
+  func testSampleOwnerNamesAreSafePathComponents() {
+    XCTAssertEqual(LocalVoiceprintStore.sampleOwner(nil), "user")
+    XCTAssertEqual(
+      LocalVoiceprintStore.sampleOwner("2f6c1f0e-9a3d-4c5b-8e21-7d0b5a1c3e44"),
+      "2f6c1f0e-9a3d-4c5b-8e21-7d0b5a1c3e44", "a backend id passes through unchanged")
+    let climbing = LocalVoiceprintStore.sampleOwner("../../../../etc/passwd")
+    XCTAssertFalse(climbing.contains("/"))
+    XCTAssertFalse(climbing.contains(".."))
+    XCTAssertNotEqual(LocalVoiceprintStore.sampleOwner("user"), "user", "a person cannot claim the user's clips")
+  }
+}
