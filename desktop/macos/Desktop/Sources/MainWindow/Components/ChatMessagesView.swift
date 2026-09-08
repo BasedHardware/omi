@@ -437,10 +437,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   /// Opens via structured agent identity (session/run/pill) when available.
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
-  /// Re-asks the question an answer came from, through the host's one send.
-  /// Optional: a surface that does not own a send (the task panel sends through
-  /// its own state) simply shows no Redo control.
-  var onRedo: ((String) -> Void)? = nil
+  /// Re-asks the question an answer came from, through the host's one send, and
+  /// names the answer the new one replaces. Optional: a surface that does not
+  /// own a send (the task panel sends through its own state) shows no Redo.
+  var onRedo: ((_ question: String, _ replacingAnswerID: String) -> Void)? = nil
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = ChatComposerLayout.transcriptEdgeInset
@@ -1164,7 +1164,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // from the transcript's shape (`ChatTranscriptDuplicateKey`) rather than
       // re-run on every rewrite of the streaming tail.
       let visibleMessages = visibleTranscriptMessages
-      let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
+      // A redone answer is drawn in the slot of the answer it replaced, and its
+      // repeated question is not drawn twice. See `ChatRedoDisplayProjection`.
+      let displayMessages = ChatRedoDisplayProjection.project(
+        AgentLifecycleDisplayProjection.project(visibleMessages))
       // The recap row is part of the row data: it anchors above the message its
       // day begins at, so it scrolls with history like any row. See
       // `ChatDailyRecapRowPlacement` for when a thread deliberately shows none.
@@ -1221,7 +1224,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     guard let onRedo,
       let question = ChatRedoTarget.question(forMessageID: message.id, in: messages)
     else { return nil }
-    return { onRedo(question) }
+    return { onRedo(question, message.id) }
   }
 
   /// The recap this thread shows as a day boundary, if any. A cleared thread

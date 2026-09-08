@@ -521,6 +521,7 @@ struct QueryShellHome: View {
       var accepted = false
       _ = await chatProvider.sendMessage(
         plan.question,
+        clientTurnId: plan.continuityKey ?? UUID().uuidString,
         onAccepted: {
           accepted = true
           sendLedger.recordAccepted(plan)
@@ -549,8 +550,10 @@ struct QueryShellHome: View {
   /// `Redo` under an answer: ask that answer's own question again, through the same one send. A
   /// busy provider is left to refuse it and say so — silently dropping the press would look like a
   /// dead button, and the provider already owns the words for "still answering the last one".
-  private func redo(_ question: String) {
-    guard let plan = sendLedger.planRedo(question) else { return }
+  private func redo(_ question: String, replacingAnswerID: String) {
+    guard let plan = sendLedger.planRedo(question, replacingAnswerID: replacingAnswerID) else {
+      return
+    }
     send(plan)
   }
 

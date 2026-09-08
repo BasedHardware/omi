@@ -333,6 +333,10 @@ struct QueryShellSendLedger: Equatable, Sendable {
     /// question that was never in the bar: writing it there would overwrite
     /// whatever they are typing now with an old one.
     var returnsToComposerIfRefused: Bool = true
+    /// The continuity key this send must use, or nil for a fresh one. `Redo`
+    /// sets it, because the key is what names the answer being replaced and so
+    /// what lets the transcript draw the new answer in its place.
+    var continuityKey: String? = nil
   }
 
   private(set) var lastAskedQuestion = ""
@@ -372,10 +376,16 @@ struct QueryShellSendLedger: Equatable, Sendable {
   /// logical question, so it never re-counts toward the rating prompt, and it
   /// came from the transcript rather than the bar, so a refusal leaves the
   /// composer exactly as the reader left it.
-  func planRedo(_ question: String) -> Plan? {
+  func planRedo(_ question: String, replacingAnswerID: String) -> Plan? {
     let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    return Plan(question: trimmed, countsAsQuestion: false, returnsToComposerIfRefused: false)
+    let answerID = replacingAnswerID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !answerID.isEmpty else { return nil }
+    return Plan(
+      question: trimmed,
+      countsAsQuestion: false,
+      returnsToComposerIfRefused: false,
+      continuityKey: ChatContinuityInvariants.redoContinuityKey(supersedingMessageID: answerID)
+    )
   }
 }
 

@@ -67,13 +67,120 @@ final class ChatRedoTests: XCTestCase {
     XCTAssertNil(ChatRedoTarget.question(forMessageID: "a1", in: messages))
   }
 
+  // MARK: - Where the redone answer is drawn
+
+  /// The transcript is `Q, A`; redoing `A` appends `Q(redo), A2`. What the
+  /// reader must see is `Q, A2` — the new answer in the old one's place, their
+  /// question asked once.
+  private func redoTurn(_ nonce: String, replacing answerID: String, question: String, answer: String)
+    -> [ChatMessage]
+  {
+    let key = "redo:\(nonce):\(answerID)"
+    return [
+      ChatMessage(id: key, clientTurnId: key, text: question, sender: .user),
+      ChatMessage(id: "\(key)-assistant", clientTurnId: key, text: answer, sender: .ai),
+    ]
+  }
+
+  func testRedoneAnswerReplacesTheOldOneInPlace() {
+    let base = [msg("u1", "what changed today?", .user), msg("a1", "first answer", .ai)]
+    let projected = ChatRedoDisplayProjection.project(
+      base + redoTurn("n1", replacing: "a1", question: "what changed today?", answer: "second answer"))
+
+    XCTAssertEqual(projected.map(\.id), ["u1", "redo:n1:a1-assistant"])
+    XCTAssertEqual(projected.map(\.text), ["what changed today?", "second answer"])
+  }
+
+  /// Redoing an OLDER answer replaces that answer where it sits; every later
+  /// exchange keeps its own place below it.
+  func testRedoOfAnOlderAnswerKeepsTheRestOfTheThreadInPlace() {
+    let base = [
+      msg("u1", "first question", .user),
+      msg("a1", "first answer", .ai),
+      msg("u2", "second question", .user),
+      msg("a2", "second answer", .ai),
+    ]
+    let projected = ChatRedoDisplayProjection.project(
+      base + redoTurn("n1", replacing: "a1", question: "first question", answer: "better first answer"))
+
+    XCTAssertEqual(
+      projected.map(\.text),
+      [
+        "first question", "better first answer", "second question", "second answer",
+      ])
+  }
+
+  /// Redoing a redo replaces the same original slot, not the row below it.
+  func testRedoOfARedoStillOccupiesTheOriginalSlot() {
+    let base = [msg("u1", "q", .user), msg("a1", "first", .ai)]
+    let once = base + redoTurn("n1", replacing: "a1", question: "q", answer: "second")
+    let twice = once + redoTurn("n2", replacing: "redo:n1:a1-assistant", question: "q", answer: "third")
+
+    XCTAssertEqual(ChatRedoDisplayProjection.project(twice).map(\.text), ["q", "third"])
+  }
+
+  /// A redo whose answer never arrived (the turn failed, so the journal
+  /// projection dropped its empty assistant row) must leave the original answer
+  /// standing rather than blanking the slot.
+  func testFailedRedoLeavesTheOriginalAnswerVisible() {
+    let base = [msg("u1", "q", .user), msg("a1", "first answer", .ai)]
+    let userRowOnly = Array(redoTurn("n1", replacing: "a1", question: "q", answer: "unused").prefix(1))
+
+    XCTAssertEqual(
+      ChatRedoDisplayProjection.project(base + userRowOnly).map(\.text),
+      [
+        "q", "first answer",
+      ])
+  }
+
+  /// The answer being replaced can be older than the mounted window. Hiding the
+  /// redo rows then would draw nothing at all, so they render where they are.
+  func testRedoRendersInPlaceWhenTheReplacedAnswerIsNotLoaded() {
+    let projected = ChatRedoDisplayProjection.project(
+      redoTurn("n1", replacing: "a-not-loaded", question: "q", answer: "answer"))
+
+    XCTAssertEqual(projected.map(\.text), ["q", "answer"])
+  }
+
+  func testTranscriptWithoutRedoIsUnchanged() {
+    let base = [msg("u1", "q", .user), msg("a1", "a", .ai)]
+    XCTAssertEqual(ChatRedoDisplayProjection.project(base).map(\.id), ["u1", "a1"])
+  }
+
+  // MARK: - The key that carries the replacement
+
+  func testRedoContinuityKeyNamesTheAnswerItReplaces() {
+    let key = ChatContinuityInvariants.redoContinuityKey(supersedingMessageID: "turn_abc-assistant")
+    XCTAssertTrue(key.hasPrefix("redo:"))
+    XCTAssertEqual(
+      ChatContinuityInvariants.supersededMessageID(fromContinuityKey: key), "turn_abc-assistant")
+  }
+
+  /// The id being replaced may itself contain colons — a proactive
+  /// notification's turn, or a previous redo — so only the nonce separator ends.
+  func testRedoKeyRoundTripsAnIDContainingColons() {
+    let key = ChatContinuityInvariants.redoContinuityKey(
+      supersedingMessageID: "notification:general:ABC-assistant")
+    XCTAssertEqual(
+      ChatContinuityInvariants.supersededMessageID(fromContinuityKey: key),
+      "notification:general:ABC-assistant")
+  }
+
+  func testOrdinaryContinuityKeysSupersedeNothing() {
+    XCTAssertNil(ChatContinuityInvariants.supersededMessageID(fromContinuityKey: nil))
+    XCTAssertNil(ChatContinuityInvariants.supersededMessageID(fromContinuityKey: UUID().uuidString))
+    XCTAssertNil(
+      ChatContinuityInvariants.supersededMessageID(fromContinuityKey: "notification:ABC"))
+    XCTAssertNil(ChatContinuityInvariants.supersededMessageID(fromContinuityKey: "redo:nonce:"))
+  }
+
   // MARK: - What the redo send may do
 
   /// A redo is the same logical question asked again: it keeps its analytics
   /// event but must never advance the one-time rating-prompt trigger.
   func testRedoNeverRecountsTheQuestion() {
     let ledger = QueryShellSendLedger()
-    guard let plan = ledger.planRedo("what changed today?") else {
+    guard let plan = ledger.planRedo("what changed today?", replacingAnswerID: "a1") else {
       return XCTFail("a non-empty question must produce a redo plan")
     }
     XCTAssertEqual(plan.question, "what changed today?")
@@ -86,13 +193,27 @@ final class ChatRedoTests: XCTestCase {
   func testRefusedRedoDoesNotWriteIntoTheComposer() {
     let ledger = QueryShellSendLedger()
     XCTAssertEqual(ledger.planSubmit("typed question")?.returnsToComposerIfRefused, true)
-    XCTAssertEqual(ledger.planRedo("redone question")?.returnsToComposerIfRefused, false)
+    XCTAssertEqual(
+      ledger.planRedo("redone question", replacingAnswerID: "a1")?.returnsToComposerIfRefused,
+      false)
   }
 
-  func testEmptyQuestionPlansNoRedo() {
+  /// The plan carries the key that names the replaced answer; a submit carries
+  /// none, so an ordinary question replaces nothing.
+  func testOnlyARedoPlanCarriesAReplacementKey() {
     let ledger = QueryShellSendLedger()
-    XCTAssertNil(ledger.planRedo(""))
-    XCTAssertNil(ledger.planRedo("   \n"))
+    XCTAssertNil(ledger.planSubmit("typed question")?.continuityKey)
+    XCTAssertEqual(
+      ChatContinuityInvariants.supersededMessageID(
+        fromContinuityKey: ledger.planRedo("q", replacingAnswerID: "a1")?.continuityKey),
+      "a1")
+  }
+
+  func testEmptyQuestionOrAnswerPlansNoRedo() {
+    let ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planRedo("", replacingAnswerID: "a1"))
+    XCTAssertNil(ledger.planRedo("   \n", replacingAnswerID: "a1"))
+    XCTAssertNil(ledger.planRedo("q", replacingAnswerID: " "))
   }
 
   /// After an accepted redo, the question in flight is the redone one — so if
@@ -106,7 +227,7 @@ final class ChatRedoTests: XCTestCase {
     ledger.recordAccepted(submit)
     XCTAssertEqual(ledger.planRetry()?.question, "second question")
 
-    guard let redo = ledger.planRedo("first question") else {
+    guard let redo = ledger.planRedo("first question", replacingAnswerID: "a1") else {
       return XCTFail("a non-empty question must produce a redo plan")
     }
     ledger.recordAccepted(redo)
