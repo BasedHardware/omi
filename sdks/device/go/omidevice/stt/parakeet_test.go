@@ -48,24 +48,37 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 	t.Helper()
 	clientConn, serverConn := net.Pipe()
 	deadline := time.Now().Add(5 * time.Second)
-	clientConn.SetDeadline(deadline)
-	serverConn.SetDeadline(deadline)
-	t.Cleanup(func() { clientConn.Close(); serverConn.Close() })
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	// Gorilla resets transport deadlines during its handshake and writes.
+	// Closing the pipes bounds even a regression that blocks AppendPCM/Stop.
+	closed := make(chan struct{})
+	context.AfterFunc(ctx, func() {
+		clientConn.Close()
+		serverConn.Close()
+		close(closed)
+	})
 	listener := &pipeListener{connections: make(chan net.Conn, 1), done: make(chan struct{})}
 	listener.connections <- serverConn
 	releaseReady := make(chan struct{})
 	received := make(chan []byte, 1)
+	handlerDone := make(chan struct{})
+	serverErrors := make(chan error, 1)
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
 		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 		if err != nil {
-			t.Error(err)
+			serverErrors <- err
 			return
 		}
 		defer conn.Close()
-		<-releaseReady
+		select {
+		case <-releaseReady:
+		case <-ctx.Done():
+			return
+		}
 		if parakeet {
 			if err := conn.WriteJSON(map[string]string{"type": "ready"}); err != nil {
-				t.Error(err)
+				serverErrors <- err
 				return
 			}
 		}
@@ -82,8 +95,21 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 			}
 		}
 	})}
-	go server.Serve(listener)
-	t.Cleanup(func() { server.Close() })
+	serveDone := make(chan struct{})
+	go func() {
+		defer close(serveDone)
+		server.Serve(listener)
+	}()
+	connected := false
+	t.Cleanup(func() {
+		cancel()
+		server.Close()
+		<-closed
+		<-serveDone
+		if connected {
+			<-handlerDone
+		}
+	})
 	oldDialer := websocket.DefaultDialer
 	dialer := *oldDialer
 	dialer.Proxy = nil
@@ -103,6 +129,7 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	connected = true
 	defer transcriber.Stop()
 	pcm := []byte{1, 0, 2, 0}
 	// Audio arrives while the background reader is awaiting the ready message.
@@ -117,6 +144,8 @@ func testTranscriberReadiness(t *testing.T, parakeet bool) {
 			t.Fatal(err)
 		}
 		select {
+		case err := <-serverErrors:
+			t.Fatal(err)
 		case got := <-received:
 			if !bytes.Equal(got, pcm) {
 				t.Fatalf("PCM = %v, want %v", got, pcm)
