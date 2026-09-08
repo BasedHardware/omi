@@ -274,7 +274,9 @@ Cloud Linux after `56f0649059`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `6c06500d62`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer shows a raised 44×44 microphone control that looks like it can start capture. There is no start-capture producer on that surface. Listening and Not capturing status stay. This does not invent an STT or capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact-Home mind-map Expand honesty slice: compact Home no longer says Expand on the collapsed Mind Map. That control opens Memories, matching Tasks and Recaps View All. The preview stays collapsed. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `23e5a78419`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer says Expand on the collapsed Mind Map. That control opens Memories, matching Tasks and Recaps View All. The preview stays collapsed when memories exist. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the compact-Home empty mind-map preview honesty slice: compact Home no longer shows decorative mind-map nodes when there are no memories. Ready empty uses the same empty-library completeness copy as Memories instead of a populated-looking graph. The collapsed preview stays when memories exist. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

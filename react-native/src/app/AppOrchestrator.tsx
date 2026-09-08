@@ -1167,6 +1167,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         mindMapStatus={
           readOutcomes?.memories.status === 'error' ? 'error' : projectionStatus
         }
+        mindMapHasItems={
+          readOutcomes?.memories.status === 'success' &&
+          readOutcomes.memories.value.items.length > 0
+        }
+        mindMapEmptyCopy={emptyLibraryCopy(
+          'Memories',
+          readOutcomes?.memories.status === 'success'
+            ? readOutcomes.memories.value.page
+            : null,
+          false,
+          '',
+          'No memories yet.',
+        )}
         onAskChange={setDraft}
         onAskSubmit={() => {
           setRoute('Home');

@@ -83,6 +83,8 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   taskCoverageCopy?: string | null;
   taskErrorCopy?: string;
   mindMapStatus: MobileProjectionStatus;
+  mindMapHasItems?: boolean;
+  mindMapEmptyCopy?: string;
   mindMapErrorCopy?: string;
   mindMapCoverageCopy?: string | null;
   onRefresh?: () => void;
@@ -300,6 +302,8 @@ export function MobileAppSurface({
   conversationContent,
   appsContent,
   mindMapStatus,
+  mindMapHasItems = false,
+  mindMapEmptyCopy,
   onAskChange,
   onAskSubmit,
   onExpandMindMap,
@@ -509,19 +513,29 @@ export function MobileAppSurface({
             title="Mind Map"
           />
           {mindMapStatus === 'ready' ? (
-            <>
+            mindMapHasItems ? (
+              <>
+                <View
+                  accessibilityLabel="Mind map preview"
+                  style={styles.mapCard}>
+                  <View style={styles.mapNodeLarge} />
+                  <View style={[styles.mapNode, styles.mapNodeLeft]} />
+                  <View style={[styles.mapNode, styles.mapNodeRight]} />
+                  <View style={[styles.mapNode, styles.mapNodeBottom]} />
+                </View>
+                {mindMapCoverageCopy ? (
+                  <Text style={styles.stateText}>{mindMapCoverageCopy}</Text>
+                ) : null}
+              </>
+            ) : (
               <View
-                accessibilityLabel="Mind map preview"
-                style={styles.mapCard}>
-                <View style={styles.mapNodeLarge} />
-                <View style={[styles.mapNode, styles.mapNodeLeft]} />
-                <View style={[styles.mapNode, styles.mapNodeRight]} />
-                <View style={[styles.mapNode, styles.mapNodeBottom]} />
+                accessibilityLabel="mind map empty state"
+                style={styles.statePanel}>
+                <Text style={styles.stateText}>
+                  {mindMapEmptyCopy ?? 'No memories yet.'}
+                </Text>
               </View>
-              {mindMapCoverageCopy ? (
-                <Text style={styles.stateText}>{mindMapCoverageCopy}</Text>
-              ) : null}
-            </>
+            )
           ) : (
             <StatePanel
               errorCopy={mindMapErrorCopy}
@@ -536,6 +550,8 @@ export function MobileAppSurface({
     [
       capture,
       mindMapStatus,
+      mindMapHasItems,
+      mindMapEmptyCopy,
       onExpandMindMap,
       onTaskToggle,
       onTaskEdit,

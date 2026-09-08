@@ -489,8 +489,38 @@ test('retryable mind map errors still offer Refresh', () => {
   ).toBeGreaterThan(0);
 });
 
+test('empty mind map keeps the complete-library copy by default', () => {
+  const renderer = render();
+  expect(renderedText(renderer)).toContain('No memories yet.');
+  expect(renderedText(renderer)).toContain('View All');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'mind map empty state',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toHaveLength(0);
+});
+
+test('empty mind map keeps incomplete coverage instead of claiming emptiness', () => {
+  const renderer = render({
+    mindMapEmptyCopy: 'Memories are incomplete.',
+  });
+  expect(renderedText(renderer)).toContain('Memories are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No memories yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toHaveLength(0);
+});
+
 test('loaded mind map preview keeps incomplete coverage instead of looking complete', () => {
   const renderer = render({
+    mindMapHasItems: true,
     mindMapCoverageCopy: 'Memories are incomplete.',
   });
   expect(
@@ -499,10 +529,12 @@ test('loaded mind map preview keeps incomplete coverage instead of looking compl
     ),
   ).toBeDefined();
   expect(renderedText(renderer)).toContain('Memories are incomplete.');
+  expect(renderedText(renderer)).not.toContain('No memories yet.');
 });
 
 test('loaded mind map preview omits more-available after a closed later page', () => {
   const renderer = render({
+    mindMapHasItems: true,
     mindMapCoverageCopy: null,
   });
   expect(
@@ -752,7 +784,7 @@ test('live capture without a transcript does not claim speech text', () => {
 
 test('compact Home mind map opens Memories with View All instead of claiming Expand', () => {
   const onExpandMindMap = jest.fn();
-  const renderer = render({onExpandMindMap});
+  const renderer = render({mindMapHasItems: true, onExpandMindMap});
   expect(renderedText(renderer)).not.toContain('Expand');
   expect(renderedText(renderer)).toContain('View All');
   const viewAll = renderer.root.find(
