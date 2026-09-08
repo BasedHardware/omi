@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Updates.swift
   - desktop/macos/Desktop/Sources/Updater/DesktopReleaseNotes.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+Updates.swift
   - desktop/macos/Desktop/Sources/UpdaterViewModel.swift
   - desktop/macos/Desktop/Sources/Updater/ReleaseNotesDisclosure.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
