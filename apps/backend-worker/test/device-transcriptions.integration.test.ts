@@ -97,6 +97,20 @@ test("verified completion atomically queues once, persists transcription and pro
   expect(await readConversations(env.DB, "another-owner")).toEqual([]);
 });
 
+test("queued recordings stay visible without inventing a Recording title", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "",
+    overview: "",
+    source: "omi",
+    status: "processing",
+  });
+});
+
 test("recording conversation preserves capture provenance separately from server times", async () => {
   for (const capturedAtMs of [undefined, 0, 8640000000000000]) {
     const session = await recording(capturedAtMs);

@@ -26,7 +26,10 @@ test("projects durable recording IDs and distinguishes transcript completion fro
     parseConversationReadSnapshot({
       revision: 1,
       records: [row()],
-      after: { updatedAt: 1, id: "recording:11111111-2222-4333-8444-555555555555" },
+      after: {
+        updatedAt: 1,
+        id: "recording:11111111-2222-4333-8444-555555555555",
+      },
     }).records[0]?.record.id
   ).toBe("recording:11111111-2222-4333-8444-555555555555");
   const projected = parseConversationReadSnapshot({
@@ -54,7 +57,7 @@ test("keeps queued and failed recordings visible and never publishes an unfinish
       revision: 1,
       records: [row({ state, excerpt: "Not yet published", locked: false })],
     }).records[0]!.record;
-    expect(record.structured).toEqual({ title: "Recording", overview: "" });
+    expect(record.structured).toEqual({ title: "", overview: "" });
     expect(record.status).toBe(state === "failed" ? "failed" : "processing");
   }
   expect(
@@ -190,8 +193,10 @@ test("union composition keeps numeric updatedAt so a listen cursor position can 
     cursorPolicyVersion: "conversations-read-union-cursor-v1",
   });
   const projected = JSON.parse(
-    readConversationsPage({ limit: snapshot.records.length, cursor: null }, prepared)
-      .canonical_json
+    readConversationsPage(
+      { limit: snapshot.records.length, cursor: null },
+      prepared
+    ).canonical_json
   ) as { items: Record<string, unknown>[] };
   const composed = composeConversationUnionPage(
     projected.items,

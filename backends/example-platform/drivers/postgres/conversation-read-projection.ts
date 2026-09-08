@@ -91,7 +91,7 @@ export function parseConversationReadSnapshot(
       const record: ConversationRecord = Object.freeze({
         id,
         structured: Object.freeze({
-          title: excerpt ? excerpt.slice(0, 80) : row.device ? "Recording" : "",
+          title: excerpt ? excerpt.slice(0, 80) : "",
           overview: excerpt,
         }),
         created_at: startedAt,

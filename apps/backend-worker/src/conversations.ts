@@ -129,8 +129,8 @@ export async function readConversations(
       id: `recording:${recording.id}`,
       title: recording.text?.trim()
         ? displayText(recording.text).slice(0, 80)
-        : "Recording",
-      overview: recording.text === null ? "" : displayText(recording.text),
+        : "",
+      overview: recording.text?.trim() ? displayText(recording.text) : "",
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,
