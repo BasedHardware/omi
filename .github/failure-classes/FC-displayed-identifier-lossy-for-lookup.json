@@ -1,0 +1,17 @@
+{
+  "canonical_prevention": "Render lookup keys verbatim on every surface that accepts them back; confine lossy shortening to non-key descriptive fields, and pin the full identifier in display output with a regression test through the real command entry point.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_memory.py",
+    "sdks/python-cli/tests/test_conversation.py",
+    "sdks/python-cli/tests/test_goal.py",
+    "sdks/python-cli/tests/test_action_item.py"
+  ],
+  "evidence_prs": [],
+  "id": "FC-displayed-identifier-lossy-for-lookup",
+  "schema_version": 1,
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/commands/"
+  ],
+  "status": "open",
+  "violated_contract": "An identifier a surface displays for later reuse must round-trip through the surface that resolves it. A lossy display projection (truncation, masking, reformatting) applied to the lookup key itself makes the shown value unresolvable, so copy-paste from list output into the get-by-ID path fails with not-found even though the resource exists."
+}

@@ -62,7 +62,7 @@ def list_conversations(
         structured = c.get("structured") or {}
         rows.append(
             {
-                "id": shorten(c.get("id"), 14),
+                "id": c.get("id"),
                 "title": shorten(structured.get("title"), 50),
                 "category": structured.get("category"),
                 "started_at": c.get("started_at"),

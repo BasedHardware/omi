@@ -76,3 +76,15 @@ def test_conversation_from_segments_reads_file(authed_profile, respx_mock, cli_r
     body = json.loads(route.calls.last.request.content)
     assert len(body["transcript_segments"]) == 2
     assert body["source"] == "phone"
+
+
+def test_conversation_list_pretty_shows_full_id(authed_profile, respx_mock, cli_runner) -> None:
+    """Regression for #13039: pretty list must not truncate IDs (copy -> get)."""
+    full_id = "12345678-1234-4234-8234-123456789abc"
+    respx_mock.get("/v1/dev/user/conversations").respond(
+        json=[{"id": full_id, "structured": {"title": "hello", "category": "personal"}}]
+    )
+    result = cli_runner.invoke(app, ["--no-color", "conversation", "list"])
+    assert result.exit_code == 0
+    assert full_id in result.stdout
+    assert "12345678-1234…" not in result.stdout

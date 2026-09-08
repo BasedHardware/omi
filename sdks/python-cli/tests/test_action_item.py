@@ -56,3 +56,15 @@ def test_action_item_get_missing_returns_not_found_exit_code(authed_profile, res
     result = cli_runner.invoke(app, ["action-item", "get", "missing"])
     assert result.exit_code == 5  # EXIT_NOT_FOUND
     assert "not found" in result.stderr.lower()
+
+
+def test_action_item_list_pretty_shows_full_id(authed_profile, respx_mock, cli_runner) -> None:
+    """Regression for #13039: pretty list must not truncate IDs (copy -> get)."""
+    full_id = "12345678-1234-4234-8234-123456789abc"
+    respx_mock.get("/v1/dev/user/action-items").respond(
+        json=[{"id": full_id, "description": "ship it", "completed": False}]
+    )
+    result = cli_runner.invoke(app, ["--no-color", "action-item", "list"])
+    assert result.exit_code == 0
+    assert full_id in result.stdout
+    assert "12345678-1234…" not in result.stdout
