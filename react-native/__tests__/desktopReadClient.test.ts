@@ -11,6 +11,7 @@ import {
   developerWebhookTypeCopy,
   appCategoryCopy,
   appDisplaySource,
+  appDisplayName,
   accountFieldCopy,
   connectionIdentityCopy,
   chatMessageDisplayText,
@@ -721,6 +722,13 @@ test('empty app source stays visible instead of a blank meta line', () => {
       description: '  Calendar sync  ',
     }),
   ).toBe('Calendar sync');
+});
+
+test('empty app names stay visible instead of a blank title', () => {
+  expect(appDisplayName('')).toBe('App name unavailable');
+  expect(appDisplayName(' \t\n')).toBe('App name unavailable');
+  expect(appDisplayName('\u00A0')).toBe('App name unavailable');
+  expect(appDisplayName('  Owned app  ')).toBe('Owned app');
 });
 
 test('empty chat bodies stay visible instead of a blank bubble', () => {

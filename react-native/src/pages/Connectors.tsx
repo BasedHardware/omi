@@ -25,6 +25,7 @@ import {
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
   appCategoryCopy,
+  appDisplayName,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -248,12 +249,13 @@ export function ConnectorsPage({
               ) : (
                 section.items.map(app => {
                   const meta = appRowMeta(app, installKnown);
+                  const name = appDisplayName(app.name);
                   return (
                     <View
                       key={`${section.key}-${app.id}`}
                       style={styles.cloudRow}>
                       <View style={styles.cloudRowBody}>
-                        <Text style={styles.cloudRowTitle}>{app.name}</Text>
+                        <Text style={styles.cloudRowTitle}>{name}</Text>
                         {app.description.trim().length > 0 && (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
                             {app.description.trim()}
@@ -266,9 +268,7 @@ export function ConnectorsPage({
                       {writesAvailable && installKnown && (
                         <FocusPressable
                           accessibilityLabel={
-                            app.enabled
-                              ? `Remove ${app.name}`
-                              : `Install ${app.name}`
+                            app.enabled ? `Remove ${name}` : `Install ${name}`
                           }
                           accessibilityRole="button"
                           disabled={pendingId !== null}

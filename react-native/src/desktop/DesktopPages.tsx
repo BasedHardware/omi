@@ -3,6 +3,7 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
+  appDisplayName,
   appDisplaySource,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
@@ -248,7 +249,7 @@ function tilesFromCatalog(
   return apps.map(app => ({
     Icon: Puzzle,
     id: app.id,
-    name: app.name,
+    name: appDisplayName(app.name),
     source: appDisplaySource(app),
     status: cloudAppStatus(app, installKnown),
   }));

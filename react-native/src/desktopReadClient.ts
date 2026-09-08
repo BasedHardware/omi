@@ -151,6 +151,10 @@ export function appCategoryCopy(category: string): string {
   return accountWireCopy(category, '');
 }
 
+export function appDisplayName(name: string): string {
+  return accountFieldCopy(name, 'App name unavailable');
+}
+
 export function appDisplaySource(app: {
   author: string;
   category: string;
