@@ -571,13 +571,15 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       messageCount: Int,
       startsLoading: Bool = false,
       pendingMessageCount: Int = 0,
-      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil,
+      pinReduceMotion: Bool? = nil
     ) throws {
       model = TranscriptModel(messages: Self.makeMessages(count: messageCount))
       model.isLoadingInitial = startsLoading
       model.transcriptWindowPolicy = transcriptWindowPolicy
       self.pendingMessages = Self.makeMessages(count: pendingMessageCount)
-      hostingView = NSHostingView(rootView: HarnessChatHost(model: model))
+      hostingView = NSHostingView(
+        rootView: HarnessChatHost(model: model, pinReduceMotion: pinReduceMotion))
       hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
       window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
@@ -997,8 +999,19 @@ final class TranscriptModel: ObservableObject {
 
 struct HarnessChatHost: View {
   @ObservedObject var model: TranscriptModel
+  /// Pins the accessibility Reduce Motion environment when set. A test that
+  /// asserts on *animated* output must not inherit the host machine's
+  /// accessibility settings — a CI host with Reduce Motion on would otherwise
+  /// silently take every static branch and fail the assertion for an
+  /// environment reason the code under test never chose.
+  var pinReduceMotion: Bool? = nil
 
   var body: some View {
+    host
+      .modifier(PinnedReduceMotion(pin: pinReduceMotion))
+  }
+
+  @ViewBuilder private var host: some View {
     ZStack {
       if model.isPresented {
         ChatMessagesView(
@@ -1020,6 +1033,35 @@ struct HarnessChatHost: View {
       }
     }
     .frame(width: 900, height: 600)
+  }
+}
+
+/// Applies the pinned Reduce Motion value below the host, leaving the subtree
+/// exactly as the system provided it when no pin was asked for.
+struct PinnedReduceMotion: ViewModifier {
+  let pin: Bool?
+
+  func body(content: Content) -> some View {
+    if let pin {
+      content.pinnedReduceMotion(pin)
+    } else {
+      content
+    }
+  }
+}
+
+extension View {
+  /// One environment write, expressed for both toolchains this package builds
+  /// with: the macOS 26 SDK made the public key path read-only, and its
+  /// underscored twin is the same environment entry (verified to propagate to
+  /// readers of the public one), while the Xcode 16 SDK CI pins still takes
+  /// the public setter.
+  @ViewBuilder func pinnedReduceMotion(_ pin: Bool) -> some View {
+    #if compiler(>=6.2)
+      environment(\._accessibilityReduceMotion, pin)
+    #else
+      environment(\.accessibilityReduceMotion, pin)
+    #endif
   }
 }
 

@@ -34,7 +34,14 @@ final class ChatStreamingRenderBudgetTests: XCTestCase {
   private static let flushInterval: TimeInterval = 0.035
 
   func testAStreamingFlushParsesOnceAndEditsTheTailOnly() throws {
-    let harness = try ChatTranscriptGestureHarnessTests.Harness(messageCount: 20)
+    // The working mark animates only outside Reduce Motion, and the mark's
+    // frames are the very thing the idle budget measures. Pin the environment
+    // so the host machine's accessibility settings (a CI image can ship with
+    // Reduce Motion on) cannot silently take the mark's static branch and fail
+    // this precondition for a reason the code under test never chose.
+    let harness = try ChatTranscriptGestureHarnessTests.Harness(
+      messageCount: 20,
+      pinReduceMotion: false)
     defer { harness.tearDown() }
     // Real history, not uniform prose: settled answers carry the blocks a real
     // turn leaves behind — a tool call with its output and the answer text —
@@ -101,7 +108,9 @@ final class ChatStreamingRenderBudgetTests: XCTestCase {
       + "storageIncrementalEdits=\(totals[.storageIncrementalEdit] ?? 0) "
       + "transcriptBodies=\(totals[.transcriptBodyEvaluation] ?? 0) "
       + "bubbleBodies=\(totals[.bubbleBodyEvaluation] ?? 0) "
-      + "idle markFrames=\(idle[.markFrame] ?? 0) proseSizeQueries=\(idle[.proseSizeQuery] ?? 0)"
+      + "idle markFrames=\(idle[.markFrame] ?? 0) proseSizeQueries=\(idle[.proseSizeQuery] ?? 0) "
+      + "markFramesTotal=\(totals[.markFrame] ?? 0) "
+      + "hostReduceMotion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)"
     print(report)
 
     // 0. A streaming row that receives nothing lays nothing out. The working
