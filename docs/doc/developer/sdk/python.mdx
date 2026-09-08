@@ -93,6 +93,16 @@ The SDK requires the Opus audio codec library:
     0. Omi [7F52EC55-50C9-D1B9-E8D7-19B83217C97D]
     ```
   </Step>
+  <Step title="Use Machine-Readable Output (Optional)">
+    For scripts, request a JSON array and set a finite scan timeout:
+
+    ```bash
+    omi-scan --json --timeout 3
+    ```
+
+    Each result contains the device `name` and Bluetooth `address`. An empty
+    scan prints `[]`; invalid timeout values are rejected before scanning.
+  </Step>
   <Step title="Write Your Code">
     ```python
     import asyncio
@@ -159,6 +169,7 @@ The SDK requires the Opus audio codec library:
 | Command | Description |
 |---------|-------------|
 | `omi-scan` | Scan for nearby Bluetooth devices |
+| `omi-scan --json --timeout 3` | Print device names and addresses as JSON for scripts |
 
 ---
 
