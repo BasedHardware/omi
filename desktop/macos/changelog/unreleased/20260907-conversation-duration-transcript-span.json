@@ -1,3 +1,0 @@
-{
-  "change": "Fixed conversation durations that showed the whole recording session instead of the conversation, so a short capture no longer reads as tens of minutes"
-}
