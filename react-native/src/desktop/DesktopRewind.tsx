@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {clockLabel} from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
 import type {useRewindCapture} from '../app/useRewindCapture';
@@ -42,6 +43,11 @@ function errorCopy(error: unknown) {
   if (code === 'OMI_REWIND_AUTH')
     return 'Sign in again to open your screen history.';
   return 'Screen history could not be loaded. Try again.';
+}
+
+function formatRewindCaptureTime(capturedAtMs: number): string {
+  const label = clockLabel(capturedAtMs, Date.now());
+  return label === '' ? 'Time unavailable' : label;
 }
 
 export function rewindLaterPageCanRetry(error: unknown): boolean {
@@ -288,7 +294,7 @@ export function DesktopRewind({
                 {frame.windowTitle}
               </Text>
               <Text style={styles.meta}>
-                {new Date(frame.capturedAtMs).toLocaleString()}
+                {formatRewindCaptureTime(frame.capturedAtMs)}
               </Text>
             </FocusPressable>
           ))}

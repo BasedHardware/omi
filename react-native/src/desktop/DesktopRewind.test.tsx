@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Image, NativeModules, Switch, Text} from 'react-native';
+import {clockLabel} from '../desktopReadClient';
 
 const mockRewind = {listFrames: jest.fn(), readFrame: jest.fn()};
 NativeModules.OmiRewind = mockRewind;
@@ -196,6 +197,28 @@ test('a complete empty history may claim nothing is saved', async () => {
       node => node.props.accessibilityLabel === 'Load more history',
     ),
   ).toHaveLength(0);
+});
+
+test('Rewind capture time uses the same clock as conversations and not 1970', async () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const expected = clockLabel(older.getTime(), Date.now());
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [{...frame('one'), capturedAtMs: older.getTime()}],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain(expected);
+  expect(content(view)).not.toContain('1970');
+});
+
+test('a zero Rewind capture timestamp says Time unavailable instead of 1970', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [{...frame('one'), capturedAtMs: 0}],
+    nextCursor: null,
+  });
+  const view = await render();
+  expect(content(view)).toContain('Time unavailable');
+  expect(content(view)).not.toContain('1970');
 });
 
 test('later-page Rewind unavailability keeps frames and omits Load more', async () => {
