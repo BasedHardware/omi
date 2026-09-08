@@ -46,7 +46,12 @@ export async function composeGenerationPrompt(
   for (const attachment of bound) {
     if (!isGenerationTextMimeType(attachment.mediaType)) continue;
     const remaining = GENERATION_ATTACHMENT_TEXT_BUDGET - usedBytes;
-    if (remaining <= 0) continue;
+    if (remaining <= 0) {
+      if (!(await boundTextObjectPresent(r2, attachment.r2Key))) {
+        return { kind: "fail" };
+      }
+      continue;
+    }
     const excerpt = await readTextExcerpt(r2, attachment.r2Key, remaining);
     if (excerpt.kind === "missing") {
       return { kind: "fail" };
@@ -122,6 +127,18 @@ async function readGenerationHistory(
     });
   }
   return history.reverse();
+}
+
+async function boundTextObjectPresent(
+  r2: R2Bucket | undefined,
+  r2Key: string
+): Promise<boolean> {
+  if (r2 === undefined) return false;
+  try {
+    return (await r2.get(r2Key, { range: { offset: 0, length: 1 } })) !== null;
+  } catch {
+    return false;
+  }
 }
 
 type TextExcerpt =

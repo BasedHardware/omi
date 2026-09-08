@@ -1263,6 +1263,74 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).toContain("a.txt");
   });
 
+  test("fails when a later bound text object is missing after the excerpt budget is spent", async () => {
+    const first = "a".repeat(GENERATION_ATTACHMENT_TEXT_BUDGET);
+    await insertBound(db, {
+      id: "att-budget-spent",
+      accountId: "acct-a",
+      messageId: "msg-later-missing",
+      mimeType: "text/plain",
+      displayName: "a.txt",
+    });
+    await insertBound(db, {
+      id: "att-later-gone",
+      accountId: "acct-a",
+      messageId: "msg-later-missing",
+      mimeType: "text/plain",
+      displayName: "b.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-budget-spent",
+      new TextEncoder().encode(first)
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-later-missing",
+      "cap"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("keeps the excerpt cap when later bound text objects still exist", async () => {
+    const first = "a".repeat(GENERATION_ATTACHMENT_TEXT_BUDGET);
+    const second = "b".repeat(20);
+    await insertBound(db, {
+      id: "att-budget-full",
+      accountId: "acct-a",
+      messageId: "msg-later-present",
+      mimeType: "text/plain",
+      displayName: "a.txt",
+    });
+    await insertBound(db, {
+      id: "att-later-present",
+      accountId: "acct-a",
+      messageId: "msg-later-present",
+      mimeType: "text/plain",
+      displayName: "b.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-budget-full",
+      new TextEncoder().encode(first)
+    );
+    r2.putBytes(
+      "attachments/acct-a/att-later-present",
+      new TextEncoder().encode(second)
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-later-present",
+      "cap"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain(first);
+    expect(result.prompt).not.toContain(second);
+  });
+
   test("does not log file contents", async () => {
     const lines: string[] = [];
     const log = console.log;
