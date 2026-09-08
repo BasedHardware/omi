@@ -227,7 +227,15 @@ test('powered-on Home status does not claim a dropped Omi session', () => {
       devices: [],
       lastEvent: 'Bluetooth is unavailable',
     }).label,
-  ).toBe('Bluetooth status unknown');
+  ).toBe('Bluetooth unavailable');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
+      bluetooth: 'unknown',
+      devices: [],
+      lastEvent: 'Bluetooth is unavailable',
+    }).color,
+  ).toBe('#d9826f');
 });
 
 test('connected audio status waits for an actual packet without changing capture ownership', () => {
@@ -329,7 +337,7 @@ test.each([
     'Bluetooth permission needed',
     'unauthorized',
   ],
-  ['Bluetooth is unavailable', 'Bluetooth status unknown', 'unknown'],
+  ['Bluetooth is unavailable', 'Bluetooth unavailable', 'unknown'],
   ['Bluetooth is unavailable', 'Bluetooth off', 'poweredOff'],
   ['Bluetooth adapter not checked', 'Checking Bluetooth…', 'unknown'],
   ['Bluetooth adapter not checked', 'Bluetooth off', 'poweredOff'],

@@ -21,6 +21,12 @@ export function bluetoothSessionLabel(
   ) {
     return 'Checking Bluetooth…';
   }
+  if (
+    snapshot.lastEvent?.trim() === 'Bluetooth is unavailable' &&
+    snapshot.bluetooth === 'unknown'
+  ) {
+    return 'Bluetooth unavailable';
+  }
   return bluetoothStatusLabel(snapshot.bluetooth);
 }
 
@@ -82,7 +88,9 @@ export function emptyDeviceListHint(
     return bluetoothStatusLabel('unauthorized');
   }
   if (trimmed === 'Bluetooth is unavailable') {
-    return emptyDeviceListHint('', bluetooth, scanBusy);
+    return bluetooth === 'unknown'
+      ? 'Bluetooth unavailable'
+      : emptyDeviceListHint('', bluetooth, scanBusy);
   }
   if (trimmed === 'Bluetooth adapter not checked') {
     return bluetooth === 'unknown'
