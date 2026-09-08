@@ -120,7 +120,7 @@ describe("canonical memory service boundary", () => {
         service: serviceReturning(raw),
         caller,
       });
-      expect(result.kind).toBe(fixture.safe ? "page" : "unavailable");
+      expect(result.kind).toBe(fixture.safe ? "page" : "unreadable");
       if (result.kind === "page")
         expect(await result.response.text()).toBe(raw);
     }
@@ -133,10 +133,16 @@ describe("canonical memory service boundary", () => {
         '{"contractVersion":"9.9.9","contractVersion":'
       ),
       ` ${page}`,
-      `\uFEFF${page}`,
       '{"items":[],"complete":true}',
-      new Uint8Array([0xff, 0xfe]),
     ]) {
+      expect(
+        await readCanonicalMemoryPage({
+          service: serviceReturning(raw),
+          caller,
+        })
+      ).toEqual({ kind: "unreadable" });
+    }
+    for (const raw of [`\uFEFF${page}`, new Uint8Array([0xff, 0xfe])]) {
       expect(
         await readCanonicalMemoryPage({
           service: serviceReturning(raw),
@@ -168,11 +174,13 @@ describe("canonical memory service boundary", () => {
           ),
           caller,
         })
-      ).toEqual({ kind: "unavailable" });
+      ).toEqual({
+        kind: status === 200 ? "unreadable" : "unavailable",
+      });
     }
     expect(
       await readCanonicalMemoryPage({ service: undefined, caller })
-    ).toEqual({ kind: "unavailable" });
+    ).toEqual({ kind: "unbound" });
     expect(
       await readCanonicalMemoryPage({
         service: {

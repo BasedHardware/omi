@@ -798,6 +798,9 @@ export async function handleMemories(context: CoreContext): Promise<Response> {
         },
       }
     );
+  if (result.kind === "unbound" || result.kind === "unreadable") {
+    return backendError("projection_unavailable", "none", 503);
+  }
   return backendError("projection_unavailable", "retry", 503, true);
 }
 

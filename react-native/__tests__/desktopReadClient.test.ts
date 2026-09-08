@@ -1084,6 +1084,23 @@ test('surfaces typed unavailable projections as truthful retryable copy', async 
   expect(result.tasks).toEqual(expect.objectContaining({status: 'success'}));
 });
 
+test('surfaces nested non-retryable projection_unavailable without retry copy', async () => {
+  const body = JSON.stringify({
+    error: {
+      code: 'projection_unavailable',
+      retryable: false,
+      action: 'none',
+    },
+  });
+  const backend = backendFor(() => ({status: 503, body}));
+  await expect(loadMemories(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
+  expect(desktopBackendUnavailableCopy).not.toBe(
+    desktopProjectionUnavailableCopy,
+  );
+});
+
 test('surfaces nested non-retryable 503s without connection-retry copy', async () => {
   const body = JSON.stringify({
     error: {

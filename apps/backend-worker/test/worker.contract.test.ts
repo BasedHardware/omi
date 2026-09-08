@@ -228,8 +228,8 @@ const emptyConversationPage = () => ({
 const projectionUnavailable = () => ({
   error: {
     code: "projection_unavailable",
-    retryable: true,
-    action: "retry",
+    retryable: false,
+    action: "none",
   },
 });
 
@@ -1060,7 +1060,7 @@ describe("worker request contract", () => {
     expect(extra.status).toBe(400);
   });
 
-  test("memories stay retryably unavailable because no store exists", async () => {
+  test("memories stay non-retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,
     });
