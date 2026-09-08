@@ -432,6 +432,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               // Clear stored device
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
               SharedPreferencesUtil().deviceName = '';
+              await SharedPreferencesUtil().clearDeviceCustomName(deviceId);
 
               // Fully tear down connection, transport, and native service
               if (deviceId.isNotEmpty) {
@@ -487,10 +488,12 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
+                      final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
                       await SharedPreferencesUtil().btDeviceSet(
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
                       SharedPreferencesUtil().deviceName = '';
+                      await SharedPreferencesUtil().clearDeviceCustomName(deviceId);
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
@@ -541,7 +544,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildDeviceInfoSection(DeviceProvider provider) {
-    final deviceName = provider.pairedDevice?.name ?? context.l10n.unknownDevice;
+    final deviceName = provider.pairedDevice?.displayName ?? context.l10n.unknownDevice;
     final modelNumber = provider.pairedDevice?.modelNumber ?? context.l10n.unknown;
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
@@ -671,7 +674,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 Column(
                   children: [
                     Text(
-                      provider.pairedDevice?.name ?? context.l10n.unknownDevice,
+                      provider.pairedDevice?.displayName ?? context.l10n.unknownDevice,
                       style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),

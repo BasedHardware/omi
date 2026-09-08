@@ -318,6 +318,8 @@ class BtDevice {
   set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
   set serialNumber(String? serialNumber) => _serialNumber = serialNumber;
 
+  String get displayName => SharedPreferencesUtil().getDeviceCustomName(id) ?? name;
+
   String getShortId() => BtDevice.shortId(id);
 
   static shortId(String id) {
