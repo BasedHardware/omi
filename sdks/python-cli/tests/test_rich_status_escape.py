@@ -32,6 +32,14 @@ def test_config_set_escapes_markup_profile_and_value(config_path, cli_runner) ->
     assert cfg.load().get_profile(MARKUP_PROFILE).local_api_url == MARKUP_VALUE.rstrip("/")
 
 
+def test_config_profile_delete_error_escapes_markup_profile_name(config_path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "delete", MARKUP_PROFILE, "--yes"])
+
+    assert result.exit_code != 0
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_PROFILE in result.stderr
+
+
 def test_auth_logout_escapes_markup_profile_name(config_path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--profile", MARKUP_PROFILE, "auth", "logout"])
 
