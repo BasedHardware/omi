@@ -276,7 +276,9 @@ Cloud Linux after `6c06500d62`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `23e5a78419`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer says Expand on the collapsed Mind Map. That control opens Memories, matching Tasks and Recaps View All. The preview stays collapsed when memories exist. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact-Home empty mind-map preview honesty slice: compact Home no longer shows decorative mind-map nodes when there are no memories. Ready empty uses the same empty-library completeness copy as Memories instead of a populated-looking graph. The collapsed preview stays when memories exist. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `4dbc6cae56`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer shows decorative mind-map nodes when there are no memories. Ready empty uses the same empty-library completeness copy as Memories instead of a populated-looking graph. The collapsed preview stays when memories exist. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the compact-Home live-transcript honesty slice: compact Home no longer leaves a blank speech line while Listening. NativeSnapshot has no live speech transcript. Live capture without text says Live transcript is not available. The Listening badge stays. Waiting for audio and Not capturing are unchanged. This does not invent an STT producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

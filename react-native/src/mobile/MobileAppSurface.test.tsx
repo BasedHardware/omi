@@ -758,6 +758,7 @@ test('mobile waiting-for-audio state never claims Listening before the first pac
     ),
   );
   expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).toContain('Live transcript is not available.');
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
   act(() => renderer.unmount());
 });
@@ -777,6 +778,7 @@ test('live capture without a transcript does not claim speech text', () => {
     capture: {active: true, waitingForAudio: false, transcript: ''},
   });
   expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).toContain('Live transcript is not available.');
   expect(renderedText(renderer)).not.toContain('Listening for speech');
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
   act(() => renderer.unmount());

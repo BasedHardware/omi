@@ -407,7 +407,7 @@ export function MobileAppSurface({
                 ? 'Not capturing'
                 : capture.waitingForAudio
                 ? 'Your Omi is connected. Waiting for audio…'
-                : ''}
+                : 'Live transcript is not available.'}
             </Text>
           </View>
         );
