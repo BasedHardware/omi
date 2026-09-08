@@ -34,10 +34,7 @@ void main() {
           .toList(growable: false);
 
       expect(memories.map((memory) => memory.id), expected['memory_ids']);
-      expect(
-        {for (final memory in memories) memory.id: memory.content},
-        expected['readable_text_by_id'],
-      );
+      expect({for (final memory in memories) memory.id: memory.content}, expected['readable_text_by_id']);
       expect(
         memories.where((memory) => memory.isKnowledgeLedger).map((memory) => memory.id),
         expected['authoritative_ledger_ids'],
@@ -47,18 +44,12 @@ void main() {
     test('mobile leaves legacy evidence optional and makes future evidence inert', () {
       final records = fixture['chat_records'] as Map<String, dynamic>;
       expect(
-        ChatEvidenceReferenceEnvelope.tryFromJson(
-          (records['legacy'] as Map<String, dynamic>)['evidence'],
-        ),
+        ChatEvidenceReferenceEnvelope.tryFromJson((records['legacy'] as Map<String, dynamic>)['evidence']),
         isNull,
       );
 
-      final current = ChatEvidenceReferenceEnvelope.tryFromJson(
-        (records['v1'] as Map<String, dynamic>)['evidence'],
-      );
-      final future = ChatEvidenceReferenceEnvelope.tryFromJson(
-        (records['future'] as Map<String, dynamic>)['evidence'],
-      );
+      final current = ChatEvidenceReferenceEnvelope.tryFromJson((records['v1'] as Map<String, dynamic>)['evidence']);
+      final future = ChatEvidenceReferenceEnvelope.tryFromJson((records['future'] as Map<String, dynamic>)['evidence']);
 
       expect(current?.references.single.kind.wireValue, expected['v1_evidence_kind']);
       expect(future?.references.single.kind.wireValue, expected['future_evidence_kind']);
@@ -185,12 +176,12 @@ String _pad(int n) => n.toString().padLeft(2, '0');
 /// Build the item through the production wire decode so bucket cases exercise
 /// the same path a backend response takes.
 GeneratedActionItemResponse _wireItem({DateTime? due, DateTime? created}) => GeneratedActionItemResponse.fromJson({
-      'id': 'parity',
-      'description': 'parity case',
-      'completed': false,
-      if (created != null) 'created_at': created.toUtc().toIso8601String(),
-      if (due != null) 'due_at': due.toUtc().toIso8601String(),
-    });
+  'id': 'parity',
+  'description': 'parity case',
+  'completed': false,
+  if (created != null) 'created_at': created.toUtc().toIso8601String(),
+  if (due != null) 'due_at': due.toUtc().toIso8601String(),
+});
 
 /// Build the conversation through the production model so duration cases
 /// exercise the same getter the conversation list and detail header read.
