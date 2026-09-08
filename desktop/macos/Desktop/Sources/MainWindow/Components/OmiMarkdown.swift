@@ -111,7 +111,6 @@ struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style
   let fontScale: CGFloat
-  let document: OmiMarkdownDocument
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
   let appKitProseSelection: Bool
@@ -127,7 +126,6 @@ struct OmiMarkdownContent: View, Equatable {
     self.text = text
     self.style = style
     self.fontScale = fontScale
-    self.document = OmiMarkdownDocument(markdown: text)
     self.citations = citations
     self.onOpenCitation = onOpenCitation
     self.appKitProseSelection = appKitProseSelection
@@ -139,6 +137,7 @@ struct OmiMarkdownContent: View, Equatable {
   }
 
   var body: some View {
+    let document = ChatMarkdownRenderCache.document(for: text)
     Group {
       if document.blocks.count == 1, case .text(let content) = document.blocks[0].kind {
         // Single text segment — no VStack overhead

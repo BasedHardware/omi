@@ -297,6 +297,26 @@ final class QueryComposerTests: XCTestCase {
     XCTAssertEqual(QueryShellSubmit.resolve(text: "  "), .none)
   }
 
+  func testSendStopAndStoppingKeepTheDraftAndComposerGeometry() throws {
+    for mode in [QueryShellMode.answer, .results] {
+      let composer = try Composer(mode: mode)
+      defer { composer.tearDown() }
+      composer.type("A draft for the next question\nwith a second line")
+      let draft = composer.visibleText
+      let height = composer.barHeight
+      composer.surface.isWorking = true
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+      composer.surface.isStopping = true
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+      composer.surface.isStopping = false
+      composer.surface.isWorking = false
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+    }
+  }
+
   // MARK: - Harness
 
   /// The real `QueryHeroBar` over the real `ChatComposerDraft`, in a window, with the `NSTextView`
@@ -468,7 +488,8 @@ final class QueryComposerTests: XCTestCase {
         QueryHeroBar(
           text: draft,
           caretClaim: surface.caretClaims,
-          isWorking: false,
+          isWorking: surface.isWorking,
+          isStopping: surface.isStopping,
           mode: mode,
           onAsk: { surface.asks += 1 }
         )
@@ -494,6 +515,8 @@ final class QueryComposerTests: XCTestCase {
   @MainActor
   private final class Surface: ObservableObject {
     @Published var caretClaims = 0
+    @Published var isWorking = false
+    @Published var isStopping = false
     var asks = 0
   }
 }

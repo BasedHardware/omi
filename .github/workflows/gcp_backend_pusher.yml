@@ -243,19 +243,26 @@ jobs:
         if: env.SERVICE == 'pusher'
         env:
           GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
           token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN MONITOR_GRAFANA_TOKEN grafana_token; }
           trap cleanup EXIT
-          test -n "$GRAFANA_TOKEN"
           case "${{ vars.ENV }}" in
-            dev|development) grafana_url=https://monitor.omiapi.com ;;
-            prod) grafana_url=https://monitor.omi.me ;;
+            dev|development)
+              grafana_url=https://monitor.omiapi.com
+              grafana_token="${MONITOR_GRAFANA_TOKEN:-}"
+              ;;
+            prod)
+              grafana_url=https://monitor.omi.me
+              grafana_token="${GRAFANA_TOKEN:-}"
+              ;;
             *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
           esac
-          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          test -n "$grafana_token"
+          printf '%s' "$grafana_token" > "$token_file"
           python3 backend/scripts/verify_pusher_live_alert_route.py \
             --grafana-url "$grafana_url" \
             --token-file "$token_file" \
