@@ -227,6 +227,116 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("keeps named-session history when the current payload JSON is unreadable", async () => {
+    const rows = [
+      ["main", "acct-a", "human", "main session words", 1, null, null, null],
+      [
+        "human",
+        "acct-a",
+        "human",
+        "My name is Ana",
+        2,
+        "session-a",
+        null,
+        null,
+      ],
+      [
+        "assistant",
+        "acct-a",
+        "ai",
+        "Hello Ana",
+        3,
+        "session-a",
+        null,
+        "completed",
+      ],
+      [
+        "other-session",
+        "acct-a",
+        "human",
+        "other session",
+        4,
+        "session-b",
+        null,
+        null,
+      ],
+      [
+        "current",
+        "acct-a",
+        "human",
+        "What is my name?",
+        5,
+        "session-a",
+        null,
+        null,
+      ],
+    ];
+    for (const [
+      id,
+      account,
+      sender,
+      text,
+      position,
+      chatSessionId,
+      appId,
+      outcome,
+    ] of rows) {
+      await db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+        )
+        .bind(
+          id,
+          account,
+          sender,
+          text,
+          position,
+          id === "current"
+            ? "{broken"
+            : JSON.stringify({ chatSessionId, appId }),
+          outcome
+        )
+        .run();
+    }
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "current",
+        "acct-a",
+        "op-current",
+        JSON.stringify({
+          op: "create",
+          opId: "op-current",
+          id: "current",
+          at: 1,
+          text: "What is my name?",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-a",
+        }),
+        "gen-current"
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [
+        { role: "user", content: "My name is Ana" },
+        { role: "assistant", content: "Hello Ana" },
+      ],
+    });
+  });
+
   test("omits whitespace-only earlier messages from generation history", async () => {
     const rows = [
       ["human", "acct-a", "human", "My name is Ana", 1, null],

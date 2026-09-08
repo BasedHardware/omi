@@ -82,8 +82,14 @@ async function readGenerationHistory(
        FROM chat_messages AS prior
        JOIN chat_messages AS current ON current.id = ? AND current.account_id = ?
        WHERE prior.account_id = current.account_id AND prior.position < current.position
-         AND json_extract(prior.payload, '$.chatSessionId') IS json_extract(current.payload, '$.chatSessionId')
-         AND json_extract(prior.payload, '$.appId') IS json_extract(current.payload, '$.appId')
+         AND ${recoveredPayloadJsonExtract(
+           "prior",
+           "chatSessionId"
+         )} IS ${recoveredPayloadJsonExtract("current", "chatSessionId")}
+         AND ${recoveredPayloadJsonExtract(
+           "prior",
+           "appId"
+         )} IS ${recoveredPayloadJsonExtract("current", "appId")}
          AND (prior.sender = 'human' OR (prior.sender = 'ai' AND prior.generation_outcome = 'completed'))
        ORDER BY prior.position DESC
        LIMIT ?`
@@ -126,6 +132,13 @@ async function readTextExcerpt(
   } catch {
     return null;
   }
+}
+
+function recoveredPayloadJsonExtract(
+  alias: "prior" | "current",
+  key: "chatSessionId" | "appId"
+): string {
+  return `CASE WHEN json_valid(${alias}.payload) THEN json_extract(${alias}.payload, '$.${key}') ELSE json_extract(COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.message_id = ${alias}.id AND admissions.account_id = ${alias}.account_id), '{}'), '$.${key}') END`;
 }
 
 function utf8Bytes(value: string): number {
