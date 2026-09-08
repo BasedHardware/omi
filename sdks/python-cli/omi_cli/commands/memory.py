@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import typer
 
@@ -60,6 +60,37 @@ def list_memories(
             }
         )
     ctx.renderer.emit(rows, columns=_LIST_COLUMNS, title=f"memories (limit={limit})")
+
+
+@app.command("export", help="Export paginated memories as one JSON array. Requires --json.")
+def export_memories(
+    typer_ctx: typer.Context,
+    max_items: int = typer.Option(10000, "--max-items", min=1, max=100000, help="Fail if more items are available."),
+    categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    if not ctx.renderer.json_mode:
+        raise UsageError(message="Export requires JSON output", detail="Run omi --json memory export.")
+
+    items: list[dict[str, Any]] = []
+    with ctx.make_client() as client:
+        while True:
+            # Fetch one extra item at the ceiling to distinguish a complete export
+            # from a truncated one. Nothing reaches stdout until every page succeeds.
+            limit = min(200, max_items - len(items) + 1)
+            page = client.get(
+                "/v1/dev/user/memories",
+                params={"limit": limit, "offset": len(items), "categories": categories},
+            )
+            items.extend(page)
+            if len(items) > max_items:
+                raise UsageError(
+                    message="Export exceeds --max-items",
+                    detail="Increase --max-items or narrow --categories. No export was written.",
+                )
+            if len(page) < limit:
+                break
+    ctx.renderer.emit(items)
 
 
 @app.command("get", help="Fetch a single memory by ID.")
