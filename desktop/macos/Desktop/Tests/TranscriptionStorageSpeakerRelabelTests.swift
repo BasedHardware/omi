@@ -6,7 +6,7 @@ import XCTest
 /// other person in the room. The stored rows of the current session must swap with it in
 /// one statement — a naive two-step update would map 0→1 and then 1→0 back again.
 final class TranscriptionStorageSpeakerRelabelTests: XCTestCase {
-  private var testUserId: String!
+  private var testUserId = ""
   private var userDir: URL?
 
   override func setUp() async throws {
