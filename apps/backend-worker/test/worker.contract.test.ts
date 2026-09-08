@@ -1631,6 +1631,79 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET keeps a JSON-null named-session row out of main history", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind("null-named", "test-account", "named session words", 2, 2, "null")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "null-named",
+        "test-account",
+        "op-null-named",
+        JSON.stringify({
+          op: "create",
+          opId: "op-null-named",
+          id: "null-named",
+          at: 2,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-alpha",
+        }),
+        "gen-null-named"
+      )
+      .run();
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    const mainEnvelope = wireToChatHistoryEnvelope(await main.json());
+    expect(mainEnvelope).not.toBeNull();
+    expect(mainEnvelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+    ]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    const namedEnvelope = wireToChatHistoryEnvelope(await named.json());
+    expect(namedEnvelope).not.toBeNull();
+    expect(namedEnvelope!.messages.map((message) => message.text)).toEqual([
+      "named session words",
+    ]);
+    expect(namedEnvelope!.messages[0]!.chatSessionId).toBe("session-alpha");
+
+    const conversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(conversations.status).toBe(200);
+    const page = (await conversations.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+  });
+
   test("history GET keeps an unreadable named-session assistant out of main history", async () => {
     const generationId = "11111111-1111-4111-8111-111111111111";
     const assistant = {

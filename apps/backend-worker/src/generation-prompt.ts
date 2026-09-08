@@ -134,11 +134,17 @@ async function readTextExcerpt(
   }
 }
 
+export function recoveredPayloadSql(alias: string): string {
+  const payload = `${alias}.payload`;
+  const admission = `COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.account_id = ${alias}.account_id AND (admissions.message_id = ${alias}.id OR admissions.generation_id = ${alias}.id) LIMIT 1), '{}')`;
+  return `CASE WHEN json_valid(${payload}) THEN CASE WHEN json_type(${payload}) = 'object' THEN ${payload} ELSE ${admission} END ELSE ${admission} END`;
+}
+
 function recoveredPayloadJsonExtract(
   alias: "prior" | "current",
   key: "chatSessionId" | "appId"
 ): string {
-  return `CASE WHEN json_valid(${alias}.payload) THEN json_extract(${alias}.payload, '$.${key}') ELSE json_extract(COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.account_id = ${alias}.account_id AND (admissions.message_id = ${alias}.id OR admissions.generation_id = ${alias}.id) LIMIT 1), '{}'), '$.${key}') END`;
+  return `json_extract(${recoveredPayloadSql(alias)}, '$.${key}')`;
 }
 
 function utf8Bytes(value: string): number {

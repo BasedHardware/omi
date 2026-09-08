@@ -7,7 +7,10 @@ import {
   listBoundAttachments,
   resolveAttachmentsForAdmit,
 } from "./attachments";
-import { isVisibleGenerationText } from "./generation-prompt";
+import {
+  isVisibleGenerationText,
+  recoveredPayloadSql,
+} from "./generation-prompt";
 import {
   CHAT_CAPABILITIES,
   isChatCreate,
@@ -199,7 +202,9 @@ export async function readHistory(
       `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
        FROM (
          SELECT id, text, sender, created_at, generation_outcome, position, payload,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.account_id = chat_messages.account_id AND (admissions.message_id = chat_messages.id OR admissions.generation_id = chat_messages.id) LIMIT 1), '{}') END)
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
+             "chat_messages"
+           )})
             WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
          FROM chat_messages WHERE account_id = ?
        ) AS normalized
