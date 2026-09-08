@@ -633,8 +633,8 @@ realTest(
       const namedPage = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
       expect(ids(namedPage)).toEqual(["chat:session-alpha"]);
       await owner.unsafe(
-        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,E' \\t\\n','human','text',500,500,'session-blank',NULL,0,'sha256:blank','desktop_chat',NULL,false,'rev-blank','[]'::jsonb,'gen_blank')`,
-        [account, "33333333-3333-4333-8333-333333333333"]
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',500,500,'session-blank',NULL,0,'sha256:blank','desktop_chat',NULL,false,'rev-blank','[]'::jsonb,'gen_blank')`,
+        [account, "33333333-3333-4333-8333-333333333333", " \t\n"]
       );
       const allNamed = (await (await call()).json()) as {
         items: Array<{ id: string; title: string; overview: string }>;

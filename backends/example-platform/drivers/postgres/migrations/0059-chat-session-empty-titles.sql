@@ -15,12 +15,12 @@ BEGIN
         ELSE 'chat:' || chat_session_id
       END AS id,
       CASE
-        WHEN char_length(btrim(title_text))>240 THEN left(btrim(title_text),237)||'...'
-        ELSE btrim(title_text)
+        WHEN char_length(btrim(title_text, E' \t\n\r'))>240 THEN left(btrim(title_text, E' \t\n\r'),237)||'...'
+        ELSE btrim(title_text, E' \t\n\r')
       END AS title,
       CASE
-        WHEN char_length(btrim(last_text))>240 THEN left(btrim(last_text),237)||'...'
-        ELSE btrim(last_text)
+        WHEN char_length(btrim(last_text, E' \t\n\r'))>240 THEN left(btrim(last_text, E' \t\n\r'),237)||'...'
+        ELSE btrim(last_text, E' \t\n\r')
       END AS overview,
       created_at AS "createdAt",
       updated_at AS "updatedAt",
