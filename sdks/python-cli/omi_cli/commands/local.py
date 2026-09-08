@@ -293,10 +293,18 @@ def _normalize_sql_result(result: Any) -> Any:
         return {"text": result}
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    row_count = int(row_count_match.group(1))
+    data_lines = non_empty[2:-1]
+    if len(set(columns)) != len(columns) or len(data_lines) != row_count:
+        return {"text": result}
     rows = []
-    for line in non_empty[2:-1]:
+    for line in data_lines:
+        if line.startswith("Result truncated after "):
+            return {"text": result}
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
-        rows.append({column: values[index] if index < len(values) else "" for index, column in enumerate(columns)})
+        if len(values) != len(columns):
+            return {"text": result}
+        rows.append(dict(zip(columns, values)))
 
     return {
         "columns": columns,
