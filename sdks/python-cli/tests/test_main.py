@@ -63,8 +63,13 @@ def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch,
     import os
     import subprocess
     import sys
+    from pathlib import Path
 
+    package_root = str(Path(__file__).resolve().parents[1])
     env = dict(os.environ, OMI_API_KEY="not-a-real-key")
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, [package_root, env.get("PYTHONPATH", "")])
+    )
     result = subprocess.run(
         [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
         capture_output=True,
