@@ -272,7 +272,7 @@ export function projectionClockLabel(
 ): string {
   const timestamp = projectionTimestamp(item);
   if (timestamp === null || timestamp <= 0) {
-    return '';
+    return 'Time unavailable';
   }
   return clockLabel(timestamp, nowEpochMilliseconds);
 }

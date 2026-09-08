@@ -826,7 +826,30 @@ test('clock labels keep Today as time and date older days', () => {
       },
       now,
     ),
-  ).toBe('');
+  ).toBe('Time unavailable');
+  expect(
+    projectionClockLabel(
+      {
+        kind: 'memory',
+        id: 'memory-zero',
+        title: 'Epoch',
+        summary: '',
+        searchableText: '',
+        citations: [],
+        timestamp: 0,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      },
+      now,
+    ),
+  ).toBe('Time unavailable');
+  expect(
+    projectionClockLabel(conversation(null, new Date(0).toISOString()), now),
+  ).toBe('Time unavailable');
 });
 
 test('chat clock labels date older days and keep seconds or milliseconds', () => {
