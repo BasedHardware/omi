@@ -1,0 +1,3 @@
+{
+  "change": "Fixed \"what's on my screen?\" asked from Omi's own window answering with Omi's interface — it now answers from the most recent frame of the app you were actually in, and when you switch into your first real app, the on-screen prompt includes that frame for you"
+}
