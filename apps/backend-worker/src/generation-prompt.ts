@@ -105,7 +105,18 @@ async function readGenerationHistory(
   for (const row of result.results) {
     if (!isVisibleGenerationText(row.text)) continue;
     const size = utf8Bytes(row.text);
-    if (size > remaining) break;
+    if (size > remaining) {
+      if (history.length === 0) {
+        const prefix = utf8Prefix(row.text, remaining);
+        if (isVisibleGenerationText(prefix)) {
+          history.push({
+            role: row.sender === "human" ? "user" : "assistant",
+            content: prefix,
+          });
+        }
+      }
+      break;
+    }
     remaining -= size;
     history.push({
       role: row.sender === "human" ? "user" : "assistant",
@@ -169,4 +180,14 @@ export function recoveredPayloadTextKeySql(
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function utf8Prefix(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) return "";
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.byteLength <= maxBytes) return value;
+  return new TextDecoder("utf-8", { fatal: true }).decode(
+    bytes.subarray(0, maxBytes),
+    { stream: true }
+  );
 }

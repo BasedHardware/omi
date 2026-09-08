@@ -648,6 +648,42 @@ describe("composeGenerationPrompt", () => {
     ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
   });
 
+  test("keeps a UTF-8 prefix of an oversized prior turn instead of composing with empty history", async () => {
+    const euro = "€";
+    const completeCount = Math.floor(
+      GENERATION_HISTORY_TEXT_BUDGET / new TextEncoder().encode(euro).byteLength
+    );
+    const oversized = euro.repeat(completeCount + 8);
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("message-oversize", oversized)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 2, 1, NULL)"
+      )
+      .bind("message-now", "current")
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-now",
+      "current"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.history).toEqual([
+      { role: "user", content: euro.repeat(completeCount) },
+    ]);
+    expect(
+      new TextEncoder().encode(result.history[0]!.content).byteLength
+    ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
+    expect(result.history[0]?.content).not.toBe(oversized);
+  });
+
   test("appends a bound text/plain R2 object to the prompt", async () => {
     await insertBound(db, {
       id: "att-text",
