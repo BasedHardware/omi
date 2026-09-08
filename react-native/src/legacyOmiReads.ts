@@ -1,6 +1,7 @@
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  taskDisplayTitle,
   type ConversationProjection,
   type DomainRead,
   type MemoryProjection,
@@ -206,7 +207,7 @@ export async function loadOmiTasks(
       id: id(row.id),
       title: description,
       summary: completed ? 'Completed' : 'Pending',
-      searchableText: description,
+      searchableText: taskDisplayTitle({title: description}),
       completed,
       completedAt: milliseconds(row.completed_at),
       dueAt: milliseconds(row.due_at),

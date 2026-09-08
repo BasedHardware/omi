@@ -67,7 +67,9 @@ export function TasksPage({
     return normalized === ''
       ? tasks
       : tasks.filter(task =>
-          task.title.toLocaleLowerCase().includes(normalized),
+          `${task.title}\n${taskDisplayTitle(task)}`
+            .toLocaleLowerCase()
+            .includes(normalized),
         );
   }, [query, tasks]);
   const grouped = useMemo(

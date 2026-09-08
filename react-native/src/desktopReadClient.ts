@@ -1089,7 +1089,7 @@ export async function loadTasks(
   );
   const items = validated.items.map((item, index) => {
     const id = string(item.id, `Task ${index} id`);
-    const description = string(item.description, `Task ${index} description`);
+    const description = text(item.description, `Task ${index} description`);
     const completed = boolean(item.completed, `Task ${index} completed`);
     const completedAt = nullableInteger(
       item.completedAt,
@@ -1100,7 +1100,7 @@ export async function loadTasks(
       throw new Error(`Task ${index} owner is malformed`);
     }
     const owner = item.owner as string | null;
-    const source = string(item.source, `Task ${index} source`);
+    const source = text(item.source, `Task ${index} source`);
     const provenance = stringArray(item.provenance, `Task ${index} provenance`);
     const sortOrder = finite(item.sortOrder, `Task ${index} sortOrder`);
     const indentLevel = integer(item.indentLevel, `Task ${index} indentLevel`);
@@ -1112,7 +1112,7 @@ export async function loadTasks(
     const revision =
       item.revision === null
         ? null
-        : string(item.revision, `Task ${index} revision`);
+        : text(item.revision, `Task ${index} revision`);
     return {
       kind: 'task' as const,
       id,
@@ -1122,7 +1122,7 @@ export async function loadTasks(
         : dueAt === null
         ? 'Pending'
         : `Due ${dueAt}`,
-      searchableText: description,
+      searchableText: taskDisplayTitle({title: description}),
       completed,
       completedAt,
       dueAt,

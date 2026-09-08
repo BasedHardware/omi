@@ -1478,6 +1478,43 @@ test('accepts an omitted account epoch and retains a null task revision', async 
   );
 });
 
+test('keeps ratified empty task descriptions instead of failing the page', async () => {
+  const result = await loadTasks(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page(
+          [
+            {...task, description: ''},
+            {...task, id: 'task2_abc', description: ' \t\n'},
+            {...task, id: 'task3_abc', source: '', revision: ''},
+          ],
+          'tasks-completeness-v1',
+        ),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'task1_abc',
+      title: '',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'task2_abc',
+      title: ' \t\n',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'task3_abc',
+      title: 'Prepare launch notes',
+      source: '',
+      revision: '',
+      searchableText: 'Prepare launch notes',
+    }),
+  ]);
+});
+
 test('marks a full conversation window as potentially incomplete', async () => {
   const conversations = Array.from({length: 50}, (_, index) => ({
     ...conversation,

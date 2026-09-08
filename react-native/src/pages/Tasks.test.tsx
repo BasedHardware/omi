@@ -102,6 +102,37 @@ test('a whitespace-only task title stays visible instead of a blank row', () => 
   act(() => renderer.unmount());
 });
 
+test('task search matches the visible title fallback for empty titles', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: ''}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('unavailable');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task title unavailable');
+  expect(copy).not.toContain('No loaded tasks match.');
+  act(() => renderer.unmount());
+});
+
 test('task page edits and toggles only through handlers with pending and error recovery', () => {
   const onTaskToggle = jest.fn();
   const onTaskEdit = jest.fn();

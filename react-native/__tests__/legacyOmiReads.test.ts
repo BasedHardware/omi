@@ -96,6 +96,29 @@ test('old empty memory content stays searchable instead of a blank row', async (
   });
 });
 
+test('old empty task descriptions stay searchable instead of failing the page', async () => {
+  const {api} = backend({
+    action_items: [
+      {id: 'blank', description: '', completed: false},
+      {id: 'named', description: 'Call Sam', completed: false},
+    ],
+    has_more: false,
+  });
+  const result = await loadTasks(api);
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'blank',
+      title: '',
+      searchableText: 'Task title unavailable',
+    }),
+    expect.objectContaining({
+      id: 'named',
+      title: 'Call Sam',
+      searchableText: 'Call Sam',
+    }),
+  ]);
+});
+
 test('old memories use v3 content without manufacturing canonical provenance', async () => {
   const {api, request} = backend([
     {
