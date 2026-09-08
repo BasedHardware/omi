@@ -79,7 +79,7 @@ from utils.retrieval.safety import (
 from utils.retrieval.web_search_gate import WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, get_model, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
@@ -117,6 +117,25 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+CHAT_PROVIDER_ENV_VAR = 'CHAT_PROVIDER'
+SUPPORTED_CHAT_PROVIDERS = frozenset({'anthropic', 'openai'})
+
+
+def _configured_chat_provider() -> str:
+    """Resolve the self-hosted chat provider at the request boundary."""
+    provider = os.getenv(CHAT_PROVIDER_ENV_VAR, 'anthropic').strip().lower()
+    if provider not in SUPPORTED_CHAT_PROVIDERS:
+        record_fallback(
+            component='other',
+            from_mode=provider,
+            to_mode='anthropic',
+            reason='config_incomplete',
+            outcome='recovered',
+            log=logger,
+        )
+        return 'anthropic'
+    return provider
 
 
 async def _resolve_jit_conversation_retrieval(uid: str) -> bool:
@@ -1161,13 +1180,15 @@ async def _run_openai_agent_stream(
     full_response: list,
     safety_guard: AgentSafetyGuard,
     configurable: dict,
+    *,
+    model_feature: str = 'chat_agent',
 ) -> Optional[str]:
-    """Run the managed agent loop through the OpenAI chat-completions contract."""
+    """Run the agent loop through an OpenAI-compatible chat-completions contract."""
     try:
-        chat_model = get_llm('chat_agent', streaming=True)
+        chat_model = get_llm(model_feature, streaming=True)
         chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
     except Exception as error:
-        await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+        await handle_llm_error_async(error, 'openai', feature=model_feature)
         # ``put_data`` alone reaches the live stream but not the persisted answer, so the
         # router would overwrite this apology with its own canned error.
         await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
@@ -1193,7 +1214,7 @@ async def _run_openai_agent_stream(
                 usage_token = None
                 user_id = configurable.get('user_id') if isinstance(configurable, dict) else None
                 if isinstance(user_id, str) and user_id:
-                    usage_token = set_usage_context(user_id, 'chat_agent')
+                    usage_token = set_usage_context(user_id, model_feature)
                 try:
                     async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
                         chunks.append(chunk)
@@ -1237,7 +1258,7 @@ async def _run_openai_agent_stream(
                     await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
                     continue
 
-                await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+                await handle_llm_error_async(error, 'openai', feature=model_feature, model=get_model(model_feature))
                 await _put_outcome_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
@@ -1403,6 +1424,7 @@ async def execute_agentic_chat_stream(
     # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
     # loading cannot silently consume the first-stream-event window.
     gateway_feature_mode = False
+    direct_openai_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
@@ -1417,8 +1439,14 @@ async def execute_agentic_chat_stream(
             # Omi-managed chat-agent is always the OpenAI/Luna runner. Anthropic BYOK
             # no longer selects a second Messages path. CHAT_AGENT_ROUTE=direct is
             # honored inside get_llm() as a kill switch onto direct OpenAI.
+            # CHAT_PROVIDER=openai selects the chat_graph feature on the same runner.
+            direct_openai_mode = _configured_chat_provider() == 'openai'
             gateway_feature_mode = should_route_chat_agent_through_gateway()
-            logger.debug('Chat agent live runner=openai gateway_lane=%s', gateway_feature_mode)
+            logger.debug(
+                'Chat agent live runner=openai gateway_lane=%s chat_provider=%s',
+                gateway_feature_mode,
+                'openai' if direct_openai_mode else 'anthropic',
+            )
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
@@ -1589,9 +1617,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             }
 
     # Live path is always the OpenAI-compatible runner (gateway Luna or direct OpenAI).
-    agent_runner = _run_openai_agent_stream
+    # CHAT_PROVIDER=openai attributes usage/errors to chat_graph; otherwise chat_agent.
     task = asyncio.create_task(
-        agent_runner(
+        _run_openai_agent_stream(
             system_prompt,
             anthropic_messages,
             tool_schemas,
@@ -1600,6 +1628,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             full_response,
             safety_guard,
             configurable,
+            model_feature='chat_graph' if direct_openai_mode else 'chat_agent',
         )
     )
 
