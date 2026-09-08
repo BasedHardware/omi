@@ -37,7 +37,8 @@ export type HistoryResult =
         | { olderCursor: null; hasOlder: false };
       capabilities: typeof CHAT_CAPABILITIES;
     }
-  | "invalid_cursor";
+  | "invalid_cursor"
+  | "unavailable";
 
 export type SettingsIdentity = {
   displayName: string;
@@ -220,8 +221,14 @@ export async function readHistory(
   const hasOlder = rows.length > limit;
   const pageRows = rows.slice(0, limit).reverse();
   const oldest = pageRows[0];
+  const messages: ChatMessage[] = [];
+  for (const row of pageRows) {
+    const message = await projectHistoryMessage(db, accountId, row);
+    if (message === null) return "unavailable";
+    messages.push(message);
+  }
   return {
-    messages: pageRows.map((row) => storedMessage(row)),
+    messages,
     page:
       hasOlder && oldest !== undefined
         ? { olderCursor: encodeCursor(oldest.position), hasOlder: true }
@@ -483,7 +490,7 @@ async function readMessage(
     .bind(id, accountId)
     .first<StoredMessage>();
   if (row === null) return null;
-  return storedMessage(row);
+  return parseStoredMessage(row);
 }
 
 async function nextPosition(
@@ -537,16 +544,78 @@ function computePayloadHash(input: ChatCreate): string {
   });
 }
 
-function storedMessage(row: StoredMessage): ChatMessage {
-  if (row.payload !== null) return JSON.parse(row.payload) as ChatMessage;
-  const base = {
-    id: recordId(
+async function projectHistoryMessage(
+  db: D1Database,
+  accountId: string,
+  row: StoredMessage
+): Promise<ChatMessage | null> {
+  const parsed = parseStoredMessage(row);
+  if (parsed === null) return null;
+  if (parsed.sender !== "ai") {
+    return { ...parsed, sender: "human", generationOutcome: null };
+  }
+  const outcome = historyOutcomeFromTerminal(
+    await readGenerationEvents(db, accountId, row.id),
+    parsed
+  );
+  return outcome === null ? null : { ...parsed, generationOutcome: outcome };
+}
+
+function historyOutcomeFromTerminal(
+  events: GenerationEvent[],
+  message: ChatMessage
+): "completed" | "cancelled" | null {
+  const terminals = events.filter((event) => isTerminal(event));
+  if (terminals.length !== 1) return null;
+  const terminal = terminals[0]!;
+  if (terminal.kind !== "done" && terminal.kind !== "cancelled") return null;
+  if (terminal.message === null || terminal.message === undefined) return null;
+  if (
+    terminal.message.id !== message.id ||
+    terminal.message.text !== message.text ||
+    terminal.message.sender !== "ai"
+  ) {
+    return null;
+  }
+  return terminal.kind === "done" ? "completed" : "cancelled";
+}
+
+function parseStoredMessage(row: StoredMessage): ChatMessage | null {
+  if (row.payload !== null) {
+    try {
+      const parsed = JSON.parse(row.payload) as unknown;
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      )
+        return null;
+      const message = parsed as ChatMessage;
+      if (
+        message.sender !== row.sender ||
+        message.id !== row.id ||
+        message.text !== row.text
+      ) {
+        return null;
+      }
+      return message;
+    } catch {
+      return null;
+    }
+  }
+  let id: ChatMessage["id"];
+  try {
+    id = recordId(
       row.id.startsWith("generation:")
         ? row.id.slice("generation:".length)
         : row.id
-    ),
+    );
+  } catch {
+    return null;
+  }
+  const base = {
+    id,
     text: row.text,
-    sender: row.sender,
     type: "text" as const,
     createdAt: row.createdAt,
     updatedAt: row.createdAt,
@@ -570,14 +639,20 @@ function storedMessage(row: StoredMessage): ChatMessage {
     revision: String(row.position),
     attachments: [],
   };
-  return row.sender === "human"
-    ? { ...base, sender: "human", generationOutcome: null }
-    : {
-        ...base,
-        sender: "ai",
-        generationOutcome:
-          row.generationOutcome === "cancelled" ? "cancelled" : "completed",
-      };
+  if (row.sender === "human") {
+    return { ...base, sender: "human", generationOutcome: null };
+  }
+  if (
+    row.generationOutcome !== "completed" &&
+    row.generationOutcome !== "cancelled"
+  ) {
+    return null;
+  }
+  return {
+    ...base,
+    sender: "ai",
+    generationOutcome: row.generationOutcome,
+  };
 }
 
 function parseEvent(payload: string): GenerationEvent {

@@ -1255,6 +1255,86 @@ describe("worker request contract", () => {
     }
   });
 
+  test("history GET does not complete assistant rows without a unique terminal event", async () => {
+    const id = "orphan-assistant";
+    const createdAt = 1;
+    const message = {
+      id,
+      text: "invented answer",
+      sender: "ai" as const,
+      type: "text",
+      createdAt,
+      updatedAt: createdAt,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      generationOutcome: "completed" as const,
+      revision: "1",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', 1, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        message.text,
+        createdAt,
+        JSON.stringify(message)
+      )
+      .run();
+
+    const orphan = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(orphan.status).toBe(503);
+    expect((await orphan.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        JSON.stringify({ id: "2", kind: "done", message })
+      )
+      .run();
+
+    const completed = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(completed.status).toBe(200);
+    const body = (await completed.json()) as {
+      messages: Array<{ id: string; generationOutcome: string | null }>;
+    };
+    expect(body.messages).toEqual([
+      expect.objectContaining({ id, generationOutcome: "completed" }),
+    ]);
+
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, NULL, 2, NULL)"
+      )
+      .bind("null-outcome-assistant", "test-account", "also invented", 2)
+      .run();
+    const missingOutcome = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(missingOutcome.status).toBe(503);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",

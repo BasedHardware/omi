@@ -444,9 +444,11 @@ export async function handleChatHistory(
     olderCursor,
     chatSessionId
   );
-  return history === "invalid_cursor"
-    ? backendError("bad_request", "edit_request", 400)
-    : json(history);
+  if (history === "invalid_cursor")
+    return backendError("bad_request", "edit_request", 400);
+  if (history === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  return json(history);
 }
 
 export async function handleChatCreate(

@@ -292,7 +292,9 @@ Cloud Linux after `608781ccb9`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `5b223ca4b7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home and Composer still disable Ask when the write door is nested `not_found` / `development_backend_unsupported`. The Ask field no longer keeps live input treatment while unavailable; it uses the same muted 0.35 opacity as unavailable Send. Desktop Search stays editable. This does not omit Ask or invent a chat.write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact Home connection-status honesty slice: compact Home no longer says Omi disconnected when Bluetooth is on and no device is connected. That header says Omi not connected instead of claiming a dropped session. Bluetooth-off copy stays Bluetooth off. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `68ecd0ce27`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer says Omi disconnected when Bluetooth is on and no device is connected. That header says Omi not connected instead of claiming a dropped session. Bluetooth-off copy stays Bluetooth off. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Worker chat-history terminal-event slice: Worker `GET /v1/chat-messages` no longer projects an assistant row as completed when it lacks a unique done or cancelled generation event. An orphan or payload-null assistant is retryable 503 instead of a silent completed answer, matching production history GET. Human rows are unchanged. This does not invent a chat.write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
