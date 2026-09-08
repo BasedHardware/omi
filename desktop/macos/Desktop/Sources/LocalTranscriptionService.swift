@@ -48,11 +48,21 @@ final class LocalTranscriptionService: @unchecked Sendable {
     let durSec: Double
   }
 
+  typealias SpeakerRelabelHandler = @MainActor ([Int: LocalSpeakerRegistry.Resolution]) -> Void
+
   private let language: String
-  /// Source-based diarization: mic = the user ("You"), system audio = another speaker.
+  /// Which capture lane this instance transcribes. Speaker identity comes from
+  /// `speakerDiarizer`; when it is unavailable the lane itself is the label
+  /// (mic = the user "You", system audio = Speaker 1), as before on-device diarization.
   private let isUser: Bool
-  private let speakerLabel: String
-  private let speakerId: Int
+  private let lane: LocalTranscriptionLane
+  private let speakerDiarizer: LocalSpeakerDiarizer?
+  private var fallbackResolution: LocalSpeakerRegistry.Resolution {
+    LocalSpeakerRegistry.Resolution(speakerId: isUser ? 0 : 1, isUser: isUser)
+  }
+  /// Longest the first window waits for the speaker models once Parakeet is ready. Past it,
+  /// windows go out with lane labels and pick up real speaker ids when the models arrive.
+  private let diarizerReadyGraceSeconds = 20.0
   private let sampleRate = 16000
   /// Longest stretch transcribed at once. A window also closes early when the speaker
   /// pauses — see `silenceTailSeconds` — so this is the ceiling, not the cadence.
@@ -76,6 +86,9 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// Fired (on the main actor) if the Parakeet model fails to download/load. Lets AppState
   /// fall back to cloud STT instead of silently producing a blank transcript.
   private var onModelLoadFailed: (@MainActor () -> Void)?
+  /// Fired (on the main actor) when the diarizer moves already-emitted segments to another
+  /// speaker — e.g. the provisional "You" turned out to be the other person in the room.
+  private var onSpeakerRelabel: SpeakerRelabelHandler?
 
   // 16 kHz mono Float32 sample buffer, guarded by `lock`.
   private let lock = NSLock()
@@ -91,22 +104,33 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
   private var pumpTask: Task<Void, Never>?
 
-  init(language: String = "en", isUser: Bool = true) {
+  init(language: String = "en", isUser: Bool = true, speakerDiarizer: LocalSpeakerDiarizer? = .shared) {
     self.language = language
     self.isUser = isUser
-    self.speakerLabel = isUser ? "SPEAKER_00" : "SPEAKER_01"
-    self.speakerId = isUser ? 0 : 1
+    self.lane = isUser ? .microphone : .systemAudio
+    self.speakerDiarizer = speakerDiarizer
   }
 
   /// Begin loading the model (async) and start the periodic flush loop.
   /// `onModelLoadFailed` fires once if the model can't load, so the caller can fall back
   /// to cloud transcription instead of recording into a void.
-  func start(onSegments: @escaping SegmentsHandler, onModelLoadFailed: (@MainActor () -> Void)? = nil) {
+  func start(
+    onSegments: @escaping SegmentsHandler,
+    onModelLoadFailed: (@MainActor () -> Void)? = nil,
+    onSpeakerRelabel: SpeakerRelabelHandler? = nil
+  ) {
     self.onSegments = onSegments
     self.onModelLoadFailed = onModelLoadFailed
+    self.onSpeakerRelabel = onSpeakerRelabel
 
     Task { [weak self] in
       guard let self else { return }
+      // Speaker models load alongside Parakeet (both are cached after the first run).
+      let diarizer = self.speakerDiarizer
+      let diarizerLoad = Task<Void, Never> {
+        guard let diarizer else { return }
+        await diarizer.prepare()
+      }
       do {
         // Test hook: force a model-load failure to exercise the cloud fallback path.
         // Toggle with env OMI_FORCE_PARAKEET_FAIL=1 or `defaults write <bundle> forceParakeetFail -bool true`.
@@ -123,6 +147,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let models = try await AsrModels.downloadAndLoad(version: version)
         let manager = AsrManager()
         try await manager.loadModels(models)
+        await Self.wait(for: diarizerLoad, upTo: self.diarizerReadyGraceSeconds)
         self.lock.withLock {
           self.asrManager = manager
           self.isReady = true
@@ -277,12 +302,23 @@ final class LocalTranscriptionService: @unchecked Sendable {
         text.removeFirst()
       }
 
+      // Who said it: the shared on-device diarizer, or the lane itself when it is unavailable.
+      // Only windows with real text reach here, so silence and hallucinations never enter the
+      // speaker clusters.
+      let outcome = await speakerDiarizer?.resolve(
+        window: snapshot.window, durationSeconds: snapshot.durSec, rms: rms, lane: lane)
+      let resolution = outcome?.resolution ?? fallbackResolution
+      if let relabels = outcome?.relabels, !relabels.isEmpty, self.onSpeakerRelabel != nil {
+        // Earlier segments move first so the transcript never shows two "You"s at once.
+        await MainActor.run { self.onSpeakerRelabel?(relabels) }
+      }
+
       let segment = TranscriptionService.BackendSegment(
         id: UUID().uuidString,
         text: text,
-        speaker: speakerLabel,
-        speaker_id: speakerId,
-        is_user: isUser,
+        speaker: resolution.speakerLabel,
+        speaker_id: resolution.speakerId,
+        is_user: resolution.isUser,
         person_id: nil,
         start: snapshot.startSec,
         end: snapshot.startSec + snapshot.durSec,
@@ -296,10 +332,23 @@ final class LocalTranscriptionService: @unchecked Sendable {
       }
       log(
         String(
-          format: "LocalTranscriptionService[%@]: %.1fs rms=%.4f conf=%.2f rtfx=%.0fx → %@",
-          isUser ? "mic" : "sys", snapshot.durSec, rms, result.confidence, result.rtfx, text))
+          format: "LocalTranscriptionService[%@]: %.1fs rms=%.4f conf=%.2f rtfx=%.0fx spk=%d%@ d=%.2f → %@",
+          isUser ? "mic" : "sys", snapshot.durSec, rms, result.confidence, result.rtfx,
+          resolution.speakerId, resolution.isUser ? "(you)" : (outcome == nil ? "(lane)" : ""),
+          outcome?.nearestDistance ?? -1, text))
     } catch {
       logError("LocalTranscriptionService: transcribe failed", error: error)
+    }
+  }
+
+  /// Await `task` for at most `seconds`; the task keeps running if the deadline passes.
+  private static func wait(for task: Task<Void, Never>, upTo seconds: Double) async {
+    let deadline = Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { await task.value }
+      group.addTask { await deadline.value }
+      await group.next()
+      group.cancelAll()
     }
   }
 

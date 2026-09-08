@@ -39,6 +39,9 @@ enum DefaultsKey: String {
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+  /// L2-normalized WeSpeaker embedding of the user's voice, learned by on-device transcription
+  /// so "You" is recognised from the first sentence of the next session (`LocalSpeakerDiarizer`).
+  case localSpeakerUserVoiceprint = "localSpeakerUserVoiceprint"
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"

@@ -617,6 +617,44 @@ actor TranscriptionStorage {
       return updatedRows
     }
   }
+  /// Move every segment of `sessionId` whose speaker id is a key of `relabels` to that key's
+  /// new speaker id / label / isUser, in one statement so a swap (0↔1) cannot double-map.
+  /// `personId` is kept unless the row becomes the user. Returns the number of rows moved.
+  @discardableResult
+  func relabelSpeakers(
+    sessionId: Int64,
+    relabels: [Int: LocalSpeakerRegistry.Resolution]
+  ) async throws -> Int {
+    guard !relabels.isEmpty else { return 0 }
+    let db = try await ensureInitialized()
+    let entries = relabels.sorted { $0.key < $1.key }
+    let speakerCase = entries.map { _ in "WHEN ? THEN ?" }.joined(separator: " ")
+    let placeholders = entries.map { _ in "?" }.joined(separator: ", ")
+    var arguments: [DatabaseValueConvertible?] = []
+    for (from, to) in entries { arguments += [from, to.speakerId] }
+    for (from, to) in entries { arguments += [from, to.speakerLabel] }
+    for (from, to) in entries { arguments += [from, to.isUser] }
+    for (from, to) in entries { arguments += [from, to.isUser] }
+    arguments.append(sessionId)
+    for (from, _) in entries { arguments.append(from) }
+    let statementArguments = StatementArguments(arguments)
+
+    return try await db.write { database -> Int in
+      try database.execute(
+        sql: """
+          UPDATE transcription_segments
+          SET speaker = CASE speaker \(speakerCase) ELSE speaker END,
+              speakerLabel = CASE speaker \(speakerCase) ELSE speakerLabel END,
+              isUser = CASE speaker \(speakerCase) ELSE isUser END,
+              personId = CASE WHEN (CASE speaker \(speakerCase) ELSE 0 END) THEN NULL ELSE personId END
+          WHERE sessionId = ? AND speaker IN (\(placeholders))
+          """,
+        arguments: statementArguments
+      )
+      return database.changesCount
+    }
+  }
+
   /// Get all segments for a session ordered by segmentOrder
   func getSegments(sessionId: Int64) async throws -> [TranscriptionSegmentRecord] {
     let db = try await ensureInitialized()

@@ -205,36 +205,18 @@ actor ConversationFinalizationService {
       return false
     }
 
-    var merged: [APIClient.UploadSegment] = []
-    for seg in bundle.segments {
-      let upload = APIClient.UploadSegment(
-        text: seg.text,
-        speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
-        speaker_id: seg.speaker,
-        is_user: seg.isUser,
-        person_id: seg.personId,
-        start: seg.startTime,
-        end: seg.endTime
-      )
-      if let last = merged.last,
-        last.speaker_id == upload.speaker_id,
-        last.speaker == upload.speaker,
-        last.is_user == upload.is_user,
-        last.person_id == upload.person_id
-      {
-        merged[merged.count - 1] = APIClient.UploadSegment(
-          text: last.text + " " + upload.text,
-          speaker: last.speaker,
-          speaker_id: last.speaker_id,
-          is_user: last.is_user,
-          person_id: last.person_id,
-          start: last.start,
-          end: upload.end
+    let merged = Self.mergeConsecutiveSpeakerRuns(
+      bundle.segments.map { seg in
+        APIClient.UploadSegment(
+          text: seg.text,
+          speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
+          speaker_id: seg.speaker,
+          is_user: seg.isUser,
+          person_id: seg.personId,
+          start: seg.startTime,
+          end: seg.endTime
         )
-      } else {
-        merged.append(upload)
-      }
-    }
+      })
 
     let uploadSegments = Self.compactSegmentsForBackendLimit(merged)
     if uploadSegments.count != merged.count {
@@ -338,6 +320,39 @@ actor ConversationFinalizationService {
         error: error
       )
     }
+  }
+
+  /// Join consecutive rows of one speaker into a single upload segment.
+  ///
+  /// A run only extends forward in time. The mic and system-audio lanes keep independent
+  /// clocks, and since on-device diarization a remote voice and its mic echo share a speaker
+  /// id, so a system row can follow a mic row of the same speaker with an *earlier* start;
+  /// joining those produced `end < start` and the backend rejected the whole conversation
+  /// ("Segment 3: end time must be after start time", 422). Such a row starts a new run.
+  static func mergeConsecutiveSpeakerRuns(_ segments: [APIClient.UploadSegment]) -> [APIClient.UploadSegment] {
+    var merged: [APIClient.UploadSegment] = []
+    for upload in segments {
+      if let last = merged.last,
+        last.speaker_id == upload.speaker_id,
+        last.speaker == upload.speaker,
+        last.is_user == upload.is_user,
+        last.person_id == upload.person_id,
+        upload.start >= last.start
+      {
+        merged[merged.count - 1] = APIClient.UploadSegment(
+          text: last.text + " " + upload.text,
+          speaker: last.speaker,
+          speaker_id: last.speaker_id,
+          is_user: last.is_user,
+          person_id: last.person_id,
+          start: last.start,
+          end: max(last.end, upload.end)
+        )
+      } else {
+        merged.append(upload)
+      }
+    }
+    return merged
   }
 
   static func compactSegmentsForBackendLimit(

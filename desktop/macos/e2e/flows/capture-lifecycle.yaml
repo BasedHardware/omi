@@ -14,6 +14,8 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
+  - desktop/macos/Desktop/Sources/LocalTranscription/LocalSpeakerRegistry.swift
+  - desktop/macos/Desktop/Sources/LocalTranscription/LocalSpeakerDiarizer.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift

@@ -1,0 +1,3 @@
+{
+  "change": "Improved live transcription on Apple Silicon so other people talking near your Mac are labeled as separate speakers instead of as you, and your own voice is recognised across sessions"
+}
