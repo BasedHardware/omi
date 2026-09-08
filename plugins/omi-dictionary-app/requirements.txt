@@ -1,0 +1,4 @@
+fastapi==0.121.0
+httpx==0.28.0
+pydantic==2.11.10
+uvicorn==0.34.0
