@@ -3,6 +3,7 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
+  appCategoryCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -244,7 +245,7 @@ function cloudAppSource(app: CloudApp): string {
     return app.author;
   }
   if (app.category.length > 0) {
-    return app.category;
+    return appCategoryCopy(app.category);
   }
   return app.description;
 }

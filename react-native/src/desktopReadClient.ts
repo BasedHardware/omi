@@ -116,6 +116,10 @@ export function developerWebhookTypeCopy(type: string): string {
   return accountWireCopy(type, 'Webhook unavailable');
 }
 
+export function appCategoryCopy(category: string): string {
+  return accountWireCopy(category, '');
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

@@ -909,3 +909,38 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('audio_bytes');
   expect(tree).not.toContain('day_summary');
 });
+
+test('Apps category labels are not raw wire tokens', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Catalog fixture app',
+            category: 'productivity',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).toContain('Productivity');
+  expect(tree).not.toContain('productivity');
+});

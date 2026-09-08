@@ -1293,6 +1293,46 @@ test('successful empty Apps enabled reads still report catalogue tiles as not co
   expect(tree).not.toContain(desktopAppsUnavailableCopy);
 });
 
+test('Apps gallery category labels are not raw wire tokens', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Catalog fixture app',
+        description: '',
+        category: 'productivity',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).toContain('Productivity');
+  expect(tree).not.toContain('productivity');
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(

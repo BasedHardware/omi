@@ -24,6 +24,7 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
+  appCategoryCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -31,7 +32,7 @@ import {styles} from '../ui/styles';
 
 function appRowMeta(app: CloudApp, installKnown: boolean): string {
   return [
-    app.category.length > 0 ? app.category : null,
+    app.category.length > 0 ? appCategoryCopy(app.category) : null,
     app.author.length > 0 ? app.author : null,
     installKnown ? (app.enabled ? 'Installed' : 'Not installed') : null,
   ]

@@ -8,6 +8,7 @@ import {
   conversationStatusCopy,
   dataProtectionCopy,
   developerWebhookTypeCopy,
+  appCategoryCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -627,6 +628,12 @@ test('developer webhook titles are not raw API keys', () => {
   expect(developerWebhookTypeCopy('day_summary')).toBe('Day Summary');
   expect(developerWebhookTypeCopy('button_event')).toBe('Button event');
   expect(developerWebhookTypeCopy('')).toBe('Webhook unavailable');
+});
+
+test('app category copy is not a raw wire token', () => {
+  expect(appCategoryCopy('productivity')).toBe('Productivity');
+  expect(appCategoryCopy('health-fitness')).toBe('Health fitness');
+  expect(appCategoryCopy('')).toBe('');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

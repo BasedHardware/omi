@@ -252,7 +252,9 @@ Cloud Linux after `88cc930056`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `3b6b12edb2`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Mobile and desktop Settings Developer webhook rows use the same product labels as web Settings (Conversation Events, Real-time Transcript, Audio Bytes, Day Summary) instead of API keys such as memory_created. Unknown types stay visible as humanized copy. Empty types say Webhook unavailable. This does not invent a webhook producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Rewind retention slice: desktop Settings Data Retention shows Forever instead of 0. Native capture treats days greater than 0 as an expiry cutoff and 0 as no cutoff. Stored rewindRetentionDays stays 0. 7 / 14 / 30 stay numeric. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `ed2cac9659`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Desktop Settings Data Retention shows Forever instead of 0. Native capture treats days greater than 0 as an expiry cutoff and 0 as no cutoff. Stored rewindRetentionDays stays 0. 7 / 14 / 30 stay numeric. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Apps category copy slice: mobile Apps and the macOS Apps gallery humanize category tokens such as productivity instead of showing the raw enum. Empty categories stay omitted. This does not invent an Apps catalogue producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
