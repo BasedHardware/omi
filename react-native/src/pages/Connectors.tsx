@@ -261,7 +261,7 @@ export function ConnectorsPage({
                           <Text style={styles.cloudRowMeta}>{meta}</Text>
                         )}
                       </View>
-                      {writesAvailable && (
+                      {writesAvailable && installKnown && (
                         <FocusPressable
                           accessibilityLabel={
                             app.enabled

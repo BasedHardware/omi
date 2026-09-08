@@ -547,7 +547,7 @@ test('nested non-retryable Apps enabled reads do not claim catalogue apps are in
   expect(textOf(renderer)).not.toContain('No installed apps.');
   expect(textOf(renderer)).toContain('Owned app');
   expect(textOf(renderer)).not.toContain('Not installed');
-  expect(labelsOf(renderer)).toContain('Install Owned app');
+  expect(labelsOf(renderer)).not.toContain('Install Owned app');
   expect(labelsOf(renderer)).not.toContain('Remove Owned app');
 });
 
