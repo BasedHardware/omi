@@ -7,6 +7,7 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
+import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {DesktopOnboarding} from './DesktopOnboarding';
 import {
   desktopNavBarHeight,
@@ -68,6 +69,7 @@ type Props = TaskMutationProps & {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
+  postSetupHomeCue?: PostSetupHomeCue;
   session: DesktopSession;
   signingIn: boolean;
   draft: string;
@@ -115,6 +117,7 @@ export function DesktopApp({
   onWorkspaceReload,
   onPreferencesChange,
   outcomes,
+  postSetupHomeCue = null,
   reads,
   readsPhase,
   session,
@@ -246,7 +249,11 @@ export function DesktopApp({
         route={route}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
-        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+        <DesktopReadBanner
+          onRefresh={onRefresh}
+          postSetupHomeCue={postSetupHomeCue}
+          readsPhase={readsPhase}
+        />
       ) : null}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
@@ -257,6 +264,7 @@ export function DesktopApp({
             onOpenConversations={() => setRoute('Conversations')}
             onRefresh={onRefresh}
             outcomes={outcomes}
+            postSetupHomeCue={postSetupHomeCue}
             reads={reads}
             readsPhase={readsPhase}
           />

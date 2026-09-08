@@ -13,7 +13,8 @@ import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopTokens} from '../desktop/tokens';
 import {Button} from './Button';
 import {OmiAvatar} from './OmiAvatar';
-import {tokens} from './tokens';
+import {color as uiColor, tokens} from './tokens';
+import {SESSION_UNREACHABLE_COPY} from '../app/onboardingCopy';
 
 const DOTS_SIZE = 104;
 
@@ -100,8 +101,19 @@ export function Onboarding({
         </Text>
         {error == null ? null : (
           <Text
-            accessibilityLabel={setupRequired ? 'Setup error' : 'Sign-in error'}
-            style={[styles.error, desktop && styles.desktopCopy]}>
+            accessibilityLabel={
+              setupRequired
+                ? 'Setup error'
+                : error === SESSION_UNREACHABLE_COPY
+                ? 'Session unreachable'
+                : 'Sign-in error'
+            }
+            style={[
+              styles.error,
+              desktop && styles.desktopCopy,
+              error === SESSION_UNREACHABLE_COPY &&
+                (desktop ? styles.desktopUnreachable : styles.unreachable),
+            ]}>
             {error}
           </Text>
         )}
@@ -231,9 +243,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
   },
+  unreachable: {
+    color: uiColor.danger,
+  },
   signIn: {marginTop: tokens.space.sm, paddingHorizontal: 28},
   desktopTitle: {color: desktopTokens.color.ink},
   desktopCopy: {color: desktopTokens.color.inkMuted},
+  desktopUnreachable: {color: desktopTokens.color.red},
   desktopButton: {backgroundColor: desktopTokens.color.dark},
   desktopButtonLabel: {color: desktopTokens.color.white},
 });
