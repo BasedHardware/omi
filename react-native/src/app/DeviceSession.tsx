@@ -94,6 +94,9 @@ export function DeviceSession({
       : 'Connected';
   const scanUnavailable = !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
   const scanDisabled = deviceBusy || scanUnavailable;
+  const reconnectUnavailable =
+    nativeSnapshot !== null &&
+    !isBluetoothScanAvailable(nativeSnapshot.bluetooth);
   const devices = (nativeSnapshot?.devices ?? []).map(device => ({
     ...device,
     connecting:
@@ -122,9 +125,16 @@ export function DeviceSession({
           <FocusPressable
             accessibilityRole="button"
             accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
-            disabled={deviceBusy || rememberedBusy}
-            onPress={() => onToggle(rememberedDevice.id, false)}
-            style={styles.scanButton}>
+            disabled={deviceBusy || rememberedBusy || reconnectUnavailable}
+            onPress={
+              reconnectUnavailable
+                ? () => undefined
+                : () => onToggle(rememberedDevice.id, false)
+            }
+            style={[
+              styles.scanButton,
+              reconnectUnavailable && styles.scanButtonUnavailable,
+            ]}>
             <Text style={styles.scanButtonText}>Reconnect</Text>
           </FocusPressable>
         )}

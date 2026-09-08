@@ -463,3 +463,59 @@ test('Bluetooth off keeps a dimmed Scan control instead of a live Scan pill', as
     live.unmount();
   });
 });
+
+test('Bluetooth off keeps a dimmed Reconnect control and a live Forget control', async () => {
+  const onToggle = jest.fn();
+  const onForget = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOff',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: '',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        rememberedDevice={{id: 'saved-id', name: 'My Omi'}}
+        onForgetRemembered={onForget}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={onToggle}
+      />,
+    );
+  });
+  const reconnect = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Reconnect My Omi',
+  );
+  expect(reconnect.props.disabled).toBe(true);
+  const reconnectStyle =
+    typeof reconnect.props.style === 'function'
+      ? reconnect.props.style({pressed: false})
+      : reconnect.props.style;
+  expect([reconnectStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Reconnect');
+  reconnect.props.onPress();
+  expect(onToggle).not.toHaveBeenCalled();
+  const forget = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Forget My Omi',
+  );
+  expect(forget.props.disabled).toBe(false);
+  const forgetStyle =
+    typeof forget.props.style === 'function'
+      ? forget.props.style({pressed: false})
+      : forget.props.style;
+  expect(JSON.stringify([forgetStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  forget.props.onPress();
+  expect(onForget).toHaveBeenCalledTimes(1);
+  await act(async () => renderer.unmount());
+});
