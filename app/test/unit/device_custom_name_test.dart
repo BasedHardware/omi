@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/device.dart';
 
 BtDevice _device({String id = 'AA:BB:CC:DD:EE:FF', String name = 'Omi'}) =>
     BtDevice(id: id, name: name, type: DeviceType.omi, rssi: 0);
@@ -81,6 +82,20 @@ void main() {
 
       expect(_device().displayName, 'Omi');
       expect(prefs.deviceCustomNames['11:22:33:44:55:66'], 'Travel Pendant');
+    });
+
+    test('the pairing list shows the custom name', () async {
+      await SharedPreferencesUtil().setDeviceCustomName('AA:BB:CC:DD:EE:FF', 'Studio Pendant');
+      final devices = [_device(), _device(id: '11:22:33:44:55:66')];
+
+      expect(DeviceUtils.listLabel(devices.first, devices), 'Studio Pendant');
+      expect(DeviceUtils.listLabel(devices.last, devices), 'Omi');
+    });
+
+    test('the pairing list still disambiguates two devices sharing a name', () {
+      final devices = [_device(), _device(id: '11:22:33:44:55:66')];
+
+      expect(DeviceUtils.listLabel(devices.first, devices), contains('Omi ('));
     });
 
     test('falls back to the advertised name when stored json is corrupt', () async {

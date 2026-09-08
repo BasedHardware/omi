@@ -37,6 +37,12 @@ class DeviceUtils {
     }
   }
 
+  static String listLabel(BtDevice device, List<BtDevice> visible) {
+    final name = device.displayName;
+    final sameNameCount = visible.where((d) => d.displayName == name).length;
+    return sameNameCount > 1 ? '$name (${device.getShortId()})' : name;
+  }
+
   static Future<(String, bool, String)> shouldUpdateFirmware({
     required String currentFirmware,
     required Map latestFirmwareDetails,
