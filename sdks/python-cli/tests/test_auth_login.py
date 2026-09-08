@@ -91,6 +91,7 @@ def test_explicit_login_key_recovers_from_invalid_environment_key(config_path, r
     "api_base",
     [
         "ftp://user:secret@example.invalid/?token=private-token",
+        "http://user:secret@127.0.0.1:0/?token=private-token",
         "http://user:secret@127.0.0.1:99999/?token=private-token",
     ],
 )

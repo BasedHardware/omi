@@ -69,6 +69,7 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
     "api_base",
     [
         "ftp://user:secret@example.invalid/?token=private-token",
+        "http://user:secret@127.0.0.1:0/?token=private-token",
         "http://user:secret@127.0.0.1:99999/?token=private-token",
     ],
 )

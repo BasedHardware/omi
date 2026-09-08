@@ -259,7 +259,8 @@ transport exception details. This guarantee does not cover separate OAuth HTTP
 requests (token exchange, refresh, or API-key minting) or local companion API
 requests.
 
-The shared client requires a valid absolute `http://` or `https://` API base URL.
+The shared client requires a valid absolute `http://` or `https://` API base URL,
+with any explicit port in the range `1`–`65535` (port `0` is reserved).
 Invalid API base configuration is reported as a usage error (exit `1`) before
 the client attempts a request or refreshes credentials.
 
