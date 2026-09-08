@@ -3,9 +3,10 @@
 Connects Omi wearable devices to the OpenAlex Global Scholarly Knowledge Graph
 (250M+ research papers, 90M+ researchers, 100K+ institutions).
 Exposes 4 zero-auth voice tools for academic search, author metrics, institution
-rankings, and scientific concepts.
+rankings, and scientific topics.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 import httpx
@@ -16,28 +17,45 @@ from models import (
     SearchResearchPapersRequest,
     GetAuthorProfileRequest,
     GetInstitutionSummaryRequest,
+    ExploreAcademicTopicRequest,
     ExploreAcademicConceptRequest,
 )
 
 OPENALEX_BASE_URL = "https://api.openalex.org"
 REQUEST_TIMEOUT_SECONDS = 15.0
-DEFAULT_USER_AGENT = "OmiOpenAlexApp/1.0 (mailto:team@basedhardware.com; +https://omi.me)"
+DEFAULT_USER_AGENT = "OmiOpenAlexApp/1.0 (+https://omi.me)"
+
+_client_lock = asyncio.Lock()
+_global_client: Optional[httpx.AsyncClient] = None
+
+
+def _create_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=OPENALEX_BASE_URL,
+        headers={"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _global_client
+    if _global_client is None or _global_client.is_closed:
+        async with _client_lock:
+            if _global_client is None or _global_client.is_closed:
+                _global_client = _create_http_client()
+    return _global_client
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    headers = {
-        "User-Agent": DEFAULT_USER_AGENT,
-        "Accept": "application/json",
-    }
-    async with httpx.AsyncClient(
-        base_url=OPENALEX_BASE_URL,
-        headers=headers,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-        follow_redirects=True,
-    ) as client:
-        app.state.http_client = client
+async def lifespan(_: FastAPI):
+    global _global_client
+    _global_client = _create_http_client()
+    try:
         yield
+    finally:
+        if _global_client is not None and not _global_client.is_closed:
+            await _global_client.aclose()
 
 
 app = FastAPI(
@@ -48,20 +66,8 @@ app = FastAPI(
 )
 
 
-def _get_client() -> httpx.AsyncClient:
-    client = getattr(app.state, "http_client", None)
-    if client is None:
-        return httpx.AsyncClient(
-            base_url=OPENALEX_BASE_URL,
-            headers={"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            follow_redirects=True,
-        )
-    return client
-
-
 async def _fetch_openalex(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    client = _get_client()
+    client = await _get_client()
     try:
         response = await client.get(endpoint, params=params)
         if response.status_code == 404:
@@ -149,19 +155,19 @@ async def omi_tools():
                 },
             },
             {
-                "name": "explore_academic_concept",
-                "description": "Explore scientific or academic disciplines, topics, and concepts with publication counts and descriptions.",
-                "endpoint": "/tools/explore_academic_concept",
+                "name": "explore_academic_topic",
+                "description": "Explore scientific or academic topics, research clusters, and subfields with publication counts and domain hierarchy.",
+                "endpoint": "/tools/explore_academic_topic",
                 "method": "POST",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "concept": {
+                        "topic": {
                             "type": "string",
-                            "description": "Scientific concept or field (e.g. 'Quantum Computing', 'Epigenetics').",
+                            "description": "Scientific topic or research cluster (e.g. 'Quantum Computing', 'CRISPR Gene Editing').",
                         },
                     },
-                    "required": ["concept"],
+                    "required": ["topic"],
                 },
             },
         ],
@@ -171,10 +177,15 @@ async def omi_tools():
 @app.post("/tools/search_research_papers", response_model=ChatToolResponse)
 async def search_research_papers(req: SearchResearchPapersRequest) -> ChatToolResponse:
     try:
-        data = await _fetch_openalex("/works", params={"search": req.query, "per_page": req.limit})
+        params = {
+            "search": req.query,
+            "filter": "type:article|preprint|review",
+            "per_page": req.limit,
+        }
+        data = await _fetch_openalex("/works", params=params)
         works = data.get("results") or []
         if not works:
-            return ChatToolResponse(result=f"No academic papers found matching '{req.query}'.")
+            return ChatToolResponse(result=f"No academic research papers found matching '{req.query}'.")
 
         lines = [f"Found {len(works)} research papers for '{req.query}':"]
         for idx, work in enumerate(works, 1):
@@ -195,10 +206,20 @@ async def search_research_papers(req: SearchResearchPapersRequest) -> ChatToolRe
             if not authors_str:
                 authors_str = "Unknown Authors"
 
-            # Open Access PDF
-            oa = work.get("open_access") or {}
-            oa_url = oa.get("oa_url") if isinstance(oa, dict) else None
-            oa_str = f" | [Open Access PDF]({oa_url})" if oa_url else ""
+            # Open Access URL: distinguish between direct PDF and repository landing page
+            best_oa = work.get("best_oa_location") or {}
+            pdf_url = best_oa.get("pdf_url") if isinstance(best_oa, dict) else None
+            landing_url = best_oa.get("landing_page_url") if isinstance(best_oa, dict) else None
+            if not landing_url:
+                oa = work.get("open_access") or {}
+                landing_url = oa.get("oa_url") if isinstance(oa, dict) else None
+
+            if pdf_url:
+                oa_str = f" | [Open Access PDF]({pdf_url})"
+            elif landing_url:
+                oa_str = f" | [Open Access Link]({landing_url})"
+            else:
+                oa_str = ""
 
             # DOI
             doi = work.get("doi")
@@ -234,7 +255,7 @@ async def get_author_profile(req: GetAuthorProfileRequest) -> ChatToolResponse:
         if isinstance(mean_cited, (int, float)):
             mean_cited = f"{mean_cited:.2f}"
 
-        # Affiliations
+        # Affiliations (relabeled as last known institutions per OpenAlex semantics)
         affils = author.get("last_known_institutions") or []
         affil_names = [a.get("display_name") for a in affils if isinstance(a, dict) and a.get("display_name")]
         affil_str = ", ".join(affil_names[:2]) if affil_names else "Independent / Unaffiliated"
@@ -246,7 +267,7 @@ async def get_author_profile(req: GetAuthorProfileRequest) -> ChatToolResponse:
 
         lines = [
             f"**Researcher Profile: {name}**",
-            f"- Current Institution: {affil_str}",
+            f"- Last known institution(s): {affil_str}",
             f"- Total Publications: {works_count:,}",
             f"- Total Citations: {cited_by:,}",
             f"- h-index: {h_index} | i10-index: {i10_index} | 2-Yr Mean Citedness: {mean_cited}",
@@ -290,36 +311,42 @@ async def get_institution_summary(req: GetInstitutionSummaryRequest) -> ChatTool
         return ChatToolResponse(error=f"Unexpected error retrieving institution summary: {exc}")
 
 
+@app.post("/tools/explore_academic_topic", response_model=ChatToolResponse)
 @app.post("/tools/explore_academic_concept", response_model=ChatToolResponse)
-async def explore_academic_concept(req: ExploreAcademicConceptRequest) -> ChatToolResponse:
+async def explore_academic_topic(req: ExploreAcademicTopicRequest) -> ChatToolResponse:
     try:
-        data = await _fetch_openalex("/concepts", params={"search": req.concept, "per_page": 3})
-        concepts = data.get("results") or []
-        if not concepts:
-            return ChatToolResponse(result=f"No academic concept found for '{req.concept}'.")
+        query_topic = req.topic
+        data = await _fetch_openalex("/topics", params={"search": query_topic, "per_page": 3})
+        topics = data.get("results") or []
+        if not topics:
+            return ChatToolResponse(result=f"No academic research topic found for '{query_topic}'.")
 
-        conc = concepts[0]
-        name = conc.get("display_name") or req.concept
-        desc = conc.get("description") or "Scientific/academic topic"
-        level = conc.get("level") if conc.get("level") is not None else 0
-        level_map = {0: "Broad Domain", 1: "Major Discipline", 2: "Sub-Discipline", 3: "Specialized Field", 4: "Niche Research Topic"}
-        level_str = level_map.get(level, f"Level {level}")
-        works = conc.get("works_count") or 0
+        top = topics[0]
+        name = top.get("display_name") or query_topic
+        desc = top.get("description") or "Research topic cluster"
+        works = top.get("works_count") or 0
+        citations = top.get("cited_by_count") or 0
 
-        # Related concepts
-        related = conc.get("related_concepts") or []
-        related_names = [r.get("display_name") for r in related if isinstance(r, dict) and r.get("display_name")]
-        related_str = ", ".join(related_names[:4]) if related_names else "None listed"
+        subfield = top.get("subfield", {}).get("display_name") if isinstance(top.get("subfield"), dict) else None
+        field = top.get("field", {}).get("display_name") if isinstance(top.get("field"), dict) else None
+        domain = top.get("domain", {}).get("display_name") if isinstance(top.get("domain"), dict) else None
+        hierarchy_parts = [p for p in [domain, field, subfield] if p]
+        hierarchy_str = " > ".join(hierarchy_parts) if hierarchy_parts else "General Sciences"
+
+        keywords = top.get("keywords") or []
+        kw_str = ", ".join(keywords[:5]) if isinstance(keywords, list) and keywords else None
 
         lines = [
-            f"**Academic Concept: {name}**",
-            f"- Classification: {level_str}",
+            f"**Research Topic: {name}**",
+            f"- Domain Hierarchy: {hierarchy_str}",
             f"- Description: {desc}",
-            f"- Indexed Publications: {works:,}",
-            f"- Related Fields: {related_str}",
+            f"- Total Works: {works:,} | Citations: {citations:,}",
         ]
+        if kw_str:
+            lines.append(f"- Key Concepts: {kw_str}")
+
         return ChatToolResponse(result="\n".join(lines))
     except ValueError as exc:
         return ChatToolResponse(error=str(exc))
     except Exception as exc:
-        return ChatToolResponse(error=f"Unexpected error exploring academic concept: {exc}")
+        return ChatToolResponse(error=f"Unexpected error exploring academic topic: {exc}")

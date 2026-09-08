@@ -80,20 +80,28 @@ class GetInstitutionSummaryRequest(BaseModel):
         return cleaned
 
 
-class ExploreAcademicConceptRequest(BaseModel):
-    """Request model for exploring an academic concept or scientific field."""
+class ExploreAcademicTopicRequest(BaseModel):
+    """Request model for exploring an academic topic or research field."""
 
-    concept: str = Field(
-        ...,
-        min_length=2,
-        max_length=100,
-        description="Scientific or academic topic/concept (e.g. 'Quantum Computing', 'Epigenetics', 'Game Theory').",
+    topic: Optional[str] = Field(
+        default=None,
+        max_length=150,
+        description="Scientific topic, research cluster, or discipline (e.g. 'Quantum Computing', 'CRISPR Gene Editing').",
+    )
+    concept: Optional[str] = Field(
+        default=None,
+        max_length=150,
+        description="Alias for topic for backward compatibility.",
     )
 
-    @field_validator("concept")
-    @classmethod
-    def normalize_concept(cls, v: str) -> str:
-        cleaned = v.strip()
-        if len(cleaned) < 2:
-            raise ValueError("Concept name must contain at least 2 non-whitespace characters.")
-        return cleaned
+    @model_validator(mode="after")
+    def resolve_topic_or_concept(self):
+        target = self.topic or self.concept
+        if not target or len(target.strip()) < 2:
+            raise ValueError("A topic or concept name with at least 2 non-whitespace characters must be provided.")
+        self.topic = target.strip()
+        return self
+
+
+# Backward-compatibility alias
+ExploreAcademicConceptRequest = ExploreAcademicTopicRequest

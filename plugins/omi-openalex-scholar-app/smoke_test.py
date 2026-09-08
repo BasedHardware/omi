@@ -1,4 +1,4 @@
-"""Comprehensive local smoke test for OpenAlex Scholar Omi app."""
+"""Comprehensive local live smoke test for OpenAlex Scholar Omi app."""
 
 import asyncio
 import httpx
@@ -9,7 +9,7 @@ from main import (
     search_research_papers,
     get_author_profile,
     get_institution_summary,
-    explore_academic_concept,
+    explore_academic_topic,
     DEFAULT_USER_AGENT,
     REQUEST_TIMEOUT_SECONDS,
     OPENALEX_BASE_URL,
@@ -18,7 +18,7 @@ from models import (
     SearchResearchPapersRequest,
     GetAuthorProfileRequest,
     GetInstitutionSummaryRequest,
-    ExploreAcademicConceptRequest,
+    ExploreAcademicTopicRequest,
 )
 
 
@@ -34,18 +34,17 @@ async def run_smoke_tests():
     assert manifest.get("schema_version") == "1.0", "Manifest schema version mismatch"
     assert len(manifest.get("tools", [])) == 4, "Expected 4 tools in manifest"
     tool_names = [t["name"] for t in manifest["tools"]]
+    assert "explore_academic_topic" in tool_names, "Expected explore_academic_topic in tools"
     print("[PASS] Manifest verified. Registered tools:", tool_names)
 
-    # Initialize httpx client on app state for tool handlers
+    # Initialize client for tool handlers
     headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"}
     async with httpx.AsyncClient(
         base_url=OPENALEX_BASE_URL,
         timeout=REQUEST_TIMEOUT_SECONDS,
         headers=headers,
         follow_redirects=True,
-    ) as client:
-        app.state.http_client = client
-
+    ):
         print("\n--- 3. Testing Research Papers Search Tool (/tools/search_research_papers) ---")
         paper_req = SearchResearchPapersRequest(query="attention is all you need", limit=3)
         paper_res = await search_research_papers(paper_req)
@@ -61,6 +60,7 @@ async def run_smoke_tests():
         assert author_res.result is not None, f"Expected result, got error: {author_res.error}"
         assert "Yann LeCun" in author_res.result
         assert "h-index:" in author_res.result
+        assert "Last known institution(s):" in author_res.result
 
         print("\n--- 5. Testing Institution Summary Tool (/tools/get_institution_summary) ---")
         inst_req = GetInstitutionSummaryRequest(institution_name="Stanford University")
@@ -70,20 +70,26 @@ async def run_smoke_tests():
         assert "Stanford University" in inst_res.result
         assert "Total Research Publications:" in inst_res.result
 
-        print("\n--- 6. Testing Academic Concept Exploration Tool (/tools/explore_academic_concept) ---")
-        concept_req = ExploreAcademicConceptRequest(concept="Quantum Computing")
-        concept_res = await explore_academic_concept(concept_req)
-        print("Concept Result:\n", concept_res.result)
+        print("\n--- 6. Testing Academic Topic Exploration Tool (/tools/explore_academic_topic) ---")
+        topic_req = ExploreAcademicTopicRequest(topic="Quantum Computing")
+        topic_res = await explore_academic_topic(topic_req)
+        print("Topic Result:\n", topic_res.result)
+        assert topic_res.result is not None, f"Expected result, got error: {topic_res.error}"
+        assert "Domain Hierarchy:" in topic_res.result
+        assert "Total Works:" in topic_res.result
+
+        # Also test backward-compatibility alias with concept field
+        concept_req = ExploreAcademicTopicRequest(concept="CRISPR Gene Editing")
+        concept_res = await explore_academic_topic(concept_req)
         assert concept_res.result is not None, f"Expected result, got error: {concept_res.error}"
-        assert "quantum" in concept_res.result.lower()
-        assert "Indexed Publications:" in concept_res.result
+        assert "Research Topic:" in concept_res.result
 
         print("\n--- 7. Testing Validation and Error Handling ---")
         # Empty search results handling
         missing_paper_req = SearchResearchPapersRequest(query="xyznonexistentquery1234567890abc", limit=3)
         missing_paper_res = await search_research_papers(missing_paper_req)
         print("Missing Query Handling:\n", missing_paper_res.result)
-        assert "No academic papers found" in missing_paper_res.result
+        assert "No academic research papers found" in missing_paper_res.result
 
         # Missing author handling
         missing_author_req = GetAuthorProfileRequest(author_name="ZzzNonExistentAuthor998877")
@@ -101,6 +107,12 @@ async def run_smoke_tests():
         try:
             GetAuthorProfileRequest(author_name="a")
             assert False, "Should have rejected author name shorter than 2 chars"
+        except ValueError:
+            pass
+
+        try:
+            ExploreAcademicTopicRequest(topic="   ")
+            assert False, "Should have rejected whitespace-only topic"
         except ValueError:
             pass
 
