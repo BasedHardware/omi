@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Allow clearing an action item due date
+
+`omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
 ## Development
 
 ```bash
