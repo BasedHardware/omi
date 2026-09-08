@@ -55,3 +55,24 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
     result = cli_runner.invoke(app, ["--json", "memory", "list"])
     assert result.exit_code == 0
     assert result.stdout.strip() == "[]"
+
+
+def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch, tmp_path) -> None:
+    """Issue #12998: `python -m omi_cli` must route through omi_cli.main.main()
+    so the documented --json error contract survives module invocation."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, OMI_API_KEY="not-a-real-key")
+    result = subprocess.run(
+        [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(tmp_path),
+        check=False,
+    )
+    assert result.returncode == 1
+    payload = json.loads(result.stderr)
+    assert "error" in payload
