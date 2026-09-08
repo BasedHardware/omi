@@ -1,6 +1,7 @@
 import {
   recoveredPayloadTextKeySql,
   visibleGenerationTrim,
+  visibleStoredTextTrimSql,
 } from "./generation-prompt";
 
 type StoredConversation = {
@@ -102,7 +103,7 @@ export async function readConversations(
            row_number() OVER (PARTITION BY session_id ORDER BY sender = 'human' DESC, position) AS title_rank
          FROM sessions
        ), selected AS (
-         SELECT *, trim(text, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)) AS display_text
+         SELECT *, ${visibleStoredTextTrimSql("text")} AS display_text
          FROM ranked WHERE first_rank = 1 OR last_rank = 1 OR title_rank = 1
        )
        SELECT CAST(session_id AS BLOB) AS id,

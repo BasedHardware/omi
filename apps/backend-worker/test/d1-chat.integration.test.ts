@@ -618,6 +618,49 @@ describe("D1 chat projects an honest conversation list", () => {
     });
   });
 
+  test("NEXT LINE-only chat titles stay visible without inventing a Chat title", async () => {
+    const accountId = "nel-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("nel-chat-title-1", accountId, "\u0085", 1, 1, "{broken")
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "",
+      overview: "",
+      source: "chat",
+      status: "in_progress",
+    });
+  });
+
+  test("chat titles omit leading and trailing NEXT LINE", async () => {
+    const accountId = "nel-padded-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "nel-padded-chat-title-1",
+        accountId,
+        "\u0085Visible title\u0085",
+        1,
+        1,
+        "{broken"
+      )
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "Visible title",
+      overview: "Visible title",
+      source: "chat",
+      status: "in_progress",
+    });
+  });
+
   test("conversation projection preserves embedded NUL and duplicate JSON key semantics", async () => {
     const accountId = "nul-conversations";
     const fixtures = [
