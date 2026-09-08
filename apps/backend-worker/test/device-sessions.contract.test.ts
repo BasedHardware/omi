@@ -273,8 +273,8 @@ describe("device session request validators", () => {
     expect((await unreadable.json()) as object).toEqual({
       error: {
         code: "service_unavailable",
-        retryable: true,
-        action: "retry",
+        retryable: false,
+        action: "none",
       },
     });
   });

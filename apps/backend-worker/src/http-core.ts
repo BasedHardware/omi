@@ -866,7 +866,7 @@ export async function handleTranscription(
   if (row === null) return backendError("not_found", "refresh_history", 404);
   const transcription = projectDeviceTranscription(row);
   if (transcription === null)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "none", 503);
   return json({ transcription });
 }
 
