@@ -84,6 +84,11 @@ struct AIProvider: Identifiable {
   static let localBaseURLKey = "localLLMBaseURL"
   /// UserDefaults key for the local provider's model id.
   static let localModelIDKey = "localLLMModelID"
+  /// UserDefaults key for an optional vision-capable local model id, used as
+  /// a subagent the main local model can delegate screenshot interpretation
+  /// to. No default — empty/unset means the feature is off and behavior is
+  /// identical to a single local model handling everything itself.
+  static let localVisionModelIDKey = "localLLMVisionModelID"
 
   /// Default local endpoint — Tawsif's Mac Studio over Tailscale. Only used
   /// as the initial value of an editable Settings field, never hardcoded
@@ -104,6 +109,23 @@ struct AIProvider: Identifiable {
   static var currentProviderMode: String {
     let raw = UserDefaults.standard.string(forKey: selectedProviderRawValueKey) ?? AIProvider.piMono.bridgeModeRawValue
     return raw == AIProvider.local.bridgeModeRawValue ? "omi-local" : "omi"
+  }
+
+  /// Resolves the model id for one-off quick-chat calls (floating bar, task
+  /// agent pills, memory export) that pick a model from ShortcutSettings
+  /// without going through ChatProvider's own bridge. On the local provider
+  /// this must be the user's configured local model — passing a Claude id
+  /// forces the pi-mono extension to also register the cloud "omi" provider,
+  /// which then fails without an Anthropic key.
+  @MainActor
+  static func resolveQuickChatModel() -> String {
+    let isLocal = UserDefaults.standard.string(forKey: "chatBridgeMode") == "local"
+    if isLocal {
+      return UserDefaults.standard.string(forKey: localModelIDKey) ?? defaultLocalModelID
+    }
+    return ShortcutSettings.shared.selectedModel.isEmpty
+      ? ModelQoS.Claude.defaultSelection
+      : ShortcutSettings.shared.selectedModel
   }
 
   /// Decodes the standard OpenAI-compatible `GET /models` response shape.
