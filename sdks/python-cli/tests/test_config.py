@@ -45,6 +45,31 @@ def test_load_missing_file_returns_empty_config(config_path: Path) -> None:
     assert config.profiles == {}
 
 
+def test_load_malformed_toml_returns_empty_config(config_path: Path) -> None:
+    """A broken config must not crash diagnostics — return an empty Config."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+
+
+def test_version_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
+    """`omi version` must keep working when the config TOML is malformed."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+    assert "omi-cli" in result.output
+
+
+def test_config_path_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
+    """`omi config path` must keep working when the config TOML is malformed."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    result = cli_runner.invoke(app, ["config", "path"])
+    assert result.exit_code == 0, result.output
+    assert str(config_path) in result.output
+
+
 def test_config_set_preserves_unknown_root_settings(config_path: Path, cli_runner) -> None:
     config_path.write_text(
         'active_profile = "default"\n'

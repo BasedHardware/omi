@@ -162,13 +162,22 @@ class Config:
 
 
 def load(path: Optional[Path] = None) -> Config:
-    """Load the config from disk, returning an empty Config if the file is missing."""
+    """Load the config from disk, returning an empty Config if the file is missing.
+
+    A malformed TOML file also yields an empty Config rather than raising:
+    diagnostics such as ``omi version`` and ``omi config path`` must keep
+    working precisely when the config needs repair, and commands that write
+    config can rebuild a healthy default.
+    """
     p = path or default_config_path()
     if not p.exists():
         return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
 
     with p.open("rb") as fh:
-        data = tomllib.load(fh)
+        try:
+            data = tomllib.load(fh)
+        except tomllib.TOMLDecodeError:
+            return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
     profiles_data = data.get("profiles", {})
