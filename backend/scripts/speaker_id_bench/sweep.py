@@ -21,7 +21,21 @@ def main() -> None:
 
     imp = {u: vec(r + "|whole") for u, r in sel["impostors"].items()}
     imp = {u: v for u, v in imp.items() if v is not None}
-    IMP = np.stack(list(imp.values()))
+    imp_items = list(imp.items())
+    IMP = np.stack([v for _, v in imp_items])
+    # A cohort-C user's own profile can be in the impostor pool; counting the
+    # distance from their person samples to it as random-impostor false
+    # acceptance folds owner-vs-own-person confusion into the sweep (that
+    # confusion has its own diagnostic below).
+    _imp_without_cache = {}
+
+    def impostors_without(uid):
+        m = _imp_without_cache.get(uid)
+        if m is None:
+            keep = [i for i, (iu, _) in enumerate(imp_items) if iu != uid]
+            m = IMP[keep] if keep else np.empty((0, IMP.shape[1]))
+            _imp_without_cache[uid] = m
+        return m
 
     def pairs(cohort, L):
         tar = []
@@ -32,13 +46,14 @@ def main() -> None:
                 ws = [(r, v) for r, v in ws if v is not None]
                 if len(ws) < 2:
                     continue
+                imp_rows = impostors_without(key.split("/")[0])
                 for i, (r, v) in enumerate(ws):
                     e = np.mean([w for j, (_, w) in enumerate(ws) if j != i], axis=0)
                     e /= np.linalg.norm(e)
                     tests = [v] if L == "whole" else chunks(r, L)
                     for t in tests:
                         tar.append(1 - e @ t)
-                        impd.extend(1 - IMP @ t)
+                        impd.extend(1 - imp_rows @ t)
             else:
                 e = vec(d["main"] + "|whole")
                 if e is None:

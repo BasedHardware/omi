@@ -25,7 +25,11 @@ def main() -> None:
             j += 1
         return out
 
-    T = 0.45
+    # The production operating point (utils/stt/speaker_match.py's
+    # SPEAKER_MATCH_THRESHOLD). The retired 0.45 figure rejected 40-70% of
+    # cross-session owner audio, so reporting it as the decision boundary made
+    # the false-reject, false-accept, and live-decision numbers misleading.
+    T = 0.65
 
     def eer(tar, imp):
         tar = np.sort(tar)
@@ -46,7 +50,7 @@ def main() -> None:
         imp = np.array(imp)
         t, e = eer(tar, imp)
         print(
-            f"{name:52s} n_tar={len(tar):5d} n_imp={len(imp):6d} | @0.45 FR={100*(tar>=T).mean():5.1f}% FA={100*(imp<T).mean():5.1f}% | EER={100*e:4.1f}% @t={t:.2f} | tar med={np.median(tar):.2f} imp med={np.median(imp):.2f}"
+            f"{name:52s} n_tar={len(tar):5d} n_imp={len(imp):6d} | @{T:.2f} FR={100*(tar>=T).mean():5.1f}% FA={100*(imp<T).mean():5.1f}% | EER={100*e:4.1f}% @t={t:.2f} | tar med={np.median(tar):.2f} imp med={np.median(imp):.2f}"
         )
 
     imp_uids = list(sel["impostors"])
@@ -114,11 +118,11 @@ def main() -> None:
                     imp += [dist(imp_whole[iu], t) for t in tests[:6]]
         report(f"C person leave-one-out test={L}", tar, imp)
 
-    # ---- Impostor-vs-impostor whole profile: pure FA rate among random users at 0.45
+    # ---- Impostor-vs-impostor whole profile: pure FA rate among random users at the production threshold
     d = [dist(a, b) for a, b in itertools.combinations(list(imp_whole.values())[:300], 2)]
     d = np.array(d)
     print(
-        f"impostor whole-profile pairs n={len(d)}  FA@0.45={100*(d<T).mean():.2f}%  min={d.min():.2f} p1={np.percentile(d,1):.2f} med={np.median(d):.2f}"
+        f"impostor whole-profile pairs n={len(d)}  FA@{T:.2f}={100*(d<T).mean():.2f}%  min={d.min():.2f} p1={np.percentile(d,1):.2f} med={np.median(d):.2f}"
     )
 
     # ---- Same-session (optimistic) : profile whole vs its own chunks, for reference
@@ -129,7 +133,7 @@ def main() -> None:
             tar += [dist(e, t) for t in chunks(sel["impostors"][u], L)]
         tar = np.array(tar)
         print(
-            f"same-session profile vs own {L}s chunks n={len(tar)} FR@0.45={100*(tar>=T).mean():.1f}% med={np.median(tar):.2f}"
+            f"same-session profile vs own {L}s chunks n={len(tar)} FR@{T:.2f}={100*(tar>=T).mean():.1f}% med={np.median(tar):.2f}"
         )
 
     # ---- k-of-n live decision on cohort A: first-match-sticks vs majority of 3 vs centroid-of-3
