@@ -153,13 +153,17 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
-from dependencies import get_uid_with_action_items_read  # noqa: E402
+from dependencies import (  # noqa: E402
+    get_uid_with_action_items_read,
+    get_uid_with_action_items_write,
+)
 
 
 def _build():
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_uid_with_action_items_read] = lambda: 'uid1'
+    app.dependency_overrides[get_uid_with_action_items_write] = lambda: 'uid1'
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -201,16 +205,15 @@ def _update_fixture():
 def test_developer_patch_explicit_null_clears_due_date_and_reminder():
     existing, _ = _update_fixture()
     updated = {**existing, 'due_at': None}
-    request = developer_module.UpdateActionItemRequest(due_at=None)
 
     with (
         patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
         patch.object(action_items_db, 'update_action_item', return_value=True) as update,
         patch.object(developer_module, 'sync_action_item_reminder') as sync,
     ):
-        result = developer_module.update_action_item('a1', request, uid='uid1')
+        response = _build().patch('/v1/dev/user/action-items/a1', json={'due_at': None})
 
-    assert request.model_fields_set == {'due_at'}
+    assert response.status_code == 200
     assert update.call_args.args[2] == {'due_at': None}
     sync.assert_called_once_with(
         user_id='uid1',
@@ -219,25 +222,27 @@ def test_developer_patch_explicit_null_clears_due_date_and_reminder():
         completed=False,
         due_at=None,
     )
-    assert result['due_at'] is None
+    assert response.json()['due_at'] is None
 
 
 def test_developer_patch_omitted_due_date_preserves_existing_value():
     existing, due = _update_fixture()
     updated = {**existing, 'description': 'Updated task'}
-    request = developer_module.UpdateActionItemRequest(description='Updated task')
 
     with (
         patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
         patch.object(action_items_db, 'update_action_item', return_value=True) as update,
         patch.object(developer_module, 'sync_action_item_reminder') as sync,
     ):
-        result = developer_module.update_action_item('a1', request, uid='uid1')
+        response = _build().patch(
+            '/v1/dev/user/action-items/a1',
+            json={'description': 'Updated task'},
+        )
 
-    assert 'due_at' not in request.model_fields_set
+    assert response.status_code == 200
     assert update.call_args.args[2] == {'description': 'Updated task'}
     sync.assert_not_called()
-    assert result['due_at'] == due
+    assert response.json()['due_at'] == due.isoformat().replace('+00:00', 'Z')
 
 
 def test_developer_patch_replaces_due_date_when_supplied():
