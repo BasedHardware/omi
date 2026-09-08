@@ -27,14 +27,17 @@ Map<String, dynamic> _integrationJson({
   String appHomeUrl = 'https://example.com/home',
   String setupCompletedUrl = 'https://example.com/setup-done',
   String webhookUrl = 'https://example.com/webhook',
+  String? setupInstructionsFilePath,
+  String triggersOn = 'memory_creation',
   List<Map<String, String>> authSteps = const [],
 }) {
   return {
-    'triggers_on': 'memory_creation',
+    'triggers_on': triggersOn,
     'webhook_url': webhookUrl,
     'setup_completed_url': setupCompletedUrl,
     'app_home_url': appHomeUrl,
     'auth_steps': authSteps,
+    if (setupInstructionsFilePath != null) 'setup_instructions_file_path': setupInstructionsFilePath,
   };
 }
 
@@ -53,21 +56,29 @@ void main() {
 
     test('returns true when auth step URL changes', () {
       final current = ExternalIntegration.fromJson(
-        _integrationJson(authSteps: [
-          {'name': 'Setup', 'url': 'https://example.com/old-auth'},
-        ]),
+        _integrationJson(
+          authSteps: [
+            {'name': 'Setup', 'url': 'https://example.com/old-auth'},
+          ],
+        ),
       );
       final updated = ExternalIntegration.fromJson(
-        _integrationJson(authSteps: [
-          {'name': 'Setup', 'url': 'https://example.com/new-auth'},
-        ]),
+        _integrationJson(
+          authSteps: [
+            {'name': 'Setup', 'url': 'https://example.com/new-auth'},
+          ],
+        ),
       );
       expect(hasExternalIntegrationChanged(current, updated), isTrue);
     });
 
     test('returns true when setup completed URL changes', () {
-      final current = ExternalIntegration.fromJson(_integrationJson(setupCompletedUrl: 'https://example.com/old-setup'));
-      final updated = ExternalIntegration.fromJson(_integrationJson(setupCompletedUrl: 'https://example.com/new-setup'));
+      final current = ExternalIntegration.fromJson(
+        _integrationJson(setupCompletedUrl: 'https://example.com/old-setup'),
+      );
+      final updated = ExternalIntegration.fromJson(
+        _integrationJson(setupCompletedUrl: 'https://example.com/new-setup'),
+      );
       expect(hasExternalIntegrationChanged(current, updated), isTrue);
     });
 
@@ -75,6 +86,22 @@ void main() {
       final current = ExternalIntegration.fromJson(_integrationJson(webhookUrl: 'https://example.com/old-webhook'));
       final updated = ExternalIntegration.fromJson(_integrationJson(webhookUrl: 'https://example.com/new-webhook'));
       expect(hasExternalIntegrationChanged(current, updated), isTrue);
+    });
+
+    test('returns true when setup instructions path changes', () {
+      final current = ExternalIntegration.fromJson(
+        _integrationJson(setupInstructionsFilePath: 'https://raw.githubusercontent.com/old.md'),
+      );
+      final updated = ExternalIntegration.fromJson(
+        _integrationJson(setupInstructionsFilePath: 'https://raw.githubusercontent.com/new.md'),
+      );
+      expect(hasExternalIntegrationChanged(current, updated), isTrue);
+    });
+
+    test('returns false when only hidden integration fields change', () {
+      final current = ExternalIntegration.fromJson(_integrationJson(triggersOn: 'memory_creation'));
+      final updated = ExternalIntegration.fromJson(_integrationJson(triggersOn: 'transcript_processed'));
+      expect(hasExternalIntegrationChanged(current, updated), isFalse);
     });
 
     test('returns true when one side has no integration', () {
@@ -101,12 +128,24 @@ void main() {
     });
 
     test('returns true when auth step URL changes without name or home URL changes', () {
-      final current = App.fromJson(_appJson(_integrationJson(authSteps: [
-        {'name': 'Setup', 'url': 'https://example.com/old-auth'},
-      ])));
-      final updated = App.fromJson(_appJson(_integrationJson(authSteps: [
-        {'name': 'Setup', 'url': 'https://example.com/new-auth'},
-      ])));
+      final current = App.fromJson(
+        _appJson(
+          _integrationJson(
+            authSteps: [
+              {'name': 'Setup', 'url': 'https://example.com/old-auth'},
+            ],
+          ),
+        ),
+      );
+      final updated = App.fromJson(
+        _appJson(
+          _integrationJson(
+            authSteps: [
+              {'name': 'Setup', 'url': 'https://example.com/new-auth'},
+            ],
+          ),
+        ),
+      );
       expect(hasAppDetailConfigChanged(current, updated), isTrue);
     });
 
