@@ -1790,7 +1790,7 @@ class GauntletRunner:
             return False
         profile = self.run_dir / "browser-profile"
         profile.mkdir(parents=True, exist_ok=True)
-        fixture_uri = fixture.as_uri()
+        fixture_uri = fixture.resolve().as_uri()
         expected_title = evidence_fixture_title(fixture.read_text(encoding="utf-8"))
         if not expected_title:
             self.fail(f"evidence fixture {fixture.name} is missing a <title> for readiness checks")
