@@ -12,6 +12,12 @@ Firmware releases are manual via `.github/workflows/firmware_release.yml`:
 
 Build logic lives in `omi/firmware/scripts/ci/`.
 
+## DevKit Tests
+
+Run the hermetic DevKit optional-storage startup regression test from the repository root:
+
+`bash omi/firmware/devkit/tests/offline_storage/run.sh`
+
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).

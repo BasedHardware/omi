@@ -7,9 +7,8 @@
 #include "config.h"
 #include "led.h"
 #include "mic.h"
-#include "sdcard.h"
 #include "speaker.h"
-#include "storage.h"
+#include "startup.h"
 #include "transport.h"
 #include "usb.h"
 #include "utils.h"
@@ -220,25 +219,9 @@ int main(void)
     LOG_INF("Speaker initialized");
 #endif
 
-    // Enable sdcard
+    // Enable offline storage when available
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    LOG_PRINTK("\n");
-    LOG_INF("Mount SD card...\n");
-
-    err = mount_sd_card();
-    if (err) {
-        LOG_ERR("Failed to mount SD card (err %d)", err);
-        return err;
-    }
-    k_msleep(500);
-
-    LOG_PRINTK("\n");
-    LOG_INF("Initializing storage...\n");
-
-    err = storage_init();
-    if (err) {
-        LOG_ERR("Failed to initialize storage (err %d)", err);
-    }
+    startup_init_optional_storage();
 #endif
 
     // Enable haptic
@@ -275,7 +258,7 @@ int main(void)
 
     // Start transport
     int transportErr;
-    transportErr = transport_start();
+    transportErr = startup_start_transport();
     if (transportErr) {
         LOG_ERR("Failed to start transport (err %d)", transportErr);
         // TODO: Detect the current core is app core or net core

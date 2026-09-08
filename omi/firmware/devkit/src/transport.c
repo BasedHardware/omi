@@ -38,6 +38,15 @@ uint16_t current_package_index = 0;
 // Internal
 //
 
+struct sensors {
+    struct sensor_value a_x;
+    struct sensor_value a_y;
+    struct sensor_value a_z;
+    struct sensor_value g_x;
+    struct sensor_value g_y;
+    struct sensor_value g_z;
+};
+
 struct k_mutex write_sdcard_mutex;
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
@@ -677,15 +686,29 @@ bool write_to_storage(void)
     return true;
 }
 
-static bool use_storage = true;
+static bool use_storage;
 #define MAX_FILES 10
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
+static bool offline_storage_is_available(void)
+{
+    return use_storage && is_sd_on();
+}
+
 void update_file_size()
 {
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
+    if (!offline_storage_is_available()) {
+        return;
+    }
+
+    int size = get_file_size(1);
+    int offset = get_offset();
+
+    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+    file_num_array[0] = size;
+    file_num_array[1] = offset;
+    k_mutex_unlock(&write_sdcard_mutex);
     // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
     // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
 }
@@ -726,11 +749,11 @@ void pusher(void)
             valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
         }
 
-        if (!valid && !storage_is_on) {
+        if (!valid && !storage_is_on && use_storage) {
             bool result = false;
             if (file_num_array[1] < MAX_STORAGE_BYTES) {
                 k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if (is_sd_on()) {
+                if (offline_storage_is_available()) {
                     result = write_to_storage();
                 }
                 k_mutex_unlock(&write_sdcard_mutex);
@@ -759,6 +782,14 @@ void pusher(void)
     }
 }
 extern struct bt_gatt_service storage_service;
+
+static void register_storage_service_if_available(void)
+{
+    if (use_storage) {
+        bt_gatt_service_register(&storage_service);
+    }
+}
+
 //
 // Public functions
 //
@@ -800,16 +831,21 @@ int bt_on()
 {
     int err = bt_enable(NULL);
     bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
-    bt_gatt_service_register(&storage_service);
-    sd_on();
+    register_storage_service_if_available();
+    if (use_storage) {
+        k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+        sd_on();
+        k_mutex_unlock(&write_sdcard_mutex);
+    }
     mic_on();
 
     return 0;
 }
 
 // periodic advertising
-int transport_start()
+int transport_start(bool offline_storage_available)
 {
+    use_storage = offline_storage_available;
     k_mutex_init(&write_sdcard_mutex);
 
     // Configure callbacks
@@ -834,7 +870,7 @@ int transport_start()
 
     // Start advertising
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
-    bt_gatt_service_register(&storage_service);
+    register_storage_service_if_available();
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
