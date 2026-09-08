@@ -110,10 +110,6 @@ struct PeoplePage: View {
   @State private var snippets: [String: [VoiceSnippet]] = [:]
   @StateObject private var samplePlayer = VoiceSamplePlayer()
 
-  private var userVoice: LocalSpeakerDiarizer.VoiceSummary? {
-    voices.first { $0.personId == nil }
-  }
-
   private var rows: [PersonOverview] {
     let all = PersonOverview.ordered(people: appState.people, activity: activity, voices: voices)
     let query = searchText.trimmingCharacters(in: .whitespaces)
@@ -129,14 +125,13 @@ struct PeoplePage: View {
         QuerySearchBar(
           text: $searchText,
           accessibilityID: "people-search-field",
-          placeholder: "Search people…",
+          placeholder: "Search people",
           searchSurface: .people
         )
       },
       content: {
         ScrollView {
           VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-            youCard
             peopleSection
           }
           .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
@@ -163,62 +158,6 @@ struct PeoplePage: View {
       Text("Removes them from your people, their speaker labels in future conversations, and the voice Omi remembered.")
     }
     .accessibilityIdentifier("people-page")
-  }
-
-  // MARK: - You
-
-  private var youCard: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      avatar(initial: userInitial, isUser: true)
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        HStack(spacing: OmiSpacing.sm) {
-          Text(userName)
-            .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(Ink.primary)
-          Text("You")
-            .scaledFont(size: OmiType.micro, weight: .semibold)
-            .foregroundColor(Ink.surface)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Ink.primary))
-            .accessibilityIdentifier("people-you-capsule")
-        }
-        Text(userVoiceCaption)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-        Text("Omi learns your voice from push-to-talk and from “This is me” on a live transcript bubble.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.tertiary)
-          .fixedSize(horizontal: false, vertical: true)
-        snippetRow(owner: LocalVoiceprintStore.sampleOwner(nil))
-      }
-      Spacer(minLength: 0)
-    }
-    .padding(OmiSpacing.md)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(Ink.rowFill)
-    )
-    .accessibilityIdentifier("people-you-card")
-  }
-
-  /// The signed-in name; "You" alone when the account has none.
-  private var userName: String {
-    let name = AuthService.shared.displayName
-    return name.isEmpty ? "You" : name
-  }
-
-  private var userInitial: String {
-    let name = AuthService.shared.displayName
-    return name.isEmpty ? "Y" : String(name.prefix(1)).uppercased()
-  }
-
-  private var userVoiceCaption: String {
-    guard let userVoice else { return "Voice not learned yet" }
-    let minutes = Int(userVoice.speechSeconds / 60)
-    let amount = minutes >= 1 ? "\(minutes) min" : "\(Int(userVoice.speechSeconds)) s"
-    return userVoice.isEnrolled
-      ? "Voice known · \(amount) heard" : "Voice guessed from who talks most · \(amount) heard"
   }
 
   // MARK: - People
