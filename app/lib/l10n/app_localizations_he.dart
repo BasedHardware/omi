@@ -515,7 +515,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get doubleTap => 'לחץ כפול';
 
   @override
-  String get singleTap => 'לחיצה בודדת';
+  String get singleTap => 'לחץ בודד';
 
   @override
   String get ledBrightness => 'בהיקות LED';

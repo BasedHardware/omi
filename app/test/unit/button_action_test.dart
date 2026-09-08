@@ -37,6 +37,30 @@ void main() {
     });
   });
 
+  group('onboarding', () {
+    test('step one always asks a question, whatever the mapping is', () {
+      expect(
+        resolveSingleTapActionForSession(2, onboardingAskQuestionStep: true),
+        ButtonAction.askQuestion,
+      );
+      expect(
+        resolveSingleTapActionForSession(3, onboardingAskQuestionStep: true),
+        ButtonAction.askQuestion,
+      );
+    });
+
+    test('outside that step the stored mapping applies', () {
+      expect(
+        resolveSingleTapActionForSession(2, onboardingAskQuestionStep: false),
+        ButtonAction.toggleMute,
+      );
+      expect(
+        resolveSingleTapActionForSession(0, onboardingAskQuestionStep: false),
+        ButtonAction.askQuestion,
+      );
+    });
+  });
+
   group('double tap', () {
     test('keeps the existing stored encoding', () {
       expect(resolveDoubleTapAction(0), ButtonAction.endConversation);

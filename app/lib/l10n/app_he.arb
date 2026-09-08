@@ -661,7 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "לחץ כפול",
-    "singleTap": "לחיצה בודדת",
+    "singleTap": "לחץ בודד",
     "@doubleTap": {
         "description": "Double tap action label"
     },

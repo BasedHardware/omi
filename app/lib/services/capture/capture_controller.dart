@@ -1024,7 +1024,12 @@ class CaptureController extends ChangeNotifier
         // Single tap (buttonState == 1) - toggle voice question mode
         // Tap once to start, tap again to end
         if (buttonState == 1) {
-          final singleTapAction = resolveSingleTapAction(SharedPreferencesUtil().singleTapAction);
+          final onboardingAskQuestionStep =
+              deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 1;
+          final singleTapAction = resolveSingleTapActionForSession(
+            SharedPreferencesUtil().singleTapAction,
+            onboardingAskQuestionStep: onboardingAskQuestionStep,
+          );
           if (singleTapAction != ButtonAction.askQuestion) {
             if (_isProcessingButtonEvent) {
               Logger.debug("Single tap: already processing, ignoring");

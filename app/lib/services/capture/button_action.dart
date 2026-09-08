@@ -23,3 +23,8 @@ ButtonAction resolveDoubleTapAction(int code) {
       return ButtonAction.endConversation;
   }
 }
+
+ButtonAction resolveSingleTapActionForSession(int code, {required bool onboardingAskQuestionStep}) {
+  if (onboardingAskQuestionStep) return ButtonAction.askQuestion;
+  return resolveSingleTapAction(code);
+}
