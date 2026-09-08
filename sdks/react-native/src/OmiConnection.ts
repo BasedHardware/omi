@@ -254,6 +254,9 @@ export class OmiConnection {
         case 20:
           codec = BleAudioCodec.OPUS;
           break;
+        case 21:
+          codec = BleAudioCodec.OPUS_FS320;
+          break;
         default:
           console.warn(`Unknown codec id: ${codecId}`);
           break;
