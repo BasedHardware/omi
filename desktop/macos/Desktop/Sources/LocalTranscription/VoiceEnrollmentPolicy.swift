@@ -45,7 +45,12 @@ struct VoiceEnrollmentPolicy: Sendable {
     let candidates =
       people
       .filter { !$0.isFavorite }
-      .map { (id: $0.personId ?? "", score: decayedScore($0.useScore, lastUsedAt: $0.lastUsedAt, now: now), last: $0.lastUsedAt ?? .distantPast) }
+      .map {
+        (
+          id: $0.personId ?? "", score: decayedScore($0.useScore, lastUsedAt: $0.lastUsedAt, now: now),
+          last: $0.lastUsedAt ?? .distantPast
+        )
+      }
       .sorted { lhs, rhs in
         if lhs.score != rhs.score { return lhs.score < rhs.score }
         return lhs.last < rhs.last
