@@ -370,6 +370,11 @@ test.each([
     {limitKey: 'future_unit', used: 7, limit: 100},
     'Usage allowance is unavailable',
   ],
+  [
+    {displayName: 'Local identity', email: ''},
+    {limitKey: '', used: 7, limit: 100},
+    'Usage allowance is unavailable',
+  ],
 ])(
   'web Settings preserves nullable projections and allowance units (%s, %s)',
   async (identity, entitlement, expected) => {

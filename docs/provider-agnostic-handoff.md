@@ -354,6 +354,8 @@ Cloud Linux after `9d8495b80e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `3529501827`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. GET `/v1/users/me/subscription` records with an empty plan or status no longer fail the Settings Plan slice as malformed. Those rows stay visible as Plan unavailable. Missing plan or status keys still fail closed. This does not invent a Settings identity producer.
 
+Cloud Linux after `e97e244feb`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. GET `/v1/settings` entitlements with an empty limitKey no longer fail the whole Settings page as malformed. Identity stays visible and usage uses the existing unknown-unit copy. Missing limitKey keys still fail closed. This does not invent a Settings identity producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

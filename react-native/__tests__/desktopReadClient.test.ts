@@ -67,6 +67,7 @@ import {
   installedApps,
   loadAccountSettings,
   loadConnectors,
+  loadServiceSettings,
   myApps,
   optInTrainingData,
   parseCloudApp,
@@ -1788,6 +1789,33 @@ test('keeps empty subscription plan tokens instead of failing Settings Plan', ()
   expect(() =>
     parseCloudSubscription({status: 'active'}, 'Subscription response'),
   ).toThrow('Subscription response is malformed');
+});
+
+test('keeps an empty Settings entitlement limitKey instead of failing the page', async () => {
+  const result = await loadServiceSettings(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify({
+        identity: {displayName: 'Local identity', email: ''},
+        entitlement: {limitKey: '', used: 7, limit: 100},
+      }),
+    })),
+  );
+  expect(result).toEqual({
+    identity: {displayName: 'Local identity', email: ''},
+    entitlement: {limitKey: '', used: 7, limit: 100},
+  });
+  await expect(
+    loadServiceSettings(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify({
+          identity: {displayName: 'Local identity', email: ''},
+          entitlement: {used: 7, limit: 100},
+        }),
+      })),
+    ),
+  ).rejects.toThrow('Usage allowance response is malformed');
 });
 
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {

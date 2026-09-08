@@ -673,7 +673,6 @@ export async function loadServiceSettings(
   const entitlement = object(body.entitlement, 'Usage allowance');
   if (
     typeof entitlement.limitKey !== 'string' ||
-    entitlement.limitKey.length === 0 ||
     typeof entitlement.used !== 'number' ||
     !Number.isFinite(entitlement.used) ||
     (entitlement.limitKey === 'chat' &&
