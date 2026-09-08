@@ -94,8 +94,7 @@ export async function admitMessage(
     if (!isChatCreate(previous) || computePayloadHash(previous) !== payloadHash)
       return "conflict";
     let message = await readMessage(db, accountId, input.id);
-    if (message === null)
-      throw new Error("admission references missing message");
+    if (message === null) return "conflict";
     message = overlayCreateFields(message, input);
     if (input.journalRevision > message.journalRevision) {
       message = {
@@ -359,7 +358,7 @@ export async function completeGeneration(
   if (admission === null) throw new Error("admission not found for generation");
 
   const human = await readMessage(db, accountId, admission.messageId);
-  if (human === null) throw new Error("human message not found for generation");
+  if (human === null) return failGeneration(db, accountId, generationId);
   if (!isVisibleGenerationText(text)) {
     return failGeneration(db, accountId, generationId);
   }

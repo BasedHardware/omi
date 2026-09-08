@@ -1111,6 +1111,57 @@ describe("completeGeneration visibility", () => {
       completeGeneration(db, "acct-a", "gen-missing", "")
     ).rejects.toThrow("admission not found for generation");
   });
+
+  test("fails instead of throwing when the admitted human payload disagrees with columns", async () => {
+    const human = {
+      id: "msg-mismatch-complete",
+      text: "hello",
+      sender: "human",
+      type: "text",
+      createdAt: 1,
+      updatedAt: 1,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "1",
+      attachments: [],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(
+        human.id,
+        "acct-a",
+        human.text,
+        human.createdAt,
+        JSON.stringify({ ...human, id: "other-id" })
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(human.id, "acct-a", "op-mismatch", "{}", "gen-mismatch-complete")
+      .run();
+    const event = await completeGeneration(
+      db,
+      "acct-a",
+      "gen-mismatch-complete",
+      "visible reply"
+    );
+    expect(event).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    expect(await countAssistantRows(db, "acct-a")).toBe(0);
+  });
 });
 
 describe("admit replay attachments", () => {
@@ -1243,6 +1294,46 @@ describe("admit replay attachments", () => {
         "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
       )
       .bind(create.id, "acct-a", create.opId, "null", "gen-replay-null-admit")
+      .run();
+    await expect(admitMessage(db, "acct-a", create, null)).resolves.toBe(
+      "conflict"
+    );
+  });
+
+  test("admit replay of a column-mismatched human payload is conflict instead of throwing", async () => {
+    const create = {
+      op: "create" as const,
+      opId: "op-replay-mismatch-human",
+      id: "msg-replay-mismatch-human",
+      at: 1,
+      text: "hello",
+      sender: "human" as const,
+      journalRevision: 0,
+      attachmentIds: [] as string[],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(
+        create.id,
+        "acct-a",
+        create.text,
+        1,
+        JSON.stringify({ ...create, id: "other-id" })
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        create.id,
+        "acct-a",
+        create.opId,
+        JSON.stringify(create),
+        "gen-replay-mismatch-human"
+      )
       .run();
     await expect(admitMessage(db, "acct-a", create, null)).resolves.toBe(
       "conflict"
