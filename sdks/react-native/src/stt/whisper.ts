@@ -20,7 +20,7 @@ export function createWhisperTranscriber(options: {
     const pcm = buffer;
     buffer = new Uint8Array(0);
     const text = await options.runner(pcm);
-    if (text && !stopped) options.onTranscript(text);
+    if (text) options.onTranscript(text);
   }
 
   return {
@@ -36,6 +36,7 @@ export function createWhisperTranscriber(options: {
       }
     },
     stop() {
+      if (stopped) return;
       stopped = true;
       void flush();
     },
