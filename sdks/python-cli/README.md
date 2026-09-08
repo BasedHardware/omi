@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Apply the requested time window to exact screen search
+
+The exact app/window/OCR fallback for `omi --json local search-screen` honors the same rolling `--days` window as semantic search.
+
 ## Development
 
 ```bash
