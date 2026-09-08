@@ -122,3 +122,34 @@ extension PeopleRebuildPlannerTests {
       "without a chunk timestamp the part cannot be placed and must not be guessed")
   }
 }
+
+extension PeopleRebuildPlannerTests {
+  /// A long history holds dozens of one-off voices; only the leading few may keep audio, or the
+  /// rebuild would carry hundreds of megabytes of samples it can never use.
+  func testOnlyTheLeadingVoicesKeepAudio() {
+    func voice(_ axis: Int) -> [Float] {
+      var v = [Float](repeating: 0, count: 16)
+      v[axis] = 1
+      return v
+    }
+    var clusterer = VoiceClusterer()
+    clusterer.clipHoldingClusters = 2
+    let clip = [Float](repeating: 0.1, count: 1600)
+    // Voice 0 in three conversations, voice 1 in two, voices 2 and 3 in one each.
+    for conversation in ["c1", "c2", "c3"] {
+      clusterer.add(
+        embedding: voice(0), seconds: 4, conversationId: conversation, date: nil, clip: clip, labeledAsUser: false)
+    }
+    for conversation in ["c1", "c2"] {
+      clusterer.add(
+        embedding: voice(1), seconds: 4, conversationId: conversation, date: nil, clip: clip, labeledAsUser: false)
+    }
+    clusterer.add(embedding: voice(2), seconds: 4, conversationId: "c1", date: nil, clip: clip, labeledAsUser: false)
+    clusterer.add(embedding: voice(3), seconds: 4, conversationId: "c2", date: nil, clip: clip, labeledAsUser: false)
+
+    XCTAssertEqual(clusterer.clusters.count, 4)
+    let withAudio = clusterer.clusters.filter { !$0.clips.isEmpty }
+    XCTAssertEqual(withAudio.count, 2, "only the two most-present voices keep clips")
+    XCTAssertEqual(clusterer.userCluster?.clips.isEmpty, false, "the user's own audio survives")
+  }
+}

@@ -87,3 +87,28 @@ final class LocalVoiceprintStoreTests: XCTestCase {
     XCTAssertEqual(prints.map(\.personId), [nil, "anna"])
   }
 }
+
+extension LocalVoiceprintStoreTests {
+  /// Rebuild decodes only the cut it needs; a range in the middle of a file comes back at the
+  /// right length and with the right audio.
+  func testDecoderReadsOneRangeOfAFile() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("range-\(UUID().uuidString)", isDirectory: true)
+      .appendingPathComponent(LocalVoiceprintStore.fileName)
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let store = LocalVoiceprintStore(fileURL: url)
+    // 3 s: silence, then a tone for the middle second, then silence.
+    var samples = [Float](repeating: 0, count: 48_000)
+    for i in 16_000..<32_000 { samples[i] = Float(sin(Double(i) * 0.05)) * 0.5 }
+    let file = try XCTUnwrap(store.addSample(personId: "range", samples: samples))
+
+    let reader = try AudioClipDecoder.Reader(url: store.sampleURL(for: file))
+    XCTAssertEqual(reader.durationSeconds, 3, accuracy: 0.01)
+    let middle = try reader.read(fromSeconds: 1, toSeconds: 2)
+    XCTAssertEqual(middle.count, 16_000, accuracy: 64)
+    XCTAssertGreaterThan(middle.map { abs($0) }.max() ?? 0, 0.3, "the tone is in the middle second")
+    let leading = try reader.read(fromSeconds: 0, toSeconds: 0.5)
+    XCTAssertLessThan(leading.map { abs($0) }.max() ?? 1, 0.01, "the first half second is silent")
+    XCTAssertEqual(try AudioClipDecoder.decode16kMono(url: store.sampleURL(for: file)).count, 48_000, accuracy: 64)
+  }
+}

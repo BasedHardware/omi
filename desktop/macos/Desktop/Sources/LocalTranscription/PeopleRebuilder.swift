@@ -95,20 +95,27 @@ enum PeopleRebuildPlanner {
 /// as the voice present in the most conversations. Pure, so the choice is testable.
 struct VoiceClusterer {
   struct Cluster {
+    /// Duration-weighted running mean of every embedding folded in — the voiceprint itself, so
+    /// the individual embeddings never have to be kept.
     var centroid: [Float]
     var weight: Double = 0
-    var embeddings: [[Float]] = []
     var speechSeconds: Double = 0
     var conversationIds: Set<String> = []
     var lastHeardAt: Date?
-    /// Longest clips first, at most `clipsToKeep`.
-    var clips: [[Float]] = []
+    /// Longest clips first, at most `clipsToKeep`, stored as 16-bit so a long history with
+    /// dozens of voices stays tens of megabytes rather than hundreds.
+    var compactClips: [[Int16]] = []
     var labeledAsUserSeconds: Double = 0
+
+    var clips: [[Float]] { compactClips.map { $0.map { Float($0) / 32768 } } }
   }
 
   var matchThreshold: Float = 0.60
   var clipsToKeep = 3
-  var embeddingsToKeep = 200
+  /// Only the most-present voices keep audio: a long history can hold dozens of one-off voices,
+  /// and three 12 s clips each would be hundreds of megabytes of samples for voices that can
+  /// never be chosen as the user.
+  var clipHoldingClusters = 5
   private(set) var clusters: [Cluster] = []
 
   init(matchThreshold: Float = 0.60) {
@@ -138,17 +145,33 @@ struct VoiceClusterer {
       clusters.append(Cluster(centroid: normalized, weight: seconds))
       index = clusters.count - 1
     }
-    if clusters[index].embeddings.count < embeddingsToKeep { clusters[index].embeddings.append(normalized) }
     clusters[index].speechSeconds += seconds
     clusters[index].conversationIds.insert(conversationId)
     clusters[index].lastHeardAt = [clusters[index].lastHeardAt, date].compactMap { $0 }.max()
     if labeledAsUser { clusters[index].labeledAsUserSeconds += seconds }
     if let clip {
-      clusters[index].clips.append(clip)
-      clusters[index].clips.sort { $0.count > $1.count }
-      if clusters[index].clips.count > clipsToKeep {
-        clusters[index].clips.removeLast(clusters[index].clips.count - clipsToKeep)
+      clusters[index].compactClips.append(clip.map { Int16(max(-1, min(1, $0)) * 32767) })
+      clusters[index].compactClips.sort { $0.count > $1.count }
+      if clusters[index].compactClips.count > clipsToKeep {
+        clusters[index].compactClips.removeLast(clusters[index].compactClips.count - clipsToKeep)
       }
+    }
+    pruneClipsBeyondTopClusters()
+  }
+
+  /// Drop audio from every voice outside the leading `clipHoldingClusters`, so memory stays
+  /// flat however many voices a history contains.
+  private mutating func pruneClipsBeyondTopClusters() {
+    let holders = clusters.indices.filter { !clusters[$0].compactClips.isEmpty }
+    guard holders.count > clipHoldingClusters else { return }
+    let ranked = holders.sorted { lhs, rhs in
+      if clusters[lhs].conversationIds.count != clusters[rhs].conversationIds.count {
+        return clusters[lhs].conversationIds.count > clusters[rhs].conversationIds.count
+      }
+      return clusters[lhs].speechSeconds > clusters[rhs].speechSeconds
+    }
+    for index in ranked.dropFirst(clipHoldingClusters) {
+      clusters[index].compactClips.removeAll()
     }
   }
 
@@ -222,6 +245,9 @@ actor PeopleRebuilder {
   /// Upper bound so a very long history stays a bounded job.
   static let maxConversations = 2000
   static let clipsPerVoice = 3
+  /// Embeddings averaged per named person. More than this adds nothing to the mean and only
+  /// costs memory on a long history.
+  static let embeddingsPerPerson = 100
 
   private var isRunning = false
 
@@ -309,15 +335,18 @@ actor PeopleRebuilder {
       state.message = "Listening to \(state.scanned) of \(state.total)…"
       progress(state)
 
-      guard let audio = await Self.downloadAndDecode(artifact.signedURL) else { continue }
+      guard let localAudio = await Self.download(artifact.signedURL) else { continue }
+      defer { try? FileManager.default.removeItem(at: localAudio) }
+      guard let reader = try? AudioClipDecoder.Reader(url: localAudio) else { continue }
       let rate = Double(LocalVoiceprintStore.sampleRate)
       let date = conversation.startedAt ?? conversation.createdAt
       var touched: Set<String> = []
       for cut in cuts {
-        let from = max(0, Int(cut.artifactStart * rate))
-        let to = min(audio.count, Int(cut.artifactEnd * rate))
-        guard to - from >= Int(PeopleRebuildPlanner.minCutSeconds * rate) else { continue }
-        let samples = Array(audio[from..<to])
+        // Only the cut is decoded, never the whole file: a two-hour capture would otherwise be
+        // hundreds of megabytes of floats.
+        guard let samples = try? reader.read(fromSeconds: cut.artifactStart, toSeconds: cut.artifactEnd),
+          samples.count >= Int(PeopleRebuildPlanner.minCutSeconds * rate)
+        else { continue }
         guard let embedding = await diarizer.embedding(for: samples) else { continue }
         state.cutsEmbedded += 1
         // Every voice goes into the clustering; the biggest cluster across conversations is you.
@@ -327,7 +356,7 @@ actor PeopleRebuilder {
         // Named people are rebuilt from exactly the segments that name them.
         guard let personId = cut.personId else { continue }
         var voice = people[personId] ?? RebuiltVoice(personId: personId)
-        voice.embeddings.append(embedding)
+        if voice.embeddings.count < Self.embeddingsPerPerson { voice.embeddings.append(embedding) }
         voice.speechSeconds += cut.length
         voice.clips.append(samples)
         voice.clips.sort { $0.count > $1.count }
@@ -347,7 +376,7 @@ actor PeopleRebuilder {
     if let user = clusterer.userCluster {
       rebuilt.append(
         RebuiltVoice(
-          personId: nil, embeddings: user.embeddings, speechSeconds: user.speechSeconds, clips: user.clips,
+          personId: nil, embeddings: [user.centroid], speechSeconds: user.speechSeconds, clips: user.clips,
           conversationCount: user.conversationIds.count, lastHeardAt: user.lastHeardAt))
       summary.userConversations = user.conversationIds.count
       log(
@@ -370,25 +399,23 @@ actor PeopleRebuilder {
     return detail
   }
 
-  /// Fetch a signed audio URL to a temp file and decode it to 16 kHz mono. The file is deleted
-  /// afterwards; the URL is never logged.
-  private static func downloadAndDecode(_ url: URL) async -> [Float]? {
+  /// Fetch a signed audio URL to a temp file the caller deletes. The URL is never logged.
+  private static func download(_ url: URL) async -> URL? {
     do {
       let (temp, _) = try await URLSession.shared.download(from: url)
       let ext = url.pathExtension.isEmpty ? "wav" : url.pathExtension
       let local = FileManager.default.temporaryDirectory
         .appendingPathComponent("people-rebuild-\(UUID().uuidString)").appendingPathExtension(ext)
       try FileManager.default.moveItem(at: temp, to: local)
-      defer { try? FileManager.default.removeItem(at: local) }
-      return try AudioClipDecoder.decode16kMono(url: local)
+      return local
     } catch {
-      logError("PeopleRebuilder: audio download/decode failed", error: error)
+      logError("PeopleRebuilder: audio download failed", error: error)
       return nil
     }
   }
 }
 
-/// Reads any AVFoundation-decodable audio file into 16 kHz mono Float32 samples.
+/// Reads ranges of any AVFoundation-decodable audio file as 16 kHz mono Float32 samples.
 enum AudioClipDecoder {
   /// Hands one input buffer to the converter per call, then reports end of stream.
   private final class SingleBufferFeed: @unchecked Sendable {
@@ -405,33 +432,53 @@ enum AudioClipDecoder {
     }
   }
 
-  static func decode16kMono(url: URL) throws -> [Float] {
-    let file = try AVAudioFile(forReading: url)
-    let source = file.processingFormat
-    guard
-      let target = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32, sampleRate: Double(LocalVoiceprintStore.sampleRate), channels: 1,
-        interleaved: false),
-      let converter = AVAudioConverter(from: source, to: target)
-    else { throw CocoaError(.fileReadCorruptFile) }
+  /// An open file that decodes one time range at a time, so a long capture never has to be
+  /// held in memory whole.
+  final class Reader {
+    private let file: AVAudioFile
+    private let target: AVAudioFormat
+    private let converter: AVAudioConverter
 
-    var output: [Float] = []
-    let chunkFrames: AVAudioFrameCount = 65_536
-    let ratio = target.sampleRate / source.sampleRate
-    while file.framePosition < file.length {
-      guard let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: chunkFrames) else { break }
-      try file.read(into: input, frameCount: chunkFrames)
-      if input.frameLength == 0 { break }
+    init(url: URL) throws {
+      file = try AVAudioFile(forReading: url)
+      guard
+        let target = AVAudioFormat(
+          commonFormat: .pcmFormatFloat32, sampleRate: Double(LocalVoiceprintStore.sampleRate), channels: 1,
+          interleaved: false),
+        let converter = AVAudioConverter(from: file.processingFormat, to: target)
+      else { throw CocoaError(.fileReadCorruptFile) }
+      self.target = target
+      self.converter = converter
+    }
+
+    var durationSeconds: Double { Double(file.length) / file.processingFormat.sampleRate }
+
+    func read(fromSeconds start: Double, toSeconds end: Double) throws -> [Float] {
+      let sourceRate = file.processingFormat.sampleRate
+      let firstFrame = max(0, AVAudioFramePosition(start * sourceRate))
+      let lastFrame = min(file.length, AVAudioFramePosition(end * sourceRate))
+      guard lastFrame > firstFrame else { return [] }
+      file.framePosition = firstFrame
+      let frames = AVAudioFrameCount(lastFrame - firstFrame)
+      guard let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else { return [] }
+      try file.read(into: input, frameCount: frames)
+      guard input.frameLength > 0 else { return [] }
+      let ratio = target.sampleRate / sourceRate
       let capacity = AVAudioFrameCount(Double(input.frameLength) * ratio) + 1024
-      guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { break }
+      guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return [] }
+      converter.reset()
       let feed = SingleBufferFeed(input)
       var conversionError: NSError?
       converter.convert(to: converted, error: &conversionError) { _, status in feed.next(status) }
       if let conversionError { throw conversionError }
-      if let channel = converted.floatChannelData {
-        output.append(contentsOf: UnsafeBufferPointer(start: channel[0], count: Int(converted.frameLength)))
-      }
+      guard let channel = converted.floatChannelData else { return [] }
+      return Array(UnsafeBufferPointer(start: channel[0], count: Int(converted.frameLength)))
     }
-    return output
+  }
+
+  /// The whole file, for callers that know it is short.
+  static func decode16kMono(url: URL) throws -> [Float] {
+    let reader = try Reader(url: url)
+    return try reader.read(fromSeconds: 0, toSeconds: reader.durationSeconds + 1)
   }
 }
