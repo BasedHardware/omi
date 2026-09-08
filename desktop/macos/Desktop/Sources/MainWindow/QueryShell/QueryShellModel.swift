@@ -141,6 +141,23 @@ enum QueryShellMode: Equatable, Sendable {
   static let homeDefault: QueryShellMode = .answer
 }
 
+/// **What the empty composer says.**
+///
+/// The chat composer used to say `Ask a follow-up…` whenever it stood under the conversation,
+/// including the moment after the reader cleared it: an invitation to follow up on nothing. It now
+/// says the one thing it always means — `Ask Omi` — whatever the transcript holds. Only the search
+/// placement carries a different prompt, because it is a different control.
+enum QueryComposerPlaceholder {
+  static let chat = "Ask Omi"
+
+  static func text(mode: QueryShellMode) -> String {
+    switch mode {
+    case .results: return RewindSearchMetrics.placeholder
+    case .answer: return chat
+    }
+  }
+}
+
 /// The `home_*` bridge actions, as the search-text transition each one promises.
 ///
 /// Home's mode is derived from the search text, so a bridge action that promises the conversation
@@ -212,15 +229,18 @@ enum QueryShellSubmit: Equatable, Sendable {
 
   /// No `commandHeld`. Which key was pressed stopped being information the moment both keys meant
   /// the same thing; a parameter nothing branches on is the next thing to grow a branch back.
-  static func resolve(text: String) -> QueryShellSubmit {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .none : .ask
+  ///
+  /// `hasAttachments`: a file or conversation staged with no words is a message — `⏎` sends it, and
+  /// the provider asks the model about what was attached. Only a bare, empty composer is inert.
+  static func resolve(text: String, hasAttachments: Bool = false) -> QueryShellSubmit {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !hasAttachments ? .none : .ask
   }
 }
 
 /// **One submit, resolved once — including what the field is left holding.**
 ///
 /// The text is a *message*, and a composer that keeps the message it just sent is a composer you
-/// have to empty by hand before you can write the next one: the `Ask a follow-up…` placeholder was
+/// have to empty by hand before you can write the next one: the `Ask Omi` placeholder was
 /// unreachable, a second `⏎` re-sent the question verbatim, and emptying the field to type a
 /// follow-up used to throw the whole conversation away because an empty field was read as "take me
 /// back to the list".
@@ -233,7 +253,8 @@ enum QueryShellSubmit: Equatable, Sendable {
 /// which is why there is no longer a `commandHeld` to disambiguate.
 struct QueryShellSubmission: Equatable, Sendable {
   let action: QueryShellSubmit
-  /// The trimmed question to send. Non-nil only for `.ask`.
+  /// The trimmed question to send. Non-nil only for `.ask` — and empty for an attachment-only send,
+  /// where the staged items are the message.
   let question: String?
   /// What the field holds afterwards.
   let text: String
@@ -241,8 +262,8 @@ struct QueryShellSubmission: Equatable, Sendable {
   /// inert key must never move the reader.
   let mode: QueryShellMode?
 
-  static func resolve(text: String) -> Self {
-    switch QueryShellSubmit.resolve(text: text) {
+  static func resolve(text: String, hasAttachments: Bool = false) -> Self {
+    switch QueryShellSubmit.resolve(text: text, hasAttachments: hasAttachments) {
     case .none:
       return Self(action: .none, question: nil, text: text, mode: nil)
     case .ask:
@@ -277,8 +298,12 @@ struct QueryShellSendLedger: Equatable, Sendable {
   /// (nor overwrite the question 'Try again' would re-send). Planning mutates
   /// nothing — only `recordAccepted` commits state, so a send ChatProvider
   /// rejects asynchronously leaves the ledger exactly as it was.
+  ///
+  /// An empty question is a resolved attachment-only send, not a blank field:
+  /// `QueryShellSubmission` already turned a bare empty composer into no
+  /// question at all, so it is admitted and counts like any other.
   func planSubmit(_ question: String?, providerBusy: Bool = false) -> Plan? {
-    guard !providerBusy, let question, !question.isEmpty else { return nil }
+    guard !providerBusy, let question else { return nil }
     return Plan(question: question, countsAsQuestion: true)
   }
 

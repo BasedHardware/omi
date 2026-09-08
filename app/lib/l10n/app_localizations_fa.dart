@@ -1858,9 +1858,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openSettings => 'باز کردن تنظیمات';
 
   @override
-  String get wantDifferentName => 'می‌خواهید به چیز دیگری نامیده شوید؟';
-
-  @override
   String get whatsYourName => 'نام شما چیست؟';
 
   @override
@@ -2040,7 +2037,8 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryDeleted => 'خاطره حذف شد.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.';
 
   @override
   String get undo => 'بازگشت';
@@ -9914,10 +9912,33 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'نمایهٔ صوتی $name';
+  }
+
+  @override
+  String get play => 'پخش';
+
+  @override
+  String get redo => 'ضبط دوباره';
+
+  @override
+  String get answerWithYourVoice => 'با صدای خود پاسخ دهید:';
+
+  @override
+  String get speechProfileTopicLocation => 'کجا زندگی می‌کنید؟';
+
+  @override
+  String get speechProfileTopicWork => 'شغل شما چیست؟';
+
+  @override
+  String get speechProfileTopicGoal => 'هدف بلندمدت شما چیست؟';
+
+  @override
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'برای شروع ضبط روی + بزنید';
 
   @override
   String get chatBlockTask => 'وظیفه';
@@ -9954,4 +9975,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'بارگذاری گراف دانش ممکن نشد';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
 }

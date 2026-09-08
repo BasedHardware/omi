@@ -1871,9 +1871,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openSettings => 'அமைப்புகளைத் திறக்கவும்';
 
   @override
-  String get wantDifferentName => 'வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?';
-
-  @override
   String get whatsYourName => 'உங்கள் பெயர் என்ன?';
 
   @override
@@ -2054,7 +2051,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryDeleted => 'பதிவு நீக்கப்பட்டுள்ளது.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.';
 
   @override
   String get undo => 'மறுசெய்க';
@@ -9984,10 +9982,33 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name இன் குரல் சுயவிவரம்';
+  }
+
+  @override
+  String get play => 'இயக்கு';
+
+  @override
+  String get redo => 'மீண்டும் பதிவு செய்';
+
+  @override
+  String get answerWithYourVoice => 'உங்கள் குரலில் பதிலளிக்கவும்:';
+
+  @override
+  String get speechProfileTopicLocation => 'நீங்கள் எங்கு வசிக்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicWork => 'நீங்கள் என்ன வேலை செய்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicGoal => 'உங்கள் நீண்டகால இலக்கு என்ன?';
+
+  @override
   String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'பதிவைத் தொடங்க + ஐத் தட்டவும்';
 
   @override
   String get chatBlockTask => 'பணி';
@@ -10024,4 +10045,8 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
 }

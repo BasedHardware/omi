@@ -11,6 +11,7 @@
         "containers": [
           {
             "image": "gcr.io/based-hardware-dev/backend-jit-qa@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "resources": {"limits": {"memory": "4Gi"}},
             "env": [
               {"name": "OMI_ENV_STAGE", "value": "dev"},
               {"name": "OMI_JIT_PROACTIVITY_BUDGET_CONTRACT", "value": "jit-cloud-qa-v1"},

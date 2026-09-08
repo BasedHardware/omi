@@ -233,6 +233,9 @@ tests/unit/test_rate_limit_json_failopen.py::test_partial_cache_entry_fails_open
 tests/unit/test_rate_limiting.py::TestRouterWiring::test_developer_rate_limit_failures_log_without_request
 tests/unit/test_short_audio_embedding.py::TestGetWavDuration::test_different_sample_rates
 tests/unit/test_speaker_id_pipeline.py::TestAudioRingBuffer::test_write_overwrites_oldest_when_capacity_exceeded
+# First test to build a live SpeakerMatcher amortizes importing routers.listen.speakers
+# (FastAPI router graph) into its call; later tests in this file reuse the cached import.
+tests/unit/test_speaker_match.py::test_short_clips_are_pooled_before_a_live_decision
 tests/unit/test_speaker_sample.py::test_verify_and_transcribe_sample_transcription_failure
 tests/unit/test_speaker_sample_migration.py::test_get_migration_lock_reuses_same_key
 tests/unit/test_streaming_deepgram_backoff.py::test_gated_socket_death_reason_delegates_to_safe_socket

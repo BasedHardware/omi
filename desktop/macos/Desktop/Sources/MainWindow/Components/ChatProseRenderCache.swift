@@ -44,10 +44,10 @@ enum ChatProseRenderCache {
     }
   }
 
-  private static var entries: [Key: Entry] = [:]
-  private static var lruOrder: [Key] = []
-  /// A full transcript window plus headroom for the streaming row's turnover.
-  private static let maximumEntries = 192
+  // Two prose blocks per fully expanded 500-row transcript, plus a streaming
+  // tail. The former 192-entry cache evicted rows before the next render pass.
+  static let maximumEntries = 1_024
+  private static let entries = ChatRenderLRU<Key, Entry>(capacity: maximumEntries)
   /// A window resize proposes a new width per block per frame of the drag.
   /// Old widths are dead once the window settles at its new size, so the map
   /// is dropped wholesale at the bound rather than curated.
@@ -57,16 +57,10 @@ enum ChatProseRenderCache {
   /// cannot be represented as AppKit prose (a table, a fenced block) — those
   /// keep their SwiftUI renderers and are never cached.
   static func entry(for key: Key, produce: () -> NSAttributedString?) -> Entry? {
-    if let hit = entries[key] {
-      touch(key)
-      return hit
+    entries.value(for: key) {
+      guard let attributed = produce() else { return nil }
+      return Entry(attributed: attributed)
     }
-    guard let attributed = produce() else { return nil }
-    let entry = Entry(attributed: attributed)
-    entries[key] = entry
-    lruOrder.append(key)
-    evictIfNeeded()
-    return entry
   }
 
   /// Memoized TextKit height for the width the transcript proposed. The width
@@ -85,20 +79,8 @@ enum ChatProseRenderCache {
   /// asserts on its population needs a way to start from empty.
   static func removeAll() {
     entries.removeAll()
-    lruOrder.removeAll()
   }
 
   /// Population, for tests that pin the eviction bound.
   static var entryCount: Int { entries.count }
-
-  private static func touch(_ key: Key) {
-    lruOrder.removeAll { $0 == key }
-    lruOrder.append(key)
-  }
-
-  private static func evictIfNeeded() {
-    while lruOrder.count > maximumEntries {
-      entries[lruOrder.removeFirst()] = nil
-    }
-  }
 }

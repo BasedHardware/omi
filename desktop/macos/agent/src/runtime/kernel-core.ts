@@ -29,9 +29,16 @@ import {
   type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import { renderAttachmentsSection } from "./attachment-prompt.js";
+import {
+  materializeExternalSurfaceRunJournal,
+  type ExternalSurfaceJournalChange,
+} from "./external-surface-journal.js";
 import {
   bindProducingJournalTurn,
+  readConversationEvidence,
   searchJournalConversation,
+  searchConversationEvidence,
   validateProducingJournalTurnAdmission,
 } from "./conversation-journal.js";
 import type {
@@ -73,7 +80,6 @@ import {
   requiresVerifiedContextDispatch,
   bindingMetadata,
   stableHash,
-  stableJsonStringify,
   stableMcpServerConfig,
   stableJsonHash,
   parseJsonObject,
@@ -349,6 +355,122 @@ export class KernelCore {
     } finally {
       lease.release();
     }
+  }
+
+  /**
+   * Read evidence through the caller's mounted conversation. The model only
+   * supplies stable evidence/turn references; owner and conversation scope
+   * come from the live run capability and exact surface mapping.
+   */
+  readAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "read_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("read_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceReadToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("read_conversation_evidence requires an exact conversation binding");
+      const read = readConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        turnId: toolInput.turnId,
+        evidenceId: toolInput.evidenceId,
+        maxChars: Math.min(
+          toolInput.maxChars,
+          invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 5_000 : 12_000,
+        ),
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      if (!read) {
+        return {
+          found: false,
+          available: false,
+          readable: false,
+          complete: true,
+          availability: "unavailable",
+          turnId: toolInput.turnId,
+          evidenceId: toolInput.evidenceId,
+        };
+      }
+      // `found` means the stable descriptor was present. `available` is the
+      // descriptor's source availability, while `readable` means this local
+      // mirror actually yielded extracted body content. Keep these separate:
+      // an unavailable/bodyless descriptor must never look like a successful
+      // body read merely because its metadata was found.
+      const readable = read.availability !== "unavailable"
+        && read.extractionCompleteness !== "none"
+        && (read.chunk.length > 0 || read.nextOffset !== null);
+      const { conversationId: _conversationId, ...readResult } = read;
+      return {
+        found: true,
+        readable,
+        ...readResult,
+        available: read.available,
+      };
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Search evidence through the caller's mounted conversation. */
+  searchAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceSearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("search_conversation_evidence requires an exact conversation binding");
+      const result = searchConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        query: toolInput.query,
+        limit: toolInput.limit,
+        maxChars: invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 280 : 320,
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      const { matches, offset, nextOffset, hasMore, scanned } = result;
+      return { matches, offset, nextOffset, hasMore, scanned };
+    } finally {
+      lease.release();
+    }
+  }
+
+  private authorizedConversationId(invocation: AuthorizedRunToolInvocation, surfaceKind: string): string | null {
+    if (!invocation.externalRefKind || !invocation.externalRefId) return null;
+    return conversationIdForOwnedSurfaceSession(this.store, {
+      ownerId: invocation.ownerId,
+      sessionId: invocation.sessionId,
+      surfaceKind,
+      externalRefKind: invocation.externalRefKind,
+      externalRefId: invocation.externalRefId,
+    });
   }
 
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
@@ -665,10 +787,33 @@ export class KernelCore {
     const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
     if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
       if (run.status === persistedStatus && attempt.status === persistedStatus) {
+        // Wrapped, like the first-completion path below. Until the missing-user-turn
+        // repair landed this branch made a single write, so atomicity was free; it now
+        // restores the question and updates the answer, and a partial failure between
+        // them would leave a half-repaired exchange until some later replay finished
+        // the job. Re-entrancy makes that recoverable rather than corrupting, but
+        // recoverable-by-retry is a weaker property than the first write already has,
+        // and there is no reason for the two paths to differ. `withTransaction` tracks
+        // nesting depth, so this composes with the transactions the journal helpers
+        // open themselves.
+        const journal = run.status === "succeeded"
+          ? this.withTransaction(() => materializeExternalSurfaceRunJournal(this.store, {
+            ownerId: input.ownerId,
+            run,
+            attempt,
+            finalText: run.finalText,
+          }))
+          : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
         // First write wins, so a replayed frame's text is deliberately not
         // stored. Say so rather than letting the surface read ok and assume it
         // landed — that silence is the shape of #12731 itself.
-        return { ...input, duplicate: true, finalTextPersisted: false };
+        return {
+          ...input,
+          duplicate: true,
+          finalTextPersisted: false,
+          journalMaterialized: journal.materialized,
+          journalChanges: journal.changes,
+        };
       }
       throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
     }
@@ -699,7 +844,7 @@ export class KernelCore {
     // or sent "" (#12731).
     const trimmed = input.finalText?.trim();
     const finalText = trimmed ? trimmed : null;
-    this.withTransaction(() => {
+    const journal = this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
@@ -709,8 +854,22 @@ export class KernelCore {
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
+      return persistedStatus === "succeeded"
+        ? materializeExternalSurfaceRunJournal(this.store, {
+          ownerId: input.ownerId,
+          run: { ...run, status: persistedStatus, finalText },
+          attempt: { ...attempt, status: persistedStatus },
+          finalText,
+        })
+        : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
     });
-    return { ...input, duplicate: false, finalTextPersisted: finalText !== null };
+    return {
+      ...input,
+      duplicate: false,
+      finalTextPersisted: finalText !== null,
+      journalMaterialized: journal.materialized,
+      journalChanges: journal.changes,
+    };
   }
 
   private assertExternalRunIdentity(
@@ -1155,9 +1314,7 @@ export class KernelCore {
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
-        const attachments = input.attachments?.length
-          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
-          : "";
+        const attachments = renderAttachmentsSection(input.attachments);
         const renderedContext = adapterId === "pi-mono" && handle.bindingId
           ? renderContextSnapshotForBinding(
               snapshot,
@@ -2904,6 +3061,55 @@ function chatHistorySearchToolInput(input: Record<string, unknown>): {
     startDate: readOptionalString(input.start_date, "start_date"),
     endDate: readOptionalString(input.end_date, "end_date"),
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  };
+}
+
+function conversationEvidenceReadToolInput(input: Record<string, unknown>): {
+  evidenceId: string;
+  turnId: string;
+  offset: number;
+  maxChars: number;
+} {
+  const required = (value: unknown, field: string): string => {
+    if (typeof value !== "string" || !value.trim() || value.length > 160) {
+      throw new Error(`read_conversation_evidence ${field} must be a bounded string`);
+    }
+    return value.trim();
+  };
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`read_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    evidenceId: required(input.evidence_id, "evidence_id"),
+    turnId: required(input.turn_id, "turn_id"),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 64 * 1024),
+    maxChars: boundedInteger(input.max_chars, "max_chars", 5_000, 128, 12_000),
+  };
+}
+
+function conversationEvidenceSearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  offset: number;
+  limit: number;
+} {
+  if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 512) {
+    throw new Error("search_conversation_evidence query must be a bounded non-empty string");
+  }
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`search_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    query: input.query.trim(),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 1_000_000_000),
+    limit: boundedInteger(input.limit, "limit", 10, 1, 20),
   };
 }
 

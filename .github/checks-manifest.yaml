@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: go-device-sdk-tests
+    command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
+    triggers: ["sdks/device/go/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -19,6 +25,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: pre-push-firmware-formatter-prerequisite
+    command: ["bash", "scripts/test-pre-push-firmware-format-prerequisite.sh"]
+    triggers: ["scripts/pre-push", "scripts/test-pre-push-firmware-format-prerequisite.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #12993 found that firmware formatting can fail only after a hosted run because pre-push silently skipped clang-format when it was absent; selected firmware sources now require the same formatter locally"
   - id: pre-commit-pinned-toolchains
     command: ["bash", "scripts/test-pre-commit-pinned-toolchains.sh"]
     triggers: ["scripts/pre-commit", "scripts/test-pre-commit-pinned-toolchains.sh", ".github/checks-manifest.yaml"]
@@ -64,7 +75,6 @@ checks:
     command: ["python3", ".github/scripts/test_preflight_runner.py"]
     triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_preflight_runner.py", ".github/scripts/run_checks.py", ".github/scripts/test_run_checks.py", "scripts/pre-push-singleflight", "scripts/pre-push", "scripts/pr-preflight", ".github/workflows/windows-preflight-portability.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    platforms: ["windows"]
     reason: "the single-flight pre-push gate must manage child processes and launch Bash checks on native Windows and POSIX hosts"
   - id: context-for-claude-build-identity
     command: ["bash", "desktop/context-for-claude/scripts/test-build-identity.sh"]
@@ -197,7 +207,7 @@ checks:
     reason: "locked invariant citation enforcement must keep rejecting an uncited path match"
   - id: pr-preflight-contract-tests
     command: ["python3", ".github/scripts/test_pr_preflight.py"]
-    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", "desktop/macos/scripts/check-e2e-flow-coverage.py", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", "desktop/macos/scripts/check-e2e-flow-coverage.py", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/checks-manifest.yaml", ".github/workflows/**", ".github/actions/**"]
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
@@ -308,12 +318,30 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
+  - id: ios-speech-deadline
+    command: ["ruby", "app/ios/test/speech_deadline_test.rb"]
+    triggers: ["app/ios/Runner/SpeechDeadline.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/speech_deadline_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "PR 12935: speech availability must return on deadline without awaiting shared downloads, and recognition cleanup must precede retry"
+  - id: ios-flutter-launch-engine-guard
+    command: ["ruby", "app/ios/test/flutter_launch_engine_guard_test.rb"]
+    triggers: ["app/ios/Runner/FlutterLaunchEngineGuard.swift", "app/ios/Runner/AppDelegate.swift", "app/ios/test/flutter_launch_engine_guard_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "a debug build opened without Flutter tooling has no engine; AppDelegate must skip plugin registration instead of handing plugins a nil registrar (launch crash in SwiftAwesomeNotificationsPlugin.register)"
   - id: ios-ble-energy-policy
     command: ["ruby", "app/ios/test/omi_ble_energy_policy_test.rb"]
     triggers: ["app/ios/Runner/Ble/OmiBleEnergyPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/BleHostApiImpl.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_ble_energy_policy_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-batch-audio-energy
+    command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
+    triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "c04b703719 writes each native batch frame in two calls; 370b1045a0 rereads saved phone location each append; exercise those production writers while preserving frame durability and metadata freshness"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
@@ -529,6 +557,11 @@ checks:
     triggers: ["backend/charts/pusher/**", "backend/scripts/verify_shared_config_migration.py", "backend/tests/unit/test_verify_shared_config_migration.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-39: static preflight that fails closed when pusher chart env/envFrom config references are structurally invalid (the 2026-07-22 REDIS_DB_HOST outage class)"
+  - id: pusher-cohost-env-diff
+    command: ["python3", "backend/scripts/verify_pusher_cohost_env_diff.py"]
+    triggers: ["backend/charts/pusher/**", "backend/charts/backend-listen/**", "backend/scripts/verify_pusher_cohost_env_diff.py", "backend/tests/unit/test_verify_pusher_cohost_env_diff.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-08-30 pusher finalization outage: unexplained pusher vs backend-listen env divergence must fail the deploy path (decision 4 co-host env-diff)"
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]

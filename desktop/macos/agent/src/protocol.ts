@@ -398,7 +398,8 @@ export interface JournalUpdateTurnMessage extends ProtocolEnvelope {
   surfaceKind: string;
   externalRefKind: string;
   externalRefId: string;
-  update: Record<string, unknown>;
+  /** Swift may append typed evidence atomically; the kernel still owns turn identity. */
+  update: Record<string, unknown> & { appendEvidence?: unknown[] };
 }
 
 export interface JournalTerminalizeTurnMessage extends ProtocolEnvelope {
@@ -814,6 +815,8 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
    * trusting a silent no-op (#12731).
    */
   finalTextPersisted?: boolean;
+  /** Whether completion left a canonical assistant row for this voice turn. */
+  journalMaterialized?: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -1028,6 +1031,32 @@ export interface ContextSourceOutcomeProjection {
   payload: Record<string, unknown>;
 }
 
+/** Compact, untrusted evidence reference admitted into shared context. Full
+ * evidence remains local to the journal and is read through an owner-scoped
+ * kernel helper when the model actually needs it. */
+export interface ConversationEvidenceProjection {
+  evidenceId: string;
+  kind: "screen" | "document" | "attachment" | "tool_result";
+  title: string;
+  capturedAtMs: number;
+  availability: "pending" | "available" | "partial" | "unavailable";
+  extractionCompleteness: "complete" | "partial" | "none";
+  snippet?: string;
+  digest?: string;
+  fullReadRequired: boolean;
+}
+
+/** Bounded receipts derived from the existing operation ledger. They describe
+ * recorded tool outcomes only; they are not a replacement for tool authority. */
+export interface ConversationOperationReceiptProjection {
+  invocationId: string;
+  runId: string;
+  toolName: string;
+  status: "prepared" | "dispatched" | "succeeded" | "failed" | "outcome_unknown";
+  retryPolicy: "safe_retry" | "never_auto_retry";
+  updatedAtMs: number;
+}
+
 export interface ContextSnapshotProjection {
   snapshotId: string;
   version: string;
@@ -1059,6 +1088,8 @@ export interface ContextSnapshotProjection {
   ownerId: string;
   sessionId: string;
   conversationId: string;
+  /** Journal clear generation at admission; absent only on legacy snapshots. */
+  conversationGeneration?: number;
   recentTurns: Array<{
     turnId: string;
     turnSeq: number;
@@ -1069,7 +1100,12 @@ export interface ContextSnapshotProjection {
     createdAtMs: number;
     /** Text of what the user's screen showed when this turn was asked (historical). */
     screenContext?: string;
+    /** Bounded historical evidence references attached to this turn. */
+    evidence?: ConversationEvidenceProjection[];
+    /** True when an authorized evidence read is needed for complete detail. */
+    evidenceReadRequired?: boolean;
   }>;
+  recentOperations?: ConversationOperationReceiptProjection[];
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
     sessionId: string;

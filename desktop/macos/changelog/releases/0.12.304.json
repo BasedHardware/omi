@@ -1,0 +1,7 @@
+{
+  "version": "0.12.304",
+  "date": "2026-09-06",
+  "changes": [
+    "Free-plan screen proactivity now stops on the plan gate instead of retrying paid Gemini calls, and a mid-session voice quota close shows the usage-limit prompt."
+  ]
+}

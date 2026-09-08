@@ -138,6 +138,9 @@ enum ProactiveLaneClientError: LocalizedError {
   case http(status: Int, retryAfterSeconds: Int?)
   case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
+  /// Identified basic + non-BYOK pixel call, or a typed 402 `plan_gated`.
+  /// Text-only JIT completions stay open (S14 / S24 narrowing).
+  case planGated
 
   var errorDescription: String? {
     switch self {
@@ -149,6 +152,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
+    case .planGated:
+      return "proactive_plan_gated"
     }
   }
 }
@@ -184,6 +189,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       return "invalid_structured_output status=\(status ?? 0)"
     case "quota_cooldown":
       return "quota_cooldown status=\(status ?? 0)"
+    case "plan_gated":
+      return "plan_gated status=\(status ?? 402)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -206,6 +213,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
         return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      case .planGated:
+        return ProactiveLaneFailureClassification(failure: "plan_gated", status: 402, errorType: nil)
       }
     }
     if error is DecodingError {
@@ -244,6 +253,12 @@ actor ProactiveLaneClient {
   static let defaultQuotaCooldownSeconds = 10 * 60
   static let minQuotaCooldownSeconds = 60
   static let maxQuotaCooldownSeconds = 60 * 60
+  /// Minimum completion budget accepted by the backend for the reasoning lane.
+  /// Reasoning models spend part of this cap on hidden tokens before producing
+  /// the strict JSON body. Keep every director call at this floor so a client
+  /// request cannot be truncated before the backend's compatible budget is
+  /// applied.
+  static let backendCompatibleReasoningMinimumCompletionTokens = 2400
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
@@ -257,6 +272,7 @@ actor ProactiveLaneClient {
     @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot) async throws
       -> Void
   private let now: @Sendable () -> Date
+  private let managedPixelDecision: @Sendable () async -> SubscriptionEntitlementDecision
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
@@ -321,7 +337,8 @@ actor ProactiveLaneClient {
       (
         @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot)
           async throws -> Void
-      )? = nil
+      )? = nil,
+    managedPixelDecision: (@Sendable () async -> SubscriptionEntitlementDecision)? = nil
   ) {
     self.session = session
     self.baseURL = baseURL
@@ -344,6 +361,11 @@ actor ProactiveLaneClient {
         _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
           authorizationSnapshot: authorizationSnapshot,
           knownAuthority: snapshot)
+      }
+    self.managedPixelDecision =
+      managedPixelDecision
+      ?? {
+        await ManagedProactivityDecisionSource.current()
       }
   }
 
@@ -434,6 +456,16 @@ actor ProactiveLaneClient {
     let currentOwner = authorizationSnapshot?.ownerID
     clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
+    if imageData != nil {
+      if await managedPixelDecision() == .planGated {
+        // S24 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route pixels to
+        // LocalInferenceRuntime. Text-only completions stay ungated here.
+        if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+          // Local lane not shipped — still fail closed to `.planGated`.
+        }
+        throw ProactiveLaneClientError.planGated
+      }
+    }
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -449,6 +481,8 @@ actor ProactiveLaneClient {
         "image_url": ["url": "data:image/jpeg;base64,\(imageData.base64EncodedString())"],
       ])
     }
+    let effectiveMaxCompletionTokens = Self.effectiveMaxCompletionTokens(
+      operation: operation, requested: maxCompletionTokens)
     var body: [String: Any] = [
       "operation": operation,
       "messages": [["role": "user", "content": content]],
@@ -456,7 +490,7 @@ actor ProactiveLaneClient {
         "type": "json_schema",
         "json_schema": ["name": "desktop_proactivity", "strict": true, "schema": jsonSchema],
       ],
-      "max_completion_tokens": maxCompletionTokens,
+      "max_completion_tokens": effectiveMaxCompletionTokens,
     ]
     if let cacheKey { body["cache_key"] = cacheKey }
     let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
@@ -492,6 +526,14 @@ actor ProactiveLaneClient {
     let requestID = http.value(forHTTPHeaderField: "X-Omi-Request-ID")
     Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
+      if ManagedPlanGateHTTP.isPlanGated(status: http.statusCode, data: data) {
+        await responseObserver?(
+          ProactiveLaneResponseObservation(
+            statusCode: http.statusCode,
+            requestID: requestID,
+            failure: ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)))
+        throw ProactiveLaneClientError.planGated
+      }
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)
@@ -519,6 +561,11 @@ actor ProactiveLaneClient {
           failure: ProactiveLaneFailureClassification.classify(error)))
       throw error
     }
+  }
+
+  static func effectiveMaxCompletionTokens(operation: String, requested: Int) -> Int {
+    guard operation == ModelQoS.Proactivity.reasoningOperation else { return requested }
+    return max(requested, backendCompatibleReasoningMinimumCompletionTokens)
   }
 
   private func clearCooldownsIfOwnerChanged(_ owner: String?) {
@@ -761,6 +808,8 @@ enum ContextProactivityTelemetry {
       "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
       "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
       "candidate_graduation", "notification_dropped", "jit_execution",
+      "http_error", "invalid_structured_output", "invalid_response", "decode",
+      "network", "quota_cooldown", "plan_gated",
     ])
     let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
     await MainActor.run {

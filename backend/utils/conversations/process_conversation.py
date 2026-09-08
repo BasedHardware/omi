@@ -64,6 +64,7 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -534,10 +535,9 @@ def _get_structured(
                 )
             return structured, False
 
-        # Compute conversation duration for discard heuristics
-        duration_seconds: Optional[float] = None
-        if main_conv.started_at and main_conv.finished_at:
-            duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
+        # Transcript span, not the wall window: `started_at` is the streaming-session
+        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text

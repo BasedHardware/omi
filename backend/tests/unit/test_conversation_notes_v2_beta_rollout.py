@@ -24,10 +24,11 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_OCR_CONTEXT_ENABLED',
 )
 
-# backend-listen finalizes a live conversation; cloud_run/backend runs process_conversation
-# inline for POST /v1/conversations/{id}/reprocess. Both must agree or "regenerate" produces
-# a different summary pipeline than the one that captured the conversation.
-SUMMARY_PIPELINE_SCOPES = ('gke/backend-listen', 'cloud_run/backend')
+# backend-listen finalizes a live conversation; gke/pusher hosts the same
+# process_conversation path after 2026-08-30; cloud_run/backend runs it inline
+# for POST /v1/conversations/{id}/reprocess. All three must agree or a captured
+# conversation and a regenerate/pusher finalization produce different pipelines.
+SUMMARY_PIPELINE_SCOPES = ('gke/backend-listen', 'gke/pusher', 'cloud_run/backend')
 
 
 @functools.cache
@@ -38,6 +39,7 @@ def _composed() -> dict:
 def _env_maps(environment: dict) -> dict[str, dict]:
     return {
         'gke/backend-listen': environment['gke']['backend-listen']['env'],
+        'gke/pusher': environment['gke']['pusher']['env'],
         'cloud_run/backend': environment['cloud_run']['services']['backend']['env'],
     }
 
@@ -81,17 +83,20 @@ def test_reprocess_cannot_disagree_with_live_finalization():
             values = {scope: _value(env_maps[scope], flag) for scope in SUMMARY_PIPELINE_SCOPES}
             assert len(set(values.values())) == 1, f'{flag}: {values}'
             assert values['gke/backend-listen'] != '', flag
+            assert values['gke/pusher'] != '', flag
 
 
 def test_the_deployed_chart_values_match_the_composed_manifest():
     """Helm reads the values file, not runtime_env.yaml, so drift here is what actually ships."""
     composed = _composed()
-    for environment, chart in (
-        ('dev', 'dev_omi_backend_listen_values.yaml'),
-        ('prod', 'prod_omi_backend_listen_values.yaml'),
+    for environment, chart_dir, chart, scope in (
+        ('dev', 'backend-listen', 'dev_omi_backend_listen_values.yaml', 'gke/backend-listen'),
+        ('prod', 'backend-listen', 'prod_omi_backend_listen_values.yaml', 'gke/backend-listen'),
+        ('dev', 'pusher', 'dev_omi_pusher_values.yaml', 'gke/pusher'),
+        ('prod', 'pusher', 'prod_omi_pusher_values.yaml', 'gke/pusher'),
     ):
-        values = yaml.safe_load((BACKEND / 'charts/backend-listen' / chart).read_text(encoding='utf-8'))
+        values = yaml.safe_load((BACKEND / 'charts' / chart_dir / chart).read_text(encoding='utf-8'))
         rendered = {entry['name']: str(entry.get('value', '')).strip().lower() for entry in values['env']}
-        expected = _env_maps(composed['environments'][environment])['gke/backend-listen']
+        expected = _env_maps(composed['environments'][environment])[scope]
         for flag in ROLLOUT_FLAGS:
-            assert rendered.get(flag) == _value(expected, flag), f'{environment}:{flag}'
+            assert rendered.get(flag) == _value(expected, flag), f'{environment}:{scope}:{flag}'

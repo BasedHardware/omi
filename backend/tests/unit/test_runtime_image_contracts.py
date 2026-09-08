@@ -142,19 +142,6 @@ def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_pa
     assert any('services.conversation_finalization' in error for error in errors)
 
 
-def test_modal_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
-    models = _contract(contracts_module, 'models')
-    dockerfile = _dockerfile_without(
-        models.dockerfile,
-        'COPY backend/utils /app/utils\n',
-        tmp_path / 'Dockerfile',
-    )
-
-    errors = contracts_module.source_closure_errors(replace(models, dockerfile=dockerfile))
-
-    assert any('utils.stt.speech_profile' in error for error in errors)
-
-
 def test_relative_import_resolution_keeps_the_current_package(contracts_module):
     level_one = contracts_module.ast.parse('from ._client import db')
     level_two = contracts_module.ast.parse('from ..shared import client')

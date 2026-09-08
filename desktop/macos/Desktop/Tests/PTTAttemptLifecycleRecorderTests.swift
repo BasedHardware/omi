@@ -44,6 +44,27 @@ import XCTest
       XCTAssertEqual(snap.firstChunksEnergyBucket, .none)
     }
 
+    func testPermissionDenialClosesAttemptWithItsOwnTerminalClass() {
+      let recorder = makeRecorder()
+      // Not the shared `begin` helper: that seeds micPermissionGranted: true, which
+      // would emit tcc_microphone_granted: true on the snapshot for an attempt the
+      // microphone permission is what refused.
+      recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: false)
+
+      let snap = recorder.terminate(
+        disposition: .permissionDenied,
+        source: "permission_gate",
+        peak: nil,
+        rms: nil,
+        turnAudioSeconds: nil,
+        voicedAudioSeconds: nil,
+        judgeable: false)
+
+      XCTAssertEqual(snap.failureClass, .permissionDenied)
+      XCTAssertEqual(snap.turnDisposition, .permissionDenied)
+      XCTAssertEqual(snap.captureStartOutcome, .notRequested)
+    }
+
     // MARK: - Failure classification 2: zero / near-zero samples
 
     func testOperationalCaptureWithOnlyZeroSamplesClassifiesZeroSamples() {

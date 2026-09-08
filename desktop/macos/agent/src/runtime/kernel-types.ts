@@ -144,6 +144,10 @@ export interface CompleteExternalSurfaceRunResult {
   duplicate: boolean;
   /** Whether this call wrote `finalText`, so an older kernel is detectable by its absence. */
   finalTextPersisted: boolean;
+  /** Whether the canonical assistant journal row exists after completion. */
+  journalMaterialized: boolean;
+  /** Internal daemon projection events; omitted from the completion wire receipt. */
+  journalChanges: import("./external-surface-journal.js").ExternalSurfaceJournalChange[];
 }
 
 export type ExternalSurfaceAuthorityErrorCode =

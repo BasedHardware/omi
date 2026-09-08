@@ -1,0 +1,51 @@
+version: 2
+name: screen-frame-attach
+tier: 2
+description: "Composer screen-frame capability: the recent-frames menu rows, and the first-real-app card handoff (frame staged with the prefilled draft, never sent)"
+app: non-prod
+covers:
+  # The composer on this route is where recent screen frames are staged
+  # (paperclip menu / first-real-app card handoff) and where a "what's on my
+  # screen?" send resolves its evidence.
+  - desktop/macos/Desktop/Sources/Chat/RewindFrameLoader.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatAttachment.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+RecentFrameStaging.swift
+  - desktop/macos/Desktop/Sources/Chat/ScreenContextFallbackPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/RecentScreensMenuContent.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+steps:
+  - id: SF1
+    name: The loader offers recent non-excluded frames (excluded apps and Omi never appear)
+    bridge.action:
+      name: recent_screen_frames_snapshot
+      params:
+        limit: "12"
+    expect:
+      ok: true
+      result.detail.rowCount:
+        min: 1
+
+  - id: SF2
+    name: The card handoff loads the newest frame, stages it, and opens the chat
+    bridge.action:
+      name: open_chat_prefilled_with_screen_frame
+    expect:
+      ok: true
+      result.detail.staged: "true"
+      result.detail.frameAppName:
+        exists: true
+      result.detail.attachmentBytes:
+        min: 1
+
+  - id: SF3
+    name: The composer holds the prompt unsent with the frame staged
+    bridge.action:
+      name: chat_composer_snapshot
+    expect:
+      ok: true
+      result.detail.main: "Summarize what's on my screen"
+      result.detail.mainStagedAttachments:
+        min: 1

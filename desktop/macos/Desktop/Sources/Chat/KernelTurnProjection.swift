@@ -140,6 +140,7 @@ enum KernelAgentLifecycleMutation {
       appendResourcesJSON: ChatResource.encodeResourcesForPersistence(
         result.resources
       ) ?? "[]",
+      appendEvidenceJSON: nil,
       metadataJSON: nil,
       terminalRevision: false
     )
@@ -504,6 +505,51 @@ final class KernelTurnProjection {
     }
   }
 
+  /// Adds one stable-ID evidence item to an already-admitted user row. The
+  /// runtime atomically merges the object into the owned row, preserving
+  /// unrelated metadata even when a streaming update races this late OCR.
+  @discardableResult
+  func appendEvidence(
+    surface: AgentSurfaceReference,
+    turnID: String,
+    evidence: ConversationEvidence,
+    ownerID: String? = nil
+  ) async -> KernelJournalTurn? {
+    guard !turnID.isEmpty,
+      let lease = captureOwnerLease(ownerID: ownerID),
+      let host
+    else { return nil }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
+    do {
+      guard let evidenceData = try? JSONEncoder().encode(evidence),
+        let evidenceJSON = String(data: evidenceData, encoding: .utf8)
+      else { return nil }
+      let updated = try await client.updateJournalTurn(
+        surface: surface,
+        ownerID: lease.ownerID,
+        update: KernelJournalTurnUpdate(
+          turnId: turnID,
+          status: nil,
+          content: nil,
+          contentBlocksJSON: nil,
+          appendContentBlocksJSON: nil,
+          resourcesJSON: nil,
+          appendResourcesJSON: nil,
+          appendEvidenceJSON: evidenceJSON,
+          metadataJSON: nil,
+          terminalRevision: false))
+      guard isCurrent(lease) else { return nil }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      guard isCurrent(lease) else { return nil }
+      return updated
+    } catch {
+      if isCurrent(lease) {
+        log("KernelTurnProjection: journal evidence append failed (code=journal_evidence_append_failed)")
+      }
+      return nil
+    }
+  }
+
   @discardableResult
   func terminalizeTurn(
     surface: AgentSurfaceReference,
@@ -670,6 +716,7 @@ final class KernelTurnProjection {
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
     userScreenContext: String? = nil,
+    userEvidence: [ConversationEvidence] = [],
     ownerID: String? = nil
   ) async -> Bool {
     let baseDate = Date()
@@ -682,8 +729,10 @@ final class KernelTurnProjection {
         createdAt: baseDate,
         sender: .user
       )
-      if let userScreenContext, !userScreenContext.isEmpty {
-        user.metadata = MessageMetadata(screenContext: userScreenContext)
+      if !userEvidence.isEmpty || !(userScreenContext?.isEmpty ?? true) {
+        user.metadata = MessageMetadata(
+          screenContext: userScreenContext,
+          evidence: userEvidence)
       }
       writes.append(
         user.journalWrite(

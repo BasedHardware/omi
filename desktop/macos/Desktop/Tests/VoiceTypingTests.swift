@@ -114,25 +114,39 @@ final class VoiceTypeCommandParserTests: XCTestCase {
 final class VoiceTypeSessionTests: XCTestCase {
 
   private final class RecordingSink: TextInsertionSink {
+    var insertionReceiptDidChange: (() -> Void)?
     var pasted: [String] = []
     var copied: [String] = []
     var pasteSucceeds = true
     var caretAfterWord = false
     var focus: String? = "1:com.example.editor"
 
-    func paste(_ text: String) -> Bool {
-      guard pasteSucceeds else { return false }
+    func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
+      guard pasteSucceeds, focusTarget() == target else { return .notInserted }
       pasted.append(text)
-      return true
+      return .inserted
     }
     func copy(_ text: String) { copied.append(text) }
-    func caretNeedsSeparatingSpace() -> Bool { caretAfterWord }
-    func focusTarget() -> String? { focus }
+    func focusTarget() -> TextInsertionTarget? {
+      guard let focus else { return nil }
+      return TextInsertionTarget(
+        elementID: AnyHashable(focus), processID: 1, bundleIdentifier: "com.example.editor",
+        selection: NSRange(location: 0, length: 0), valueDigest: Data(),
+        needsSeparatingSpace: caretAfterWord)
+    }
+  }
+
+  private func authorizedSession(sink: RecordingSink, trusted: Bool = true) -> VoiceTypeSession {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    return VoiceTypeSession(
+      sink: sink, isAccessibilityTrusted: { trusted },
+      captureAuthorization: { authority.capture(ownerID: "test-owner", expectedOwnerID: nil) },
+      isAuthorizationCurrent: { authority.isCurrent($0, ownerID: "test-owner") })
   }
 
   private func makeSession(trusted: Bool = true) -> (VoiceTypeSession, RecordingSink) {
     let sink = RecordingSink()
-    let session = VoiceTypeSession(sink: sink, isAccessibilityTrusted: { trusted })
+    let session = authorizedSession(sink: sink, trusted: trusted)
     session.begin()
     session.noteRelease()
     return (session, sink)
@@ -187,17 +201,25 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(session.payload(from: "Type hello"), "Hello")
   }
 
-  func testWithoutAccessibilityTheTurnIsReleasedToChat() {
+  func testWithoutAccessibilityTheTurnStillDictatesButCopiesInsteadOfPasting() {
+    // Regression for #12877: a "type …" turn with no Accessibility grant used
+    // to release itself to the realtime model once blocked, which then acted
+    // on the words as an instruction (spawned an agent) instead of dictating
+    // them. The turn must still claim itself — never reach the model — and
+    // deliver by clipboard copy since a paste cannot land without the grant.
     let (session, sink) = makeSession(trusted: false)
-    XCTAssertFalse(session.claim(transcript: "Type hello"))
-    XCTAssertNil(session.payload(from: "Type hello again"), "one denied turn stays denied")
-    XCTAssertEqual(session.deliver("Hello"), .none)
-    XCTAssertTrue(sink.pasted.isEmpty)
+    XCTAssertTrue(session.claim(transcript: "Type hello"), "a blocked turn still claims itself")
+    XCTAssertEqual(session.payload(from: "Type hello again"), "Hello again", "one denied turn stays denied")
+    XCTAssertTrue(session.claimsTurn)
+    XCTAssertEqual(session.deliver("Hello again"), .copied("Hello again"))
+    XCTAssertTrue(sink.pasted.isEmpty, "no Accessibility grant means no paste is even attempted")
+    XCTAssertEqual(sink.copied, ["Hello again"])
   }
 
   func testADictationThatContinuesALineOpensWithASpace() {
     let (session, sink) = makeSession()
     sink.caretAfterWord = true
+    session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type I think so"))
     // The space is on screen but not part of what the turn dictated.
     XCTAssertEqual(session.deliver("I think so"), .pasted("I think so"))
@@ -235,15 +257,16 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(sink.copied, ["Hello world"])
   }
 
-  func testAnUnreadableFocusAtReleaseStillPastes() {
+  func testAnUnreadableFocusAtReleaseCopiesInsteadOfGuessing() {
     let sink = RecordingSink()
     sink.focus = nil
-    let session = VoiceTypeSession(sink: sink, isAccessibilityTrusted: { true })
+    let session = authorizedSession(sink: sink)
     session.begin()
     session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type hello"))
-    XCTAssertEqual(session.deliver("Hello"), .pasted("Hello"))
-    XCTAssertEqual(sink.pasted, ["Hello"])
+    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    XCTAssertTrue(sink.pasted.isEmpty)
+    XCTAssertEqual(sink.copied, ["Hello"])
   }
 
   func testFocusThatBecameUnreadableAfterReleaseCopies() {
@@ -354,9 +377,112 @@ final class DictationFormatterTests: XCTestCase {
     XCTAssertEqual(DictationFormatter.format("Nathan is here"), "Nathan is here")
     XCTAssertEqual(DictationFormatter.format("   "), "")
   }
+
+  func testSentenceStartsAndThePronounIAreCapitalized() {
+    // Verbatim from a live dictation the backend recognizer returned in
+    // lowercase while the polisher was unavailable; this is what was pasted.
+    XCTAssertEqual(
+      DictationFormatter.format(
+        "beat came for real. first of all, i'm typing right now and i think this will work. "
+          + "i'm just talking a lot. i think supreme board is pretty cool. there's i got a laptop. "
+          + "loki got a pack. i'm gonna get this bread. let's go."),
+      "Beat came for real. First of all, I'm typing right now and I think this will work. "
+        + "I'm just talking a lot. I think supreme board is pretty cool. There's I got a laptop. "
+        + "Loki got a pack. I'm gonna get this bread. Let's go.")
+    XCTAssertEqual(
+      DictationFormatter.format("yes, i’m here and i’ll go! are you?"), "Yes, I’m here and I’ll go! Are you?")
+    XCTAssertEqual(DictationFormatter.format("so do i. so does he"), "So do I. So does he")
+    XCTAssertEqual(DictationFormatter.format("wait, i"), "Wait, I")
+  }
+
+  func testALetterIInsideAnotherTokenIsNotThePronoun() {
+    XCTAssertEqual(DictationFormatter.format("say hi to him"), "Say hi to him")
+    XCTAssertEqual(DictationFormatter.format("the wi-fi is down"), "The wi-fi is down")
+    XCTAssertEqual(DictationFormatter.format("mail i@example.com now"), "Mail i@example.com now")
+    XCTAssertEqual(DictationFormatter.format("that is i.e. the one"), "That is i.e. the one")
+    XCTAssertEqual(DictationFormatter.format("see (i) and (ii)"), "See (i) and (ii)")
+    XCTAssertEqual(DictationFormatter.format("open /usr/i/notes"), "Open /usr/i/notes")
+  }
+
+  func testAbbreviationsInitialsAndEllipsesDoNotStartASentence() {
+    XCTAssertEqual(DictationFormatter.format("see e.g. the docs. it works"), "See e.g. the docs. It works")
+    XCTAssertEqual(DictationFormatter.format("ask dr. smith at 3.5 pm"), "Ask dr. smith at 3.5 pm")
+    XCTAssertEqual(DictationFormatter.format("meet J. smith. then go"), "Meet J. smith. Then go")
+    XCTAssertEqual(DictationFormatter.format("wait... maybe not"), "Wait... maybe not")
+    XCTAssertEqual(DictationFormatter.format("she said \"no.\" then left"), "She said \"no.\" Then left")
+    XCTAssertEqual(DictationFormatter.format("visit example.com. it loads"), "Visit example.com. It loads")
+  }
+
+  func testThePronounIIsOnlyCapitalizedInEnglish() {
+    // Italian "i" is an article; capitalizing it would rewrite the sentence.
+    XCTAssertEqual(DictationFormatter.format("guarda i ragazzi", language: "it"), "Guarda i ragazzi")
+    XCTAssertEqual(DictationFormatter.format("guarda i ragazzi", language: "multi"), "Guarda i ragazzi")
+    // Auto-detected language, English text: the text itself decides.
+    XCTAssertEqual(
+      DictationFormatter.format("so i think this is the one", language: "multi"), "So I think this is the one")
+    // Sentence starts are capitalized in every cased language.
+    XCTAssertEqual(DictationFormatter.format("er kommt. sie auch", language: "de"), "Er kommt. Sie auch")
+  }
 }
 
 final class DictationPolisherTests: XCTestCase {
+
+  private actor RequestProbe {
+    private(set) var calls = 0
+
+    func record() {
+      calls += 1
+    }
+  }
+
+  func testAnAlreadyCleanEnglishUtteranceSkipsTheRemotePolisher() {
+    let context = DictationPolisher.Context(appName: "Notes")
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: context),
+      .skip)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "thanks", formatted: "Thanks", context: context),
+      .required)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: .init(language: "es")),
+      .required)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: .init(keywords: ["Project"])),
+      .required)
+  }
+
+  func testOnlyFiniteSafePhrasesCanSkipTheRemotePath() {
+    let context = DictationPolisher.Context()
+    for text in [
+      "Hello world.",
+      "Make it blue—actually red",
+      "Sorry, send it tomorrow",
+      "john at example dot com",
+      "I I need the report",
+      "Hello new paragraph world",
+      "Meet at three, no, four",
+      "Call me at four",
+    ] {
+      XCTAssertEqual(
+        DictationPolisher.policy(original: text, formatted: text, context: context),
+        .required,
+        "arbitrary or speech-like prose must keep the model path: \(text)")
+    }
+  }
+
+  func testInjectedPolishRequestCanApplyASelfCorrectionWithoutNetworkOrSleep() async throws {
+    let probe = RequestProbe()
+    let context = DictationPolisher.Context()
+    let result = try await DictationPolisher.polish(
+      "Meet at three, no, four", context: context,
+      using: { _, _, _ in
+        await probe.record()
+        return "Meet at four."
+      })
+    XCTAssertEqual(result, "Meet at four.")
+    let calls = await probe.calls
+    XCTAssertEqual(calls, 1)
+  }
 
   func testACleanRewriteIsAccepted() {
     XCTAssertEqual(

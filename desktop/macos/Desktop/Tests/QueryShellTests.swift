@@ -28,9 +28,24 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - What the empty bar says
+
+  /// Clearing the chat left the bar saying `Ask a follow-up…` over an empty transcript — an
+  /// invitation to follow up on nothing. The composer now says `Ask Omi`, full stop: the prompt
+  /// does not depend on what the transcript holds, so there is no state for it to get wrong.
+  func testTheChatComposerAlwaysSaysAskOmi() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .answer), "Ask Omi")
+    XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
+  }
+
+  /// The search placement keeps its own prompt; it is a different control.
+  func testSearchingKeepsTheSearchPlaceholder() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)
+  }
+
   // MARK: - What a submit leaves behind
 
-  /// A composer that keeps the message it just sent leaves `Ask a follow-up…` permanently
+  /// A composer that keeps the message it just sent leaves its placeholder permanently
   /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
   /// the field by hand before they can write the next one.
   func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {
@@ -51,6 +66,33 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(submission.question, "priya")
     XCTAssertEqual(submission.text, "", "the send consumes the words wherever the bar is standing")
     XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// **A staged file with no words is a send.** Dropping a PDF on the bar and pressing return used to
+  /// resolve to `.none`, so the only way to ask about an attachment was to invent words for it.
+  func testAStagedItemWithNoWordsSubmitsAsAnAsk() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "   ", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: false), .none)
+
+    let submission = QueryShellSubmission.resolve(text: "  ", hasAttachments: true)
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "", "An empty question: the attachment is the message")
+    XCTAssertEqual(submission.text, "", "The send consumes the field as it does for words")
+    XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// The ledger admits the resolved attachment-only submit — and once the send has consumed the
+  /// attachments there is nothing for `Try again` to re-send.
+  func testTheLedgerAdmitsAnAttachmentOnlySubmitButOffersNoRetryForIt() {
+    var ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planSubmit(nil), "A bare empty field resolved to no question at all")
+    guard let plan = ledger.planSubmit("") else { return XCTFail("an attachment-only send is a plan") }
+    XCTAssertTrue(plan.countsAsQuestion)
+    XCTAssertNil(ledger.planSubmit("", providerBusy: true), "Return during a turn is still refused")
+
+    ledger.recordAccepted(plan)
+    XCTAssertNil(ledger.planRetry(), "The caption alone would ask about files that are gone")
   }
 
   /// An inert key must not move the reader. Before this, an empty field was itself read as "go back

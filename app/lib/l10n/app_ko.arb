@@ -3246,5 +3246,15 @@
     "chatBlockUnavailable": "더 이상 사용할 수 없음",
     "chatBlockRecommendedNextSteps": "권장 다음 단계",
     "couldNotLoadMemories": "추억을 불러올 수 없습니다",
-    "couldNotLoadKnowledgeGraph": "지식 그래프를 불러올 수 없습니다"
+    "couldNotLoadKnowledgeGraph": "지식 그래프를 불러올 수 없습니다",
+    "speechProfileOwnerTitle": "{name}님의 음성 프로필",
+    "play": "재생",
+    "redo": "다시 녹음",
+    "answerWithYourVoice": "목소리로 답해주세요:",
+    "speechProfileTopicLocation": "어디에 사시나요?",
+    "speechProfileTopicWork": "어떤 일을 하시나요?",
+    "speechProfileTopicGoal": "장기적인 목표는 무엇인가요?",
+    "speechToTextUnavailableDesc": "지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.",
+    "memoryHistoryPartial": "기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.",
+    "tapPlusToStartRecording": "+를 눌러 녹음 시작"
 }

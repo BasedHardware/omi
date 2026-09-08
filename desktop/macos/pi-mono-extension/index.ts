@@ -1150,8 +1150,13 @@ function typeBoxSchemaForJsonSchema(schema: Record<string, unknown>): unknown {
     case "string":
       return Type.String(options);
     case "number":
-    case "integer":
       return Type.Number(options);
+    case "integer":
+      // Keep the canonical JSON Schema integer contract at the Pi boundary.
+      // Type.Number accepts the same runtime values but advertises a different
+      // schema, which lets cursor/limit/offset arguments drift to fractional
+      // values before the kernel can apply its integer bounds.
+      return Type.Integer(options);
     case "boolean":
       return Type.Boolean(options);
     case "array": {

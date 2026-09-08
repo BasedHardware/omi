@@ -251,6 +251,7 @@ extension SettingsContentView {
     Binding(
       get: { audioRecordingMode },
       set: { mode in
+        let previousMode = audioRecordingMode
         audioRecordingModeRaw = mode.rawValue
         AnalyticsManager.shared.settingToggled(
           setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
@@ -259,7 +260,11 @@ extension SettingsContentView {
         // starts never raise the TCC sheet. Enabling listening here IS an explicit
         // user action, so it owns the one-shot permission request itself (same
         // contract as the Listen control's `cycleListening`).
-        if mode != .off, !appState.hasMicrophonePermission {
+        if AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+          currentMode: previousMode,
+          requestedMode: mode,
+          permissionGranted: appState.hasMicrophonePermission)
+        {
           appState.requestMicrophonePermission()
         }
       }

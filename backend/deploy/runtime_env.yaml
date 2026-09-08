@@ -237,6 +237,15 @@ environments:
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_ENABLED:
             value: 'on'
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
             category: rollout
@@ -1528,6 +1537,15 @@ environments:
         env:
           MEMORY_ENABLED:
             value: 'on'
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
       config_map:
         name: prod-omi-backend-config
         entries:

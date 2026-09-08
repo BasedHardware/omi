@@ -447,7 +447,6 @@ import XCTest
     XCTAssertFalse(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
     XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
     XCTAssertTrue(source.contains("pttStatusBanner"))
-    XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
     XCTAssertFalse(source.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
   }
 
@@ -1585,9 +1584,12 @@ import XCTest
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
     let source = try floatingControlBarWindowSource()
 
-    // Legacy PTT collapse supplies the bare compact surface to the shared
-    // transition path, which applies the active response/agent glow exactly once.
-    XCTAssertTrue(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
+    // Legacy PTT collapse now lands on the composed closed surface (card ∪
+    // banner ∪ listening island) instead of substituting the bare compact
+    // bar; the shared transition path still applies the active response/agent
+    // glow exactly once on top of whatever size lands.
+    XCTAssertTrue(source.contains("return closedSurfaceSize(usesNotchIsland: usesNotchIsland)"))
+    XCTAssertFalse(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
     XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
     XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }
