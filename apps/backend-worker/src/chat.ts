@@ -10,6 +10,7 @@ import {
 import { isVisibleGenerationText } from "./generation-prompt";
 import {
   CHAT_CAPABILITIES,
+  isChatCreate,
   type ChatCreate,
   type ChatMessage,
   type GenerationEvent,
@@ -86,6 +87,7 @@ export async function admitMessage(
     let message = await readMessage(db, accountId, input.id);
     if (message === null)
       throw new Error("admission references missing message");
+    message = overlayCreateFields(message, input);
     if (input.journalRevision > message.journalRevision) {
       message = {
         ...message,
@@ -197,7 +199,7 @@ export async function readHistory(
       `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
        FROM (
          SELECT id, text, sender, created_at, generation_outcome, position, payload,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END)
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.message_id = chat_messages.id AND admissions.account_id = chat_messages.account_id), '{}') END)
             WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
          FROM chat_messages WHERE account_id = ?
        ) AS normalized
@@ -499,7 +501,7 @@ async function readMessage(
   const parsed = parseStoredMessage(row);
   if (parsed === null) return null;
   return parsed.fromColumns
-    ? withBoundHistoryAttachments(db, accountId, parsed.message)
+    ? hydrateColumnMessage(db, accountId, parsed.message)
     : parsed.message;
 }
 
@@ -562,7 +564,7 @@ async function projectHistoryMessage(
   const parsed = parseStoredMessage(row);
   if (parsed === null) return null;
   const message = parsed.fromColumns
-    ? await withBoundHistoryAttachments(db, accountId, parsed.message)
+    ? await hydrateColumnMessage(db, accountId, parsed.message)
     : parsed.message;
   if (message.sender === "ai") {
     const outcome = historyOutcomeFromTerminal(
@@ -575,6 +577,73 @@ async function projectHistoryMessage(
     return { ...message, sender: "human", generationOutcome: null };
   }
   return { ...message, sender: "unknown" };
+}
+
+function overlayCreateFields(
+  message: ChatMessage,
+  input: ChatCreate
+): ChatMessage {
+  return {
+    ...message,
+    chatSessionId: input.chatSessionId ?? null,
+    appId: input.appId ?? null,
+    messageSource: input.messageSource ?? message.messageSource,
+    payloadHash: computePayloadHash(input),
+  };
+}
+
+function overlayAdmissionPayload(
+  message: ChatMessage,
+  payload: string
+): ChatMessage {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return message;
+  }
+  if (isChatCreate(parsed)) {
+    return overlayCreateFields(message, parsed);
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return message;
+  }
+  const session = (parsed as Record<string, unknown>)["chatSessionId"];
+  if (
+    typeof session !== "string" ||
+    session.length === 0 ||
+    session.length > 128
+  ) {
+    return message;
+  }
+  return { ...message, chatSessionId: session };
+}
+
+async function withAdmissionCreateFields(
+  db: D1Database,
+  accountId: string,
+  message: ChatMessage
+): Promise<ChatMessage> {
+  const row = await db
+    .prepare(
+      "SELECT payload FROM chat_admissions WHERE message_id = ? AND account_id = ?"
+    )
+    .bind(message.id, accountId)
+    .first<{ payload: string }>();
+  if (row === null) return message;
+  return overlayAdmissionPayload(message, row.payload);
+}
+
+async function hydrateColumnMessage(
+  db: D1Database,
+  accountId: string,
+  message: ChatMessage
+): Promise<ChatMessage> {
+  return withBoundHistoryAttachments(
+    db,
+    accountId,
+    await withAdmissionCreateFields(db, accountId, message)
+  );
 }
 
 async function withBoundHistoryAttachments(

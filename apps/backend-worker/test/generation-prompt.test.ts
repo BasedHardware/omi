@@ -845,6 +845,7 @@ describe("admit replay attachments", () => {
       sender: "human" as const,
       journalRevision: 1,
       attachmentIds: ["att-notes"],
+      chatSessionId: "named-session",
     };
     const now = 1;
     await db
@@ -903,5 +904,7 @@ describe("admit replay attachments", () => {
     expect(JSON.parse(stored!.payload).attachments).toEqual(
       admitted.message.attachments
     );
+    expect(admitted.message.chatSessionId).toBe("named-session");
+    expect(JSON.parse(stored!.payload).chatSessionId).toBe("named-session");
   });
 });

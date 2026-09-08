@@ -80,7 +80,7 @@ export async function readConversations(
     .prepare(
       `WITH normalized AS (
          SELECT position, sender, created_at, generation_outcome, text,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END)
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.message_id = chat_messages.id AND admissions.account_id = chat_messages.account_id), '{}') END)
             WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
          FROM chat_messages WHERE account_id = ?
        ), sessions AS (
