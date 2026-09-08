@@ -135,6 +135,21 @@ extension APIClient {
     return try await get("v1/users/people")
   }
 
+  /// Renames a person. The backend answers with an untyped acknowledgement, so only the status
+  /// is checked.
+  func renamePerson(id: String, name: String) async throws {
+    var components = URLComponents(string: baseURL + "v1/users/people/\(id)/name")
+    components?.queryItems = [URLQueryItem(name: "value", value: name)]
+    guard let url = components?.url else { throw APIError.invalidResponse }
+    var request = URLRequest(url: url)
+    request.httpMethod = "PATCH"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    let (data, response) = try await performAuthenticatedData(for: request)
+    guard (200..<300).contains(response.statusCode) else {
+      throw APIError.httpError(statusCode: response.statusCode, detail: String(data: data, encoding: .utf8))
+    }
+  }
+
   /// Deletes a person (their speech profile goes with them on the backend).
   func deletePerson(id: String) async throws {
     try await delete("v1/users/people/\(id)")

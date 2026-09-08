@@ -106,6 +106,9 @@ struct PeoplePage: View {
   @State private var activity: [String: PersonActivity] = [:]
   @State private var voices: [LocalSpeakerDiarizer.VoiceSummary] = []
   @State private var personPendingDeletion: Person?
+  @State private var editingPersonId: String?
+  @State private var editedName = ""
+  @FocusState private var nameFieldFocused: Bool
   /// Who was talked to according to the backend's conversations (from the last Refresh),
   /// merged with the local transcript store.
   @State private var remoteActivity: [String: PersonActivity] = [:]
@@ -251,9 +254,7 @@ struct PeoplePage: View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
       avatar(initial: String(row.person.name.prefix(1)).uppercased(), isUser: false)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text(row.person.name)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
+        nameField(row)
         Text(PersonOverview.conversationCaption(count: row.conversationCount, last: row.lastTalkedAt))
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
@@ -306,6 +307,46 @@ struct PeoplePage: View {
         .fill(Ink.rowFill)
     )
     .accessibilityIdentifier("people-row-\(row.id)")
+  }
+
+  /// The name, editable in place: click it to type, Return saves, Escape cancels.
+  @ViewBuilder
+  private func nameField(_ row: PersonOverview) -> some View {
+    if editingPersonId == row.id {
+      TextField("Name", text: $editedName)
+        .textFieldStyle(.plain)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(Ink.primary)
+        .focused($nameFieldFocused)
+        .onSubmit { Task { await commitRename(row) } }
+        .onExitCommand { editingPersonId = nil }
+        .onChange(of: nameFieldFocused) { _, focused in
+          if !focused, editingPersonId == row.id { Task { await commitRename(row) } }
+        }
+        .frame(maxWidth: 260)
+        .accessibilityIdentifier("people-name-field-\(row.id)")
+    } else {
+      Button {
+        editedName = row.person.name
+        editingPersonId = row.id
+        nameFieldFocused = true
+      } label: {
+        Text(row.person.name)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
+      }
+      .buttonStyle(.plain)
+      .help("Click to rename")
+      .accessibilityIdentifier("people-name-\(row.id)")
+    }
+  }
+
+  private func commitRename(_ row: PersonOverview) async {
+    guard editingPersonId == row.id else { return }
+    editingPersonId = nil
+    let name = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, name != row.person.name else { return }
+    _ = await appState.renamePerson(id: row.id, name: name)
   }
 
   private func avatar(initial: String, isUser: Bool) -> some View {
