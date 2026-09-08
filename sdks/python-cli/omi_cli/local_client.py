@@ -159,7 +159,12 @@ def _unwrap_tool_response(body: Any) -> Any:
     result = body["result"] if "result" in body else body
     unwrapped = _unwrap_tool_result(result)
     if isinstance(unwrapped, Mapping) and unwrapped.get("ok") is False:
-        message = unwrapped.get("message") or unwrapped.get("error") or "Local tool error"
+        raw_error = unwrapped.get("error") or unwrapped.get("message") or "Local tool error"
+        if isinstance(raw_error, Mapping):
+            raw_message = raw_error.get("message")
+            message = raw_message if isinstance(raw_message, str) else "Local tool error"
+        else:
+            message = raw_error
         raise CliError(
             message=str(message),
             detail=json.dumps(unwrapped, sort_keys=True),
