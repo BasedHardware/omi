@@ -271,6 +271,20 @@ async function connectToDevice(deviceId) {
 
 ---
 
+## Local Whisper transcription
+
+For the injected Whisper runner, `stop()` stops accepting new PCM audio and
+flushes any buffered tail. Transcripts from accepted audio are still delivered
+through `onTranscript`, including decodes that finish after `stop()` returns.
+Decodes run sequentially in the order audio was accepted, so a short tail cannot
+overtake an earlier batch. Repeated `stop()` calls do not decode the tail again.
+
+Run the hardware-independent stop behavior tests from the repository root:
+
+```bash
+bun test sdks/react-native/tests/whisper.test.mjs
+```
+
 ## License
 
 MIT License

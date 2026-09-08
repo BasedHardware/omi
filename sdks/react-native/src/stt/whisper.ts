@@ -14,13 +14,19 @@ export function createWhisperTranscriber(options: {
   const batchBytes = (options.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
+  let pending = Promise.resolve();
 
-  async function flush() {
+  function flush() {
     if (buffer.byteLength === 0) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
-    const text = await options.runner(pcm);
-    if (text && !stopped) options.onTranscript(text);
+    const decode = async () => {
+      const text = await options.runner(pcm);
+      if (text) options.onTranscript(text);
+    };
+    // A failed batch must not prevent later accepted audio from being decoded.
+    pending = pending.then(decode, decode);
+    return pending;
   }
 
   return {
@@ -36,6 +42,7 @@ export function createWhisperTranscriber(options: {
       }
     },
     stop() {
+      if (stopped) return;
       stopped = true;
       void flush();
     },
