@@ -236,7 +236,7 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation, @unchecked Sendable {
   /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
   /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
   /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
@@ -989,6 +989,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openItem.target = self
     menu.addItem(openItem)
 
+    let undoDictationItem = NSMenuItem(
+      title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
+    undoDictationItem.target = self
+    menu.addItem(undoDictationItem)
+
     menu.addItem(NSMenuItem.separator())
 
     // Check for Updates
@@ -1110,6 +1115,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   /// stages the first-real-app card's screen referent alongside the draft.
   @MainActor func openMainAppChat(prefilledDraft draft: String, attachedFrame: ChatAttachment? = nil) {
     MainChatNavigationRequestStore.shared.request(draft: draft, attachment: attachedFrame)
+    openMainAppWindow()
+  }
+
+  /// Merge an offline question only once the actual composer has restored its draft.
+  @MainActor func openMainAppChat(appendingDraft draft: String, authorization: RuntimeOwnerAuthorizationSnapshot) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, disposition: .append, authorization: authorization)
     openMainAppWindow()
   }
 
@@ -1283,6 +1294,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     let outcome = SystemCaptureControls.setAudioRecording(enabled)
     sender.state = outcome.resultingIsOn ? .on : .off
+  }
+
+  @MainActor @objc private func undoLastDictationFromMenu() {
+    PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
+  }
+
+  @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if menuItem.action == #selector(undoLastDictationFromMenu) {
+      return PushToTalkManager.shared.canUndoLastDictation
+    }
+    return true
   }
 
   // MARK: - NSMenuDelegate

@@ -7,6 +7,42 @@ enum NotchVoiceMorphStage: Equatable {
   case waveform
 }
 
+/// The compact, actionable control shown in the notch while a voice turn is
+/// capturing. This is presentation copy only: the tap still routes through
+/// the existing push-to-talk button facade and the reducer remains the owner
+/// of the turn lifecycle.
+enum NotchVoiceControlPresentation {
+  /// The right lobe needs enough room for the icon, label, and hit target while
+  /// the notch is owned by an active voice turn.
+  static let activeSideWidth: CGFloat = 86
+
+  static func title(isLocked _: Bool) -> String {
+    "SEND"
+  }
+
+  static func iconName(isLocked: Bool) -> String {
+    isLocked ? "lock.fill" : "mic.fill"
+  }
+
+  static func accessibilityLabel(isLocked _: Bool) -> String {
+    "Send voice message"
+  }
+
+  static func accessibilityValue(isLocked: Bool) -> String {
+    isLocked ? "Locked" : "Listening"
+  }
+
+  static func stateLabel(isLocked: Bool) -> String {
+    isLocked ? "Locked listening" : "Listening"
+  }
+
+  static func accessibilityHint(isLocked: Bool) -> String {
+    isLocked
+      ? "Tap to stop listening and send your voice message"
+      : "Tap to stop listening and send your voice message, or release the shortcut"
+  }
+}
+
 enum NotchVoiceMorphGeometry {
   static let lineBoundary: CGFloat = 0.55
   static let markSize = CGSize(width: 21, height: 21)
@@ -354,6 +390,8 @@ struct NotchVoiceMorphMark: View {
   let isListening: Bool
   let isThinking: Bool
   var isSpeaking: Bool = false
+  /// The reducer-owned turn is in hands-free listening mode.
+  var isLocked: Bool = false
   /// The hold has been recognised as a dictation: the dots ease to red and
   /// keep whatever motion the presentation already has. When it ends they
   /// ease back out rather than snapping.
@@ -406,7 +444,11 @@ struct NotchVoiceMorphMark: View {
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(
-      isDictating ? "Dictating" : isListening ? "Listening" : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
+      isDictating
+        ? "Dictating"
+        : isListening
+          ? NotchVoiceControlPresentation.stateLabel(isLocked: isLocked)
+          : isSpeaking ? "Speaking" : isThinking ? "Thinking" : "Omi")
   }
 
   private func setMorphProgress(_ progress: CGFloat) {

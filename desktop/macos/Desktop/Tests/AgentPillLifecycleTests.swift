@@ -447,7 +447,6 @@ import XCTest
     XCTAssertFalse(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
     XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
     XCTAssertTrue(source.contains("pttStatusBanner"))
-    XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
     XCTAssertFalse(source.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
   }
 

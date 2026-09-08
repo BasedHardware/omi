@@ -811,6 +811,7 @@ final class DesktopAutomationActionRegistry {
     // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
     registerActivationActions()
+    registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     register(
       name: "refresh_all_data",
