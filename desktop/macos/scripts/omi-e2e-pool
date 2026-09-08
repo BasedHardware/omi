@@ -50,7 +50,7 @@
 #                               Background/ssh session with no keychain prompt)
 #   OMI_E2E_POOL_AUTOMATION_BASE / _BACKEND_BASE / _PYTHON_BASE
 #                               port bases; slot N gets base+N (defaults 47700 / 10100 / 8300,
-#                               all below the per-worktree ranges dev-instance.sh derives)
+#                               all outside the per-worktree ranges dev-instance.sh derives)
 #   OMI_E2E_POOL_REQUIRED       comma list `check` insists on
 #                               (default microphone,screen_recording,accessibility)
 #
@@ -81,6 +81,18 @@ case "$POOL_PREFIX" in
   *) die "OMI_E2E_POOL_PREFIX must start with omi- so run.sh accepts it as a named bundle (got '$POOL_PREFIX')" ;;
 esac
 
+# run.sh slugifies OMI_APP_NAME (lowercase, [a-z0-9-]) before handing the slug
+# to `verify`, so a prefix that would not survive the same transform can never
+# match a derived slug — the run.sh guard would silently pass every build.
+pool_prefix_slug() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+}
+_pool_prefix_slug="$(pool_prefix_slug "$POOL_PREFIX")"
+if [ "$_pool_prefix_slug" != "$POOL_PREFIX" ]; then
+  die "OMI_E2E_POOL_PREFIX must already be in run.sh slug form (lowercase letters, digits, single hyphens; got '$POOL_PREFIX' -> '$_pool_prefix_slug')"
+fi
+unset _pool_prefix_slug
+
 # ── slot naming ─────────────────────────────────────────────────────────────
 slot_name()      { printf '%s-%s' "$POOL_PREFIX" "$1"; }
 slot_bundle_id() { printf 'com.omi.%s' "$(slot_name "$1")"; }
@@ -105,6 +117,66 @@ slug_slot() {
 valid_slot() {
   case "$1" in ''|*[!0-9]*) return 1 ;; esac
   [ "$1" -ge 1 ] && [ "$1" -le "$POOL_SIZE" ]
+}
+
+# --slot 01 and --slot 1 are the same slot. Canonicalize before any path or
+# name is derived from the value, so no lease ever lands in a padded directory
+# like slots/01 next to the canonical slots/1. Non-numeric values pass through
+# untouched for valid_slot to report.
+canonical_slot() {
+  case "$1" in
+    ''|*[!0-9]*) printf '%s' "$1" ;;
+    *) printf '%s' "$((10#$1))" ;;
+  esac
+}
+
+# ── mutual exclusion ────────────────────────────────────────────────────────
+# acquire, release and reap all follow read-decide-write sequences on the
+# lease files. Two lanes acquiring concurrently could both observe the same
+# slot free and overwrite each other's lease, so the decision sequence runs
+# under one pool lock. mkdir(2) is atomic; the owner pid recorded inside makes
+# a crashed holder's lock breakable instead of permanently wedging the pool.
+POOL_LOCK_DIR="$POOL_DIR/.lock"
+
+pool_lock() {
+  mkdir -p "$POOL_DIR"
+  local waited=0
+  until mkdir "$POOL_LOCK_DIR" 2>/dev/null; do
+    break_stale_pool_lock
+    waited=$((waited + 1))
+    [ "$waited" -lt 300 ] || die "pool lock at $POOL_LOCK_DIR is stuck; remove it by hand"
+    sleep 0.1
+  done
+  printf '%s\n' "$$" > "$POOL_LOCK_DIR/owner"
+  trap pool_unlock EXIT
+}
+
+break_stale_pool_lock() {
+  [ -d "$POOL_LOCK_DIR" ] || return 0
+  local owner
+  owner="$(cat "$POOL_LOCK_DIR/owner" 2>/dev/null || true)"
+  # A recorded, living owner is the normal case: wait like everyone else.
+  [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null && return 0
+  # No owner written yet (crash between mkdir and printf), or the owner is
+  # gone. Only act on a lock that has sat there for a while, and only when
+  # the recorded owner is really dead — never touch a live holder's lock.
+  if [ -n "$owner" ]; then
+    rm -rf "$POOL_LOCK_DIR"
+    return 0
+  fi
+  local mtime
+  mtime="$(stat -f %m "$POOL_LOCK_DIR" 2>/dev/null || stat -c %Y "$POOL_LOCK_DIR" 2>/dev/null || printf '%s' "$(now)")"
+  [ $(( $(now) - mtime )) -ge 60 ] && rm -rf "$POOL_LOCK_DIR"
+  return 0
+}
+
+pool_unlock() {
+  # Remove the lock only when this process still owns it: a waiter that dies
+  # mid-wait must never drop a live holder's lock.
+  if [ -f "$POOL_LOCK_DIR/owner" ] && [ "$(cat "$POOL_LOCK_DIR/owner" 2>/dev/null)" = "$$" ]; then
+    rm -rf "$POOL_LOCK_DIR"
+  fi
+  trap - EXIT
 }
 
 # ── per-slot persisted config ───────────────────────────────────────────────
@@ -168,9 +240,13 @@ lease_defunct_reason() {
   fi
   if [ -n "$L_WORKTREE" ] && [ -d "$L_WORKTREE" ] && [ -n "$L_TOKEN" ]; then
     # The holder's own env file carries the token. omi-lane finish removes the
-    # worktree; a lane that merely deleted .dev/ has given the slot up too.
+    # worktree; a lane that merely deleted .dev/ has given the slot up too, so
+    # a missing env file is just as defunct as one naming a different token.
     local env_file="$L_WORKTREE/.dev/e2e-pool.env"
-    if [ -f "$env_file" ] && ! grep -q "OMI_E2E_POOL_TOKEN='$L_TOKEN'" "$env_file"; then
+    if [ ! -f "$env_file" ]; then
+      printf 'worktree %s no longer holds the pool env file' "$L_WORKTREE"; return 0
+    fi
+    if ! grep -q "OMI_E2E_POOL_TOKEN='$L_TOKEN'" "$env_file"; then
       printf 'worktree %s now holds a different lease' "$L_WORKTREE"; return 0
     fi
   fi
@@ -220,8 +296,8 @@ ARG_SLOT="" ARG_WORKTREE="" ARG_HOLDER="" ARG_PID="" ARG_AUTH="" ARG_QUIET=0
 parse_common() {
   while [ $# -gt 0 ]; do
     case "$1" in
-      --slot) ARG_SLOT="${2:?--slot needs a number}"; shift 2 ;;
-      --slot=*) ARG_SLOT="${1#--slot=}"; shift ;;
+      --slot) ARG_SLOT="$(canonical_slot "${2:?--slot needs a number}")"; shift 2 ;;
+      --slot=*) ARG_SLOT="$(canonical_slot "${1#--slot=}")"; shift ;;
       --worktree) ARG_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
       --worktree=*) ARG_WORKTREE="${1#--worktree=}"; shift ;;
       --holder) ARG_HOLDER="${2:?--holder needs a name}"; shift 2 ;;
@@ -259,6 +335,11 @@ cmd_acquire() {
     *) die "--auth must be shared or isolated (got '$ARG_AUTH')" ;;
   esac
 
+  # Everything from the first lease read to the last lease write runs under
+  # the pool lock: without it, two lanes acquiring at the same moment can both
+  # observe the same slot free and overwrite each other's lease.
+  pool_lock
+
   # Already ours? Refresh rather than take a second slot.
   local held
   if held="$(worktree_slot "$wt")"; then
@@ -273,6 +354,7 @@ cmd_acquire() {
     write_env_file "$held" "$wt"
     [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $held ($(slot_name "$held")) already held by $wt — refreshed"
     printf '%s\n' "$held"
+    pool_unlock
     return 0
   fi
 
@@ -307,6 +389,7 @@ cmd_acquire() {
     write_env_file "$n" "$wt"
     [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $n ($(slot_name "$n")) acquired by $holder for $wt"
     printf '%s\n' "$n"
+    pool_unlock
     return 0
   done
 
@@ -317,6 +400,7 @@ cmd_acquire() {
     say "  A larger pool needs its new slot granted once by a human: omi-e2e-pool setup --slot $((POOL_SIZE + 1))"
     say "  Do NOT build into a held slot by hand; that is another lane's app, mid-test."
   } >&2
+  pool_unlock
   return 1
 }
 
@@ -406,6 +490,7 @@ cmd_verify() {
 
 cmd_release() {
   parse_common "$@"
+  pool_lock
 
   local slot
   if [ -n "$ARG_SLOT" ]; then
@@ -415,11 +500,13 @@ cmd_release() {
     local wt="${ARG_WORKTREE:-$(current_worktree)}"
     if ! slot="$(worktree_slot "$wt")"; then
       [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: $wt holds no slot — nothing to release"
+      pool_unlock
       return 0
     fi
   fi
   if ! read_lease "$slot"; then
     [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $slot was not leased — nothing to release"
+    pool_unlock
     return 0
   fi
   if [ -n "$ARG_WORKTREE" ] && [ "$L_WORKTREE" != "$ARG_WORKTREE" ] && [ -z "$(lease_defunct_reason)" ]; then
@@ -428,7 +515,7 @@ cmd_release() {
   [ -f "$L_WORKTREE/.dev/e2e-pool.env" ] && rm -f "$L_WORKTREE/.dev/e2e-pool.env"
   rm -f "$(lease_file "$slot")"
   [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $slot ($(slot_name "$slot")) released (was $L_HOLDER)"
-
+  pool_unlock
 }
 
 app_pid() {
@@ -465,6 +552,7 @@ cmd_status() {
 }
 
 cmd_reap() {
+  pool_lock
   local n reaped=0
   for ((n = 1; n <= POOL_SIZE; n++)); do
     read_lease "$n" || continue
@@ -478,6 +566,7 @@ cmd_reap() {
     local pid; pid="$(app_pid "$n")"
     [ -n "$pid" ] && say "    $(slot_name "$n").app still running (pid $pid); the next launch replaces it"
   done
+  pool_unlock
   [ "$reaped" -eq 1 ] || say "omi-e2e-pool: nothing to reap"
 }
 

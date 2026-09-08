@@ -37,6 +37,9 @@ assert_contains "$bigger" "omi-e2e-7	com.omi.omi-e2e-7	47707" "pool size is dyna
 custom="$(OMI_E2E_POOL_PREFIX=omi-lab OMI_E2E_POOL_SIZE=1 "$POOL" slots)"
 assert_contains "$custom" "omi-lab-1	com.omi.omi-lab-1" "prefix is configurable"
 if OMI_E2E_POOL_PREFIX=lab "$POOL" slots >/dev/null 2>&1; then fail "a prefix without omi- must be rejected"; fi
+if OMI_E2E_POOL_PREFIX=omi_lab "$POOL" slots >/dev/null 2>&1; then fail "a prefix run.sh would slugify differently must be rejected"; fi
+if OMI_E2E_POOL_PREFIX=Omi-Lab "$POOL" slots >/dev/null 2>&1; then fail "a prefix run.sh would lowercase must be rejected"; fi
+assert_contains "$(OMI_E2E_POOL_PREFIX=omi-lab-2 OMI_E2E_POOL_SIZE=1 "$POOL" slots)" "omi-lab-2-1" "an already-slug-form prefix is accepted"
 if OMI_E2E_POOL_SIZE=0 "$POOL" slots >/dev/null 2>&1; then fail "pool size 0 must be rejected"; fi
 
 # ── a non-pool slug passes verify untouched ────────────────────────────────
@@ -89,6 +92,13 @@ assert_eq "$("$POOL" acquire --quiet --worktree "$WT_C" --holder lane-c)" "2" "r
 "$POOL" release --quiet --slot 2
 "$POOL" release --quiet --worktree "$WT_B" >/dev/null   # nothing held: not an error
 
+# ── zero-padded --slot values address the canonical slot ───────────────────
+assert_eq "$("$POOL" acquire --quiet --worktree "$WT_C" --slot 02)" "2" "--slot 02 canonicalizes to slot 2"
+[ -f "$OMI_E2E_POOL_DIR/slots/2/lease" ] || fail "--slot 02 must lease the canonical slots/2 directory"
+[ ! -e "$OMI_E2E_POOL_DIR/slots/02" ] || fail "no padded slot directory may be created"
+"$POOL" release --quiet --slot 02
+[ ! -f "$OMI_E2E_POOL_DIR/slots/2/lease" ] || fail "--slot 02 must release canonical slot 2"
+
 # ── liveness: a vanished worktree gives its slot up ───────────────────────
 rm -rf "$WT_A"
 if "$POOL" verify --worktree "$WT_B" omi-e2e-1 >/dev/null 2>&1; then fail "a defunct lease does not authorize a stranger"; fi
@@ -98,6 +108,13 @@ assert_contains "$status" "is gone" "defunct reason names the worktree"
 out="$("$POOL" acquire --worktree "$WT_B" --holder lane-b 2>&1)"
 assert_contains "$out" "reclaiming slot 1 from 'lane-a'" "acquire reclaims a defunct slot loudly"
 assert_eq "$(printf '%s\n' "$out" | tail -1)" "1" "reclaimed slot is slot 1"
+
+# ── liveness: a lane that deleted .dev/ has given the slot up too ──────────
+rm -rf "$WT_B/.dev"
+status="$("$POOL" status)"
+assert_contains "$status" "DEFUNCT  lane-b" "a deleted pool env file shows as defunct"
+assert_contains "$status" "no longer holds the pool env file" "the missing-env reason names the worktree"
+assert_eq "$("$POOL" acquire --quiet --worktree "$WT_A" --holder lane-a)" "1" "a deleted-env lease is reclaimable"
 
 # ── liveness: a dead holder pid gives its slot up ─────────────────────────
 "$POOL" release --quiet --slot 1
@@ -148,6 +165,16 @@ OMI_E2E_POOL_SIZE=3 "$POOL" release --quiet --slot 3
 out="$("$POOL" run --worktree "$WT_A" -- sh -c 'printf "%s %s %s" "$OMI_APP_NAME" "$OMI_AUTOMATION_PORT" "$OMI_E2E_POOL_SLOT"')"
 assert_eq "$out" "omi-e2e-1 47701 1" "run exports the slot environment"
 "$POOL" release --quiet --worktree "$WT_A"
+
+# ── concurrent acquires are serialized; each lane wins a distinct slot ─────
+for lane in a b c; do
+  "$POOL" acquire --quiet --worktree "$TMP/wt-race-$lane" --holder "race-$lane" >"$TMP/race-$lane.out" 2>&1 &
+done
+wait || true
+race_winners="$(cat "$TMP/race-a.out" "$TMP/race-b.out" "$TMP/race-c.out" | grep -cE '^[12]$' || true)"
+assert_eq "$race_winners" "2" "exactly two of three racing acquires win a slot"
+race_distinct="$(cat "$TMP/race-a.out" "$TMP/race-b.out" "$TMP/race-c.out" | grep -E '^[12]$' | sort -u | wc -l | tr -d ' ')"
+assert_eq "$race_distinct" "2" "racing acquires win distinct slots"
 
 # ── setup prints a per-slot human checklist ───────────────────────────────
 setup="$("$POOL" setup --slot 2)"

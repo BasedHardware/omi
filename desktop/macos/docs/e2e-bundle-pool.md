@@ -103,8 +103,10 @@ Each slot has fixed ports, so nothing needs to be threaded through by hand:
 | --- | --- | --- | --- | --- |
 | N | `com.omi.omi-e2e-N` | 47700 + N | 10100 + N | 8300 + N |
 
-All three bases sit below the per-worktree ranges `scripts/dev-instance.sh`
-derives, so a pool slot never collides with an auto-isolated worktree.
+All three bases sit outside the per-worktree ranges `scripts/dev-instance.sh`
+derives — the bridge and desktop-backend bases below them, the Python base
+above the bounded `8080 + offset` range (max 8279) — so a pool slot never
+collides with an auto-isolated worktree.
 `./scripts/omi-e2e-pool slots` prints the table for the configured size.
 
 ## Leases: who owns a slot, and when it is given up
@@ -119,6 +121,8 @@ A lease is **defunct**, and the next `acquire` reclaims it loudly, when:
 
 - the holder's worktree directory no longer exists (`omi-lane finish`,
   `git worktree remove`, a deleted checkout);
+- the holder's `.dev/e2e-pool.env` is gone while the worktree remains — a lane
+  that deleted its pool state has given the slot up;
 - a holder pid recorded with `--pid` has died (pass the pid of the agent run or
   harness that owns the lane, when there is one);
 - as a backstop only, no pool command has touched it for
@@ -128,6 +132,10 @@ A live holder is **never** evicted: `acquire` on a full pool lists the holders
 and stops, and says how to grow the pool. `reap` frees defunct leases and
 reports — but does not kill — a slot app left running by a vanished lane; the
 next launch replaces it.
+
+`acquire`, `release`, and `reap` decide from the lease files and then write
+them, so those sequences run under one pool lock: two lanes acquiring at the
+same moment are serialized, and each ends up holding a distinct slot.
 
 A holder that comes back after the backstop simply refreshes its own lease; the
 backstop reclaims slots from lanes that vanished, it does not lock a live lane
