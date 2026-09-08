@@ -20,6 +20,12 @@ extension ChatProvider {
     let voiceCompanion = expected.realtimeVoiceCompanion()
     var updatedMessages = messages
     var divergences: Set<JournalProjectionDivergence> = []
+    // Whether any row will differ from what is published. A refresh after a
+    // streaming write echoes a row the live projection already has (and is
+    // ahead of), and publishing an identical transcript re-ran every observer
+    // of `messages` — a second full transcript pass per journal round trip,
+    // for nothing the reader could see.
+    var changed = false
 
     for turn in turns {
       let isCanonicalChatSurface =
@@ -65,21 +71,34 @@ extension ChatProvider {
         && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && projected.contentBlocks.isEmpty
         && projected.resources.isEmpty
+      func replace(at index: Int) {
+        let merged = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        guard !merged.isProjectionEquivalent(to: updatedMessages[index]) else { return }
+        updatedMessages[index] = merged
+        changed = true
+      }
       if isEmptyTerminalPlaceholder {
+        let countBefore = updatedMessages.count
         updatedMessages.removeAll { $0.id == projected.id }
+        if updatedMessages.count != countBefore { changed = true }
       } else if let index = updatedMessages.firstIndex(where: { $0.id == projected.id }) {
-        updatedMessages[index] = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        replace(at: index)
       } else if let continuityKey = projected.clientTurnId,
         let index = updatedMessages.firstIndex(where: {
           $0.clientTurnId == continuityKey && $0.sender == projected.sender
         })
       {
-        updatedMessages[index] = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        replace(at: index)
       } else {
         updatedMessages.append(projected)
+        changed = true
       }
     }
 
+    guard changed else {
+      flushPendingMessageRatings()
+      return
+    }
     let orderBeforeCanonicalSort = updatedMessages.map(\.id)
     updatedMessages.sort {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
@@ -346,5 +365,32 @@ extension ChatProvider {
         != ChatContentBlockCodec.comparisonData(existing.contentBlocks)
       || projected.attachments != existing.attachments
       || projected.resources != existing.resources
+  }
+}
+
+extension ChatMessage {
+  /// Whether publishing `self` in place of `other` would change anything a
+  /// reader or a persisted projection could observe. Every stored field is
+  /// compared; `Citation` has no equality of its own, so its identities stand
+  /// in for it.
+  func isProjectionEquivalent(to other: ChatMessage) -> Bool {
+    id == other.id
+      && clientTurnId == other.clientTurnId
+      && text == other.text
+      && createdAt == other.createdAt
+      && sender == other.sender
+      && isStreaming == other.isStreaming
+      && rating == other.rating
+      && isSynced == other.isSynced
+      && citations.map(\.id) == other.citations.map(\.id)
+      && contentBlocks == other.contentBlocks
+      && metadata == other.metadata
+      && notificationContext == other.notificationContext
+      && notificationScreenshot == other.notificationScreenshot
+      && attachments == other.attachments
+      && resources == other.resources
+      && turnOwner == other.turnOwner
+      && journalStatus == other.journalStatus
+      && hidesEmptyStreamingPlaceholder == other.hidesEmptyStreamingPlaceholder
   }
 }
