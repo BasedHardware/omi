@@ -818,6 +818,44 @@ describe("D1 chat attachment admit bind", () => {
     expect(body.message.attachments).toEqual([]);
   });
 
+  test("chat create with attachments without object storage is nested non-retryable", async () => {
+    await insertAttachment({
+      id: "d1-att-no-r2",
+      accountId: "test-account",
+      state: "ingested",
+    });
+    const response = await handler.fetch(
+      new Request("https://worker.test/v1/chat-messages", {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...chatCreate("d1-attach-no-r2"),
+          attachmentIds: ["d1-att-no-r2"],
+        }),
+      }),
+      {
+        ...env,
+        API_TOKEN: "test-token",
+        AI: { run: async () => ({ response: "AI reply" }) },
+        ATTACHMENTS: undefined,
+      } as never,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
+
   test("foreign and incomplete attachments stay rejected", async () => {
     await insertAttachment({
       id: "d1-att-foreign",

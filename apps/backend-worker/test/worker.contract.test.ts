@@ -170,6 +170,7 @@ const env = {
   get DB() {
     return d1Mock;
   },
+  ATTACHMENTS: {},
 };
 
 const executionContext = {
@@ -178,10 +179,14 @@ const executionContext = {
   props: {},
 };
 
-const fetchWorker = (path: string, init?: RequestInit) =>
+const fetchWorker = (
+  path: string,
+  init?: RequestInit,
+  bindings: Record<string, unknown> = env
+) =>
   handler.fetch(
     new Request(`https://worker.test${path}`, init),
-    env as never,
+    bindings as never,
     executionContext as never
   );
 
@@ -1601,6 +1606,61 @@ describe("settings entitlement admission contract", () => {
       headers: { ...authenticatedHeaders, "content-type": "application/json" },
       body: JSON.stringify(chatCreate("attach-none")),
     });
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      message: { attachments: unknown[] };
+    };
+    expect(body.message.attachments).toEqual([]);
+  });
+
+  test("chat create with attachments without object storage is nested non-retryable", async () => {
+    await insertAttachment({
+      id: "att-no-r2",
+      accountId: "test-account",
+      state: "ingested",
+    });
+    const response = await fetchWorker(
+      "/v1/chat-messages",
+      {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...chatCreate("attach-no-r2"),
+          attachmentIds: ["att-no-r2"],
+        }),
+      },
+      { ...env, ATTACHMENTS: undefined }
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    expect(accountCalls).toEqual([]);
+  });
+
+  test("text-only chat create still admits without object storage", async () => {
+    const response = await fetchWorker(
+      "/v1/chat-messages",
+      {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(chatCreate("attach-text-no-r2")),
+      },
+      { ...env, ATTACHMENTS: undefined }
+    );
 
     expect(response.status).toBe(201);
     const body = (await response.json()) as {

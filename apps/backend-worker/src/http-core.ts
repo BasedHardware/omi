@@ -465,6 +465,8 @@ export async function handleChatCreate(
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (body.attachmentIds.length > 0 && context.env.ATTACHMENTS === undefined)
+    return backendError("service_unavailable", "none", 503);
   const resolved = await resolveAttachmentsForAdmit(
     db,
     context.get("accountId"),
