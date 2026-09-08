@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from omi_cli import config as cfg
 from omi_cli.main import app
 
@@ -60,3 +62,21 @@ def test_auth_refresh_error_detail_escapes_markup_profile_name(config_path, cli_
     assert result.exit_code != 0
     assert "MarkupError" not in result.stderr
     assert MARKUP_PROFILE in result.stderr
+
+
+def test_json_auth_refresh_error_detail_keeps_raw_profile_name(config_path, cli_runner) -> None:
+    profile = cfg.Profile(name=MARKUP_PROFILE, auth_method="api_key", api_key="omi_dev_" + "x" * 32)
+    config = cfg.load()
+    config.set_profile(profile)
+    config.active_profile = MARKUP_PROFILE
+    cfg.save(config)
+
+    result = cli_runner.invoke(app, ["--json", "--profile", MARKUP_PROFILE, "auth", "refresh"])
+
+    assert result.exit_code != 0
+    payload = json.loads(result.stderr)
+    assert payload["detail"] == (
+        f"Profile '{MARKUP_PROFILE}' uses API-key auth — there is no token to refresh. "
+        "Rotate keys in the Omi web app if needed."
+    )
+    assert "\\[" not in payload["detail"]
