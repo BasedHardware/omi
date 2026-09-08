@@ -3246,5 +3246,15 @@
     "chatBlockUnavailable": "Niet langer beschikbaar",
     "chatBlockRecommendedNextSteps": "Aanbevolen volgende stappen",
     "couldNotLoadMemories": "Herinneringen konden niet worden geladen",
-    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen"
+    "couldNotLoadKnowledgeGraph": "Kennisgrafiek kon niet worden geladen",
+    "speechProfileOwnerTitle": "Stemprofiel van {name}",
+    "play": "Afspelen",
+    "redo": "Opnieuw opnemen",
+    "answerWithYourVoice": "Antwoord met je stem:",
+    "speechProfileTopicLocation": "Waar woon je?",
+    "speechProfileTopicWork": "Wat doe je voor werk?",
+    "speechProfileTopicGoal": "Wat is je langetermijndoel?",
+    "speechToTextUnavailableDesc": "Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.",
+    "memoryHistoryPartial": "Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.",
+    "tapPlusToStartRecording": "Tik op + om de opname te starten"
 }

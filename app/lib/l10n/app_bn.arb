@@ -10812,5 +10812,15 @@
     "chatBlockUnavailable": "আর উপলব্ধ নেই",
     "chatBlockRecommendedNextSteps": "প্রস্তাবিত পরবর্তী পদক্ষেপ",
     "couldNotLoadMemories": "স্মৃতি লোড করা যায়নি",
-    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি"
+    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি",
+    "speechProfileOwnerTitle": "{name}-এর ভয়েস প্রোফাইল",
+    "play": "চালান",
+    "redo": "আবার রেকর্ড করুন",
+    "answerWithYourVoice": "মুখে উত্তর দিন:",
+    "speechProfileTopicLocation": "আপনি কোথায় থাকেন?",
+    "speechProfileTopicWork": "আপনি কী কাজ করেন?",
+    "speechProfileTopicGoal": "আপনার দীর্ঘমেয়াদি লক্ষ্য কী?",
+    "speechToTextUnavailableDesc": "এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।",
+    "memoryHistoryPartial": "স্মৃতির ইতিহাসের কিছু অংশ পাওয়া যাচ্ছে না। এখন পর্যন্ত পাওয়া ইতিহাস দেখানো হচ্ছে।",
+    "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে + চাপুন"
 }

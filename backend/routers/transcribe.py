@@ -96,6 +96,7 @@ async def _stream_handler(
     *,
     conversation_role: str = 'ambient',
     geolocation: Optional[Geolocation] = None,
+    speech_profile_redo: bool = False,
 ) -> None:
     """Compatibility facade for the accepted-socket listen session."""
     await _run_listen_session_with_deletion_fence(
@@ -120,6 +121,7 @@ async def _stream_handler(
             conversation_role='meeting' if conversation_role == 'meeting' else 'ambient',
             client_device_context=client_device_context,
             geolocation=geolocation,
+            speech_profile_redo=speech_profile_redo,
         )
     )
 
@@ -144,6 +146,7 @@ async def _listen(
     client_conversation_id: Optional[str] = None,
     conversation_role: str = 'ambient',
     geolocation: Optional[Geolocation] = None,
+    speech_profile_redo: bool = False,
 ) -> None:
     try:
         await websocket.accept()
@@ -170,6 +173,7 @@ async def _listen(
         client_conversation_id=client_conversation_id,
         conversation_role=conversation_role,
         geolocation=geolocation,
+        speech_profile_redo=speech_profile_redo,
     )
 
 
@@ -193,6 +197,7 @@ async def listen_handler(
     call_id: Optional[str] = None,
     client_conversation_id: Optional[str] = None,
     conversation_role: str = 'ambient',
+    speech_profile_redo: str = 'disabled',
 ) -> None:
     geolocation = geolocation_from_private_header(websocket.headers.get('x-omi-conversation-geolocation'))
     await _listen(
@@ -215,6 +220,7 @@ async def listen_handler(
         client_conversation_id=client_conversation_id,
         conversation_role=conversation_role,
         geolocation=geolocation,
+        speech_profile_redo=speech_profile_redo == 'enabled',
     )
 
 

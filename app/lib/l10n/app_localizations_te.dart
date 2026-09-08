@@ -1866,9 +1866,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openSettings => 'సెట్టింగ్‌లను తెరండి';
 
   @override
-  String get wantDifferentName => 'వేరే పేరుతో వెళ్లాలనుకుంటున్నారా?';
-
-  @override
   String get whatsYourName => 'మీ పేరు ఏమిటి?';
 
   @override
@@ -2051,7 +2048,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryDeleted => 'జ్ఞాపకం తొలగించబడింది.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
 
   @override
   String get undo => 'మరలుచేయండి';
@@ -9963,10 +9961,33 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name వాయిస్ ప్రొఫైల్';
+  }
+
+  @override
+  String get play => 'ప్లే చేయండి';
+
+  @override
+  String get redo => 'మళ్లీ రికార్డ్ చేయండి';
+
+  @override
+  String get answerWithYourVoice => 'మీ స్వరంతో సమాధానం ఇవ్వండి:';
+
+  @override
+  String get speechProfileTopicLocation => 'మీరు ఎక్కడ నివసిస్తున్నారు?';
+
+  @override
+  String get speechProfileTopicWork => 'మీరు ఏ పని చేస్తారు?';
+
+  @override
+  String get speechProfileTopicGoal => 'మీ దీర్ఘకాలిక లక్ష్యం ఏమిటి?';
+
+  @override
   String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి';
 
   @override
   String get chatBlockTask => 'పని';
@@ -10003,4 +10024,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'నాలెడ్జ్ గ్రాఫ్‌ను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
 }

@@ -69,8 +69,6 @@ ingress:
       paths:
         - path: /v1/vad
           pathType: Prefix
-        - path: /v1/speaker-identification
-          pathType: Prefix
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:

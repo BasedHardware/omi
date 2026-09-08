@@ -3224,5 +3224,15 @@
     "chatBlockUnavailable": "Ja no està disponible",
     "chatBlockRecommendedNextSteps": "Propers passos recomanats",
     "couldNotLoadMemories": "No s'han pogut carregar els records",
-    "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement"
+    "couldNotLoadKnowledgeGraph": "No s'ha pogut carregar el graf de coneixement",
+    "speechProfileOwnerTitle": "Perfil de veu de {name}",
+    "play": "Reprodueix",
+    "redo": "Torna a gravar",
+    "answerWithYourVoice": "Respon amb la veu:",
+    "speechProfileTopicLocation": "On vius?",
+    "speechProfileTopicWork": "A què et dediques?",
+    "speechProfileTopicGoal": "Quin és el teu objectiu a llarg termini?",
+    "speechToTextUnavailableDesc": "La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.",
+    "memoryHistoryPartial": "Una part de l'historial de records no està disponible. Es mostra l'historial rebut fins ara.",
+    "tapPlusToStartRecording": "Toca + per començar a gravar"
 }
