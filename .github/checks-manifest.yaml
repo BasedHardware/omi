@@ -19,6 +19,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
+  - id: pre-push-firmware-formatter-prerequisite
+    command: ["bash", "scripts/test-pre-push-firmware-format-prerequisite.sh"]
+    triggers: ["scripts/pre-push", "scripts/test-pre-push-firmware-format-prerequisite.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #12993 found that firmware formatting can fail only after a hosted run because pre-push silently skipped clang-format when it was absent; selected firmware sources now require the same formatter locally"
   - id: pre-commit-pinned-toolchains
     command: ["bash", "scripts/test-pre-commit-pinned-toolchains.sh"]
     triggers: ["scripts/pre-commit", "scripts/test-pre-commit-pinned-toolchains.sh", ".github/checks-manifest.yaml"]
