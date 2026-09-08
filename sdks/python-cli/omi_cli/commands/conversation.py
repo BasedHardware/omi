@@ -142,8 +142,8 @@ def from_segments(
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
     try:
-        payload = json.loads(segments_file.read_text())
-    except json.JSONDecodeError as exc:
+        payload = json.loads(segments_file.read_bytes())
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 
     segments = payload.get("transcript_segments") if isinstance(payload, dict) else payload

@@ -232,6 +232,9 @@ omi
     └── delete <id> [-y]
 ```
 
+`conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
+UTF-16, or UTF-32, independently of the system's default text encoding.
+
 ## Global flags
 
 ```text
