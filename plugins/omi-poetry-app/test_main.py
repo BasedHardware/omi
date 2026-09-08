@@ -3,6 +3,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 from fastapi.testclient import TestClient
 
 from main import (
@@ -74,6 +75,10 @@ class TestModels(unittest.TestCase):
         self.assertEqual(req.author, "Emily Dickinson")
         self.assertEqual(req.max_lines, 15)
 
+    def test_get_random_poem_request_none_defaults(self):
+        req = GetRandomPoemRequest(max_lines=None)
+        self.assertEqual(req.max_lines, 30)
+
     def test_get_random_poem_request_bounds(self):
         with self.assertRaises(ValueError):
             GetRandomPoemRequest(max_lines=0)
@@ -87,6 +92,10 @@ class TestModels(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             SearchPoemsByAuthorRequest(author="   ")
+
+    def test_search_poems_by_author_none_defaults(self):
+        req = SearchPoemsByAuthorRequest(author="Keats", max_results=None)
+        self.assertEqual(req.max_results, 3)
 
     def test_get_poem_by_title_sanitization(self):
         req = GetPoemByTitleRequest(title="  The   Raven  ", author="  Edgar Allan Poe  ")
@@ -253,6 +262,56 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         resp = await get_poem_by_title(req)
         self.assertIsNotNone(resp.error)
         self.assertIn("not found", resp.error)
+
+    async def test_get_random_poem_http_status_error_404(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        error = httpx.HTTPStatusError("404 Not Found", request=MagicMock(), response=mock_resp)
+        mock_resp.raise_for_status.side_effect = error
+        self.mock_client.get.return_value = mock_resp
+
+        req = GetRandomPoemRequest(author="NonexistentPoetXYZ")
+        resp = await get_random_poem(req)
+        self.assertIsNotNone(resp.error)
+        self.assertIn("No poems found for author 'NonexistentPoetXYZ'", resp.error)
+
+    async def test_search_poems_by_author_http_status_error_404(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        error = httpx.HTTPStatusError("404 Not Found", request=MagicMock(), response=mock_resp)
+        mock_resp.raise_for_status.side_effect = error
+        self.mock_client.get.return_value = mock_resp
+
+        req = SearchPoemsByAuthorRequest(author="NonexistentPoetXYZ")
+        resp = await search_poems_by_author(req)
+        self.assertIsNotNone(resp.error)
+        self.assertIn("No poems found for poet 'NonexistentPoetXYZ'", resp.error)
+
+    async def test_get_poem_by_title_http_status_error_404(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        error = httpx.HTTPStatusError("404 Not Found", request=MagicMock(), response=mock_resp)
+        mock_resp.raise_for_status.side_effect = error
+        self.mock_client.get.return_value = mock_resp
+
+        req = GetPoemByTitleRequest(title="NonexistentPoemXYZ")
+        resp = await get_poem_by_title(req)
+        self.assertIsNotNone(resp.error)
+        self.assertIn("not found in the public domain library", resp.error)
+
+    async def test_url_encoding_with_slashes(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [SAMPLE_POEM]
+        mock_resp.raise_for_status = MagicMock()
+        self.mock_client.get.return_value = mock_resp
+
+        req = GetPoemByTitleRequest(title="Ozymandias/Part1", author="Shelley/Percy")
+        resp = await get_poem_by_title(req)
+        self.assertIsNone(resp.error)
+        called_url = self.mock_client.get.call_args[0][0]
+        self.assertIn("Shelley%2FPercy", called_url)
+        self.assertIn("Ozymandias%2FPart1", called_url)
 
     async def test_list_poets_all(self):
         mock_resp = MagicMock()

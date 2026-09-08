@@ -7,11 +7,11 @@ A standalone, unauthenticated integration app for the Omi AI ecosystem that conn
 ## Highlights
 
 - **Spoken Literary Wisdom for Wearables**: Instant, hands-free poetry recitation (Shakespeare, Emily Dickinson, Edgar Allan Poe, John Keats, Percy Bysshe Shelley, Walt Whitman, Robert Frost, etc.).
-- **Voice-Optimized Line Lengths**: Filter poems by maximum line counts (e.g. short 14-line sonnets or brief 4-8 line verses) tailored for spoken audio recitation on smart glasses and necklaces.
+- **Voice-Optimized Line Limits**: Caps spoken verse length via `max_lines` (default 30, tailored for audio wearables). Prefers poems matching the limit; if all available poems exceed it, returns a poem truncated at `max_lines` with a clear continuation indicator.
 - **Zero Authentication Required**: Uses 100% public domain literature via the open PoetryDB REST API. No API keys, OAuth, or accounts required.
 - **Omi Chat-Tool Contract Compliant**: Implements strict `ChatToolResponse` protocol (`result` or `error`, omitting nulls), relative `endpoint`, `method: "POST"`, and `auth_required: false` in `/.well-known/omi-tools.json`.
 - **In-Memory LRU Caching**: Bounded LRU cache buffers author directories and poems with TTL to optimize response speed.
-- **Fully Tested**: Hermetic unit test suite (28/28 passing) and live ASGI integration smoke test suite (8/8 passing).
+- **Fully Tested**: Hermetic unit test suite (34/34 passing) and live ASGI integration smoke test suite (8/8 passing).
 
 ---
 
@@ -19,7 +19,7 @@ A standalone, unauthenticated integration app for the Omi AI ecosystem that conn
 
 | Tool Name | Endpoint | Description |
 | :--- | :--- | :--- |
-| `get_random_poem` | `POST /tools/get_random_poem` | Recite a random classical poem or sonnet with optional author and maximum line count filters. |
+| `get_random_poem` | `POST /tools/get_random_poem` | Recite a random classical poem or sonnet with optional author filter and line length cap (truncates with continuation note if poem exceeds cap). |
 | `search_poems_by_author` | `POST /tools/search_poems_by_author` | Browse poems and preview excerpts by a specific classical poet. |
 | `get_poem_by_title` | `POST /tools/get_poem_by_title` | Retrieve the complete text and verse lines of a famous poem by title. |
 | `list_poets` | `POST /tools/list_poets` | Browse available poets in the collection with optional keyword filtering. |
@@ -95,7 +95,7 @@ curl -X POST http://localhost:8080/tools/get_poem_by_title \
 **Sample Response:**
 ```json
 {
-  "result": "📜 \"Ozymandias\"\n✍️ by Percy Bysshe Shelley (14 lines)\n\nI met a traveller from an antique land\nWho said: Two vast and trunkless legs of stone\nStand in the desert...Near them, on the sand,\nHalf sunk, a shattered visage lies..."
+  "result": "📜 \"Ozymandias\"\n✍️ by Percy Bysshe Shelley (14 lines)\n\nI met a traveller from an antique land,\nWho said—\"Two vast and trunkless legs of stone\nStand in the desert. . . . Near them, on the sand,\nHalf sunk a shattered visage lies, whose frown,\nAnd wrinkled lip, and sneer of cold command,\nTell that its sculptor well those passions read\nWhich yet survive, stamped on these lifeless things,\nThe hand that mocked them, and the heart that fed;\nAnd on the pedestal, these words appear:\nMy name is Ozymandias, King of Kings;\nLook on my Works, ye Mighty, and despair!\nNothing beside remains. Round the decay\nOf that colossal Wreck, boundless and bare\nThe lone and level sands stretch far away.\""
 }
 ```
 

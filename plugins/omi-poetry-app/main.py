@@ -27,10 +27,7 @@ from models import (
 
 POETRYDB_API_URL = "https://poetrydb.org"
 REQUEST_TIMEOUT_SECONDS = 15.0
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (Omi-Poetry/1.0)"
-)
+USER_AGENT = "omi-poetry-app/1.0 (https://omi.me)"
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +127,10 @@ def _format_poem(poem: Dict[str, Any], max_lines: Optional[int] = None) -> str:
 async def get_random_poem(request: GetRandomPoemRequest) -> ChatToolResponse:
     """Retrieve a random classical poem or sonnet, optionally filtered by poet and length."""
     client: httpx.AsyncClient = app.state.http_client
+    max_lines = request.max_lines or 30
     try:
         if request.author:
-            safe_author = urllib.parse.quote(request.author)
+            safe_author = urllib.parse.quote(request.author, safe="")
             url = f"{POETRYDB_API_URL}/author/{safe_author}"
             resp = await client.get(url)
             resp.raise_for_status()
@@ -144,10 +142,10 @@ async def get_random_poem(request: GetRandomPoemRequest) -> ChatToolResponse:
             if not isinstance(data, list) or not data:
                 return ChatToolResponse(error=f"Could not retrieve poems for author '{request.author}'.")
 
-            # Filter poems within max_lines if possible
-            matching = [p for p in data if int(p.get("linecount", 0)) <= request.max_lines]
+            # Filter poems within max_lines if possible; otherwise fall back to truncating
+            matching = [p for p in data if int(p.get("linecount", 0)) <= max_lines]
             candidate = random.choice(matching) if matching else random.choice(data)
-            return ChatToolResponse(result=_format_poem(candidate, max_lines=request.max_lines))
+            return ChatToolResponse(result=_format_poem(candidate, max_lines=max_lines))
 
         # Random poem without author constraint
         url = f"{POETRYDB_API_URL}/random/5"
@@ -158,9 +156,14 @@ async def get_random_poem(request: GetRandomPoemRequest) -> ChatToolResponse:
         if not isinstance(data, list) or not data:
             return ChatToolResponse(error="Could not retrieve a random poem at this moment.")
 
-        matching = [p for p in data if int(p.get("linecount", 0)) <= request.max_lines]
+        matching = [p for p in data if int(p.get("linecount", 0)) <= max_lines]
         candidate = matching[0] if matching else data[0]
-        return ChatToolResponse(result=_format_poem(candidate, max_lines=request.max_lines))
+        return ChatToolResponse(result=_format_poem(candidate, max_lines=max_lines))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            author_msg = f" for author '{request.author}'" if request.author else ""
+            return ChatToolResponse(error=f"No poems found{author_msg}.")
+        return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to retrieve poem: {exc}")
 
@@ -174,7 +177,7 @@ async def search_poems_by_author(request: SearchPoemsByAuthorRequest) -> ChatToo
 
     try:
         if not cached:
-            safe_author = urllib.parse.quote(request.author)
+            safe_author = urllib.parse.quote(request.author, safe="")
             url = f"{POETRYDB_API_URL}/author/{safe_author}"
             resp = await client.get(url)
             resp.raise_for_status()
@@ -190,7 +193,8 @@ async def search_poems_by_author(request: SearchPoemsByAuthorRequest) -> ChatToo
             poetry_cache.set(cache_key, cached)
 
         total_found = len(cached)
-        selected = cached[: request.max_results]
+        max_results = request.max_results or 3
+        selected = cached[: max_results]
 
         output_parts = [f"📚 Found {total_found} poem{'s' if total_found != 1 else ''} by {request.author}:\n"]
         for idx, p in enumerate(selected, 1):
@@ -201,6 +205,10 @@ async def search_poems_by_author(request: SearchPoemsByAuthorRequest) -> ChatToo
             output_parts.append(f"{idx}. \"{title}\" ({linecount} lines):\n  {preview}\n  ...")
 
         return ChatToolResponse(result="\n".join(output_parts))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"No poems found for poet '{request.author}'. Use list_poets to see available authors.")
+        return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to search poems by author '{request.author}': {exc}")
 
@@ -215,11 +223,11 @@ async def get_poem_by_title(request: GetPoemByTitleRequest) -> ChatToolResponse:
     try:
         if not cached:
             if request.author:
-                safe_author = urllib.parse.quote(request.author)
-                safe_title = urllib.parse.quote(request.title)
+                safe_author = urllib.parse.quote(request.author, safe="")
+                safe_title = urllib.parse.quote(request.title, safe="")
                 url = f"{POETRYDB_API_URL}/author,title/{safe_author};{safe_title}"
             else:
-                safe_title = urllib.parse.quote(request.title)
+                safe_title = urllib.parse.quote(request.title, safe="")
                 url = f"{POETRYDB_API_URL}/title/{safe_title}"
 
             resp = await client.get(url)
@@ -236,6 +244,10 @@ async def get_poem_by_title(request: GetPoemByTitleRequest) -> ChatToolResponse:
             poetry_cache.set(cache_key, cached)
 
         return ChatToolResponse(result=_format_poem(cached))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(error=f"Poem titled '{request.title}' not found in the public domain library.")
+        return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to get poem '{request.title}': {exc}")
 
@@ -273,6 +285,8 @@ async def list_poets(request: ListPoetsRequest) -> ChatToolResponse:
             lines.append(f"\n... and {len(cached_authors) - 30} more poets. Use a search query to filter.")
 
         return ChatToolResponse(result="\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to list poets: {exc}")
 

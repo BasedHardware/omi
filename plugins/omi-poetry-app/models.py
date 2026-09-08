@@ -29,12 +29,19 @@ class GetRandomPoemRequest(BaseModel):
         max_length=100,
         description="Optional author/poet filter (e.g. 'Emily Dickinson', 'Shakespeare', 'Robert Frost').",
     )
-    max_lines: Optional[int] = Field(
+    max_lines: int = Field(
         default=30,
         ge=1,
         le=200,
         description="Maximum lines in the returned poem (default 30, optimal for voice/wearables).",
     )
+
+    @field_validator("max_lines", mode="before")
+    @classmethod
+    def sanitize_max_lines(cls, v: Optional[int]) -> int:
+        if v is None:
+            return 30
+        return v
 
     @field_validator("author")
     @classmethod
@@ -56,12 +63,19 @@ class SearchPoemsByAuthorRequest(BaseModel):
         max_length=100,
         description="Poet or author name (e.g. 'Edgar Allan Poe', 'Walt Whitman', 'John Keats', 'Emily Dickinson').",
     )
-    max_results: Optional[int] = Field(
+    max_results: int = Field(
         default=3,
         ge=1,
         le=10,
         description="Maximum number of poems to return (1-10, default 3).",
     )
+
+    @field_validator("max_results", mode="before")
+    @classmethod
+    def sanitize_max_results(cls, v: Optional[int]) -> int:
+        if v is None:
+            return 3
+        return v
 
     @field_validator("author")
     @classmethod
