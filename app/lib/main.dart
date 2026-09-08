@@ -74,6 +74,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
@@ -145,6 +146,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await MergeNotificationHandler.handleMergeCompleted(data, channelKey, isAppInForeground: false);
   } else if (messageType == 'important_conversation') {
     await ImportantConversationNotificationHandler.handleImportantConversation(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
+  } else if (ChatAnswerNotificationHandler.isChatAnswerData(data)) {
+    // Click-to-talk / chat answers: local BigText + navigate_to (#4375).
+    // Must live in this single background entrypoint — do not re-register a
+    // second onBackgroundMessage handler from NotificationService.
+    await ChatAnswerNotificationHandler.handle(
       data,
       channelKey,
       isAppInForeground: false,
