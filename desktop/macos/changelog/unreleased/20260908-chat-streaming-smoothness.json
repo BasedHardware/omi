@@ -1,0 +1,3 @@
+{
+  "change": "Chat stays smooth while an answer streams: the transcript no longer re-renders the whole reply, re-writes the journal, or re-lays out the window on every word"
+}

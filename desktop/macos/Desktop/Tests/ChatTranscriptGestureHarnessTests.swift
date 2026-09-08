@@ -826,6 +826,17 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       model.messages[model.messages.count - 1].isStreaming = true
     }
 
+    /// An empty assistant row that is still streaming, for a test that wants
+    /// to stream an answer into a fresh row rather than onto a settled one.
+    func beginStreamingAssistantMessage() {
+      model.messages.append(
+        ChatMessage(
+          id: "assistant-streaming-\(model.messages.count)",
+          text: "",
+          sender: .ai,
+          isStreaming: true))
+    }
+
     func appendAssistantMessage() {
       model.messages.append(
         ChatMessage(

@@ -45,6 +45,11 @@ covers:
   # (selectable, not editable, one view across rebuilds) is asserted
   # hermetically in ChatSelectableTextSurfaceTests, not here.
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSelectableProse.swift
+  # Streaming answers on this surface exercise the incremental prose edit and
+  # the coalesced journal write; the work-per-flush counters are DEBUG-only
+  # and asserted hermetically in ChatStreamingRenderBudgetTests.
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatStreamingRenderProbe.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
   # The prose parse and measured height this file caches are exercised by the
   # same mounts the flow drives; the cache changes no visible behaviour.
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatProseRenderCache.swift
