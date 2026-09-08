@@ -3881,44 +3881,6 @@ class ChatProvider: ObservableObject {
     mainChatSurfaceReference().realtimeVoiceCompanion()
   }
 
-  /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
-  /// two identical messages with distinct turn IDs are distinct journal rows.
-  /// Some `ChatMessage` fields live only in the in-memory row and are never
-  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
-  /// reconstruct them and a journal projection can never be their authority:
-  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
-  /// completion, rendered in the message footer), `notificationScreenshot`,
-  /// and in-memory kind-only citation rewrites until the journal catches up.
-  /// Replacing a row wholesale with the projection would drop them, so carry
-  /// them forward from the row being replaced. A field the projection *does*
-  /// carry (non-nil) wins, so this stays correct if the journal schema later
-  /// starts persisting one of them.
-  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
-    var merged = projected
-    // A journal echo of a row this client is still streaming is the snapshot
-    // it wrote a round trip ago; the live projection has moved on since. Taking
-    // the echo's text put the visible answer a few words back on every write
-    // and forward again on the next flush — the stutter the reader saw. The
-    // journal stays the durable authority: a terminal or kernel-owned row is
-    // never streaming and is taken whole, and a streaming echo that has more
-    // than the live row (a restore from another writer) still wins.
-    if existing.isStreaming, projected.isStreaming, existing.text.utf8.count >= projected.text.utf8.count {
-      merged.text = existing.text
-      merged.contentBlocks = existing.contentBlocks
-    }
-    if merged.rating == nil { merged.rating = existing.rating }
-    if merged.metadata == nil { merged.metadata = existing.metadata }
-    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
-    // Kind-only binding rewrites markers and appends citation blocks in memory.
-    // A stale journal echo still has `[memory]` and no citation blocks; keep the
-    // already-bound row so chips do not vanish between hydrate and the next bind.
-    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
-      merged.text = existing.text
-      merged.contentBlocks = existing.contentBlocks
-    }
-    return merged
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
@@ -6408,89 +6370,6 @@ class ChatProvider: ObservableObject {
         messages[index].text = text
       }
     }
-  }
-
-  /// What a streaming assistant message shows right now.
-  ///
-  /// The grounded follow-up tail streams in like any other token, so without
-  /// stripping it here the chip's words appear in the prose first and are
-  /// removed only when the turn finalizes. Composed with sentence spacing
-  /// because both are projections of the same accumulated text.
-  static func normalizeStreamingAssistantText(_ text: String) -> String {
-    normalizeAssistantSentenceSpacing(ChatFollowUpTail.strippingPendingTail(text))
-  }
-
-  /// Normalize missing spaces after sentence punctuation in assistant messages.
-  /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
-  ///
-  /// Code spans are preserved verbatim so identifiers, file paths, and method
-  /// chains like `pd.DataFrame`, `System.IO`, or `foo.Bar()` are never mangled
-  /// into `pd. DataFrame`. Both fenced code blocks (``` / ~~~) and inline
-  /// backtick spans are skipped. Applied on every streaming flush, so it must
-  /// treat an unterminated span (fence or backtick still open mid-stream) as
-  /// code to avoid corrupting code that is still arriving.
-  static func normalizeAssistantSentenceSpacing(_ text: String) -> String {
-    let lines = text.components(separatedBy: "\n")
-    var output: [String] = []
-    output.reserveCapacity(lines.count)
-    var inFencedBlock = false
-
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-        inFencedBlock.toggle()
-        output.append(line)  // fence marker line, verbatim
-      } else if inFencedBlock {
-        output.append(line)  // code content, verbatim
-      } else {
-        output.append(normalizeInlinePreservingCode(line))
-      }
-    }
-
-    return output.joined(separator: "\n")
-  }
-
-  /// Apply sentence-spacing normalization to a single line, leaving inline
-  /// backtick code spans untouched. An odd number of backticks (an unterminated
-  /// span) leaves its trailing content treated as code.
-  private static func normalizeInlinePreservingCode(_ line: String) -> String {
-    guard line.contains("`") else { return applySentenceSpacing(line) }
-
-    let parts = line.split(separator: "`", omittingEmptySubsequences: false)
-    let normalizedParts = parts.enumerated().map { index, part -> String in
-      // Even segments are outside inline code; odd segments are inside.
-      index.isMultiple(of: 2) ? applySentenceSpacing(String(part)) : String(part)
-    }
-    return normalizedParts.joined(separator: "`")
-  }
-
-  /// Compiled once. Both used to be compiled inside this function, which runs
-  /// per line of the whole accumulated answer on every streaming flush — two
-  /// pattern compiles per line per flush, for two patterns that never change.
-  private static let sentencePunctuationBeforeUpper =
-    try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#)
-  private static let sentencePunctuationBeforeQuotedUpper =
-    try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#)
-
-  private static func applySentenceSpacing(_ text: String) -> String {
-    // Both patterns need sentence punctuation; most lines of prose end with it
-    // exactly once and most Markdown structure has none at all.
-    guard text.contains(where: { $0 == "." || $0 == "!" || $0 == "?" }) else { return text }
-    var normalized = text
-
-    if let punctuationUpper = sentencePunctuationBeforeUpper {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    if let punctuationQuotedUpper = sentencePunctuationBeforeQuotedUpper {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationQuotedUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    return normalized
   }
 
   /// Append text to a streaming message via a buffer that flushes at ~35ms intervals.

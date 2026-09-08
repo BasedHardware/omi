@@ -368,6 +368,46 @@ extension ChatProvider {
   }
 }
 
+extension ChatProvider {
+  /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
+  /// two identical messages with distinct turn IDs are distinct journal rows.
+  /// Some `ChatMessage` fields live only in the in-memory row and are never
+  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
+  /// reconstruct them and a journal projection can never be their authority:
+  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
+  /// completion, rendered in the message footer), `notificationScreenshot`,
+  /// and in-memory kind-only citation rewrites until the journal catches up.
+  /// Replacing a row wholesale with the projection would drop them, so carry
+  /// them forward from the row being replaced. A field the projection *does*
+  /// carry (non-nil) wins, so this stays correct if the journal schema later
+  /// starts persisting one of them.
+  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
+    var merged = projected
+    // A journal echo of a row this client is still streaming is the snapshot
+    // it wrote a round trip ago; the live projection has moved on since. Taking
+    // the echo's text put the visible answer a few words back on every write
+    // and forward again on the next flush — the stutter the reader saw. The
+    // journal stays the durable authority: a terminal or kernel-owned row is
+    // never streaming and is taken whole, and a streaming echo that has more
+    // than the live row (a restore from another writer) still wins.
+    if existing.isStreaming, projected.isStreaming, existing.text.utf8.count >= projected.text.utf8.count {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
+    if merged.rating == nil { merged.rating = existing.rating }
+    if merged.metadata == nil { merged.metadata = existing.metadata }
+    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
+    // Kind-only binding rewrites markers and appends citation blocks in memory.
+    // A stale journal echo still has `[memory]` and no citation blocks; keep the
+    // already-bound row so chips do not vanish between hydrate and the next bind.
+    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
+    return merged
+  }
+}
+
 extension ChatMessage {
   /// Whether publishing `self` in place of `other` would change anything a
   /// reader or a persisted projection could observe. Every stored field is
