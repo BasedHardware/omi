@@ -1408,6 +1408,33 @@ test('wide Home search rows report a single memory citation', () => {
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
+test('wide Home search rows omit whitespace-only memory citations from the count', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-whitespace-citation-home-search',
+        title: 'Prefers concise release notes',
+        summary: 'Release notes should lead with the outcome.',
+        searchableText:
+          'Prefers concise release notes\nRelease notes should lead with the outcome.',
+        citations: [' \t\n', ''],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('2 citations');
+  expect(tree).not.toContain('"1 citation"');
+});
+
 test('wide Home search rows date task dues instead of a raw epoch', () => {
   const dueAt = 1786000000;
   const expected = `Due ${new Date(dueAt * 1000).toLocaleDateString(undefined, {

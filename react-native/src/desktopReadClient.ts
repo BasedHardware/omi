@@ -252,9 +252,8 @@ export function memoryDisplayBody(item: {
 }
 
 export function memoryCitationCopy(citations: readonly string[]): string {
-  return citations.length === 1
-    ? '1 citation'
-    : `${citations.length} citations`;
+  const visible = citations.filter(id => id.trim() !== '');
+  return visible.length === 1 ? '1 citation' : `${visible.length} citations`;
 }
 
 export function memorySynthesisCopy(item: {

@@ -913,6 +913,9 @@ test('memory citation copy matches the citation count', () => {
   expect(memoryCitationCopy([])).toBe('0 citations');
   expect(memoryCitationCopy(['citation-v1:launch'])).toBe('1 citation');
   expect(memoryCitationCopy(['a', 'b'])).toBe('2 citations');
+  expect(memoryCitationCopy([''])).toBe('0 citations');
+  expect(memoryCitationCopy([' \t', '\n'])).toBe('0 citations');
+  expect(memoryCitationCopy(['', 'citation-v1:launch'])).toBe('1 citation');
   expect(
     memorySynthesisCopy({provenance: {synthesisVersion: null}}),
   ).toBeNull();
