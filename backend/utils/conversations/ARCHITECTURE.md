@@ -22,6 +22,12 @@ and background processing.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.
+- `duration.py` owns the single conversation-duration rule shared with the
+  Flutter and macOS clients: the transcript span (largest validated segment
+  `end`), falling back to the wall window only for transcript-free records.
+  `started_at` is the streaming-session origin, so no caller may recompute
+  `finished_at - started_at` as a user-visible or policy duration.
+
 - `overview_markdown.py` renders notes-v2 `structured.overview` markdown to a
   closed HTML subset for the share-email body (headings, lists, emphasis,
   `http(s)` links; every text node escaped).
