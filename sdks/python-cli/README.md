@@ -290,6 +290,14 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+## Datetime options
+Conversation and action-item datetime options accept ISO timestamps with `Z`
+(UTC), numeric offsets, and optional fractional seconds, for example
+`--due-at 2026-09-08T12:30:00Z` or
+`--start-date 2026-09-08T12:30:00.123456+05:30`. Offsets are preserved in API
+requests. Date-only values and timestamps without an offset remain supported;
+the CLI does not assign a timezone to those inputs.
+
 ## Development
 
 ```bash

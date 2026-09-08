@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import ConversationTextSource
 from omi_cli.output import shorten
@@ -36,8 +37,12 @@ def list_conversations(
     typer_ctx: typer.Context,
     limit: int = typer.Option(25, "--limit", min=1, max=200),
     offset: int = typer.Option(0, "--offset", min=0),
-    start_date: Optional[datetime] = typer.Option(None, "--start-date", help="ISO datetime lower bound."),
-    end_date: Optional[datetime] = typer.Option(None, "--end-date", help="ISO datetime upper bound."),
+    start_date: Optional[datetime] = typer.Option(
+        None, "--start-date", formats=ISO_DATETIME_FORMATS, help="ISO datetime lower bound."
+    ),
+    end_date: Optional[datetime] = typer.Option(
+        None, "--end-date", formats=ISO_DATETIME_FORMATS, help="ISO datetime upper bound."
+    ),
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
@@ -97,8 +102,12 @@ def create_conversation(
         help="Source type. One of audio_transcript, message, other_text.",
     ),
     text_source_spec: Optional[str] = typer.Option(None, "--text-source-spec", help="e.g. 'email', 'slack'."),
-    started_at: Optional[datetime] = typer.Option(None, "--started-at", help="ISO datetime."),
-    finished_at: Optional[datetime] = typer.Option(None, "--finished-at", help="ISO datetime."),
+    started_at: Optional[datetime] = typer.Option(
+        None, "--started-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."
+    ),
+    finished_at: Optional[datetime] = typer.Option(
+        None, "--finished-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."
+    ),
     language: str = typer.Option("en", "--language", help="ISO 639-1 code."),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -134,8 +143,8 @@ def from_segments(
     typer_ctx: typer.Context,
     segments_file: Path = typer.Argument(..., help="Path to a JSON file containing 'transcript_segments'."),
     source: Optional[str] = typer.Option(None, "--source", help="Conversation source (e.g. omi, friend, phone)."),
-    started_at: Optional[datetime] = typer.Option(None, "--started-at"),
-    finished_at: Optional[datetime] = typer.Option(None, "--finished-at"),
+    started_at: Optional[datetime] = typer.Option(None, "--started-at", formats=ISO_DATETIME_FORMATS),
+    finished_at: Optional[datetime] = typer.Option(None, "--finished-at", formats=ISO_DATETIME_FORMATS),
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
