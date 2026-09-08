@@ -149,6 +149,36 @@ def test_login_with_browser_rejects_unknown_provider(config_path) -> None:
         )
 
 
+def test_browser_login_status_goes_to_stderr_not_stdout(monkeypatch, capsys) -> None:
+    """Human status messages during browser login must not pollute stdout.
+
+    In --json mode stdout carries only the JSON payload, so the
+    "Opening browser…" / fallback-URL messages belong on stderr.
+    """
+    import threading
+
+    monkeypatch.setattr(oauth.webbrowser, "open", lambda *a, **k: True)
+
+    # Force the OAuth wait to time out right after the status prints, so the
+    # test doesn't block for the real 300s browser timeout.
+    monkeypatch.setattr(threading.Event, "wait", lambda *a, **k: False)
+    # The real serve_forever thread never got a callback; make join() safe.
+    monkeypatch.setattr(threading.Thread, "join", lambda *a, **k: None)
+
+    with pytest.raises(oauth.AuthError):
+        oauth.login_with_browser(
+            "default",
+            api_base="https://api.test.omi.local",
+            provider="google",
+            open_browser=True,
+        )
+
+    captured = capsys.readouterr()
+    assert captured.out == "", f"stdout should stay clean, got: {captured.out!r}"
+    assert "Opening browser for google sign-in..." in captured.err
+    assert "api.test.omi.local" in captured.err
+
+
 # ---- code-exchange wiring -------------------------------------------------
 
 
