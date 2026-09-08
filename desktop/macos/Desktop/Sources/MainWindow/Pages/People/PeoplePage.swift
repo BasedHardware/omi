@@ -39,8 +39,9 @@ struct PersonOverview: Identifiable {
       }
   }
 
-  static func voiceCaption(_ voice: LocalSpeakerDiarizer.VoiceSummary?) -> String {
-    guard let voice else { return "No voice yet — name them in a live transcript" }
+  /// Nil when no voice is known: the row says nothing rather than nagging.
+  static func voiceCaption(_ voice: LocalSpeakerDiarizer.VoiceSummary?) -> String? {
+    guard let voice else { return nil }
     let minutes = Int(voice.speechSeconds / 60)
     let amount = minutes >= 1 ? "\(minutes) min heard" : "\(Int(voice.speechSeconds)) s heard"
     let clips =
@@ -192,11 +193,6 @@ struct PeoplePage: View {
         snippetRow(owner: LocalVoiceprintStore.sampleOwner(nil))
       }
       Spacer(minLength: 0)
-      if userVoice != nil {
-        pillButton(title: "Forget my voice", identifier: "people-forget-user-voice") {
-          await LocalSpeakerDiarizer.shared.forgetVoice(personId: nil)
-        }
-      }
     }
     .padding(OmiSpacing.md)
     .background(
@@ -261,9 +257,11 @@ struct PeoplePage: View {
         Text(PersonOverview.conversationCaption(count: row.conversationCount, last: row.lastTalkedAt))
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
-        Text(PersonOverview.voiceCaption(row.voice))
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(row.hasVoice ? Ink.secondary : Ink.tertiary)
+        if let caption = PersonOverview.voiceCaption(row.voice) {
+          Text(caption)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
         snippetRow(owner: LocalVoiceprintStore.sampleOwner(row.id))
       }
       Spacer(minLength: 0)

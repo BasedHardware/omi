@@ -50,8 +50,7 @@ final class PeoplePageOverviewTests: XCTestCase {
 
   func testCaptionsSayWhatOmiKnows() {
     let now = Date()
-    XCTAssertEqual(
-      PersonOverview.voiceCaption(nil), "No voice yet — name them in a live transcript")
+    XCTAssertNil(PersonOverview.voiceCaption(nil), "an unknown voice shows no caption")
     XCTAssertEqual(PersonOverview.voiceCaption(summary("a", seconds: 125)), "Voice known · 2 min heard")
     XCTAssertEqual(
       PersonOverview.voiceCaption(summary("a", seconds: 125, clips: 2)), "Voice known · 2 min heard · 2 clips")
