@@ -5,6 +5,17 @@ set -euo pipefail
 # Source the actual hook branch into a controlled fixture so this verifies
 # process execution and exit status rather than matching hook diagnostics.
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+fixture_mode="${1:-}"
+unset FORMATTER_ARGS FORMATTER_EXIT FORMATTER_FUNCTION PRE_PUSH_SKIP_FIRMWARE_FORMAT
+
+# The fixture is selected by pre-push and must not let a caller's formatter
+# test variables redirect the sourced function or change its expected result.
+if [ "$fixture_mode" != "--hostile-env-probe" ]; then
+  FORMATTER_ARGS=/dev/null \
+    FORMATTER_EXIT=97 \
+    FORMATTER_FUNCTION=/dev/null \
+    bash "${BASH_SOURCE[0]}" --hostile-env-probe >/dev/null
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/omi-pre-push-firmware-format.XXXXXX")"
@@ -33,6 +44,7 @@ chmod +x "$FIXTURE_TMP/bin/clang-format"
 run_formatter_check() (
   cd "$FIXTURE_TMP/repo"
   CHANGED_FILES=("$@")
+  ci_prediction_note_skipped() { : >"$SKIP_MARKER"; }
   # shellcheck source=/dev/null
   source "${FORMATTER_FUNCTION:-$FUNCTION}"
   check_firmware_formatters
@@ -85,6 +97,16 @@ if PATH="$FIXTURE_TMP/bin" run_formatter_check omi/firmware/fixture.c >/dev/null
   exit 1
 fi
 unset FORMATTER_EXIT
+
+# The deliberate formatter hatch must take the bypass visibly, so the hook's
+# bounded CI-prediction summary cannot look like a verified format check.
+SKIP_MARKER="$FIXTURE_TMP/firmware-format-skipped"
+export SKIP_MARKER
+PRE_PUSH_SKIP_FIRMWARE_FORMAT=1 PATH="$FIXTURE_TMP/no-formatter" run_formatter_check omi/firmware/fixture.c >/dev/null
+if [ ! -e "$SKIP_MARKER" ]; then
+  echo "FAIL: firmware-format hatch did not record a skipped formatter check" >&2
+  exit 1
+fi
 
 # A deleted firmware source and a non-firmware push must stay independent of
 # an unprovisioned formatter.

@@ -236,12 +236,16 @@ check_firmware_formatters() {
     return
   fi
 
-  if command -v clang-format >/dev/null 2>&1; then
+  if [ "${PRE_PUSH_SKIP_FIRMWARE_FORMAT:-}" = "1" ]; then
+    echo "Skipping C/C++ format check because PRE_PUSH_SKIP_FIRMWARE_FORMAT=1."
+    ci_prediction_note_skipped "Firmware C/C++ formatting (PRE_PUSH_SKIP_FIRMWARE_FORMAT=1)"
+  elif command -v clang-format >/dev/null 2>&1; then
     echo "==> clang-format --dry-run (${#firmware_files[@]} file(s))"
     clang-format --dry-run --Werror "${firmware_files[@]}"
   else
     echo "FAIL: changed firmware C/C++ files require clang-format for local CI certification." >&2
     echo "      Install clang-format (for example, 'brew install clang-format') and retry the push." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_FIRMWARE_FORMAT=1 git push" >&2
     return 1
   fi
 }
