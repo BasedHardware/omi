@@ -305,6 +305,62 @@ test.each([
   },
 );
 
+test('empty device list does not keep Scanning after the scan is no longer busy', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOn',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: 'Scanning for Omi devices',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('No Omi device was discovered.');
+  expect(output).not.toContain('Scanning for Omi devices');
+  await act(async () => renderer.unmount());
+});
+
+test('empty device list keeps Scanning copy while a scan is busy', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOn',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: 'Scanning for Omi devices',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={true}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Scanning for Omi devices',
+  );
+  await act(async () => renderer.unmount());
+});
+
 test('empty device list keeps an already-human Bluetooth last event', async () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {

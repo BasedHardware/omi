@@ -103,7 +103,11 @@ export function DeviceSession({
   const hint =
     deviceScanMessage ??
     (nativeSnapshot !== null && devices.length === 0
-      ? emptyDeviceListHint(nativeSnapshot.lastEvent, nativeSnapshot.bluetooth)
+      ? emptyDeviceListHint(
+          nativeSnapshot.lastEvent,
+          nativeSnapshot.bluetooth,
+          deviceBusy,
+        )
       : null);
 
   const remembered =

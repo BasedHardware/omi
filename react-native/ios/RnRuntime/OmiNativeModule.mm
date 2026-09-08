@@ -195,6 +195,8 @@ RCT_REMAP_METHOD(startScan,
     }
     [self.central stopScan];
     self.scanning = NO;
+    self.lastEvent = self.devices.count == 0 ? @"No Omi devices found" : [NSString stringWithFormat:@"Found %lu Omi device%@", (unsigned long)self.devices.count, self.devices.count == 1 ? @"" : @"s"];
+    [self emitSnapshot];
     RCTPromiseResolveBlock pending = self.scanResolve;
     self.scanResolve = nil;
     pending([self deviceList]);

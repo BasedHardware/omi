@@ -31,6 +31,7 @@ export function bluetoothStatusLabel(state: string): string {
 export function emptyDeviceListHint(
   event: string | null | undefined,
   bluetooth: string,
+  scanBusy = false,
 ): string {
   const trimmed = event?.trim() ?? '';
   const match = /^Bluetooth is ([A-Za-z]+)$/.exec(trimmed);
@@ -51,6 +52,9 @@ export function emptyDeviceListHint(
     return statusCode[1] === 'BLE scan failed'
       ? 'Bluetooth scan failed.'
       : `${statusCode[1]}.`;
+  }
+  if (trimmed === 'Scanning for Omi devices' && !scanBusy) {
+    return 'No Omi device was discovered.';
   }
   return trimmed;
 }

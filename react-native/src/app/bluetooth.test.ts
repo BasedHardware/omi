@@ -30,6 +30,13 @@ test.each([
     'poweredOn',
     'Omi notification subscription failed.',
   ],
+  ['Scanning for Omi devices', 'poweredOn', 'No Omi device was discovered.'],
 ] as const)('emptyDeviceListHint(%j, %s)', (event, bluetooth, expected) => {
   expect(emptyDeviceListHint(event, bluetooth)).toBe(expected);
+});
+
+test('emptyDeviceListHint keeps Scanning copy only while a scan is busy', () => {
+  expect(
+    emptyDeviceListHint('Scanning for Omi devices', 'poweredOn', true),
+  ).toBe('Scanning for Omi devices');
 });

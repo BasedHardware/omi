@@ -785,6 +785,17 @@ test('static tripwire: OmiNative wires CoreBluetooth and tested connection polic
   expect(scanSource).toContain('[self.devices removeAllObjects]');
   expect(scanSource).toContain('self.connectedPeripheral');
   expect(scanSource).toContain('self.devices[keepId] = kept');
+  expect(scanSource).toContain('No Omi devices found');
+  const iosSource = readFileSync(
+    resolve(__dirname, '../ios/RnRuntime/OmiNativeModule.mm'),
+    'utf8',
+  );
+  const iosScanStart = iosSource.indexOf('RCT_REMAP_METHOD(startScan');
+  const iosScanSource = iosSource.slice(
+    iosScanStart,
+    iosSource.indexOf('RCT_REMAP_METHOD(stopScan', iosScanStart),
+  );
+  expect(iosScanSource).toContain('No Omi devices found');
   expect(source).not.toContain('.swift');
   expect(entitlements).toContain('com.apple.security.device.bluetooth');
   expect(entitlements).toContain('com.apple.security.app-sandbox');
