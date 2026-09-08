@@ -51,6 +51,10 @@ class OnboardingHandler:
         self.current_transcript = ''
         self.silence_timer: Optional[asyncio.Task[None]] = None
         self.is_checking_answer = False
+        # Segments that arrive while an AI answer check is awaiting the LLM are
+        # queued here and replayed once the check finishes, so speech covering
+        # later topics is evaluated instead of dropped.
+        self.pending_segments: List[Dict[str, Any]] = []
         self.completed = False
         self.started = False
         self.start_time: Optional[float] = None  # Track when onboarding started
@@ -100,7 +104,13 @@ class OnboardingHandler:
 
     def on_segments_received(self, segments: List[Dict[str, Any]]) -> None:
         """Called when new transcript segments are received"""
-        if self.completed or self.is_checking_answer:
+        if self.completed:
+            return
+        if self.is_checking_answer:
+            # An AI answer check can await up to three LLM calls; speech that
+            # arrives during that window must not be lost. Queue it and replay
+            # it when _check_answer finishes.
+            self.pending_segments.extend(segments)
             return
 
         # Update timing tracking
@@ -228,6 +238,12 @@ class OnboardingHandler:
 
         finally:
             self.is_checking_answer = False
+            # Replay what was said while the checks were awaiting the LLM so it
+            # accumulates into the transcript and restarts the silence timer
+            # for the next evaluation.
+            pending, self.pending_segments = self.pending_segments, []
+            if pending and not self.completed:
+                self.on_segments_received(pending)
 
     async def _ai_check_answer(self, question: str, transcript: str) -> bool:
         """Use AI to determine if answer is valid"""

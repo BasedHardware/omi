@@ -60,3 +60,29 @@ async def test_transcript_is_kept_for_the_next_topic_when_it_stops_answering():
     assert handler.current_question_index == 1
     assert handler.current_transcript == 'I live in Austin.'
     assert [e['type'] for e in events] == ['question_answered', 'onboarding_question']
+
+
+@pytest.mark.anyio
+async def test_segments_during_answer_check_are_queued_not_dropped():
+    events = []
+    handler = _handler(events, [])
+    handler.current_transcript = 'I live in Austin.'
+    ai_answers = [True, False]
+
+    async def fake_ai_check(question, transcript):
+        answered = ai_answers.pop(0)
+        if answered:
+            # Speech keeps arriving while the answer check awaits the LLM.
+            handler.on_segments_received([{'text': ' and I work as an engineer.', 'speaker_id': 1}])
+        return answered
+
+    handler._ai_check_answer = fake_ai_check  # type: ignore[method-assign]
+
+    await handler._check_answer()
+
+    # The mid-check speech must be merged back, not dropped: it lands in the
+    # transcript and restarts the silence evaluation for the next topic.
+    assert handler.pending_segments == []
+    assert handler.current_transcript == 'I live in Austin. and I work as an engineer.'
+    assert handler.silence_timer is not None
+    handler.silence_timer.cancel()
