@@ -27,6 +27,9 @@ struct QueryAnswerThread: View {
   /// Re-sends the question that failed, through the host's one send — never a second send path. The
   /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
+  /// `Redo` under an answer: the same host send again, with the question the transcript carries.
+  /// This view still owns no send of its own (INV-6) — it only says which question.
+  let onRedo: (String) -> Void
   /// The inline entity controls' owners. It gives this thread no second provider, transcript, or
   /// lifecycle owner.
   let chatFirstRichBlockContext: ChatFirstRichBlockContext
@@ -66,6 +69,7 @@ struct QueryAnswerThread: View {
           FloatingControlBarManager.shared.openAgentChatFromTimeline(
             ref: ref, completion: completion)
         },
+        onRedo: onRedo,
 
         // **Not zero.** The assistant's identity mark is drawn in an overlay offset
         // `ChatOmiMarkPlacement.markGutter` to the left of the message column, so a transcript with

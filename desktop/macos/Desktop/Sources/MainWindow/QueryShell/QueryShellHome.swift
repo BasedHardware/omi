@@ -348,6 +348,7 @@ struct QueryShellHome: View {
         chatProvider: chatProvider,
         onOpenCitation: openCitation,
         onRetry: retry,
+        onRedo: redo,
         chatFirstRichBlockContext: chatFirstRichBlockContext
       )
     }
@@ -530,9 +531,10 @@ struct QueryShellHome: View {
             source: "query_shell", countsAsQuestion: plan.countsAsQuestion,
             attemptID: attemptID)
         })
-      if !accepted, chatProvider.draftText.isEmpty {
+      if !accepted, plan.returnsToComposerIfRefused, chatProvider.draftText.isEmpty {
         // The provider refused the send — give the typed question back
-        // instead of losing it to a cleared field.
+        // instead of losing it to a cleared field. A refused Redo returns
+        // nothing: that question came from the transcript, where it still is.
         chatProvider.draftText = plan.question
       }
     }
@@ -541,6 +543,14 @@ struct QueryShellHome: View {
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
   private func retry() {
     guard let plan = sendLedger.planRetry() else { return }
+    send(plan)
+  }
+
+  /// `Redo` under an answer: ask that answer's own question again, through the same one send. A
+  /// busy provider is left to refuse it and say so — silently dropping the press would look like a
+  /// dead button, and the provider already owns the words for "still answering the last one".
+  private func redo(_ question: String) {
+    guard let plan = sendLedger.planRedo(question) else { return }
     send(plan)
   }
 

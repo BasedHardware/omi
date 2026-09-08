@@ -387,6 +387,23 @@ enum ChatTranscriptWindow {
 /// view is generic, so the constant lives here rather than as a static on it.
 private let chatRowViewportStep: CGFloat = 48
 
+/// **What `Redo` re-asks.** The question that produced an answer is the nearest
+/// user turn above it — not "the last thing asked", which is a different
+/// question the moment the reader scrolls back and redoes an older answer.
+/// Pure so the walk is testable without mounting a transcript.
+enum ChatRedoTarget {
+  static func question(forMessageID id: String, in messages: [ChatMessage]) -> String? {
+    guard let index = messages.firstIndex(where: { $0.id == id }),
+      messages[index].sender == .ai
+    else { return nil }
+    for candidate in messages[..<index].reversed() where candidate.sender == .user {
+      let question = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return question.isEmpty ? nil : question
+    }
+    return nil
+  }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -420,6 +437,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   /// Opens via structured agent identity (session/run/pill) when available.
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Re-asks the question an answer came from, through the host's one send.
+  /// Optional: a surface that does not own a send (the task panel sends through
+  /// its own state) simply shows no Redo control.
+  var onRedo: ((String) -> Void)? = nil
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = ChatComposerLayout.transcriptEdgeInset
@@ -1173,6 +1194,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef,
+          onRedo: redoAction(for: message),
           chatFirstRichBlockContext: chatFirstRichBlockContext
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
@@ -1190,6 +1212,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         ChatSwitchPerfLog.span("dailySummaryActivate", startedAt: startedAt)
       }
     }
+  }
+
+  /// The Redo closure for one row, or nil when there is nothing to re-ask.
+  /// Resolved against the FULL transcript rather than the mounted window, so
+  /// redoing the oldest visible answer still finds the question above it.
+  private func redoAction(for message: ChatMessage) -> (() -> Void)? {
+    guard let onRedo,
+      let question = ChatRedoTarget.question(forMessageID: message.id, in: messages)
+    else { return nil }
+    return { onRedo(question) }
   }
 
   /// The recap this thread shows as a day boundary, if any. A cleared thread
