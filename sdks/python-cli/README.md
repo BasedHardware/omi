@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Preserve existing config directory permissions
+
+Existing config parent directories retain their permissions. Newly created config directories use owner-only access; credential files remain owner-only.
+
 ## Development
 
 ```bash
