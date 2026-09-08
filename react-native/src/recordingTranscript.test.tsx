@@ -87,6 +87,13 @@ test('loads full recording text through native transport without truncating to o
   expect(text?.props.selectable).toBe(true);
 });
 
+test('a completed whitespace-only transcript says empty instead of a blank body', async () => {
+  mockRequest.mockResolvedValue(response('session-one', 'completed', ' \t\n'));
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('The transcript is empty.');
+  expect(textOf(renderer)).not.toMatch(/ \t\n/);
+});
+
 test.each(['queued', 'running'])(
   'shows %s state truthfully and resumes a completed result',
   async state => {

@@ -332,7 +332,7 @@ Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
 
-Cloud Linux after `b47a72e2b0`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. 0059 trims space, tab, LF, and CR so whitespace-only chat sessions stay visible with empty title and overview instead of inventing Chat. Migration 0059 is not applied to DEV from this VM. Conversation and memory display helpers now treat leftover whitespace-only copy as empty, so those rows keep Conversation title unavailable / Memory text unavailable instead of a blank gap. This does not invent a chat or memory producer.
+Cloud Linux after `32e068418b`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Whitespace-only conversation titles and summaries use the same unavailable fallback as empty strings instead of a blank row. Memory display does the same. Cancelled chat bubbles and completed recording transcripts now treat leftover whitespace-only bodies as empty, so they say Response stopped / The transcript is empty instead of a blank gap. This does not invent a chat or transcription producer.
 
 ## Verified and pushed
 

@@ -133,7 +133,8 @@ function AskExchange({
               ? item.generationRetryable === true
                 ? 'Response failed. Try again.'
                 : 'Response failed.'
-              : item.generationOutcome === 'cancelled' && item.text === ''
+              : item.generationOutcome === 'cancelled' &&
+                item.text.trim() === ''
               ? 'Response stopped.'
               : item.text}
           </Text>

@@ -79,7 +79,7 @@ export function ChatConversationHistory({
                     ? 'Response failed. Try again.'
                     : 'Response failed.'
                   : message.generationOutcome === 'cancelled' &&
-                    message.text === ''
+                    message.text.trim() === ''
                   ? 'Response stopped'
                   : message.text;
               return (
@@ -88,7 +88,7 @@ export function ChatConversationHistory({
                     {`${sender} · ${body}`}
                   </Text>
                   {message.generationOutcome === 'cancelled' &&
-                  message.text !== '' ? (
+                  message.text.trim() !== '' ? (
                     <Text style={styles.conversationDetailField}>
                       Response stopped
                     </Text>

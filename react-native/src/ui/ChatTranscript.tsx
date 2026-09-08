@@ -73,15 +73,16 @@ const ChatMessageRow = memo(function ChatMessageRow({
                 : 'Response failed.'}
             </Text>
           ) : message.generationOutcome === 'cancelled' &&
-            message.text === '' ? (
+            message.text.trim() === '' ? (
             <Text style={styles.message}>Response stopped</Text>
           ) : (
             <Text style={styles.message}>{message.text}</Text>
           )}
         </View>
-        {message.generationOutcome === 'cancelled' && message.text !== '' && (
-          <Text style={styles.cancelledLabel}>Response stopped</Text>
-        )}
+        {message.generationOutcome === 'cancelled' &&
+          message.text.trim() !== '' && (
+            <Text style={styles.cancelledLabel}>Response stopped</Text>
+          )}
         <Text
           style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
           {chatClockLabel(message.createdAt, Date.now()) || 'Time unavailable'}

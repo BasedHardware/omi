@@ -424,6 +424,23 @@ test('desktop chat renders a truthful failed terminal state', () => {
   ).not.toHaveLength(0);
 });
 
+test('desktop chat treats a cancelled whitespace-only reply as Response stopped', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'cancelled-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'cancelled',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Response stopped.');
+  expect(copy).not.toContain(' \t\n');
+});
+
 test('a zero macOS Home chat timestamp says Time unavailable instead of omitting the clock', () => {
   const renderer = renderDesktop({
     messages: [

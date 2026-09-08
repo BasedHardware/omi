@@ -41,7 +41,7 @@ export function RecordingTranscript({
             </Text>
           )}
           <Text selectable style={styles.conversationTranscriptText}>
-            {result.value.text === ''
+            {result.value.text.trim() === ''
               ? 'The transcript is empty.'
               : result.value.text}
           </Text>
