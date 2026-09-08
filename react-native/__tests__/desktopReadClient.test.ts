@@ -72,6 +72,7 @@ import {
   parseCloudApp,
   parseCloudApps,
   parseCloudProfile,
+  parseCloudSubscription,
   parseEnabledAppIds,
   serviceApps,
 } from '../src/desktopCloudClient';
@@ -1765,6 +1766,28 @@ test('keeps empty catalogue names instead of failing the Apps page', () => {
   expect(() => parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toThrow(
     'App 0 is malformed',
   );
+});
+
+test('keeps empty subscription plan tokens instead of failing Settings Plan', () => {
+  expect(
+    parseCloudSubscription({plan: '', status: ''}, 'Subscription response'),
+  ).toEqual(
+    expect.objectContaining({
+      plan: '',
+      status: '',
+      transcriptionSecondsUsed: null,
+      transcriptionSecondsLimit: null,
+    }),
+  );
+  expect(
+    parseCloudSubscription(
+      {plan: 'plus', status: 'active'},
+      'Subscription response',
+    ),
+  ).toEqual(expect.objectContaining({plan: 'plus', status: 'active'}));
+  expect(() =>
+    parseCloudSubscription({status: 'active'}, 'Subscription response'),
+  ).toThrow('Subscription response is malformed');
 });
 
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {

@@ -248,14 +248,15 @@ export function parseCloudSubscription(
     record.subscription === undefined
       ? record
       : object(record.subscription, `${label} subscription`);
-  const plan = optionalString(subscription.plan);
-  const status = optionalString(subscription.status);
-  if (plan === null || status === null) {
+  if (
+    typeof subscription.plan !== 'string' ||
+    typeof subscription.status !== 'string'
+  ) {
     throw new Error(`${label} is malformed`);
   }
   return {
-    plan,
-    status,
+    plan: subscription.plan,
+    status: subscription.status,
     transcriptionSecondsUsed: optionalInteger(
       record.transcription_seconds_used,
     ),
