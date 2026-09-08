@@ -1872,9 +1872,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openSettings => 'Obrir configuració';
 
   @override
-  String get wantDifferentName => 'Voleu que us anomeni d\'una altra manera?';
-
-  @override
   String get whatsYourName => 'Com et dius?';
 
   @override
@@ -2055,7 +2052,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryDeleted => 'Record eliminat.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Una part de l\'historial de records no està disponible. Es mostra l\'historial rebut fins ara.';
 
   @override
   String get undo => 'Desfer';
@@ -9971,10 +9969,33 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Perfil de veu de $name';
+  }
+
+  @override
+  String get play => 'Reprodueix';
+
+  @override
+  String get redo => 'Torna a gravar';
+
+  @override
+  String get answerWithYourVoice => 'Respon amb la veu:';
+
+  @override
+  String get speechProfileTopicLocation => 'On vius?';
+
+  @override
+  String get speechProfileTopicWork => 'A què et dediques?';
+
+  @override
+  String get speechProfileTopicGoal => 'Quin és el teu objectiu a llarg termini?';
+
+  @override
   String get transcriptionNoAudio => 'La transcripció no rep àudio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Toca + per començar a gravar';
 
   @override
   String get chatBlockTask => 'Tasca';
@@ -10011,4 +10032,8 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'No s\'ha pogut carregar el graf de coneixement';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.';
 }

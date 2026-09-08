@@ -1862,9 +1862,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openSettings => 'Адкрыць налады';
 
   @override
-  String get wantDifferentName => 'Хочаце быць вядомамі пад чым-то іншым?';
-
-  @override
   String get whatsYourName => 'Якое вашае імя?';
 
   @override
@@ -2044,7 +2041,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get memoryDeleted => 'Спамін выдалена.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.';
 
   @override
   String get undo => 'Адмяніць';
@@ -9946,10 +9943,33 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Галасавы профіль: $name';
+  }
+
+  @override
+  String get play => 'Прайграць';
+
+  @override
+  String get redo => 'Перазапісаць';
+
+  @override
+  String get answerWithYourVoice => 'Адкажыце голасам:';
+
+  @override
+  String get speechProfileTopicLocation => 'Дзе вы жывяце?';
+
+  @override
+  String get speechProfileTopicWork => 'Кім вы працуеце?';
+
+  @override
+  String get speechProfileTopicGoal => 'Якая ваша доўгатэрміновая мэта?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Націсніце +, каб пачаць запіс';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -9986,4 +10006,8 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Не ўдалося загрузіць граф ведаў';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.';
 }

@@ -413,15 +413,15 @@ final class ChatDailySummaryTests: XCTestCase {
   @MainActor
   func testFollowUpChipPrefillsTheComposerAndSendsNothing() {
     _ = MainChatNavigationRequestStore.shared.consume()
-    _ = MainChatNavigationRequestStore.shared.consumeDraft()
+    _ = MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: "")
 
     let question = ChatDailySummaryPresentation.followUpQuestion(
       for: "2026-09-01", now: date(2026, 9, 2), calendar: calendar)
     ChatDailySummaryPresentation.requestFollowUp(question)
 
-    XCTAssertEqual(MainChatNavigationRequestStore.shared.consumeDraft(), "What did I do yesterday?")
+    XCTAssertEqual(MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: ""), "What did I do yesterday?")
     // Consumed exactly once — a second composer must not re-insert it, and nothing was sent.
-    XCTAssertNil(MainChatNavigationRequestStore.shared.consumeDraft())
+    XCTAssertNil(MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: ""))
     XCTAssertTrue(MainChatNavigationRequestStore.shared.consume())
   }
 

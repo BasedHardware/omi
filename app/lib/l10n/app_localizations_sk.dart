@@ -1864,9 +1864,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openSettings => 'Otvoriť nastavenia';
 
   @override
-  String get wantDifferentName => 'Chcete sa volať inak?';
-
-  @override
   String get whatsYourName => 'Ako sa voláš?';
 
   @override
@@ -2047,7 +2044,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryDeleted => 'Spomienka bola odstránená.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.';
 
   @override
   String get undo => 'Vrátiť späť';
@@ -9907,10 +9904,33 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Hlasový profil: $name';
+  }
+
+  @override
+  String get play => 'Prehrať';
+
+  @override
+  String get redo => 'Nahrať znova';
+
+  @override
+  String get answerWithYourVoice => 'Odpovedzte hlasom:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kde bývate?';
+
+  @override
+  String get speechProfileTopicWork => 'Čím sa živíte?';
+
+  @override
+  String get speechProfileTopicGoal => 'Aký je váš dlhodobý cieľ?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Ťuknutím na + spustíte nahrávanie';
 
   @override
   String get chatBlockTask => 'Úloha';
@@ -9947,4 +9967,8 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Nepodarilo sa načítať graf znalostí';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.';
 }

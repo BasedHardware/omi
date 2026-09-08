@@ -2,6 +2,16 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.318",
+      "date": "2026-09-08",
+      "changes": [
+        "Added Undo Last Dictation in supported editors and clearer recovery when dictation cannot be inserted safely",
+        "Voice typing is now faster for simple, already-clean English dictation",
+        "Made locked listening visible in the notch with a stop and send control, and added clearer push-to-talk and dictation guidance",
+        "Offline voice questions stay available for five minutes for review or copy without being sent automatically"
+      ]
+    },
+    {
       "version": "0.12.317",
       "date": "2026-09-08",
       "changes": [
