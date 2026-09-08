@@ -198,5 +198,7 @@ def delete_conversation(
     if not confirm:
         typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")
