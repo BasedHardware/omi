@@ -26,11 +26,15 @@ export type ConversationProjection = {
   discarded: boolean;
 };
 
+export function visibleDisplayText(value: string): string {
+  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
+}
+
 export function conversationDisplayTitle(item: {
   title: string;
   status: string;
 }): string {
-  const title = item.title.trim();
+  const title = visibleDisplayText(item.title);
   if (title !== '') {
     return title;
   }
@@ -43,7 +47,7 @@ export function conversationDisplaySummary(item: {
   summary: string;
   status: string;
 }): string {
-  const summary = item.summary.trim();
+  const summary = visibleDisplayText(item.summary);
   if (summary !== '') {
     return summary;
   }
@@ -53,7 +57,7 @@ export function conversationDisplaySummary(item: {
 }
 
 export function conversationStatusCopy(status: string): string {
-  const trimmed = status.trim();
+  const trimmed = visibleDisplayText(status);
   if (trimmed === 'in_progress') {
     return 'In progress';
   }
@@ -95,7 +99,7 @@ export function accountFieldCopy(
   value: string | null | undefined,
   unset: string,
 ): string {
-  const trimmed = value?.trim() ?? '';
+  const trimmed = visibleDisplayText(value ?? '');
   return trimmed !== '' ? trimmed : unset;
 }
 
@@ -205,7 +209,7 @@ export function chatMessageDisplayText(
       ? 'Response failed. Try again.'
       : 'Response failed.';
   }
-  const text = message.text.trim();
+  const text = visibleDisplayText(message.text);
   const attachmentLines = (message.attachments ?? []).map(attachment =>
     chatAttachmentDisplayName(attachment.displayName),
   );
@@ -237,8 +241,8 @@ export function memoryDisplayTitle(item: {
   title: string;
   summary: string;
 }): string {
-  const title = item.title.trim();
-  const summary = item.summary.trim();
+  const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
   return visibleMemoryText(title !== '' ? title : summary);
 }
 
@@ -246,13 +250,13 @@ export function memoryDisplayBody(item: {
   title: string;
   summary: string;
 }): string {
-  const title = item.title.trim();
-  const summary = item.summary.trim();
+  const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
   return visibleMemoryText(summary !== '' ? summary : title);
 }
 
 export function memoryCitationCopy(citations: readonly string[]): string {
-  const visible = citations.filter(id => id.trim() !== '');
+  const visible = citations.filter(id => visibleDisplayText(id) !== '');
   return visible.length === 1 ? '1 citation' : `${visible.length} citations`;
 }
 
@@ -299,13 +303,13 @@ export function taskDisplaySummary(item: {
 }
 
 export function taskDisplayTitle(item: {title: string}): string {
-  const title = item.title.trim();
+  const title = visibleDisplayText(item.title);
   return title !== '' ? title : 'Task title unavailable';
 }
 
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
-  const body = parsed.body.trim();
+  const body = visibleDisplayText(parsed.body);
   return body !== '' ? body : 'Memory text unavailable';
 }
 

@@ -958,6 +958,51 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("keeps older visible history when leftover prefix is only NEXT LINE", async () => {
+    const leftover = 2;
+    const recent = "a".repeat(GENERATION_HISTORY_TEXT_BUDGET - leftover);
+    const padded = `\u0085${"b".repeat(64)}`;
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("message-older", "ok")
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 2, 1, NULL)"
+      )
+      .bind("message-padded", padded)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 3, 1, NULL)"
+      )
+      .bind("message-recent", recent)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 4, 1, NULL)"
+      )
+      .bind("message-now", "current")
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-now",
+      "current"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "current",
+      history: [
+        { role: "user", content: "ok" },
+        { role: "user", content: recent },
+      ],
+    });
+  });
+
   test("appends a bound text/plain R2 object to the prompt", async () => {
     await insertBound(db, {
       id: "att-text",
@@ -1583,6 +1628,8 @@ describe("isVisibleGenerationText", () => {
   test("rejects empty and whitespace-only provider text", () => {
     expect(isVisibleGenerationText("")).toBe(false);
     expect(isVisibleGenerationText(" \t\n")).toBe(false);
+    expect(isVisibleGenerationText("\u0085")).toBe(false);
+    expect(isVisibleGenerationText(" \u0085 ")).toBe(false);
     expect(isVisibleGenerationText(null)).toBe(false);
     expect(isVisibleGenerationText(undefined)).toBe(false);
   });

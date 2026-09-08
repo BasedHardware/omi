@@ -5,6 +5,7 @@ import {
   chatClockLabel,
   chatMessageDisplayText,
   chatSenderCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
@@ -81,7 +82,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
           )}
         </View>
         {message.generationOutcome === 'cancelled' &&
-          message.text.trim() !== '' && (
+          visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>
           )}
         {message.sender === 'unknown' && (

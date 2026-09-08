@@ -611,6 +611,9 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(conversationDisplayTitle({title: ' \t\n', status: 'completed'})).toBe(
     'Conversation title unavailable',
   );
+  expect(conversationDisplayTitle({title: '\u0085', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
   ).toBe('Morning walk');
@@ -784,6 +787,12 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
     chatMessageDisplayText({
       text: '\u00A0',
       generationOutcome: null,
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '\u0085',
+      generationOutcome: 'completed',
     }),
   ).toBe('Message text unavailable');
   expect(
@@ -974,6 +983,7 @@ test('task due copy uses a calendar date instead of a raw epoch', () => {
 test('empty task titles stay visible instead of a blank row', () => {
   expect(taskDisplayTitle({title: ''})).toBe('Task title unavailable');
   expect(taskDisplayTitle({title: ' \t\n'})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: '\u0085'})).toBe('Task title unavailable');
   expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
   expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
 });
@@ -1006,6 +1016,12 @@ test('empty conversation summaries stay visible instead of a blank subtitle', ()
   expect(
     conversationDisplaySummary({
       summary: ' \t\n',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: '\u0085',
       status: 'completed',
     }),
   ).toBe('Conversation summary unavailable');

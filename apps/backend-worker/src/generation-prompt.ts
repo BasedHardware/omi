@@ -23,7 +23,11 @@ export function isGenerationTextMimeType(mimeType: string): boolean {
 }
 
 export function isVisibleGenerationText(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+  return typeof value === "string" && visibleGenerationTrim(value).length > 0;
+}
+
+function visibleGenerationTrim(value: string): string {
+  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, "");
 }
 
 export async function composeGenerationPrompt(
