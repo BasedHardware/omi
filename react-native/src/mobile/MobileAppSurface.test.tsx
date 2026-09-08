@@ -111,6 +111,13 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
     node => node.props.accessibilityLabel === 'Send to Omi unavailable',
   );
   expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
   send.props.onPress();
   expect(onAskSubmit).not.toHaveBeenCalled();
   const ask = renderer.root.find(
@@ -118,6 +125,22 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
   );
   expect(ask.props.editable).toBe(false);
   expect(ask.props.onSubmitEditing).toBeUndefined();
+  const live = render();
+  const liveSend = live.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi',
+  );
+  expect(liveSend.props.disabled).toBe(false);
+  const liveStyle =
+    typeof liveSend.props.style === 'function'
+      ? liveSend.props.style({pressed: false})
+      : liveSend.props.style;
+  expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  act(() => {
+    renderer.unmount();
+    live.unmount();
+  });
 });
 
 describe('MobileAppSurface', () => {

@@ -759,7 +759,10 @@ export function MobileAppSurface({
             accessibilityRole="button"
             disabled={askUnavailable}
             onPress={askUnavailable ? () => undefined : onAskSubmit}
-            style={styles.askButton}>
+            style={[
+              styles.askButton,
+              askUnavailable && styles.askButtonUnavailable,
+            ]}>
             <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>
         </View>
@@ -1039,6 +1042,10 @@ const styles = StyleSheet.create({
     height: 46,
     justifyContent: 'center',
     width: 46,
+  },
+  askButtonUnavailable: {
+    backgroundColor: '#555555',
+    opacity: 0.35,
   },
   askGlyph: {color: mobileColor.background, fontSize: 14},
   tabBar: {
