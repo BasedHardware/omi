@@ -14,6 +14,7 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
+import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {FocusPressable} from '../ui/Pressable';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
@@ -32,13 +33,16 @@ type Props = {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
+  postSetupHomeCue?: PostSetupHomeCue;
 };
 
 export function DesktopReadBanner({
   onRefresh,
+  postSetupHomeCue = null,
   readsPhase,
 }: {
   onRefresh: () => void;
+  postSetupHomeCue?: PostSetupHomeCue;
   readsPhase: ReadsPhase;
 }) {
   if (readsPhase === 'initial-loading' || readsPhase === 'refreshing') {
@@ -64,6 +68,17 @@ export function DesktopReadBanner({
         </Text>
         <Text style={styles.bannerAction}>Try again</Text>
       </FocusPressable>
+    );
+  }
+  // Post-setup prove-it: only after reads settled ready. Never invents Claude.
+  if (postSetupHomeCue === 'proven' && readsPhase === 'ready') {
+    return (
+      <View accessibilityLabel="Home prove-it" style={styles.banner}>
+        <Text style={styles.bannerText}>
+          You're set. Home can read conversations, memories, and tasks from your
+          account.
+        </Text>
+      </View>
     );
   }
   return null;
@@ -135,6 +150,7 @@ export function DesktopHome({
   onRefresh,
   onOpenRewind,
   outcomes,
+  postSetupHomeCue = null,
   reads,
   readsPhase,
 }: Props) {
@@ -189,7 +205,11 @@ export function DesktopHome({
       : 'Nothing captured yet.';
   return (
     <View style={styles.home}>
-      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+      <DesktopReadBanner
+        onRefresh={onRefresh}
+        postSetupHomeCue={postSetupHomeCue}
+        readsPhase={readsPhase}
+      />
       {messages.length > 0 || chatBusy || hasOlderChat ? (
         <ScrollView
           contentContainerStyle={styles.chatContent}

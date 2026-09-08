@@ -488,6 +488,55 @@ test('the session probe holds an empty window with no product copy', () => {
   expect(renderer.root.findAllByType(Text)).toHaveLength(0);
 });
 
+test('post-setup prove-it cue shows only after reads settle ready', () => {
+  const renderer = renderDesktop({
+    postSetupHomeCue: 'proven',
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).not.toContain('Claude');
+});
+
+test('post-setup unavailable path keeps the honest banner without prove-it', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    postSetupHomeCue: 'unavailable',
+    reads: [],
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("Some of your history isn't loaded yet.");
+  expect(tree).toContain('Try again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+});
+
+test('ready Home without a post-setup cue stays quiet', () => {
+  const renderer = renderDesktop({readsPhase: 'ready'});
+  expect(renderedText(renderer)).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+});
+
 test('keeps an unavailable read as an inline shell state', () => {
   const renderer = renderDesktop({
     outcomes: null,

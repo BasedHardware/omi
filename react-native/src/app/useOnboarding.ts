@@ -1,5 +1,8 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {omiAuth, subscribeOmiBackendSessionInvalidated} from '../omiNative';
+import {SESSION_UNREACHABLE_COPY} from './onboardingCopy';
+
+export {SESSION_UNREACHABLE_COPY} from './onboardingCopy';
 
 export function useOnboarding(
   nativeSessionRequired: boolean,
@@ -50,9 +53,7 @@ export function useOnboarding(
       })
       .catch(() => {
         if (active && operation === authOperationRef.current) {
-          setAuthError(
-            "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
-          );
+          setAuthError(SESSION_UNREACHABLE_COPY);
           setSetupRequired(!nativeSessionRequired);
           setOnboardingRequired(true);
         }

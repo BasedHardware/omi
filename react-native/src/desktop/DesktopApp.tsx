@@ -7,6 +7,7 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
+import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {Onboarding} from '../ui/Onboarding';
 import {
   desktopNavBarHeight,
@@ -45,6 +46,7 @@ type Props = TaskMutationProps & {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
+  postSetupHomeCue?: PostSetupHomeCue;
   session: DesktopSession;
   signingIn: boolean;
   draft: string;
@@ -84,6 +86,7 @@ export function DesktopApp({
   onSignOut,
   onWorkspaceReload,
   outcomes,
+  postSetupHomeCue = null,
   reads,
   readsPhase,
   session,
@@ -165,6 +168,7 @@ export function DesktopApp({
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
+            postSetupHomeCue={postSetupHomeCue}
             reads={reads}
             readsPhase={readsPhase}
           />
