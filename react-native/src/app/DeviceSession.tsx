@@ -9,7 +9,7 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
-import {deviceDisplayName} from '../desktopReadClient';
+import {accountFieldCopy, deviceDisplayName} from '../desktopReadClient';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -364,7 +364,9 @@ export function DeviceSession({
         ] as const
       ).map(([field, label]) => (
         <Text key={field} selectable style={styles.deviceMeta}>
-          {label}: {connected.information?.[field] ?? 'Unavailable'}
+          {label}
+          {': '}
+          {accountFieldCopy(connected.information?.[field], 'Unavailable')}
         </Text>
       ))}
     </View>

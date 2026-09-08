@@ -57,6 +57,49 @@ test('connected device details show reported values and truthful unavailable fie
   await act(async () => renderer.unmount());
 });
 
+test('connected device details treat empty information fields as Unavailable', async () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    devices: [
+      {
+        id: 'omi-test',
+        name: 'Omi',
+        connected: true,
+        rssi: -40,
+        information: {
+          model: '',
+          firmware: ' \t\n',
+          hardware: '\u00A0',
+          manufacturer: '  Based  ',
+        },
+      },
+    ],
+    connectedDeviceId: 'omi-test',
+    capture: 'idle',
+  } as PlatformNativeSnapshot;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={snapshot}
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('"Model",": ","Unavailable"');
+  expect(output).toContain('"Firmware",": ","Unavailable"');
+  expect(output).toContain('"Hardware",": ","Unavailable"');
+  expect(output).toContain('"Manufacturer",": ","Based"');
+  expect(output).toContain('"Serial number",": ","Unavailable"');
+  expect(output).not.toContain(' \t\n');
+  await act(async () => renderer.unmount());
+});
+
 test.each(['affordance', 'compact', 'overview'] as const)(
   '%s shows pending readiness and cancels the requested connection',
   async variant => {
