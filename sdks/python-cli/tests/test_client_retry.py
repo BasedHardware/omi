@@ -38,6 +38,9 @@ def test_user_agent_contains_version_and_repo() -> None:
         "https://example.invalid/api#private-token",
         "https://example.invalid/api?",
         "https://example.invalid/api#",
+        "https://user:secret@example.invalid/api",
+        "https://user@example.invalid/api",
+        "https://:secret@example.invalid/api",
     ],
 )
 def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch, api_base) -> None:
@@ -65,7 +68,13 @@ def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch
 
 @pytest.mark.parametrize(
     "api_base",
-    ["http://localhost:1", "https://localhost:65535", "https://api.omi.me", "https://api.omi.me/api/v1/"],
+    [
+        "http://localhost:1",
+        "https://localhost:65535",
+        "https://api.omi.me",
+        "https://api.omi.me/api/v1/",
+        "http://[fe80::1]:8000",
+    ],
 )
 def test_valid_api_base_port_boundaries(api_base) -> None:
     assert validate_api_base(api_base).host

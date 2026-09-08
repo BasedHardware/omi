@@ -268,12 +268,15 @@ to verify the stored credential. Browser login has already created a developer
 API key, and an earlier key for this machine may have been replaced.
 
 The shared client requires a valid absolute `http://` or `https://` API base URL,
-stored as a string, without a query or fragment, and with any explicit port in
-the range `1`–`65535` (port `0` is reserved). Path prefixes are supported.
+stored as a string, without embedded credentials, a query or fragment, and with
+any explicit port in the range `1`–`65535` (port `0` is reserved). Path prefixes
+and IPv6 hosts are supported. An explicitly empty `--api-base` is invalid;
+it does not fall back to the stored or environment URL.
 Invalid API base configuration is reported as a usage error (exit `1`) before
 the client attempts a request or refreshes credentials.
 Browser-login progress goes through the renderer: stderr for human output and
 suppressed in JSON mode, including when later credential verification fails.
+Fallback login URLs are printed literally, preserving IPv6 address brackets.
 
 ## For agents
 

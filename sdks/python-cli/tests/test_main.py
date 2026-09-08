@@ -72,6 +72,7 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
         "ftp://user:secret@example.invalid/?token=private-token",
         "http://user:secret@127.0.0.1:0/?token=private-token",
         "http://user:secret@127.0.0.1:99999/?token=private-token",
+        "https://user:secret@example.invalid/api",
     ],
 )
 def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsys, source, json_mode, api_base) -> None:
@@ -107,6 +108,26 @@ def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsy
     assert "Traceback" not in captured.err
     assert "secret" not in captured.err
     assert "private-token" not in captured.err
+
+
+@pytest.mark.parametrize("env_base", [None, "https://example.invalid"])
+def test_empty_api_base_flag_does_not_fall_back(authed_profile, config_path, monkeypatch, capsys, env_base):
+    if env_base is not None:
+        monkeypatch.setenv("OMI_API_BASE", env_base)
+    original_config = config_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "--api-base", "", "memory", "list"])
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("An explicit empty base must fail before HTTP construction")
+
+    monkeypatch.setattr(httpx, "Client", unexpected_call)
+    with pytest.raises(SystemExit) as info:
+        main()
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"] == "Invalid API base URL"
+    assert config_path.read_bytes() == original_config
 
 
 @pytest.mark.parametrize("api_base", [123, False, ["https://api.omi.me"], {"url": "https://api.omi.me"}])

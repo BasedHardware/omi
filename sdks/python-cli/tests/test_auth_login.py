@@ -137,6 +137,8 @@ def test_explicit_login_key_recovers_from_invalid_environment_key(config_path, r
         "http://user:secret@127.0.0.1:99999/?token=private-token",
         "https://example.invalid/api?tenant=private-token",
         "https://example.invalid/api#private-token",
+        "https://user:secret@example.invalid/api",
+        "",
     ],
 )
 def test_invalid_login_base_preserves_existing_profile(
@@ -178,8 +180,9 @@ def test_invalid_login_base_preserves_existing_profile(
 
 @pytest.mark.parametrize("json_mode", [False, True])
 @pytest.mark.parametrize("failure", [False, True])
+@pytest.mark.parametrize("api_base", [FAKE_API_BASE, "http://[fe80::1]:8000"])
 def test_production_browser_login_respects_output_mode(
-    config_path, monkeypatch, respx_mock, capsys, json_mode, failure
+    config_path, monkeypatch, respx_mock, capsys, json_mode, failure, api_base
 ):
     """Keep the production OAuth flow; replace only browser, callback server, and token endpoints."""
     callback = {}
@@ -208,6 +211,7 @@ def test_production_browser_login_respects_output_mode(
             pass
 
     def browser_callback(url, **kwargs):
+        callback["url"] = url
         query = parse_qs(urlparse(url).query)
         callback["received"].update(state=query["state"][0], code="test-code")
         callback["event"].set()
@@ -220,7 +224,7 @@ def test_production_browser_login_respects_output_mode(
     monkeypatch.setattr(oauth, "_firebase_signin_with_custom_token", lambda *args: ("test-id", "test-refresh", 3600))
     monkeypatch.setattr(oauth, "_exchange_firebase_token_for_dev_key", lambda *args: FAKE_API_KEY)
     monkeypatch.setattr(time, "sleep", lambda _: None)
-    route = respx_mock.get("/v1/dev/user/memories")
+    route = respx_mock.get(f"{api_base}/v1/dev/user/memories")
     if failure:
         route.mock(side_effect=httpx.ConnectError("private-token"))
     else:
@@ -233,7 +237,7 @@ def test_production_browser_login_respects_output_mode(
             "--no-color",
             *(["--json"] if json_mode else []),
             "--api-base",
-            FAKE_API_BASE,
+            api_base,
             "auth",
             "login",
             "--browser",
@@ -259,4 +263,6 @@ def test_production_browser_login_respects_output_mode(
         assert captured.out == ""
         assert "Opening browser" in captured.err
         assert "/v1/auth/authorize?" in captured.err
+        # Rich may wrap the long URL, but must preserve every character, including IPv6 brackets.
+        assert callback["url"] in "".join(captured.err.split())
     assert "private-token" not in captured.out + captured.err

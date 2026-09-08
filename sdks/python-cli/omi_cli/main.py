@@ -75,7 +75,7 @@ class AppContext:
     def get_profile(self) -> cfg.Profile:
         config = self.load_config()
         profile = config.get_profile(self.profile_name)
-        if self.api_base_override:
+        if self.api_base_override is not None:
             profile.api_base = self.api_base_override
         # Allow OMI_API_KEY to take effect even if the on-disk profile has no key.
         # Validate the prefix here so an obviously-bad env value fails fast with the
@@ -86,7 +86,7 @@ class AppContext:
             profile.auth_method = "api_key"
             profile.api_key = validate_api_key_format(env_key)
         env_base = os.environ.get(cfg.ENV_API_BASE)
-        if env_base and not self.api_base_override:
+        if env_base and self.api_base_override is None:
             profile.api_base = env_base
         return profile
 

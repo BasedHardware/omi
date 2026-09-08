@@ -118,10 +118,10 @@ class Renderer:
     # Stderr (status/messages)
     # ------------------------------------------------------------------
 
-    def info(self, message: str) -> None:
+    def info(self, message: str, *, markup: bool = True) -> None:
         if self.json_mode:
             return  # silence in JSON mode — keep stderr clean for piping
-        self._stderr.print(message)
+        self._stderr.print(message, markup=markup)
 
     def success(self, message: str) -> None:
         if self.json_mode:

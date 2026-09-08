@@ -63,6 +63,8 @@ def validate_api_base(value: str) -> httpx.URL:
         api_base is None
         or api_base.scheme not in ("http", "https")
         or not api_base.host
+        # HTTPX turns URL userinfo into Basic auth, overriding the Bearer header.
+        or api_base.userinfo
         # These delimiters change how endpoint paths are appended, even when
         # their component is empty. Percent-encoded path characters stay valid.
         or "?" in value

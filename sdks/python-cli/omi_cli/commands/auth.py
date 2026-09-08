@@ -106,10 +106,13 @@ def _mark_stored_but_unverified(exc: CliError, *, browser: bool) -> None:
 
 def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
     """Run the OAuth browser flow + verify the resulting Firebase token works."""
-    api_base = ctx.api_base_override or ctx.get_profile().api_base
+    api_base = ctx.api_base_override if ctx.api_base_override is not None else ctx.get_profile().api_base
     validate_api_base(api_base)
     profile = oauth_auth.login_with_browser(
-        ctx.profile_name, api_base=api_base, provider=provider, on_progress=ctx.renderer.info
+        ctx.profile_name,
+        api_base=api_base,
+        provider=provider,
+        on_progress=lambda message: ctx.renderer.info(message, markup=False),
     )
 
     # Verify the freshly-minted Firebase ID token actually authenticates against
@@ -149,7 +152,12 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
 
 def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
     """Validate, persist, and verify a dev API key."""
-    validate_api_base(ctx.api_base_override or ctx.load_config().get_profile(ctx.profile_name).api_base)
+    api_base = (
+        ctx.api_base_override
+        if ctx.api_base_override is not None
+        else ctx.load_config().get_profile(ctx.profile_name).api_base
+    )
+    validate_api_base(api_base)
     profile = api_key_auth.login_with_api_key(ctx.profile_name, api_key, api_base=ctx.api_base_override)
 
     # Sanity check on a tolerant endpoint — see the original launch PR's
