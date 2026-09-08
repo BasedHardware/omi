@@ -150,7 +150,47 @@ final class FirstRealAppCardCoordinator {
       // The seam every prefill already uses. `MainChatNavigationRequestStore`
       // holds the draft until a composer mounts, so this works whether or not
       // the main window exists yet — and it never sends.
-      AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt)
+      //
+      // **The window opens now.** The tap is the activation moment, and an
+      // order that captures and encodes a full-screen JPEG *before* summoning
+      // leaves the user staring at a dead click for hundreds of milliseconds.
+      // The summon itself records the boundary capture — the pre-summon
+      // pixels, which is exactly the named app's screen — so the referent
+      // comes from that boundary instead of a second capture this tap would
+      // otherwise race against its own opening window.
+      //
+      // The reservation is taken synchronously at tap time: the boundary
+      // encode below can be overtaken by any other open-chat request
+      // (floating bar, a second card), and a stale handoff must not attach
+      // its frame to the newer request's composer.
+      let generation = MainChatNavigationRequestStore.shared.reserve()
+      let tappedAt = Date()
+      guard let target = AppDelegate.summonWindowTarget() else { return }
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: nil)
+      Task { @MainActor in
+        // The boundary's JPEG encode runs detached; wait for it to publish.
+        // If Omi was already frontmost when the card was tapped, no boundary
+        // was recorded for this tap — fall back to the newest stored frame,
+        // whose loader excludes Omi and capture-excluded apps, so the
+        // referent can never be Omi's own window either way.
+        var frame = await RewindFrameLoader.shared.awaitSummonBoundary(recordedAfter: tappedAt)
+        if frame == nil {
+          frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+            maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+          )
+        }
+        guard let frame,
+          generation == MainChatNavigationRequestStore.shared.currentGeneration
+        else { return }
+        guard
+          let attachment = RecentScreenFrameStaging.attachment(
+            appName: frame.appName,
+            jpegData: frame.data,
+            capturedAt: frame.timestamp
+          )
+        else { return }
+        ChatProvider.mainInstance?.addAttachments([attachment])
+      }
     },
     scheduler: any FirstRealAppCardScheduling = FirstRealAppCardMainQueueScheduler()
   ) {

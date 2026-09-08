@@ -80,6 +80,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
   static let notchCompactSideWidth: CGFloat = 30
   static let notchActiveSideWidth: CGFloat = 42
+  /// Voice owns a wider trailing lobe so the notch can show a persistent
+  /// stop/send affordance while a turn is capturing.
+  static let notchVoiceSideWidth: CGFloat = NotchVoiceControlPresentation.activeSideWidth
   /// Thinking keeps the compact active lobe width: the visible state is the
   /// spinning Omi mark only, without a right-side text label.
   static let notchThinkingSideWidth: CGFloat = notchActiveSideWidth
@@ -278,7 +281,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private func screenUnderCursor() -> NSScreen? {
     Self.screenContainingCursor()
   }
+  private var usesVoiceNotchControl: Bool {
+    state.voiceProjection.isListening
+  }
   private var notchSideWidth: CGFloat {
+    if usesVoiceNotchControl {
+      return Self.notchVoiceSideWidth
+    }
     if state.showingAIConversation {
       return AgentPillsManager.shared.pills.isEmpty
         ? Self.notchCompactSideWidth
@@ -299,7 +308,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     Self.notchInputPanelHeight(for: screenForPlacement)
   }
   private func notchSize(active: Bool) -> NSSize {
-    let sideWidth = active ? Self.notchActiveSideWidth : Self.notchCompactSideWidth
+    let sideWidth =
+      active
+      ? (usesVoiceNotchControl ? Self.notchVoiceSideWidth : Self.notchActiveSideWidth)
+      : Self.notchCompactSideWidth
     return notchSize(sideWidth: sideWidth)
   }
   private func notchSize(sideWidth: CGFloat) -> NSSize {
@@ -423,6 +435,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   var onPlayPause: (() -> Void)?
+  var onTogglePushToTalk: (() -> Void)?
   var onAskAI: (() -> Void)?
   var onHide: (() -> Void)?
   var onSendQuery: ((String) -> Void)?
@@ -756,6 +769,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let swiftUIView = FloatingControlBarView(
       window: self,
       onPlayPause: { [weak self] in self?.onPlayPause?() },
+      onTogglePushToTalk: { [weak self] in self?.onTogglePushToTalk?() },
       onAskAI: { [weak self] in self?.handleAskAI() },
       onHide: { [weak self] in self?.hideBar() },
       onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
@@ -945,7 +959,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let listeningSize: NSSize
     if usesNotchIsland {
       listeningSize =
-        screen.map { notchSize(sideWidth: Self.notchActiveSideWidth, for: $0) }
+        screen.map {
+          notchSize(
+            sideWidth: usesVoiceNotchControl ? Self.notchVoiceSideWidth : Self.notchActiveSideWidth,
+            for: $0
+          )
+        }
         ?? notchSize(active: true)
     } else {
       listeningSize = Self.voiceBarSize
@@ -2290,7 +2309,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else if island {
       let base: NSSize
       if state.isVoiceListening {
-        base = notchSize(sideWidth: Self.notchActiveSideWidth, for: screen)
+        base = notchSize(
+          sideWidth: usesVoiceNotchControl ? Self.notchVoiceSideWidth : Self.notchActiveSideWidth,
+          for: screen
+        )
       } else if state.isThinking || state.isVoiceResponseWaiting {
         base = notchSize(sideWidth: Self.notchThinkingSideWidth, for: screen)
       } else if state.isVoiceResponseGlowActive {
@@ -3175,6 +3197,10 @@ class FloatingControlBarManager {
     barWindow.onPlayPause = { [weak appState] in
       guard let appState = appState else { return }
       appState.toggleTranscription()
+    }
+
+    barWindow.onTogglePushToTalk = {
+      PushToTalkManager.shared.togglePushToTalkFromButton()
     }
 
     // Typing lives in the main app — the bar's "chat" affordances jump there,
@@ -4922,7 +4948,9 @@ class FloatingControlBarManager {
     origin: String = "realtime_voice",
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil, userScreenContext: String? = nil
+    terminalReason: String? = nil,
+    userScreenContext: String? = nil,
+    userEvidence: [ConversationEvidence] = []
   ) async -> Bool {
     await historyChatProvider?.kernelTurnProjection.recordExchange(
       surface: surface,
@@ -4931,7 +4959,9 @@ class FloatingControlBarManager {
       origin: origin,
       continuityKey: continuityKey,
       assistantStatus: assistantStatus,
-      terminalReason: terminalReason, userScreenContext: userScreenContext,
+      terminalReason: terminalReason,
+      userScreenContext: userScreenContext,
+      userEvidence: userEvidence,
       ownerID: ownerID
     ) ?? false
   }
@@ -5257,6 +5287,19 @@ class FloatingControlBarManager {
     return screenshotCues.contains(where: { m.contains($0) })
   }
 
+  /// Bind reserved native OCR onto the typed/voice-fallback journal row. The
+  /// existing `recordExchange` / `sendMessage` APIs are unchanged; this is the
+  /// producing-row identity ChatProvider already admitted.
+  private static func bindVoiceTurnEvidenceToProducingRow(
+    voiceTurnID: VoiceTurnID?,
+    clientTurnId: String
+  ) {
+    guard let voiceTurnID else { return }
+    RealtimeHubController.shared.bindNativeTurnEvidenceToProducingRow(
+      turnID: voiceTurnID,
+      journalUserTurnID: ChatProvider.messageIds(forAttemptId: clientTurnId).user)
+  }
+
   private func sendAIQuery(
     _ message: String,
     barWindow: FloatingControlBarWindow,
@@ -5423,6 +5466,8 @@ class FloatingControlBarManager {
             clientTurnId: clientTurnId,
             onAccepted: { [weak barWindow] in
               barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+              Self.bindVoiceTurnEvidenceToProducingRow(
+                voiceTurnID: voiceTurnID, clientTurnId: clientTurnId)
             },
             onJournalFinalized: { accepted in
               journalAccepted = accepted
@@ -5636,6 +5681,10 @@ class FloatingControlBarManager {
           imageData: screenshotData,
           turnOwner: .floatingVoice,
           clientTurnId: clientTurnId,
+          onAccepted: {
+            Self.bindVoiceTurnEvidenceToProducingRow(
+              voiceTurnID: voiceTurnID, clientTurnId: clientTurnId)
+          },
           onJournalFinalized: { accepted in
             journalAccepted = accepted
           }

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from database.firestore_index_registry import (
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_CONTENT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_SLOT_QUERY,
@@ -31,6 +32,8 @@ from database.firestore_index_registry import (
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    MESSAGES_BY_APP_ORDERED_QUERY,
+    MESSAGES_BY_SESSION_ORDERED_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
@@ -86,6 +89,14 @@ TARGET_REQUIREMENTS = (
     # Cloud Tasks finalization dispatch in its safe inline default.
     # Keep the existing production registry requirement in the bounded QA set.
     FINALIZATION_OLDEST_NONTERMINAL_QUERY.index_requirement,
+    # The named QA app exercises the shared desktop/mobile chat path.  Include
+    # the timestamped session shape and both message scopes so a fresh QA
+    # database does not rely on production-only indexes. The legacy session
+    # fallback uses Firestore's automatic same-direction key index and is
+    # intentionally absent from the generated composite manifest.
+    CURRENT_CHAT_SESSION_ORDERED_QUERY.index_requirement,
+    MESSAGES_BY_APP_ORDERED_QUERY.index_requirement,
+    MESSAGES_BY_SESSION_ORDERED_QUERY.index_requirement,
 )
 
 # Firestore returns COLLECTION_GROUP_ASC for this query as a single-field

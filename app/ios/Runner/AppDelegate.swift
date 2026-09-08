@@ -713,6 +713,151 @@ extension AppDelegate: WCSessionDelegate {
     }
 }
 
+/// iOS 26 on-device transcription through SpeechAnalyzer. Unlike
+/// SFSpeechRecognizer's on-device mode, it does not depend on Siri or
+/// Dictation being enabled in Settings: the language model is an asset the
+/// app installs itself through AssetInventory. Used first on iOS 26; the
+/// SFSpeechRecognizer path below remains for older systems and as a fallback.
+@available(iOS 26, *)
+@MainActor
+enum SpeechAnalyzerTranscription {
+    enum TranscriptionError: Error {
+        case unsupportedLanguage(String)
+        case timedOut
+    }
+
+    /// In-flight model downloads keyed by BCP-47 locale, so the pre-flight
+    /// probe and the first transcribe() share one download.
+    private static var installTasks: [String: Task<Void, Error>] = [:]
+
+    static func requestedLanguage(_ language: String) -> String {
+        let requested = language.isEmpty || language == "multi" ? "en" : language
+        return Locale(identifier: requested).language.languageCode?.identifier ?? requested
+    }
+
+    /// Best locale for the app's (bare) language code: an installed model
+    /// first, then any supported one, preferring the device locale in each.
+    static func locale(for language: String) async -> Locale? {
+        let wanted = requestedLanguage(language)
+        let current = Locale.current.identifier(.bcp47)
+        func pick(_ locales: [Locale]) -> Locale? {
+            let matching = locales.filter { $0.language.languageCode?.identifier == wanted }
+            return matching.first { $0.identifier(.bcp47) == current }
+                ?? matching.sorted { $0.identifier(.bcp47) < $1.identifier(.bcp47) }.first
+        }
+        if let installed = pick(await SpeechTranscriber.installedLocales) { return installed }
+        return pick(await SpeechTranscriber.supportedLocales)
+    }
+
+    static func isInstalled(_ locale: Locale) async -> Bool {
+        await SpeechTranscriber.installedLocales.contains { $0.identifier(.bcp47) == locale.identifier(.bcp47) }
+    }
+
+    /// Installs the model for `locale` if it is not already on the device.
+    /// Concurrent callers wait on the same download.
+    static func ensureModel(for locale: Locale) async throws {
+        if await isInstalled(locale) { return }
+        let key = locale.identifier(.bcp47)
+        let task: Task<Void, Error>
+        if let existing = installTasks[key] {
+            task = existing
+        } else {
+            task = Task {
+                let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+                if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                    NSLog("[SpeechAnalyzer] downloading speech model for %@", key)
+                    try await request.downloadAndInstall()
+                    NSLog("[SpeechAnalyzer] speech model installed for %@", key)
+                }
+            }
+            installTasks[key] = task
+        }
+        defer {
+            if installTasks[key] == task { installTasks[key] = nil }
+        }
+        try await task.value
+    }
+
+    /// Whether transcription can run for `language`: the locale is supported
+    /// and its model is installed, or finishes installing within
+    /// `installWait`. A download still running after that counts as available
+    /// too; it continues in the background and transcribe() waits for it.
+    /// Only a failed download (no network, unsupported locale) reports false.
+    static func isAvailable(language: String, installWait: Double = 8) async -> Bool {
+        guard let locale = await locale(for: language) else {
+            NSLog("[SpeechAnalyzer] no supported locale for language %@", language)
+            return false
+        }
+        if await isInstalled(locale) { return true }
+        return await SpeechDeadline.run(seconds: installWait, operation: {
+            do {
+                try await ensureModel(for: locale)
+                return true
+            } catch {
+                NSLog("[SpeechAnalyzer] model install failed for %@: %@", locale.identifier(.bcp47), error.localizedDescription)
+                return false
+            }
+        }, onTimeout: {
+            // The shared download keeps running; only this availability waiter
+            // has a deadline. A later transcription shares the same download.
+            true
+        })
+    }
+
+    /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
+    /// clips) and returns the text, empty when no speech was recognized.
+    static func transcribe(fileURL: URL, language: String) async throws -> String {
+        guard let locale = await locale(for: language) else {
+            throw TranscriptionError.unsupportedLanguage(language)
+        }
+        let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
+            do {
+                try await ensureModel(for: locale)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }, onTimeout: { .failure(TranscriptionError.timedOut) })
+        try installed.get()
+
+        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        let collector = Task { () throws -> String in
+            var finalText = ""
+            var volatileText = ""
+            for try await result in transcriber.results {
+                let text = String(result.text.characters)
+                if result.isFinal {
+                    finalText += text
+                } else {
+                    volatileText = text
+                }
+            }
+            return finalText.isEmpty ? volatileText : finalText
+        }
+        let outcome: Result<String, Error> = await SpeechDeadline.run(seconds: 20, operation: {
+            do {
+                let file = try AVAudioFile(forReading: fileURL)
+                if let lastSample = try await analyzer.analyzeSequence(from: file) {
+                    try await analyzer.finalizeAndFinish(through: lastSample)
+                } else {
+                    await analyzer.cancelAndFinishNow()
+                }
+                return .success(try await collector.value.trimmingCharacters(in: .whitespacesAndNewlines))
+            } catch {
+                await analyzer.cancelAndFinishNow()
+                collector.cancel()
+                return .failure(error)
+            }
+        }, onTimeout: {
+            collector.cancel()
+            await analyzer.cancelAndFinishNow()
+            return .failure(TranscriptionError.timedOut)
+        })
+        return try outcome.get()
+    }
+}
+
 class SpeechRecognitionHandler: NSObject {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -724,57 +869,231 @@ class SpeechRecognitionHandler: NSObject {
             }
             
             let language = args["language"] as? String ?? "en-US"
+            if #available(iOS 26, *) {
+                // SpeechAnalyzer needs no Dictation setting; fall back to
+                // SFSpeechRecognizer only if it cannot handle this clip.
+                Task {
+                    do {
+                        let text = try await SpeechAnalyzerTranscription.transcribe(
+                            fileURL: URL(fileURLWithPath: path), language: language)
+                        DispatchQueue.main.async { result(text) }
+                    } catch {
+                        NSLog("[SpeechAnalyzer] transcribe failed, falling back to SFSpeechRecognizer: %@", error.localizedDescription)
+                        DispatchQueue.main.async {
+                            self.transcribe(filePath: path, language: language, result: result)
+                        }
+                    }
+                }
+                return
+            }
             transcribe(filePath: path, language: language, result: result)
+        } else if call.method == "onDeviceAvailable" {
+            let args = call.arguments as? [String: Any]
+            let language = args?["language"] as? String ?? "en-US"
+            if #available(iOS 26, *) {
+                Task {
+                    if await SpeechAnalyzerTranscription.isAvailable(language: language) {
+                        DispatchQueue.main.async { result(true) }
+                    } else {
+                        DispatchQueue.main.async {
+                            self.probeOnDeviceRecognition(language: language, result: result)
+                        }
+                    }
+                }
+                return
+            }
+            probeOnDeviceRecognition(language: language, result: result)
         } else {
             result(FlutterMethodNotImplemented)
         }
     }
-    
+
+    /// Resolve the app's language setting to a locale whose recognizer can run
+    /// on-device. The app passes bare language codes ("en"); on-device assets
+    /// are installed per full locale ("en-US"), and a recognizer built from a
+    /// bare code fails every request with kAFAssistantErrorDomain 1101 once
+    /// `requiresOnDeviceRecognition` is set. Prefer the device's own locale
+    /// when it matches the language (that is the model most likely to be
+    /// installed), then any supported locale for that language.
+    static func onDeviceRecognizer(for language: String) -> SFSpeechRecognizer? {
+        let requested = language.isEmpty || language == "multi" ? "en" : language
+        let requestedLocale = Locale(identifier: requested)
+        let requestedLanguage = requestedLocale.languageCode ?? requested
+
+        var candidates: [Locale] = []
+        if requested.contains("-") || requested.contains("_") {
+            candidates.append(requestedLocale)
+        }
+        if Locale.current.languageCode == requestedLanguage {
+            candidates.append(Locale.current)
+        }
+        candidates.append(contentsOf: SFSpeechRecognizer.supportedLocales()
+            .filter { $0.languageCode == requestedLanguage }
+            .sorted { $0.identifier < $1.identifier })
+        candidates.append(requestedLocale)
+
+        var seen = Set<String>()
+        for locale in candidates {
+            guard seen.insert(locale.identifier).inserted else { continue }
+            guard let recognizer = SFSpeechRecognizer(locale: locale) else { continue }
+            if recognizer.isAvailable && recognizer.supportsOnDeviceRecognition {
+                return recognizer
+            }
+        }
+        return nil
+    }
+
+    /// Whether on-device recognition can actually run right now, checked by
+    /// recognizing a short silent clip. `supportsOnDeviceRecognition` alone is
+    /// not enough: with Siri and Dictation disabled in iOS Settings every
+    /// request fails at run time with kLSRErrorDomain 201 while the recognizer
+    /// still advertises on-device support. Reports true on "no speech" (1110,
+    /// the expected outcome for silence) and false on any other error, so a
+    /// caller never falls back onto a recognizer that cannot work.
+    private func probeOnDeviceRecognition(language: String, result: @escaping FlutterResult) {
+        guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
+            result(false)
+            return
+        }
+        guard let silence = SpeechRecognitionHandler.writeSilentWav(seconds: 0.6) else {
+            result(true) // Could not build a probe clip; do not block the fallback on that.
+            return
+        }
+
+        var finished = false
+        var task: SFSpeechRecognitionTask?
+        let finish: (Bool) -> Void = { value in
+            guard !finished else { return }
+            finished = true
+            task?.cancel()
+            try? FileManager.default.removeItem(at: silence)
+            result(value)
+        }
+
+        let request = SFSpeechURLRecognitionRequest(url: silence)
+        request.shouldReportPartialResults = false
+        request.requiresOnDeviceRecognition = true
+        task = recognizer.recognitionTask(with: request) { recognitionResult, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    let nsError = error as NSError
+                    let noSpeech = nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110
+                    if !noSpeech {
+                        NSLog("[SpeechRecognition] on-device probe failed: %@ %ld %@", nsError.domain, nsError.code, error.localizedDescription)
+                    }
+                    finish(noSpeech)
+                    return
+                }
+                if recognitionResult?.isFinal == true {
+                    finish(true)
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            guard !finished else { return }
+            finish(true) // Slow but not failing; let the real request decide.
+        }
+    }
+
+    /// 16 kHz mono 16-bit PCM WAV of silence, for probing the recognizer.
+    static func writeSilentWav(seconds: Double) -> URL? {
+        let sampleRate = 16000
+        let sampleCount = Int(Double(sampleRate) * seconds)
+        let dataSize = sampleCount * 2
+        var data = Data(capacity: 44 + dataSize)
+        func append<T: FixedWidthInteger>(_ value: T) {
+            var little = value.littleEndian
+            data.append(Data(bytes: &little, count: MemoryLayout<T>.size))
+        }
+        data.append(contentsOf: Array("RIFF".utf8)); append(UInt32(36 + dataSize))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8)); append(UInt32(16)); append(UInt16(1)); append(UInt16(1))
+        append(UInt32(sampleRate)); append(UInt32(sampleRate * 2)); append(UInt16(2)); append(UInt16(16))
+        data.append(contentsOf: Array("data".utf8)); append(UInt32(dataSize))
+        data.append(Data(count: dataSize))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("omi_speech_probe_\(UUID().uuidString).wav")
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
         // Request authorization first
         SFSpeechRecognizer.requestAuthorization { authStatus in
-            if authStatus != .authorized {
-                result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
-                return
-            }
-            
-            let fileUrl = URL(fileURLWithPath: filePath)
-            let localeIdentifier = language.isEmpty ? "en-US" : language
-            let locale = Locale(identifier: localeIdentifier)
-            
-            guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer not available for locale \(localeIdentifier)", details: nil))
-                return
-            }
-            
-            if !recognizer.isAvailable {
-                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer service is currently unavailable", details: nil))
-                return
-            }
-            
-            let request = SFSpeechURLRecognitionRequest(url: fileUrl)
-            request.shouldReportPartialResults = false
-            request.requiresOnDeviceRecognition = true // Force on-device
-            request.taskHint = .dictation
-            if #available(iOS 16, *) {
-                request.addsPunctuation = true
-            }
-            
-            let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
-                if let error = error {
-                    // Check if it's just "No speech identified" which might happen with silence
-                    let nsError = error as NSError
-                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 {
-                         result("") // Treat as empty
-                    } else {
-                         result(FlutterError(code: "RECOGNITION_ERROR", message: error.localizedDescription, details: nil))
-                    }
+            DispatchQueue.main.async {
+                if authStatus != .authorized {
+                    result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
                     return
                 }
-                
-                if let recognitionResult = recognitionResult, recognitionResult.isFinal {
-                    let text = recognitionResult.bestTranscription.formattedString
-                    result(text)
+
+                let fileUrl = URL(fileURLWithPath: filePath)
+
+                guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
+                    result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
+                    return
+                }
+
+                let request = SFSpeechURLRecognitionRequest(url: fileUrl)
+                // Partial results are kept so a task that never reports `isFinal`
+                // (observed with on-device recognition on short clips) still
+                // yields its best transcription instead of hanging the caller.
+                request.shouldReportPartialResults = true
+                request.requiresOnDeviceRecognition = true // Force on-device
+                request.taskHint = .dictation
+                if #available(iOS 16, *) {
+                    request.addsPunctuation = true
+                }
+
+                // The Dart caller awaits exactly one reply per clip, and its polling
+                // loop stays busy until that reply arrives — a task that never
+                // completes would silently stop all further transcription. Reply
+                // once, on the first of: final result, error, or timeout.
+                var finished = false
+                var latestText = ""
+                var task: SFSpeechRecognitionTask?
+                let finish: (Any?) -> Void = { value in
+                    guard !finished else { return }
+                    finished = true
+                    task?.cancel()
+                    result(value)
+                }
+
+                task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
+                    DispatchQueue.main.async {
+                        if let recognitionResult = recognitionResult {
+                            latestText = recognitionResult.bestTranscription.formattedString
+                            if recognitionResult.isFinal {
+                                finish(latestText)
+                                return
+                            }
+                        }
+                        if let error = error {
+                            let nsError = error as NSError
+                            // 1110 = no speech in the clip; a partial transcription before the
+                            // error is still the best answer for that clip. Only a failure that
+                            // produced nothing is reported as an error.
+                            if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
+                                finish(latestText)
+                            } else {
+                                finish(FlutterError(
+                                    code: "RECOGNITION_ERROR",
+                                    message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
+                                    details: nil))
+                            }
+                        }
+                    }
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+                    guard !finished else { return }
+                    if latestText.isEmpty {
+                        finish(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
+                    } else {
+                        finish(latestText)
+                    }
                 }
             }
         }

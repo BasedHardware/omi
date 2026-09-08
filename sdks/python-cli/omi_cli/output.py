@@ -116,7 +116,7 @@ class Renderer:
 
         table = Table(title=Text(title) if title is not None else None, show_lines=False, header_style="bold")
         for col in cols:
-            table.add_column(Text(str(col)))
+            table.add_column(Text(str(col), style="bold"))
         for row in rows:
             table.add_row(*[Text(_stringify(row.get(c))) for c in cols])
         self._stdout.print(table)

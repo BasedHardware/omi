@@ -52,3 +52,12 @@ def test_delete_failure_has_no_success_output(authed_profile, respx_mock, cli_ru
 
     assert result.exit_code == 5
     assert result.stdout == ""
+
+
+def test_delete_declined_confirmation_makes_no_request(authed_profile, respx_mock, cli_runner, delete_command) -> None:
+    command, path = delete_command
+    route = respx_mock.delete(path).respond(json={"success": True})
+    result = cli_runner.invoke(app, [command, "delete", "record-1"], input="n\n")
+
+    assert result.exit_code != 0
+    assert not route.called

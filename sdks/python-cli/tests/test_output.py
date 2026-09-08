@@ -175,3 +175,26 @@ def test_finishing_a_result_does_not_emit_a_second_json_document(capsys) -> None
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {"done": True}
     assert captured.err == ""
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [{"content": "[draft] literal [/bold] :warning:"}],
+        {"content": "[draft] literal [/bold] :warning:"},
+        "[draft] literal [/bold] :warning:",
+    ],
+)
+def test_pretty_data_is_literal(data, capsys) -> None:
+    Renderer(no_color=True).emit(data)
+    assert "[draft] literal [/bold] :warning:" in capsys.readouterr().out
+
+
+def test_pretty_data_keys_and_matched_tags_are_literal(capsys) -> None:
+    renderer = Renderer(no_color=True)
+    data = {"[key]": "[bold]keep tags[/bold] :warning:"}
+    renderer.emit(data)
+    renderer.emit([data])
+    output = capsys.readouterr().out
+    assert output.count("[key]") == 2
+    assert output.count("[bold]keep tags[/bold] :warning:") == 2

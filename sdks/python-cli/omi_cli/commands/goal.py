@@ -69,28 +69,52 @@ def get_goal(
     ctx.renderer.emit(result, title="goal")
 
 
-@app.command("create", help="Create a new goal. Up to 3 active goals per user.")
+@app.command(
+    "create", help="Create a new goal. Up to 3 active goals per user. Omit all metric options for a qualitative goal."
+)
 def create_goal(
     typer_ctx: typer.Context,
     title: str = typer.Argument(..., help="Goal title (1-500 chars)."),
-    target_value: float = typer.Option(..., "--target", help="Target value to achieve."),
-    goal_type: GoalType = typer.Option(GoalType.scale, "--type", help="boolean, scale, or numeric."),
-    current_value: float = typer.Option(0, "--current", help="Current progress value."),
-    min_value: float = typer.Option(0, "--min", help="Minimum scale value."),
-    max_value: float = typer.Option(10, "--max", help="Maximum scale value."),
-    unit: Optional[str] = typer.Option(None, "--unit", help="Unit label (e.g. 'users', 'points')."),
+    target_value: Optional[float] = typer.Option(
+        None, "--target", help="Target value to achieve. Omit for qualitative goals."
+    ),
+    goal_type: Optional[GoalType] = typer.Option(
+        None, "--type", help="boolean, scale, or numeric. Omit for qualitative goals."
+    ),
+    current_value: Optional[float] = typer.Option(None, "--current", help="Current progress value."),
+    min_value: Optional[float] = typer.Option(None, "--min", help="Minimum scale value."),
+    max_value: Optional[float] = typer.Option(None, "--max", help="Maximum scale value."),
+    unit: Optional[str] = typer.Option(
+        None, "--unit", help="Unit label (e.g. 'users', 'points'). Requires a metric option such as --target."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {
-        "title": title,
-        "goal_type": goal_type.value,
-        "target_value": target_value,
-        "current_value": current_value,
-        "min_value": min_value,
-        "max_value": max_value,
-    }
+    has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
+    if unit is not None and not has_metrics:
+        # The backend only persists ``unit`` on metric-backed goals; sending it on a
+        # qualitative goal would silently drop it, so reject the combination instead.
+        raise UsageError(
+            message="--unit requires a metric goal",
+            detail="Add a metric option such as --target, or drop --unit to create a qualitative goal.",
+        )
+    if has_metrics and target_value is None:
+        # ``--target`` was historically required for every metric goal. Partial metric
+        # invocations must not fabricate a target-less scale goal, so keep rejecting them.
+        raise UsageError(
+            message="--target is required when using metric options",
+            detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
+        )
+    body: dict[str, object] = {"title": title}
     if unit is not None:
         body["unit"] = unit
+    if has_metrics:
+        # Metric goal: keep the historical defaults for options the caller did not set.
+        body["goal_type"] = (goal_type if goal_type is not None else GoalType.scale).value
+        body["target_value"] = target_value
+        body["current_value"] = current_value if current_value is not None else 0
+        body["min_value"] = min_value if min_value is not None else 0
+        body["max_value"] = max_value if max_value is not None else 10
+    # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
     ctx.renderer.success(f"Goal created: {result.get('id')}")
@@ -107,8 +131,11 @@ def update_goal(
     min_value: Optional[float] = typer.Option(None, "--min"),
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
+    clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if clear_unit and unit is not None:
+        raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -120,11 +147,14 @@ def update_goal(
         body["min_value"] = min_value
     if max_value is not None:
         body["max_value"] = max_value
-    if unit is not None:
+    if clear_unit:
+        body["unit"] = None
+    elif unit is not None:
         body["unit"] = unit
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide one of --title/--target/--current/--min/--max/--unit."
+            message="No fields to update",
+            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)

@@ -62,28 +62,34 @@ def test_login_transport_failure_is_not_reported_as_success(
     assert info.value.code == 3
     assert route.call_count == MAX_RETRY_ATTEMPTS
     assert captured.out == ""
-    stored_detail = (
-        "The new credential is stored but has not been verified. "
-        "Run `omi auth whoami` to verify it when the API is reachable."
-    )
+    expected_detail = "Could not reach the Omi API after multiple attempts. Check your connection and try again."
     if "--browser" in login_args:
-        stored_detail += " Browser login created a developer API key; an earlier machine key may have been replaced."
-    if json_mode:
-        assert json.loads(captured.err) == {
-            "error": "Connection failed",
-            "detail": "Could not reach the Omi API after multiple attempts. Check your connection and try again. "
-            + stored_detail,
-            "credential_stored": True,
-            "credential_verified": False,
-        }
-    else:
-        assert "The new credential is stored but has not been verified." in captured.err
-        assert "omi auth whoami" in captured.err
-        assert "credential_stored" in captured.err
-        assert "credential_verified" in captured.err
-        if "--browser" in login_args:
+        stored_detail = (
+            "The new credential is stored but has not been verified. "
+            "Run `omi auth whoami` to verify it when the API is reachable. "
+            "Browser login created a developer API key; an earlier machine key may have been replaced."
+        )
+        if json_mode:
+            assert json.loads(captured.err) == {
+                "error": "Connection failed",
+                "detail": f"{expected_detail} {stored_detail}",
+                "credential_stored": True,
+                "credential_verified": False,
+            }
+        else:
+            assert "The new credential is stored but has not been verified." in captured.err
+            assert "omi auth whoami" in captured.err
+            assert "credential_stored" in captured.err
+            assert "credential_verified" in captured.err
             assert "may have been replaced" in captured.err
-    assert cfg.load().get_profile("default").api_key == FAKE_API_KEY
+        assert cfg.load().get_profile("default").api_key == FAKE_API_KEY
+    else:
+        if json_mode:
+            assert json.loads(captured.err) == {"error": "Connection failed", "detail": expected_detail}
+        else:
+            assert expected_detail in captured.err
+            assert "credential_stored" not in captured.err
+        assert cfg.load().get_profile("default").api_key == previous_key
     assert "Logged in" not in captured.err
     assert "secret" not in captured.err
     assert "private-token" not in captured.err

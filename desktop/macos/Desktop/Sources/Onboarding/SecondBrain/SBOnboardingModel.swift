@@ -311,10 +311,9 @@ final class SBOnboardingModel: ObservableObject {
     case .systemAudio:
       return "Now system audio, so I hear the other side too: Zoom, Meet, calls."
     case .screen:
-      // Says what granting this actually starts. `complete()` turns
-      // `screenAnalysisEnabled` on unconditionally, and Rewind then captures every few seconds for
-      // as long as the app runs — the single most consequential thing the product does, and the app
-      // used to state it in exactly one place the user reaches days later (Rewind's empty state).
+      // Says what granting this actually starts. `complete()` preserves this
+      // explicit intent, and Rewind then captures every few seconds for as long
+      // as the app runs — the single most consequential thing the product does.
       // "Every few seconds" rather than a number: the interval is a setting
       // (`RewindSettings.captureInterval`, 3s by default, tripled on battery). "The pictures" rather
       // than "it": the images do stay on this Mac, but `ScreenActivitySyncService` syncs their OCR
@@ -860,9 +859,19 @@ final class SBOnboardingModel: ObservableObject {
       appState.checkScreenRecordingPermission()
       let screenGranted = appState.hasScreenRecordingPermission
       AssistantSettings.shared.screenAnalysisEnabled =
-        Self.screenAnalysisIntentAtCompletion(screenRecordingGranted: screenGranted)
-      if screenGranted, !ProactiveAssistantsPlugin.shared.isMonitoring {
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+        Self.screenAnalysisIntentAtCompletion(
+          intentEnabled: AssistantSettings.shared.screenAnalysisEnabled,
+          screenRecordingGranted: screenGranted)
+      if AssistantSettings.shared.screenAnalysisEnabled {
+        if !ProactiveAssistantsPlugin.shared.isMonitoring {
+          ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+        }
+      } else if ProactiveAssistantsPlugin.shared.isMonitoring {
+        // Unreachable today: monitoring needs the screen grant, and a skip leaves
+        // no grant to have started the demo with. Stopping anyway makes "a
+        // resolved-off intent is not capturing" a property of this line rather
+        // than of that argument, which a later demo change could quietly break.
+        ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .userToggle)
       }
     }
     Task { [appState] in
@@ -904,8 +913,11 @@ final class SBOnboardingModel: ObservableObject {
   /// Recording keeps the capture intent on; a skipped or denied one turns it off —
   /// "not forced on" is not enough, because every automatic restore path and the
   /// sidebar's denied pulse read this flag as the user's standing intent.
-  static func screenAnalysisIntentAtCompletion(screenRecordingGranted: Bool) -> Bool {
-    screenRecordingGranted
+  static func screenAnalysisIntentAtCompletion(
+    intentEnabled: Bool,
+    screenRecordingGranted: Bool
+  ) -> Bool {
+    intentEnabled && screenRecordingGranted
   }
 
   /// Cancel every live task/monitor this model owns. Safe to call repeatedly.

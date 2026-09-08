@@ -374,6 +374,7 @@ actor WindowCaptureStreamEngine {
     config.width = Int(size.width)
     config.height = Int(size.height)
     config.pixelFormat = kCVPixelFormatType_32BGRA
+    ScreenCaptureService.applySingleWindowPixelIntegrityPolicy(to: config)
     config.minimumFrameInterval = Self.minimumFrameInterval
     config.queueDepth = 3
     return config

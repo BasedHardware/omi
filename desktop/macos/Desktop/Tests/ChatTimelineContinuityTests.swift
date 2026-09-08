@@ -95,7 +95,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     guard
       let functionRange = source.range(
-        of: "private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {"
+        of: "private func messageContentView(_ groupedBlocks: [ContentBlockGroup], rowText: RowText) -> some View {"
       )
     else {
       return XCTFail("messageContentView must exist")
@@ -122,7 +122,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
     guard let groupViewIndex = contentBlocksBranch.range(of: "groupView(group)")?.lowerBound else {
       return XCTFail("content-blocks path must render non-text groups via groupView")
     }
-    guard let answerIndex = contentBlocksBranch.range(of: "messageTextBubble(displayText)")?.lowerBound else {
+    guard let answerIndex = contentBlocksBranch.range(of: "messageTextBubble(rowText.display)")?.lowerBound else {
       return XCTFail("content-blocks path must still render truncated displayText")
     }
 
@@ -140,8 +140,10 @@ final class ChatTimelineContinuityTests: XCTestCase {
       contentBlocksBranch.contains("if case .text = group"),
       "duplicate .text groups must stay skipped when the answer bubble already renders"
     )
+    // `rowText.answer` is `message.visibleAnswerText`, derived once per body
+    // evaluation (`ChatBubble.RowText`) instead of at every site that reads it.
     XCTAssertTrue(
-      contentBlocksBranch.contains("message.visibleAnswerText"),
+      contentBlocksBranch.contains("rowText.answer"),
       "content-blocks path must render post-tool answer text, not concatenated commentary"
     )
     XCTAssertTrue(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -190,4 +191,11 @@ def existing_path(value: str) -> Optional[Path]:
         path = Path(value).expanduser()
     except RuntimeError:
         return None
-    return path if path.is_file() else None
+    try:
+        return path if path.is_file() else None
+    except OSError as exc:
+        # Screenshot responses may be text rather than paths. An oversized
+        # filename cannot name a file; let the caller use its text fallback.
+        if exc.errno == errno.ENAMETOOLONG:
+            return None
+        raise

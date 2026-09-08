@@ -232,7 +232,8 @@ def main() -> None:
     A resilient parse of the declared global options chooses the output mode
     before normal parsing can fail. It does not invoke commands, load config,
     or run eager actions. Click then performs its normal strict invocation with
-    that Renderer, which remains available after Click unwinds its contexts.
+    that Renderer, which remains available after Click unwinds its contexts. We
+    run Click in non-standalone mode so every exception uses this same boundary.
     """
     renderer = Renderer()
     try:
@@ -265,7 +266,7 @@ def main() -> None:
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
     except (click.Abort, KeyboardInterrupt, EOFError):
-        renderer.error("Aborted")
+        renderer.error("Aborted.")
         sys.exit(130)
     except Exception as exc:  # noqa: BLE001 — last-chance handler
         renderer.error(

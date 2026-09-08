@@ -182,7 +182,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|PushToTalkButtonTriggerTests|RealtimeScreenEvidenceTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|VoiceTurnUIProjectionCopyTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
+      --filter 'PTTAudioCaptureRaceTests|MainChatRecoveredDraftTests|VoiceTypeOpeningDecoderTests|OfflinePTTQuestionRecoveryTests|VoiceTypeTargetSafetyTests|VoiceTypeSessionTests|DictationPolisherTests|PushToTalkSpeechGateTests|NotchVoiceMorphMarkTests|ShortcutSettingsTests|AgentPillLifecycleTests|PushToTalkStateMachineTests|PushToTalkButtonTriggerTests|RealtimeScreenEvidenceTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|VoiceTurnUIProjectionCopyTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests|HubSystemInstructionTests|RealtimeScreenEvidenceHonestFailureTests|ConversationEvidenceTests|RealtimeTurnEvidenceTests|ChatAttachmentEvidenceTests'
   )
 }
 
@@ -225,6 +225,9 @@ run_cross_surface_agent_smoke() {
       tests/runtime-stdio-contract.test.ts \
       tests/protocol-v2.test.ts \
       tests/conversation-journal.test.ts \
+      tests/conversation-evidence.test.ts \
+      tests/conversation-operations.test.ts \
+      tests/evidence-tools.test.ts \
       tests/control-tools.test.ts \
       tests/runtime-adapter.test.ts \
       tests/pi-mono-adapter.test.ts \

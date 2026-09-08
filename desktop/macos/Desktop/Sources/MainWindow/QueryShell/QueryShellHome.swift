@@ -67,6 +67,12 @@ struct QueryShellHome: View {
     searchText.isEmpty ? QueryShellMode.homeDefault : .results
   }
   @State private var screenCount: Int?
+  /// Recent Rewind frames the paperclip's menu offers as one-click image
+  /// attachments ("paste past screenshots"). Metadata only — bytes load when
+  /// one is staged. `RewindFrameLoader` filters Omi and the user's excluded
+  /// apps at read time, so those rows never appear here even when they persist
+  /// in the store.
+  @State private var recentScreenFrames: [RecentScreenFrameRow] = []
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
   /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
@@ -167,6 +173,7 @@ struct QueryShellHome: View {
     .onAppear {
       ChatSwitchPerfLog.mark("QueryShellHome.appear")
       takePendingDraftIfAny()
+      refreshRecentScreenFrames()
       claimCaret()
     }
     // A prefilled draft (first-real-app card, daily-summary follow-up) lands in the composer,
@@ -182,6 +189,10 @@ struct QueryShellHome: View {
     // Harmless when the field already has it — the claim is a no-op once the caret is already there.
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       claimCaret()
+      // Coming back is also the moment the paperclip's "recent screens" rows
+      // can have gone stale: whatever the user did out there is what the rows
+      // should now offer.
+      refreshRecentScreenFrames()
     }
     // The two product flows the provider drives and nothing renders. Both were hosted only by the
     // deleted chat page, so since that deletion a browser tool with no extension token has killed
@@ -276,6 +287,9 @@ struct QueryShellHome: View {
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onAttachmentsAdded: stageAttachments,
       onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) },
+      onPasteAttachments: stagePasteboardAttachments,
+      recentScreenFrames: recentScreenFrames,
+      onStageRecentFrame: stageRecentFrame,
       references: chatProvider.pendingComposerReferences,
       onReferenceRemoved: { chatProvider.removeComposerReference(id: $0) }
     )
@@ -402,6 +416,63 @@ struct QueryShellHome: View {
     chatProvider.addAttachments(staged)
   }
 
+  /// ⌘V in the composer: file URLs and image bytes on the pasteboard stage as
+  /// attachments through the same provider path as every other pick. The
+  /// staging rides the same in-flight marker as the frame picker — a
+  /// pasteboard read is quick, but its JPEG encode is off main and a
+  /// send that races the paste must not miss it.
+  private func stagePasteboardAttachments() {
+    chatProvider.beginRecentFrameStaging()
+    Task { @MainActor in
+      defer { chatProvider.endRecentFrameStaging() }
+      let staged = await PasteboardAttachmentStaging.stageAttachments()
+      guard !staged.isEmpty else { return }
+      chatProvider.addAttachments(staged)
+    }
+  }
+
+  /// The paperclip menu's "recent screens" rows land in the same staging path
+  /// as every other attachment — the picker offers files, it is not a second
+  /// attachment list.
+  private func stageRecentFrame(_ row: RecentScreenFrameRow) {
+    // The staging is async (store decode → temp JPEG); the marker keeps a
+    // concurrent `sendMessage` from snapshotting `pendingAttachments` before
+    // this lands — the "picked a frame and immediately sent" race.
+    chatProvider.beginRecentFrameStaging()
+    Task { @MainActor in
+      defer { chatProvider.endRecentFrameStaging() }
+      // Silence here would read as "the click did nothing". Every nil on this
+      // path (bytes unreadable, row excluded mid-decode, write failed) says so.
+      guard let data = await RewindFrameLoader.shared.loadData(forRowID: row.id) else {
+        chatProvider.errorMessage = "Couldn't load that screen frame. Try another one, or paste a screenshot with ⌘V."
+        return
+      }
+      guard
+        let attachment = RecentScreenFrameStaging.attachment(
+          appName: row.appName,
+          jpegData: data,
+          capturedAt: row.timestamp
+        )
+      else {
+        chatProvider.errorMessage = "Couldn't stage that screen frame. Try another one, or paste a screenshot with ⌘V."
+        return
+      }
+      chatProvider.addAttachments([attachment])
+    }
+  }
+
+  /// Refreshes the rows the paperclip menu offers. Metadata only and bounded,
+  /// so this is cheap enough to run on every mount and re-activation.
+  private func refreshRecentScreenFrames() {
+    Task { @MainActor in
+      let rows = await RewindFrameLoader.shared.attachableRows(
+        limit: Self.recentScreenFrameRowLimit)
+      recentScreenFrames = rows.compactMap(RecentScreenFrameRow.init(screenshot:))
+    }
+  }
+
+  private static let recentScreenFrameRowLimit = 12
+
   // MARK: - The one key
 
   /// **`⏎` — the words, asked.**
@@ -477,10 +548,17 @@ struct QueryShellHome: View {
   }
 
   private func takePendingDraftIfAny() {
-    guard let draft = MainChatNavigationRequestStore.shared.consumeDraft() else { return }
+    guard let draft = MainChatNavigationRequestStore.shared.consumeDraft(existingDraft: chatProvider.draftText) else {
+      return
+    }
     // Leave search-results mode first, or the prefilled composer stays hidden behind the results.
     searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
     chatProvider.draftText = draft
+    // The request is one unit: the composer that takes the text also stages
+    // the frame that came with it (the first-real-app card's referent).
+    if let attachment = MainChatNavigationRequestStore.shared.consumeAttachment() {
+      chatProvider.addAttachments([attachment])
+    }
     claimCaret()
   }
 

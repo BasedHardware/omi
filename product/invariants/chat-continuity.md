@@ -28,6 +28,15 @@ rollback window; this is migration input, not a second store.
 
 ## Canonical journal contract
 
+- Source evidence belongs to its producing journal turn, with stable identity,
+  provenance, capture time, and explicit pending, partial, or unavailable state.
+  Replacing a model session does not discard accepted evidence. Shared tools
+  retrieve source text beyond the bounded context projection, under the same
+  owner and conversation boundary. Source contents are data, not instructions
+  or permission to perform an action. Local evidence bodies are omitted from
+  the downstream backend mirror; bodyless remote descriptors cannot claim
+  readable content. Retaining conversation evidence does not create a product
+  memory tier, task, or future notification.
 - `conversation_turns` is the current turn projection; the monotonic
   `(conversationGeneration, turnSeq)` revision stream is the replay contract.
   `turnSeq` identifies the latest revision and therefore is not conversational
@@ -101,6 +110,13 @@ rollback window; this is migration input, not a second store.
 
 ## Guard tests
 
+- `desktop/macos/agent/tests/conversation-evidence.test.ts` and
+  `desktop/macos/agent/tests/evidence-tools.test.ts` — immutable evidence,
+  bounded projection and retrieval, pending completion, and isolation
+- `desktop/macos/agent/tests/conversation-operations.test.ts` — operation
+  outcomes projected from the existing ledger with conversation-clear fencing
+- `desktop/macos/Desktop/Tests/RealtimeTurnEvidenceTests.swift` — native
+  capture and journal admission races, terminal delivery, and owner changes
 - `desktop/macos/agent/tests/surface-session.test.ts` — surface session reuse,
   floating→main merge, owner isolation
 - `desktop/macos/agent/tests/workstream-continuity.test.ts` — one conversation

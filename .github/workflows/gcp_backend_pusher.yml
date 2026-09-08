@@ -242,27 +242,23 @@ jobs:
       - name: Verify live finalization alert route before publishing
         if: env.SERVICE == 'pusher'
         env:
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          # Dest: repo MONITOR_GRAFANA_TOKEN → monitor.omiapi.com
+          # Prod: environment MONITOR_GRAFANA_TOKEN → monitor.omi.me
+          # Do not use GRAFANA_TOKEN; that belongs to the TV Cloud Run Grafana.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
           token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN MONITOR_GRAFANA_TOKEN grafana_token; }
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
           trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
           case "${{ vars.ENV }}" in
-            dev|development)
-              grafana_url=https://monitor.omiapi.com
-              grafana_token="${MONITOR_GRAFANA_TOKEN:-}"
-              ;;
-            prod)
-              grafana_url=https://monitor.omi.me
-              grafana_token="${GRAFANA_TOKEN:-}"
-              ;;
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
             *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
           esac
-          test -n "$grafana_token"
-          printf '%s' "$grafana_token" > "$token_file"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
           python3 backend/scripts/verify_pusher_live_alert_route.py \
             --grafana-url "$grafana_url" \
             --token-file "$token_file" \
@@ -658,15 +654,15 @@ jobs:
       - name: Reverify live finalization alert route after production rollout
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         env:
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail
           umask 077
           token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-final-token.XXXXXX")"
-          cleanup() { rm -f "$token_file"; unset GRAFANA_TOKEN; }
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
           trap cleanup EXIT
-          test -n "$GRAFANA_TOKEN"
-          printf '%s' "$GRAFANA_TOKEN" > "$token_file"
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
           python3 backend/scripts/verify_pusher_live_alert_route.py \
             --grafana-url https://monitor.omi.me \
             --token-file "$token_file" \
