@@ -323,17 +323,31 @@ class ListenSessionRuntime:
         # onboarding state more than the admission TTL ago — or never calls
         # the state endpoint at all — still gets a server-owned session, while
         # completed accounts can never re-enter onboarding provenance.
+        speech_profile_redo_admitted = False
         if request.onboarding_mode and request.speech_profile_redo:
             # Re-recording an existing speech profile from Settings does not
             # claim onboarding provenance, so it never touches the completed-
             # account gate above — every account, onboarded or not, can always
-            # redo their profile. OnboardingHandler mints its own session id
-            # (see utils/onboarding.py) when none is supplied, and explicitly
+            # redo their profile. The client flag alone is only a hint: the
+            # redo is proven from durable state, an actually persisted speech
+            # profile. Without one the claim falls through to the provenance
+            # admission below, so a query parameter cannot mint the bypass.
+            # OnboardingHandler mints its own session id (see
+            # utils/onboarding.py) when none is supplied, and explicitly
             # clearing onboarding_session_id here keeps any resulting
             # conversation untagged as onboarding-provenance.
-            self.onboarding_admitted = True
-            self.onboarding_session_id = None
-        elif request.onboarding_mode:
+            try:
+                has_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            except Exception as error:
+                # Fail closed: an unverifiable redo claim is treated as a
+                # plain onboarding request and judged by the gate below.
+                logger.warning('Speech profile redo check failed type=%s', type(error).__name__)
+                has_profile = False
+            if has_profile:
+                self.onboarding_admitted = True
+                self.onboarding_session_id = None
+                speech_profile_redo_admitted = True
+        if request.onboarding_mode and not speech_profile_redo_admitted:
             try:
                 admitted = await run_blocking(db_executor, user_db.ensure_backend_onboarding_admission, request.uid)
             except Exception as error:

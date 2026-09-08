@@ -311,8 +311,10 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     """Re-recording an existing speech profile from Settings must always work,
     even though the account has already completed onboarding — that account
     state is exactly what the strict onboarding-provenance admission check
-    (ensure_backend_onboarding_admission) exists to reject. speech_profile_redo
-    is the signal that this connection isn't claiming that provenance."""
+    (ensure_backend_onboarding_admission) exists to reject. The client's
+    speech_profile_redo flag is only a hint: the runtime must confirm the redo
+    from persisted state (an actual stored speech profile) before taking the
+    bypass."""
     import routers.listen.runtime as runtime_module
 
     sent_events = []
@@ -333,8 +335,10 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
     runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
 
-    async def bootstrap_persistence_call(*_args, **_kwargs):
-        return False
+    async def bootstrap_persistence_call(function, *_args, **_kwargs):
+        # This user has a persisted speech profile, which is what proves the
+        # redo; every other storage read reports its (empty) result.
+        return function is runtime_module.get_user_has_speech_profile
 
     runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
     runtime.is_multi_channel = False
@@ -385,6 +389,84 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     assert resolve_onboarding_provenance_marker(runtime) is None
     assert [event['type'] for event in sent_events] == ['onboarding_question']
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_bootstrap_redo_without_persisted_profile_goes_through_provenance_gate(monkeypatch):
+    """A speech_profile_redo claim backed by no persisted speech profile is
+    not a redo: the client must not evade the onboarding-provenance admission
+    gate with a query parameter, so a completed account is refused exactly as
+    if it had never sent the flag."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='redo-claim-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        # No speech profile persisted for this user: the redo claim cannot be
+        # proven from durable state.
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+
+    provenance_gate_calls = []
+
+    def track_provenance_gate(_uid):
+        provenance_gate_calls.append(_uid)
+        # Simulates the real behavior for a completed account: refused.
+        return False
+
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', track_provenance_gate)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: None)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    # The unprovable redo claim was judged by the provenance gate, not the
+    # bypass, and the completed account stayed refused with no question flow.
+    assert provenance_gate_calls == ['redo-claim-user']
+    assert runtime.onboarding_admitted is False
+    # object.__new__ skips __init__, so the handler only exists if the
+    # admitted branch built one.
+    assert getattr(runtime, 'onboarding_handler', None) is None
+    assert sent_events == []
+    assert enqueued_segments == []
 
 
 @pytest.mark.anyio
