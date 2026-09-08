@@ -6,6 +6,7 @@ import sys
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli import config as cfg
 from omi_cli.auth import api_key as api_key_auth
@@ -110,10 +111,12 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
         # Insufficient scope / 403 also bubbles as AuthError above. Anything
         # else is a transient network blip — keep the credential, just warn.
         ctx.renderer.warn(
-            f"Could not verify the new token right now ({exc.message}). It is stored — try again shortly."
+            f"Could not verify the new token right now ({escape(exc.message)}). It is stored — try again shortly."
         )
 
-    ctx.renderer.success(f"Logged in via [bold]{provider}[/bold] OAuth as profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(
+        f"Logged in via [bold]{escape(provider)}[/bold] OAuth as profile [bold]{escape(profile.name)}[/bold]."
+    )
     if not ctx.renderer.json_mode:
         ctx.renderer.info(
             "A developer API key for this machine was created in your Omi dashboard "
@@ -143,9 +146,11 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
         clear_credentials(ctx.profile_name)
         raise exc
     except CliError as exc:
-        ctx.renderer.warn(f"Could not verify the key right now ({exc.message}). It is stored — try again shortly.")
+        ctx.renderer.warn(f"Could not verify the key right now ({escape(exc.message)}). It is stored — try again shortly.")
 
-    ctx.renderer.success(f"Logged in as profile [bold]{profile.name}[/bold] ({profile.masked_credential()}).")
+    ctx.renderer.success(
+        f"Logged in as profile [bold]{escape(profile.name)}[/bold] ({escape(profile.masked_credential())})."
+    )
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"profile": profile.name, "auth_method": profile.auth_method, "api_base": profile.api_base})
 
@@ -155,9 +160,9 @@ def logout(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     cleared = clear_credentials(ctx.profile_name)
     if cleared:
-        ctx.renderer.success(f"Cleared credentials for profile [bold]{ctx.profile_name}[/bold].")
+        ctx.renderer.success(f"Cleared credentials for profile [bold]{escape(ctx.profile_name)}[/bold].")
     else:
-        ctx.renderer.warn(f"Profile [bold]{ctx.profile_name}[/bold] was not authenticated.")
+        ctx.renderer.warn(f"Profile [bold]{escape(ctx.profile_name)}[/bold] was not authenticated.")
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"profile": ctx.profile_name, "logged_out": cleared})
 
@@ -205,17 +210,17 @@ def refresh(typer_ctx: typer.Context) -> None:
         raise UsageError(
             message="Nothing to refresh",
             detail=(
-                f"Profile '{profile.name}' uses API-key auth — there is no token to refresh. "
+                f"Profile '{escape(profile.name)}' uses API-key auth — there is no token to refresh. "
                 "Rotate keys in the Omi web app if needed."
             ),
         )
     oauth_auth.refresh_id_token(profile.name)
-    ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{escape(profile.name)}[/bold].")
 
 
 def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover — utility for sibling commands
     if not profile.is_authenticated():
         raise UsageError(
             message="Not authenticated",
-            detail=f"Profile '{profile.name}' has no credentials. Run `omi auth login`.",
+            detail=f"Profile '{escape(profile.name)}' has no credentials. Run `omi auth login`.",
         )
