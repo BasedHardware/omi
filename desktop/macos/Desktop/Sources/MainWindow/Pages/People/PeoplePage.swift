@@ -119,9 +119,21 @@ struct PeoplePage: View {
   @State private var snippets: [String: [VoiceSnippet]] = [:]
   @StateObject private var samplePlayer = VoiceSamplePlayer()
 
+  /// The signed-in name; the row for the user shows it, never the word "You".
+  private var userName: String {
+    let name = AuthService.shared.displayName.trimmingCharacters(in: .whitespaces)
+    return name.isEmpty ? "Me" : name
+  }
+
+  /// A person entry that is the user themselves (same name) is not listed twice.
+  private func isTheUser(_ person: Person) -> Bool {
+    person.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(userName) == .orderedSame
+  }
+
   private var rows: [PersonOverview] {
     let merged = PeopleRebuildPlanner.merge(activity, remoteActivity)
-    let all = PersonOverview.ordered(people: appState.people, activity: merged, voices: voices)
+    let others = appState.people.filter { !isTheUser($0) }
+    let all = PersonOverview.ordered(people: others, activity: merged, voices: voices)
     let query = searchText.trimmingCharacters(in: .whitespaces)
     guard !query.isEmpty else { return all }
     return all.filter { $0.person.name.localizedCaseInsensitiveContains(query) }
@@ -234,9 +246,9 @@ struct PeoplePage: View {
   /// Always first: the user, styled like everyone else, with their clips when there are any.
   private var userRow: some View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
-      avatar(initial: "Y", isUser: true)
+      avatar(initial: String(userName.prefix(1)).uppercased(), isUser: true)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("You")
+        Text(userName)
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.primary)
         if let caption = PersonOverview.voiceCaption(userVoice) {
@@ -259,7 +271,7 @@ struct PeoplePage: View {
   @ViewBuilder
   private var peopleSection: some View {
     let query = searchText.trimmingCharacters(in: .whitespaces)
-    if query.isEmpty || "you".localizedCaseInsensitiveContains(query) {
+    if query.isEmpty || userName.localizedCaseInsensitiveContains(query) {
       userRow
     }
     if rows.isEmpty {
@@ -384,8 +396,9 @@ struct PeoplePage: View {
   }
 
   private func avatar(initial: String, isUser: Bool) -> some View {
+    // The user's avatar is the grey one; everyone else keeps the light fill.
     Circle()
-      .fill(isUser ? Ink.primary : Ink.rowFillHover)
+      .fill(isUser ? Ink.tertiary : Ink.rowFillHover)
       .frame(width: 36, height: 36)
       .overlay(
         Text(initial)
