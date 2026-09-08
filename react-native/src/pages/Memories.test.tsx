@@ -427,3 +427,27 @@ test('empty memory bodies stay visible instead of a blank card', async () => {
     await act(async () => view.unmount());
   }
 });
+
+test('a zero memory timestamp says Date unavailable instead of 1970', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [{...memory('zero-date'), timestamp: 0}],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(textOf(view)).toContain('Date unavailable');
+    expect(textOf(view)).not.toContain('1970');
+  } finally {
+    act(() => view.unmount());
+  }
+});

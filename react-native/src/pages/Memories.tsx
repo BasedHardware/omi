@@ -25,7 +25,7 @@ import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 function formatMemoryDate(timestamp: number | null): string {
-  if (timestamp === null) {
+  if (timestamp === null || !Number.isFinite(timestamp) || timestamp <= 0) {
     return 'Date unavailable';
   }
   return new Date(timestamp * 1000).toLocaleDateString(undefined, {
