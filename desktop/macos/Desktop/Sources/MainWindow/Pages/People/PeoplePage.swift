@@ -190,24 +190,16 @@ struct PeoplePage: View {
       Button {
         Task { await refreshPeople() }
       } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          if isRefreshing {
-            ProgressView().scaleEffect(0.5).frame(width: 14, height: 14)
-          } else {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-          }
-          Text(isRefreshing ? "Refreshing" : "Refresh")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-        }
-        .foregroundStyle(GlassShell.controlLabel(isProminent: !isRefreshing))
-        .padding(.horizontal, OmiSpacing.md)
-        .frame(height: QueryShellLayout.chipHeight)
-        .glassChip(isActive: isRefreshing)
+        Text(isRefreshing ? "Rebuilding" : "Rebuild")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(GlassShell.controlLabel(isProminent: !isRefreshing))
+          .padding(.horizontal, OmiSpacing.md)
+          .frame(height: QueryShellLayout.chipHeight)
+          .glassChip(isActive: isRefreshing)
       }
       .buttonStyle(.plain)
       .disabled(isRefreshing)
-      .accessibilityIdentifier("people-refresh")
+      .accessibilityIdentifier("people-rebuild")
     }
     .padding(OmiSpacing.md)
     .background(
