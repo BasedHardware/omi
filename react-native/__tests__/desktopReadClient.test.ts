@@ -1515,6 +1515,54 @@ test('keeps ratified empty task descriptions instead of failing the page', async
   ]);
 });
 
+test('keeps ratified memories that omit citations and provenance', async () => {
+  const item = {...memory};
+  delete (item as {citations?: unknown}).citations;
+  delete (item as {provenance?: unknown}).provenance;
+  const result = await loadMemories(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        page([item, {...memory, id: 'memory2_abc'}], 'recall-completeness-v1'),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'memory1_abc',
+      citations: [],
+      provenance: {
+        label: null,
+        synthesisVersion: null,
+        inputDigest: null,
+        outputDigest: null,
+      },
+    }),
+    expect.objectContaining({
+      id: 'memory2_abc',
+      citations: ['citation-v1:launch'],
+      provenance: expect.objectContaining({
+        synthesisVersion: 'synthesis-v1',
+        inputDigest: 'a'.repeat(64),
+        outputDigest: 'b'.repeat(64),
+      }),
+    }),
+  ]);
+});
+
+test('still fails closed for empty memory text', async () => {
+  await expect(
+    loadMemories(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify(
+          page([{...memory, text: ''}], 'recall-completeness-v1'),
+        ),
+      })),
+    ),
+  ).rejects.toThrow('Memory 0 text is malformed');
+});
+
 test('keeps empty conversation status and source instead of failing the page', async () => {
   const result = await loadConversations(
     backendFor(() => ({

@@ -1022,20 +1022,28 @@ export async function loadMemories(
     const id = string(item.id, `Memory ${index} id`);
     const text = string(item.text, `Memory ${index} text`);
     const parsedText = parseMemoryText(text);
-    const citations = stringArray(item.citations, `Memory ${index} citations`);
-    const provenance = object(item.provenance, `Memory ${index} provenance`);
-    const synthesisVersion = string(
-      provenance.synthesisVersion,
-      `Memory ${index} synthesisVersion`,
-    );
-    const inputDigest = string(
-      provenance.inputDigest,
-      `Memory ${index} inputDigest`,
-    );
-    const outputDigest = string(
-      provenance.outputDigest,
-      `Memory ${index} outputDigest`,
-    );
+    const citations =
+      item.citations === undefined
+        ? []
+        : stringArray(item.citations, `Memory ${index} citations`);
+    let synthesisVersion: string | null = null;
+    let inputDigest: string | null = null;
+    let outputDigest: string | null = null;
+    if (item.provenance !== undefined) {
+      const provenance = object(item.provenance, `Memory ${index} provenance`);
+      synthesisVersion = string(
+        provenance.synthesisVersion,
+        `Memory ${index} synthesisVersion`,
+      );
+      inputDigest = string(
+        provenance.inputDigest,
+        `Memory ${index} inputDigest`,
+      );
+      outputDigest = string(
+        provenance.outputDigest,
+        `Memory ${index} outputDigest`,
+      );
+    }
     return {
       kind: 'memory' as const,
       id,
