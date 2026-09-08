@@ -101,7 +101,7 @@ omi memory list
 omi memory create "ユーザーはダークモードを好む" --category lifestyle
 
 # 特定のメモリの詳細表示
-omi memory view <MEMORY_ID>
+omi memory get <MEMORY_ID>
 ```
 
 ### 会話 (Conversations)
@@ -112,7 +112,7 @@ omi memory view <MEMORY_ID>
 omi conversation list --limit 5
 
 # 会話の詳細と文字起こしを表示
-omi conversation view <CONVERSATION_ID>
+omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
 ### アクションアイテム (Action Items)
