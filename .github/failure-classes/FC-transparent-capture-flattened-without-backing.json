@@ -11,7 +11,7 @@
   "scope_hints": [
     "desktop/macos/Desktop/Sources/ScreenCaptureService.swift",
     "desktop/macos/Desktop/Sources/WindowCaptureStreamEngine.swift",
-    "desktop/macos/Desktop/Sources/VideoChunkEncoder.swift"
+    "desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift"
   ],
   "status": "open"
 }
