@@ -10812,5 +10812,15 @@
     "chatBlockUnavailable": "இனி கிடைக்கவில்லை",
     "chatBlockRecommendedNextSteps": "பரிந்துரைக்கப்பட்ட அடுத்த படிகள்",
     "couldNotLoadMemories": "நினைவுகளை ஏற்ற முடியவில்லை",
-    "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை"
+    "couldNotLoadKnowledgeGraph": "அறிவு வரைபடத்தை ஏற்ற முடியவில்லை",
+    "speechProfileOwnerTitle": "{name} இன் குரல் சுயவிவரம்",
+    "play": "இயக்கு",
+    "redo": "மீண்டும் பதிவு செய்",
+    "answerWithYourVoice": "உங்கள் குரலில் பதிலளிக்கவும்:",
+    "speechProfileTopicLocation": "நீங்கள் எங்கு வசிக்கிறீர்கள்?",
+    "speechProfileTopicWork": "நீங்கள் என்ன வேலை செய்கிறீர்கள்?",
+    "speechProfileTopicGoal": "உங்கள் நீண்டகால இலக்கு என்ன?",
+    "speechToTextUnavailableDesc": "பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.",
+    "memoryHistoryPartial": "நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.",
+    "tapPlusToStartRecording": "பதிவைத் தொடங்க + ஐத் தட்டவும்"
 }

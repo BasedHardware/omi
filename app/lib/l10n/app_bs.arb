@@ -10812,5 +10812,15 @@
     "chatBlockUnavailable": "Više nije dostupno",
     "chatBlockRecommendedNextSteps": "Preporučeni sljedeći koraci",
     "couldNotLoadMemories": "Nije moguće učitati uspomene",
-    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja"
+    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}",
+    "play": "Pusti",
+    "redo": "Snimi ponovo",
+    "answerWithYourVoice": "Odgovorite glasom:",
+    "speechProfileTopicLocation": "Gdje živite?",
+    "speechProfileTopicWork": "Čime se bavite?",
+    "speechProfileTopicGoal": "Koji je vaš dugoročni cilj?",
+    "speechToTextUnavailableDesc": "Pretvaranje govora u tekst trenutno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju, pa pokušajte ponovo.",
+    "memoryHistoryPartial": "Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.",
+    "tapPlusToStartRecording": "Dodirnite + za početak snimanja"
 }

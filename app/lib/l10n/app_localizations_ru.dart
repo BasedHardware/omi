@@ -1867,9 +1867,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openSettings => 'Открыть настройки';
 
   @override
-  String get wantDifferentName => 'Хотите использовать другое имя?';
-
-  @override
   String get whatsYourName => 'Как вас зовут?';
 
   @override
@@ -2049,7 +2046,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get memoryDeleted => 'Воспоминание удалено.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.';
 
   @override
   String get undo => 'Отменить';
@@ -9951,10 +9949,33 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Голосовой профиль: $name';
+  }
+
+  @override
+  String get play => 'Воспроизвести';
+
+  @override
+  String get redo => 'Записать заново';
+
+  @override
+  String get answerWithYourVoice => 'Ответьте голосом:';
+
+  @override
+  String get speechProfileTopicLocation => 'Где вы живёте?';
+
+  @override
+  String get speechProfileTopicWork => 'Кем вы работаете?';
+
+  @override
+  String get speechProfileTopicGoal => 'Какова ваша долгосрочная цель?';
+
+  @override
   String get transcriptionNoAudio => 'Транскрипция не получает аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Нажмите +, чтобы начать запись';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -9991,4 +10012,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Не удалось загрузить граф знаний';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
 }

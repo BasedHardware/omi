@@ -16,12 +16,10 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   var focusNode = FocusNode();
-  bool hasPrefilledName = false;
 
   @override
   void initState() {
     nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
-    hasPrefilledName = SharedPreferencesUtil().givenName.trim().isNotEmpty;
     super.initState();
 
     // Auto-focus the name input field after the widget is built
@@ -63,10 +61,10 @@ class _NameWidgetState extends State<NameWidget> {
 
                 // Main title
                 Text(
-                  hasPrefilledName ? context.l10n.wantDifferentName : context.l10n.whatsYourName,
-                  style: TextStyle(
+                  context.l10n.whatsYourName,
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: hasPrefilledName ? 22 : 28,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                     fontFamily: 'Manrope',
