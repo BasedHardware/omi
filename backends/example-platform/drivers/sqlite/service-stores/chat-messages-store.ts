@@ -203,7 +203,7 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           FROM service_chat_messages
           WHERE account_id = ? AND app_id IS NULL
             AND CASE WHEN ? IS NULL OR ? = 'chat-main'
-              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0 OR trim(chat_session_id) = 'chat-main')
+              THEN (chat_session_id IS NULL OR length(CAST(trim(chat_session_id) AS BLOB)) = 0 OR trim(chat_session_id) = 'chat-main')
               ELSE chat_session_id = ?
             END
             AND sequence <= ?
@@ -222,7 +222,7 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           FROM service_chat_messages
           WHERE account_id = ? AND app_id IS NULL
             AND CASE WHEN ? IS NULL OR ? = 'chat-main'
-              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0 OR trim(chat_session_id) = 'chat-main')
+              THEN (chat_session_id IS NULL OR length(CAST(trim(chat_session_id) AS BLOB)) = 0 OR trim(chat_session_id) = 'chat-main')
               ELSE chat_session_id = ?
             END
             AND sequence <= ?

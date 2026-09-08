@@ -411,5 +411,30 @@ test("SQLite chat history stays on the main session unless chatSessionId is requ
     olderThan: null,
     chatSessionId: " session-alpha ",
   }).messages.map((stored) => stored.id)).toEqual(["padded-named"]);
+  expect(messages.admitHuman("account", message({
+    id: "nul-named",
+    createdAt: 190,
+    updatedAt: 190,
+    chatSessionId: "\0",
+    payloadHash: "sha256:nul-named",
+    revision: "revision-nul-named",
+  }), "generation-nul-named").kind).toBe("created");
+  const afterNul = messages.readSnapshotSequence("account");
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence: afterNul,
+    olderThan: null,
+  }).messages.map((stored) => stored.id)).toEqual([
+    "main",
+    "stored-main",
+    "padded-main",
+    "space-main",
+  ]);
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence: afterNul,
+    olderThan: null,
+    chatSessionId: "\0",
+  }).messages.map((stored) => stored.id)).toEqual(["nul-named"]);
   db.close();
 });
