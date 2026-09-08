@@ -1,10 +1,13 @@
 import AVFoundation
 import Foundation
 
-/// One stretch of a conversation's audio that belongs to a known voice.
+/// One stretch of a conversation's audio worth listening to again.
 struct PeopleRebuildCut: Equatable, Sendable {
-  /// nil is the user.
+  /// The person the transcript names for it, if any.
   let personId: String?
+  /// What the backend's diarization said. Treated as a hint: "You" is decided by who is
+  /// heard in the most conversations, not by this flag.
+  let labeledAsUser: Bool
   let artifactStart: TimeInterval
   let artifactEnd: TimeInterval
 
@@ -19,15 +22,16 @@ enum PeopleRebuildPlanner {
   /// Longest cut kept: enough voice for a stable embedding and a listenable clip.
   static let maxCutSeconds: TimeInterval = 12.0
 
-  /// The transcript segments of a conversation that name a person (or the user), mapped onto
-  /// the aggregate artifact's media time. Segments across a gap in captured audio are skipped
-  /// rather than guessed at.
+  /// Cuts embedded per conversation at most, longest first, so a long history stays a bounded job.
+  static let maxCutsPerConversation = 40
+
+  /// Every transcript segment long enough to carry a voice, mapped onto the artifact's media
+  /// time. Segments across a gap in captured audio are skipped rather than guessed at.
   static func cuts(
     segments: [TranscriptSegment],
     artifact: CapturePlaybackArtifact
   ) -> [PeopleRebuildCut] {
-    segments.compactMap { segment in
-      guard segment.isUser || segment.personId != nil else { return nil }
+    let all: [PeopleRebuildCut] = segments.compactMap { segment in
       let wallEnd = min(segment.end, segment.start + maxCutSeconds)
       guard wallEnd - segment.start >= minCutSeconds,
         let start = artifact.artifactOffset(forWallOffset: segment.start),
@@ -35,8 +39,10 @@ enum PeopleRebuildPlanner {
       else { return nil }
       guard end - start >= minCutSeconds else { return nil }
       return PeopleRebuildCut(
-        personId: segment.isUser ? nil : segment.personId, artifactStart: start, artifactEnd: end)
+        personId: segment.isUser ? nil : segment.personId, labeledAsUser: segment.isUser,
+        artifactStart: start, artifactEnd: end)
     }
+    return Array(all.sorted { $0.length > $1.length }.prefix(maxCutsPerConversation))
   }
 
   /// How often, and how recently, each named person appears across conversations.
@@ -85,6 +91,78 @@ enum PeopleRebuildPlanner {
   }
 }
 
+/// Greedy cosine clustering of every cut heard across conversations, so the user can be found
+/// as the voice present in the most conversations. Pure, so the choice is testable.
+struct VoiceClusterer {
+  struct Cluster {
+    var centroid: [Float]
+    var weight: Double = 0
+    var embeddings: [[Float]] = []
+    var speechSeconds: Double = 0
+    var conversationIds: Set<String> = []
+    var lastHeardAt: Date?
+    /// Longest clips first, at most `clipsToKeep`.
+    var clips: [[Float]] = []
+    var labeledAsUserSeconds: Double = 0
+  }
+
+  var matchThreshold: Float = 0.60
+  var clipsToKeep = 3
+  var embeddingsToKeep = 200
+  private(set) var clusters: [Cluster] = []
+
+  init(matchThreshold: Float = 0.60) {
+    self.matchThreshold = matchThreshold
+  }
+
+  mutating func add(
+    embedding: [Float], seconds: Double, conversationId: String, date: Date?, clip: [Float]?, labeledAsUser: Bool
+  ) {
+    guard let normalized = LocalSpeakerRegistry.normalized(embedding) else { return }
+    var best: (index: Int, distance: Float)?
+    for (index, cluster) in clusters.enumerated() {
+      let distance = LocalSpeakerRegistry.cosineDistance(normalized, cluster.centroid)
+      if distance < (best?.distance ?? .infinity) { best = (index, distance) }
+    }
+    let index: Int
+    if let best, best.distance <= matchThreshold {
+      index = best.index
+      let total = clusters[index].weight + seconds
+      var blended = clusters[index].centroid
+      let keep = Float(clusters[index].weight / total)
+      let add = Float(seconds / total)
+      for i in blended.indices { blended[i] = blended[i] * keep + normalized[i] * add }
+      clusters[index].centroid = LocalSpeakerRegistry.normalized(blended) ?? clusters[index].centroid
+      clusters[index].weight = total
+    } else {
+      clusters.append(Cluster(centroid: normalized, weight: seconds))
+      index = clusters.count - 1
+    }
+    if clusters[index].embeddings.count < embeddingsToKeep { clusters[index].embeddings.append(normalized) }
+    clusters[index].speechSeconds += seconds
+    clusters[index].conversationIds.insert(conversationId)
+    clusters[index].lastHeardAt = [clusters[index].lastHeardAt, date].compactMap { $0 }.max()
+    if labeledAsUser { clusters[index].labeledAsUserSeconds += seconds }
+    if let clip {
+      clusters[index].clips.append(clip)
+      clusters[index].clips.sort { $0.count > $1.count }
+      if clusters[index].clips.count > clipsToKeep {
+        clusters[index].clips.removeLast(clusters[index].clips.count - clipsToKeep)
+      }
+    }
+  }
+
+  /// The user: heard in the most conversations; on a tie, the most speech.
+  var userCluster: Cluster? {
+    clusters.max { lhs, rhs in
+      if lhs.conversationIds.count != rhs.conversationIds.count {
+        return lhs.conversationIds.count < rhs.conversationIds.count
+      }
+      return lhs.speechSeconds < rhs.speechSeconds
+    }
+  }
+}
+
 /// A voice rebuilt from conversation audio, ready for the diarizer to remember.
 struct RebuiltVoice: Sendable {
   let personId: String?
@@ -112,6 +190,8 @@ struct PeopleRebuildSummary: Equatable, Sendable {
   /// Conversations whose audio the backend is still preparing; a later Refresh picks them up.
   var audioPending = 0
   var audioLocked = 0
+  /// Conversations the voice chosen as "You" was heard in.
+  var userConversations: Int?
   var activity: [String: PersonActivity] = [:]
   var failure: String?
 
@@ -122,6 +202,9 @@ struct PeopleRebuildSummary: Equatable, Sendable {
     parts.append(
       voicesRebuilt == 0 ? "no voices rebuilt" : "\(voicesRebuilt) voice\(voicesRebuilt == 1 ? "" : "s") rebuilt")
     if clipsSaved > 0 { parts.append("\(clipsSaved) clip\(clipsSaved == 1 ? "" : "s") saved") }
+    if let userConversations, userConversations > 0 {
+      parts.append("you = the voice in \(userConversations) of them")
+    }
     if audioPending > 0 { parts.append("\(audioPending) still preparing audio") }
     if audioLocked > 0 { parts.append("\(audioLocked) locked") }
     return parts.joined(separator: " · ")
@@ -178,7 +261,8 @@ actor PeopleRebuilder {
 
     await diarizer.prepare()
     let canEmbed = await diarizer.isAvailable
-    var voices: [String: RebuiltVoice] = [:]
+    var people: [String: RebuiltVoice] = [:]
+    var clusterer = VoiceClusterer()
     var seen: [(segments: [TranscriptSegment], date: Date)] = []
 
     for listed in conversations {
@@ -191,7 +275,7 @@ actor PeopleRebuilder {
       let segments = conversation.transcriptSegments
       seen.append((segments, conversation.startedAt ?? conversation.createdAt))
 
-      guard canEmbed, segments.contains(where: { $0.isUser || $0.personId != nil }) else { continue }
+      guard canEmbed, !segments.isEmpty else { continue }
       guard !conversation.isLocked else {
         summary.audioLocked += 1
         continue
@@ -227,6 +311,7 @@ actor PeopleRebuilder {
 
       guard let audio = await Self.downloadAndDecode(artifact.signedURL) else { continue }
       let rate = Double(LocalVoiceprintStore.sampleRate)
+      let date = conversation.startedAt ?? conversation.createdAt
       var touched: Set<String> = []
       for cut in cuts {
         let from = max(0, Int(cut.artifactStart * rate))
@@ -234,27 +319,41 @@ actor PeopleRebuilder {
         guard to - from >= Int(PeopleRebuildPlanner.minCutSeconds * rate) else { continue }
         let samples = Array(audio[from..<to])
         guard let embedding = await diarizer.embedding(for: samples) else { continue }
-        let key = LocalVoiceprintStore.sampleOwner(cut.personId)
-        var voice = voices[key] ?? RebuiltVoice(personId: cut.personId)
+        state.cutsEmbedded += 1
+        // Every voice goes into the clustering; the biggest cluster across conversations is you.
+        clusterer.add(
+          embedding: embedding, seconds: cut.length, conversationId: conversation.id, date: date,
+          clip: samples, labeledAsUser: cut.labeledAsUser)
+        // Named people are rebuilt from exactly the segments that name them.
+        guard let personId = cut.personId else { continue }
+        var voice = people[personId] ?? RebuiltVoice(personId: personId)
         voice.embeddings.append(embedding)
         voice.speechSeconds += cut.length
         voice.clips.append(samples)
         voice.clips.sort { $0.count > $1.count }
         if voice.clips.count > Self.clipsPerVoice { voice.clips.removeLast(voice.clips.count - Self.clipsPerVoice) }
-        if !touched.contains(key) {
-          touched.insert(key)
+        if !touched.contains(personId) {
+          touched.insert(personId)
           voice.conversationCount += 1
-          let date = conversation.startedAt ?? conversation.createdAt
           voice.lastHeardAt = [voice.lastHeardAt, date].compactMap { $0 }.max()
         }
-        voices[key] = voice
-        state.cutsEmbedded += 1
+        people[personId] = voice
       }
     }
 
     summary.withAudio = state.withAudio
     summary.activity = PeopleRebuildPlanner.activity(in: seen)
-    let rebuilt = Array(voices.values).filter { !$0.embeddings.isEmpty }
+    var rebuilt = Array(people.values).filter { !$0.embeddings.isEmpty }
+    if let user = clusterer.userCluster {
+      rebuilt.append(
+        RebuiltVoice(
+          personId: nil, embeddings: user.embeddings, speechSeconds: user.speechSeconds, clips: user.clips,
+          conversationCount: user.conversationIds.count, lastHeardAt: user.lastHeardAt))
+      summary.userConversations = user.conversationIds.count
+      log(
+        "PeopleRebuilder: you = cluster heard in \(user.conversationIds.count) conversations, \(Int(user.speechSeconds)) s (\(Int(user.labeledAsUserSeconds)) s labeled is_user); \(clusterer.clusters.count) voices in total"
+      )
+    }
     if !rebuilt.isEmpty {
       let saved = await diarizer.applyRebuild(rebuilt)
       summary.voicesRebuilt = rebuilt.count

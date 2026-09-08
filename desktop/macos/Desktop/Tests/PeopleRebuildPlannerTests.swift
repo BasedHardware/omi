@@ -21,7 +21,7 @@ final class PeopleRebuildPlannerTests: XCTestCase {
       ])
   }
 
-  func testOnlyNamedOrUserSegmentsInsideCapturedAudioBecomeCuts() {
+  func testEverySegmentInsideCapturedAudioBecomesACutLongestFirst() throws {
     let cuts = PeopleRebuildPlanner.cuts(
       segments: [
         segment("me", start: 2, end: 6, isUser: true),
@@ -33,11 +33,41 @@ final class PeopleRebuildPlannerTests: XCTestCase {
       ],
       artifact: artifact)
 
-    XCTAssertEqual(cuts.map(\.personId), [nil, "anna", "bob"])
-    XCTAssertEqual(cuts[0].artifactStart, 2, accuracy: 1e-6)
-    XCTAssertEqual(cuts[0].artifactEnd, 6, accuracy: 0.01)
-    XCTAssertEqual(cuts[2].artifactStart, 35, accuracy: 1e-6, "second span maps through its artifact offset")
-    XCTAssertEqual(cuts[2].length, PeopleRebuildPlanner.maxCutSeconds, accuracy: 0.01, "long segments are capped")
+    XCTAssertEqual(cuts.count, 4, "unnamed voices count too; the gap and the blip do not")
+    XCTAssertEqual(cuts.map(\.personId).prefix(2), ["bob", nil], "longest first")
+    XCTAssertEqual(Set(cuts.map(\.personId)), Set(["bob", nil, "anna"]))
+    XCTAssertEqual(cuts[0].artifactStart, 35, accuracy: 1e-6, "second span maps through its artifact offset")
+    XCTAssertEqual(cuts[0].length, PeopleRebuildPlanner.maxCutSeconds, accuracy: 0.01, "long segments are capped")
+    let me = try XCTUnwrap(cuts.first { $0.labeledAsUser })
+    XCTAssertEqual(me.artifactStart, 2, accuracy: 1e-6)
+    XCTAssertEqual(me.artifactEnd, 6, accuracy: 0.01)
+  }
+
+  /// "You" is whoever is heard in the most conversations, not whoever the backend flagged.
+  func testTheVoiceInTheMostConversationsIsTheUser() {
+    func voice(_ axis: Int) -> [Float] {
+      var v = [Float](repeating: 0, count: 8)
+      v[axis] = 1
+      return v
+    }
+    var clusterer = VoiceClusterer()
+    // Voice 0: three conversations, little speech. Voice 1: one conversation, lots of speech,
+    // flagged is_user by the backend. Voice 2: two conversations.
+    for (conversation, seconds) in [("c1", 3.0), ("c2", 3.0), ("c3", 3.0)] {
+      clusterer.add(
+        embedding: voice(0), seconds: seconds, conversationId: conversation, date: nil, clip: nil, labeledAsUser: false)
+    }
+    clusterer.add(embedding: voice(1), seconds: 300, conversationId: "c1", date: nil, clip: nil, labeledAsUser: true)
+    for conversation in ["c1", "c2"] {
+      clusterer.add(
+        embedding: voice(2), seconds: 50, conversationId: conversation, date: nil, clip: nil, labeledAsUser: false)
+    }
+
+    XCTAssertEqual(clusterer.clusters.count, 3)
+    let user = clusterer.userCluster
+    XCTAssertEqual(user?.conversationIds.count, 3)
+    XCTAssertEqual(user?.speechSeconds ?? 0, 9, accuracy: 1e-6)
+    XCTAssertEqual(user?.labeledAsUserSeconds, 0, "the backend's flag did not decide it")
   }
 
   func testActivityCountsConversationsPerPersonAndMergesWithLocal() {
