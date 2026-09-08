@@ -47,7 +47,7 @@ enum SystemCaptureControls {
   }
 
   static var isAudioRecordingOn: Bool {
-    !AppState.isPaywalledEffective && AssistantSettings.shared.audioRecordingMode != .off
+    AppState.isTranscriptionExemptFromPaywall && AssistantSettings.shared.audioRecordingMode != .off
   }
 
   // MARK: - Transitions
@@ -88,7 +88,10 @@ enum SystemCaptureControls {
 
   @discardableResult
   static func setAudioRecording(_ enabled: Bool) -> SystemCaptureOutcome {
-    if enabled && AppState.isPaywalledEffective {
+    // Narrower exemption than the general paywall check: also off the hook
+    // once transcription is pointed at a self-hosted backend, even without
+    // BYOK (see AppState.isTranscriptionExemptFromPaywall).
+    if enabled && !AppState.isTranscriptionExemptFromPaywall {
       NotificationCenter.default.post(
         name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
       return .blockedPaywall
