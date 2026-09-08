@@ -336,6 +336,8 @@ Cloud Linux after `e61bc4b1fb`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `38a8bf1be4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Connected device Model, Firmware, Hardware, Manufacturer, and Serial rows no longer leave a blank value when the native information string is empty or whitespace. Those fields say Unavailable, matching missing fields. Reported values stay. Scan, Reconnect, Connect, Forget, Disconnect, and Cancel stay. This does not invent a BLE producer.
 
+Cloud Linux after `6d343472cb`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Rewind history rows no longer leave a blank app name when the native name is empty or whitespace. That title keeps the existing Captured screen fallback. Empty or whitespace window titles are omitted instead of a blank subtitle. Reported names stay. This does not invent a ScreenCaptureKit producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {clockLabel} from '../desktopReadClient';
+import {accountFieldCopy, clockLabel} from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
 import type {useRewindCapture} from '../app/useRewindCapture';
@@ -48,6 +48,10 @@ function errorCopy(error: unknown) {
 function formatRewindCaptureTime(capturedAtMs: number): string {
   const label = clockLabel(capturedAtMs, Date.now());
   return label === '' ? 'Time unavailable' : label;
+}
+
+function rewindAppName(appName: string): string {
+  return accountFieldCopy(appName, 'Captured screen');
 }
 
 export function rewindLaterPageCanRetry(error: unknown): boolean {
@@ -288,12 +292,12 @@ export function DesktopRewind({
                 styles.row,
                 selected?.id === frame.id && styles.selected,
               ]}>
-              <Text style={styles.text}>
-                {frame.appName || 'Captured screen'}
-              </Text>
-              <Text style={styles.meta} numberOfLines={2}>
-                {frame.windowTitle}
-              </Text>
+              <Text style={styles.text}>{rewindAppName(frame.appName)}</Text>
+              {frame.windowTitle.trim() !== '' ? (
+                <Text style={styles.meta} numberOfLines={2}>
+                  {frame.windowTitle.trim()}
+                </Text>
+              ) : null}
               <Text style={styles.meta}>
                 {formatRewindCaptureTime(frame.capturedAtMs)}
               </Text>
@@ -332,7 +336,9 @@ export function DesktopRewind({
           ) : (
             <Image
               key={selected.id}
-              accessibilityLabel={`Captured screen from ${selected.appName}`}
+              accessibilityLabel={`Captured screen from ${rewindAppName(
+                selected.appName,
+              )}`}
               source={{uri: image}}
               resizeMode="contain"
               style={styles.image}

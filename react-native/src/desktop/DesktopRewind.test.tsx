@@ -221,6 +221,43 @@ test('a zero Rewind capture timestamp says Time unavailable instead of 1970', as
   expect(content(view)).not.toContain('1970');
 });
 
+test('empty Rewind app and window names stay visible without a blank row', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [
+      {
+        ...frame('one'),
+        appName: '',
+        windowTitle: '',
+      },
+      {
+        ...frame('two'),
+        appName: ' \t\n',
+        windowTitle: '\u00A0',
+      },
+      {
+        ...frame('three'),
+        appName: '  Preview app  ',
+        windowTitle: '  Window three  ',
+      },
+    ],
+    nextCursor: null,
+  });
+  const view = await render();
+  const output = content(view);
+  expect(output).toContain('Captured screen');
+  expect(output).toContain('Preview app');
+  expect(output).toContain('Window three');
+  expect(output).not.toContain(' \t\n');
+  await press(view, 'View capture one');
+  expect(view.root.findByType(Image).props.accessibilityLabel).toBe(
+    'Captured screen from Captured screen',
+  );
+  await press(view, 'View capture three');
+  expect(view.root.findByType(Image).props.accessibilityLabel).toBe(
+    'Captured screen from Preview app',
+  );
+});
+
 test('later-page Rewind unavailability keeps frames and omits Load more', async () => {
   mockRewind.listFrames.mockResolvedValueOnce({
     frames: [frame('one')],
