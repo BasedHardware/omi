@@ -1,3 +1,3 @@
 {
-  "change": "Fixed the Home chat input bar breaking apart when the paperclip menu's backing control grew to half the lane, squeezing the Ask Omi field and pushing the mic and send discs to the window edge"
+  "change": "Fixed the Home chat input bar spreading its controls across the window — the message field, paperclip, microphone, and send button now keep their usual layout"
 }
