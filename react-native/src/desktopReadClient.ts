@@ -50,6 +50,25 @@ export function conversationDisplaySummary(item: {
     : 'Conversation summary unavailable';
 }
 
+export function conversationStatusCopy(status: string): string {
+  if (status === 'in_progress') {
+    return 'In progress';
+  }
+  if (status === 'processing') {
+    return 'Processing';
+  }
+  if (status === 'merging') {
+    return 'Merging';
+  }
+  if (status === 'completed') {
+    return 'Completed';
+  }
+  if (status === 'failed') {
+    return 'Failed';
+  }
+  return status === '' ? 'Status unavailable' : status;
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

@@ -4,6 +4,7 @@ import {Text} from 'react-native';
 import {ConversationsPage} from './Conversations';
 import {
   clockLabel,
+  conversationStatusCopy,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
 } from '../desktopReadClient';
@@ -572,4 +573,58 @@ test('conversation capture time uses the same clock as Started and not 1970', ()
   expect(copy).toContain('Captured (device time)');
   expect(copy).toContain(expected);
   expect(copy).not.toContain('1970');
+});
+
+test('conversation detail status is not a raw wire token', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:in-progress-one',
+    title: 'Morning standup',
+    summary: 'Still processing this recording.',
+    searchableText: 'Morning standup\nStill processing this recording.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Morning standup',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Status ·');
+  expect(copy).toContain(conversationStatusCopy('in_progress'));
+  expect(copy).not.toContain('in_progress');
 });

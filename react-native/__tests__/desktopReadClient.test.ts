@@ -5,6 +5,7 @@ import {
   conversationDisplayTitle,
   conversationDayLabel,
   conversationGroupLabel,
+  conversationStatusCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -589,6 +590,16 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
   ).toBe('Morning walk');
+});
+
+test('conversation status copy is not a raw wire token', () => {
+  expect(conversationStatusCopy('in_progress')).toBe('In progress');
+  expect(conversationStatusCopy('processing')).toBe('Processing');
+  expect(conversationStatusCopy('merging')).toBe('Merging');
+  expect(conversationStatusCopy('completed')).toBe('Completed');
+  expect(conversationStatusCopy('failed')).toBe('Failed');
+  expect(conversationStatusCopy('')).toBe('Status unavailable');
+  expect(conversationStatusCopy('queued')).toBe('queued');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

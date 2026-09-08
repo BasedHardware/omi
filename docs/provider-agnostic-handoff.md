@@ -224,7 +224,9 @@ Cloud Linux after `5beb6d71b8`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `acc604f039`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation detail Captured (device time) uses the same Today/Yesterday/date clock as Started/Finished instead of toLocaleString. A zero capture timestamp says Time unavailable instead of 1970. This does not invent a capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Rewind clock slice: Rewind list timestamps use the same Today/Yesterday/date clock as conversation capture time instead of toLocaleString. A zero capture timestamp says Time unavailable instead of 1970. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2350637137`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Rewind list timestamps use the same Today/Yesterday/date clock as conversation capture time instead of toLocaleString. A zero capture timestamp says Time unavailable instead of 1970. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the conversation-status copy slice: conversation detail Status uses In progress / Processing / Merging / Completed / Failed instead of snake_case wire tokens such as in_progress. An empty status says Status unavailable. Unknown statuses stay visible. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

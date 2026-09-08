@@ -15,6 +15,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationDayLabel,
+  conversationStatusCopy,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -400,7 +401,7 @@ export function ConversationsPage({
                     )}
                   </Text>
                   <Text style={styles.conversationDetailField}>
-                    Status · {selected.status}
+                    Status · {conversationStatusCopy(selected.status)}
                   </Text>
                   {selected.locked && (
                     <Text style={styles.conversationDetailField}>Locked</Text>
