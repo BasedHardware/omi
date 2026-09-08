@@ -97,6 +97,9 @@ export function formatTaskDue(dueAt: number | null): string {
   if (dueAt === null) {
     return 'No due date';
   }
+  if (!Number.isFinite(dueAt) || dueAt <= 0) {
+    return 'Date unavailable';
+  }
   return new Date(epochMilliseconds(dueAt)).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
@@ -114,6 +117,9 @@ export function taskDisplaySummary(item: {
   }
   if (item.dueAt === null) {
     return 'Pending';
+  }
+  if (!Number.isFinite(item.dueAt) || item.dueAt <= 0) {
+    return 'Date unavailable';
   }
   return `Due ${formatTaskDue(item.dueAt)}`;
 }
@@ -194,7 +200,7 @@ export function taskGroup(
   dueAt: number | null,
   nowMilliseconds: number,
 ): TaskGroup {
-  if (dueAt === null) {
+  if (dueAt === null || !Number.isFinite(dueAt) || dueAt <= 0) {
     return 'Later';
   }
   const today = Math.floor(nowMilliseconds / 86400000);

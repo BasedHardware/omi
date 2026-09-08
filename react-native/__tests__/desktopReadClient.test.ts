@@ -675,6 +675,12 @@ test('task due copy uses a calendar date instead of a raw epoch', () => {
     'Completed',
   );
   expect(formatTaskDue(null)).toBe('No due date');
+  expect(formatTaskDue(0)).toBe('Date unavailable');
+  expect(formatTaskDue(0)).not.toContain('1970');
+  expect(taskDisplaySummary({completed: false, dueAt: 0})).toBe(
+    'Date unavailable',
+  );
+  expect(taskGroup(0, Date.now())).toBe('Later');
 });
 
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {

@@ -217,6 +217,36 @@ test('task due dates use second-scale epochs as calendar days not 1970', () => {
   ).toBe(0);
 });
 
+test('a zero task due timestamp says Date unavailable instead of 1970', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt: 0}]},
+        }}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
+  expect(copy).toContain('Date unavailable');
+  expect(copy).not.toContain('1970');
+  expect(copy).not.toContain('No due date');
+});
+
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
   const props = {writesAvailable: true, onTaskEdit: jest.fn()};
   const renderer = render(props);
