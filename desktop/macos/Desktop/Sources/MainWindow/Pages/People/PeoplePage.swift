@@ -227,8 +227,41 @@ struct PeoplePage: View {
 
   // MARK: - People
 
+  private var userVoice: LocalSpeakerDiarizer.VoiceSummary? {
+    voices.first { $0.personId == nil }
+  }
+
+  /// Always first: the user, styled like everyone else, with their clips when there are any.
+  private var userRow: some View {
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
+      avatar(initial: "Y", isUser: true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("You")
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
+        if let caption = PersonOverview.voiceCaption(userVoice) {
+          Text(caption)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
+        snippetRow(owner: LocalVoiceprintStore.sampleOwner(nil))
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(OmiSpacing.md)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        .fill(Ink.rowFill)
+    )
+    .accessibilityIdentifier("people-row-you")
+  }
+
   @ViewBuilder
   private var peopleSection: some View {
+    let query = searchText.trimmingCharacters(in: .whitespaces)
+    if query.isEmpty || "you".localizedCaseInsensitiveContains(query) {
+      userRow
+    }
     if rows.isEmpty {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text(appState.people.isEmpty ? "No people yet" : "No one matches")
