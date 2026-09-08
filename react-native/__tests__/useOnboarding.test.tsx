@@ -55,8 +55,9 @@ async function renderOnboarding(
   ) => Promise<void> = async () => undefined,
 ) {
   let latest: ReturnType<typeof useOnboarding> | null = null;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    ReactTestRenderer.create(
+    renderer = ReactTestRenderer.create(
       <Harness
         macDesktop={macDesktop}
         onState={state => {
@@ -68,6 +69,19 @@ async function renderOnboarding(
   });
   return {
     latest: () => latest!,
+    update: async (next: boolean) => {
+      await ReactTestRenderer.act(async () => {
+        renderer.update(
+          <Harness
+            macDesktop={next}
+            onState={state => {
+              latest = state;
+            }}
+            refreshReads={refreshReads}
+          />,
+        );
+      });
+    },
   };
 }
 
@@ -126,6 +140,33 @@ test('session probe settles from auth alone when native devices are unavailable'
 
   expect(hook.latest().onboardingRequired).toBe(false);
   expect(hook.latest().onboardingRequired).not.toBeNull();
+});
+
+test('an unreachable startup probe keeps Welcome with an unreachable error', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockRejectedValue(new Error('offline'));
+
+  const hook = await renderOnboarding(true);
+
+  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().authError).toBe(
+    "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
+  );
+});
+
+test('a recovered startup probe clears the unreachable error', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockRejectedValueOnce(new Error('offline'));
+
+  const hook = await renderOnboarding(true);
+  expect(hook.latest().authError).toBe(
+    "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
+  );
+
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  await hook.update(false);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().authError).toBeNull();
 });
 
 test('sign-in requires explicit setup completion before cloud reads', async () => {
@@ -191,6 +232,29 @@ test('a rejected sign-in stays on Welcome and stops the busy flag', async () => 
   expect(hook.latest().onboardingRequired).toBe(true);
   expect(hook.latest().signingIn).toBe(false);
   expect(hook.latest().authError).toBe('Sign in was not completed. Try again.');
+});
+
+test('a reads failure after a resumed sign-in keeps the shell without a sign-in error', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  mockAuth.signIn.mockResolvedValue({signedIn: true});
+  const refresh = jest.fn(async () => {
+    throw new Error('reads down');
+  });
+
+  const hook = await renderOnboarding(true, refresh);
+
+  await ReactTestRenderer.act(async () => {
+    await hook.latest().signInAndRefresh();
+  });
+
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().signingIn).toBe(false);
+  expect(hook.latest().authError).not.toBe(
+    'Sign in was not completed. Try again.',
+  );
+  expect(hook.latest().authError).toBeNull();
+  expect(refresh).toHaveBeenCalledWith(false, {ignoreEnabled: true});
 });
 
 test('sign-out returns the desktop to Welcome without firing cloud reads', async () => {
@@ -415,6 +479,31 @@ test('failed setup persistence stays on disclosure and can retry', async () => {
     await hook.latest().completeSetup();
   });
   expect(hook.latest().onboardingRequired).toBe(false);
+});
+
+test('a reads failure after consent still completes onboarding without a save error', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(false);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  const refresh = jest.fn(async () => {
+    throw new Error('reads down');
+  });
+
+  const hook = await renderOnboarding(true, refresh);
+  let completed!: boolean;
+  await ReactTestRenderer.act(async () => {
+    completed = await hook.latest().completeSetup();
+  });
+
+  expect(mockAuth.markOnboardingComplete).toHaveBeenCalledTimes(1);
+  expect(completed).toBe(true);
+  expect(hook.latest().setupRequired).toBe(false);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().completingSetup).toBe(false);
+  expect(hook.latest().authError).not.toBe(
+    'Setup could not be saved. Try again.',
+  );
+  expect(hook.latest().authError).toBeNull();
+  expect(refresh).toHaveBeenCalledWith(false, {ignoreEnabled: true});
 });
 
 test('sign-out retires delayed setup completion without refreshing', async () => {
