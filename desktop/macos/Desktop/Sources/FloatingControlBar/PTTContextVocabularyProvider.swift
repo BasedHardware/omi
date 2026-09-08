@@ -11,6 +11,14 @@ struct PTTContextSnapshot {
   /// OCR text of the pre-overlay frame, bounded. Used only as the chat-lane fallback when the
   /// realtime model escalates a turn without having grounded it on the screen image.
   let visibleText: String?
+  /// Immediate OCR is intentionally capped to keep PTT context cheap. Preserve
+  /// that fact in evidence metadata instead of calling clipped text complete.
+  let visibleTextWasTruncated: Bool
+  /// The same OCR result retained for the durable evidence envelope. This is
+  /// independently bounded so transcript correction can stay cheap without
+  /// making a later evidence read permanently incomplete.
+  let evidenceText: String?
+  let evidenceTextWasTruncated: Bool
 }
 
 enum PTTContextVocabularyProvider {
@@ -49,8 +57,10 @@ enum PTTContextVocabularyProvider {
     }
 
     let keywords = collector.values
+    let visibleTextWasTruncated = visibleText.map { $0.count > maxImmediateOCRLength } ?? false
     let boundedVisibleText = visibleText.map { String($0.prefix(maxImmediateOCRLength)) }
       .flatMap { $0.isEmpty ? nil : $0 }
+    let boundedEvidence = visibleText.flatMap(ConversationEvidence.boundedBody)
     let sample = keywords.prefix(12).joined(separator: ", ")
     let immediateSourceCount = (visibleText?.isEmpty == false) ? 1 : 0
     log(
@@ -60,7 +70,10 @@ enum PTTContextVocabularyProvider {
       capturedAt: capturedAt,
       keywords: keywords,
       sourceCount: immediateSourceCount,
-      visibleText: boundedVisibleText
+      visibleText: boundedVisibleText,
+      visibleTextWasTruncated: visibleTextWasTruncated,
+      evidenceText: boundedEvidence?.text,
+      evidenceTextWasTruncated: boundedEvidence?.wasTruncated ?? false
     )
   }
 

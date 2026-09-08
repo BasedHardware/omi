@@ -7,6 +7,93 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - PTT integration
 
+  /// Reserves the native OCR result before the asynchronous extractor starts.
+  /// The reservation is independent of Gemini's JPEG/report protocol and is
+  /// therefore still valid when the model never asks for a screenshot.
+  @discardableResult
+  func beginNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    capturedAt: Date = Date()
+  ) -> RealtimeTurnEvidenceLedger.Key? {
+    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID,
+      VoiceTurnCoordinator.shared.activeTurnID == turnID,
+      RuntimeOwnerIdentity.currentOwnerId() == ownerID
+    else { return nil }
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let pendingEvidence = ConversationEvidence.pendingNativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      turnID: turnID,
+      frontmostApp: screenEvidence?.descriptor.frontmostApp,
+      frontmostBundleID: screenEvidence?.descriptor.frontmostBundleID)
+    return turnEvidenceLedger.begin(
+      ownerID: ownerID,
+      turnID: turnID,
+      continuityKey: continuityKey,
+      surface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      screenDescriptor: screenEvidence?.descriptor,
+      initialEvidence: pendingEvidence,
+      createdAt: capturedAt)
+  }
+
+  /// Resolves one native OCR result. The journal update is queued through the
+  /// same streaming write tail when available and otherwise targets the exact
+  /// stable user turn ID; no active-turn lookup can redirect it to a later PTT.
+  func resolveNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    ownerID: String,
+    capturedAt: Date,
+    text: String?,
+    textWasTruncated: Bool = false
+  ) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      _ = turnEvidenceLedger.revoke(ownerID: ownerID)
+      return
+    }
+    guard let entry = turnEvidenceLedger.entry(for: key) else { return }
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      text: text,
+      turnID: turnID,
+      frontmostApp: entry.screenDescriptor?.frontmostApp,
+      frontmostBundleID: entry.screenDescriptor?.frontmostBundleID,
+      textWasTruncated: textWasTruncated)
+    let state: RealtimeTurnEvidenceLedger.CaptureState =
+      evidence.availability == .unavailable
+      ? .unavailable
+      : (evidence.extractionCompleteness == .partial ? .partial : .complete)
+    guard turnEvidenceLedger.resolve(key: key, evidence: evidence, state: state) else { return }
+    guard let surface = entry.surface else { return }
+    let userTurnID =
+      entry.journalUserTurnID
+      ?? KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    if streamingJournalWriteLedger.contains(continuityKey: continuityKey) {
+      enqueueNativeEvidenceUpdate(continuityKey: continuityKey, evidence: evidence)
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self,
+        RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+        let current = self.turnEvidenceLedger.evidence(for: key)
+      else { return }
+      let accepted = await FloatingControlBarManager.shared.attachRealtimeUserEvidence(
+        surface: surface,
+        ownerID: ownerID,
+        userTurnID: userTurnID,
+        evidence: current)
+      guard accepted else {
+        _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
+        return
+      }
+      _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+      _ = self.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    }
+  }
+
   /// PTT-down: make sure the socket is warm and reset per-turn state. The typed
   /// result is the caller's fail-closed gate for buffered audio replay.
   @discardableResult

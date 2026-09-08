@@ -60,16 +60,22 @@ struct RealtimeStreamingJournalProjection: Equatable {
   let modelsUsed: [String]
   /// Accepted screen observation for this turn, journaled on the user row (see MessageMetadata).
   let screenContext: String?
+  /// Native OCR evidence is journaled beside (and independently from) the
+  /// model's optional screen report. It is frozen into the existing streaming
+  /// persistence obligation so late OCR cannot drift to another turn.
+  let evidence: [ConversationEvidence]
 
   init(
     ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference,
-    modelsUsed: [String] = [], screenContext: String? = nil
+    modelsUsed: [String] = [], screenContext: String? = nil,
+    evidence: [ConversationEvidence] = []
   ) {
     self.ownerID = ownerID
     self.continuityKey = continuityKey
     self.admissionSurface = admissionSurface
     self.modelsUsed = modelsUsed
     self.screenContext = screenContext
+    self.evidence = evidence
     userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
     assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
   }
@@ -81,8 +87,8 @@ struct RealtimeStreamingJournalProjection: Equatable {
       text: text,
       sender: .user
     )
-    if let screenContext, !screenContext.isEmpty {
-      message.metadata = MessageMetadata(screenContext: screenContext)
+    if !evidence.isEmpty || !(screenContext?.isEmpty ?? true) {
+      message.metadata = MessageMetadata(screenContext: screenContext, evidence: evidence)
     }
     return message
   }
@@ -129,6 +135,10 @@ final class RealtimeStreamingJournalWriteLedger {
 
   func contains(continuityKey: String) -> Bool {
     entries[continuityKey] != nil
+  }
+
+  func projection(for continuityKey: String) -> RealtimeStreamingJournalProjection? {
+    entries[continuityKey]?.projection
   }
 
   @discardableResult

@@ -1,5 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
+import {
+  conversationEvidenceById,
+  conversationEvidenceExcerpt,
+  conversationEvidenceForBackend,
+  conversationEvidenceForBackendImport,
+  conversationEvidenceMatches,
+  mergeConversationEvidenceMetadata,
+  parseConversationEvidenceMetadata,
+  preserveConversationEvidenceOnMetadataUpdate,
+  validateConversationEvidence,
+  validateConversationEvidenceMetadata,
+  type ConversationEvidence,
+} from "./conversation-evidence.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import {
   decideAttempt,
@@ -95,6 +108,8 @@ export interface UpdateJournalTurnInput {
   appendContentBlocks?: readonly ConversationContentBlock[];
   replaceResources?: readonly ConversationResource[];
   appendResources?: readonly ConversationResource[];
+  /** Kernel-owned evidence append; items merge atomically by stable evidence ID. */
+  appendEvidence?: readonly ConversationEvidence[];
   producingRunId?: string | null;
   producingAttemptId?: string | null;
   metadataJson?: string;
@@ -107,6 +122,98 @@ export interface UpdateJournalTurnInput {
    */
   terminalRevision?: boolean;
   nowMs?: number;
+}
+
+export interface AttachJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  turnId: string;
+  evidence: ConversationEvidence;
+  nowMs?: number;
+}
+
+export interface AttachJournalEvidenceResult {
+  turn: ConversationTurn;
+  evidence: ConversationEvidence;
+  created: boolean;
+  duplicate: boolean;
+}
+
+export interface ReadJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  turnId: string;
+  evidenceId: string;
+}
+
+export interface JournalEvidenceRead {
+  conversationId: string;
+  turnId: string;
+  evidence: ConversationEvidence;
+}
+
+export interface ReadConversationEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  evidenceId?: string;
+  turnId?: string;
+  offset?: number;
+  maxChars?: number;
+}
+
+export interface ConversationEvidenceReadResult {
+  conversationId: string;
+  turnId: string;
+  evidenceId: string;
+  kind: ConversationEvidence["kind"];
+  title: string;
+  chunk: string;
+  offset: number;
+  nextOffset: number | null;
+  complete: boolean;
+  /** False for pending/unavailable descriptors; no source body was read. */
+  available: boolean;
+  availability: ConversationEvidence["availability"];
+  extractionCompleteness: ConversationEvidence["extractionCompleteness"];
+  provenance?: Record<string, string>;
+  digest?: string;
+}
+
+export interface SearchJournalEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  query: string;
+  limit?: number;
+}
+
+export interface JournalEvidenceSearchMatch {
+  timestamp: string;
+  turnId: string;
+  role: ConversationTurnRole;
+  evidenceId: string;
+  kind: ConversationEvidence["kind"];
+  title: string;
+  excerpt: string;
+  availability: ConversationEvidence["availability"];
+  extractionCompleteness: ConversationEvidence["extractionCompleteness"];
+  fullReadRequired: boolean;
+}
+
+export interface SearchConversationEvidenceInput {
+  ownerId: string;
+  conversationId: string;
+  query: string;
+  limit?: number;
+  maxChars?: number;
+  offset?: number;
+}
+
+export interface SearchConversationEvidenceResult {
+  matches: JournalEvidenceSearchMatch[];
+  offset: number;
+  nextOffset: number | null;
+  hasMore: boolean;
+  scanned: number;
 }
 
 /**
@@ -414,6 +521,9 @@ const MAX_CHAT_HISTORY_SEARCH_SCAN = 500;
 const DEFAULT_CHAT_HISTORY_SEARCH_LIMIT = 10;
 const MAX_CHAT_HISTORY_SEARCH_LIMIT = 20;
 const MAX_CHAT_HISTORY_SEARCH_EXCERPT = 320;
+const DEFAULT_EVIDENCE_SEARCH_LIMIT = 10;
+const MAX_EVIDENCE_SEARCH_LIMIT = 20;
+const MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR = 8;
 
 export interface JournalTurnChangedWake {
   ownerId: string;
@@ -676,6 +786,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     && input.appendContentBlocks === undefined
     && input.replaceResources === undefined
     && input.appendResources === undefined
+    && input.appendEvidence === undefined
     && input.producingRunId === undefined
     && input.producingAttemptId === undefined
     && input.metadataJson === undefined
@@ -683,6 +794,9 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     throw new Error("Journal turn update has no changes");
   }
   const now = input.nowMs ?? Date.now();
+  const appendEvidence = input.appendEvidence === undefined
+    ? []
+    : input.appendEvidence.map(validateConversationEvidence);
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
     const current = requireJournalTurn(store, input.conversationId, input.turnId);
@@ -751,8 +865,18 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     const metadataJson = input.metadataJson === undefined
       ? current.metadataJson
       : input.terminalRevision === true
-        ? mergedObjectJson(current.metadataJson, input.metadataJson)
-        : validObjectJson(input.metadataJson, "metadataJson");
+        ? preserveConversationEvidenceOnMetadataUpdate(
+          current.metadataJson,
+          mergedObjectJson(current.metadataJson, input.metadataJson),
+        )
+        : preserveConversationEvidenceOnMetadataUpdate(
+          current.metadataJson,
+          validObjectJson(input.metadataJson, "metadataJson"),
+        );
+    let nextMetadataJson = metadataJson;
+    for (const evidence of appendEvidence) {
+      nextMetadataJson = mergeConversationEvidenceMetadata(nextMetadataJson, evidence).metadataJson;
+    }
     const content = input.content ?? current.content;
     const producingRunId = input.producingRunId === undefined ? current.producingRunId : input.producingRunId;
     const producingAttemptId = input.producingAttemptId === undefined
@@ -764,7 +888,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       || stableJson(resources) !== stableJson(current.resources)
       || producingRunId !== current.producingRunId
       || producingAttemptId !== current.producingAttemptId
-      || stableJson(parseObjectJson(metadataJson)) !== stableJson(parseObjectJson(current.metadataJson));
+      || stableJson(parseObjectJson(nextMetadataJson)) !== stableJson(parseObjectJson(current.metadataJson));
     if (!changed) return current;
 
     const sequence = nextJournalSequence(store, input.conversationId, now);
@@ -780,7 +904,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       producingRunId,
       producingAttemptId,
       remoteId: current.remoteId,
-      metadataJson,
+      metadataJson: nextMetadataJson,
     });
 
     store.execute(
@@ -800,7 +924,7 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
         JSON.stringify(resources),
         producingRunId,
         producingAttemptId,
-        metadataJson,
+        nextMetadataJson,
         sequence.turnSeq,
         payloadHash,
         now,
@@ -829,6 +953,215 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
     );
     return updated;
   });
+}
+
+/**
+ * Atomically attach source evidence to an existing journal turn. Evidence is
+ * part of the turn's canonical revision, so clear/replay, backend projection,
+ * and context freshness all observe the same identity. The stable evidence ID
+ * makes retries safe without a second receipt or transcript table.
+ */
+export function attachJournalEvidence(
+  store: AgentStore,
+  input: AttachJournalEvidenceInput,
+): AttachJournalEvidenceResult {
+  const evidence = validateConversationEvidence(input.evidence);
+  const now = input.nowMs ?? Date.now();
+  return store.withTransaction(() => {
+    assertConversationOwner(store, input.conversationId, input.ownerId);
+    const current = requireJournalTurn(store, input.conversationId, input.turnId);
+    const merged = mergeConversationEvidenceMetadata(current.metadataJson, evidence);
+    if (merged.duplicate) {
+      return { turn: current, evidence: merged.evidence, created: false, duplicate: true };
+    }
+    const turn = updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      turnId: input.turnId,
+      metadataJson: merged.metadataJson,
+      nowMs: now,
+    });
+    return { turn, evidence: merged.evidence, created: true, duplicate: false };
+  });
+}
+
+/** Read one complete bounded evidence item after the caller has established owner scope. */
+export function readJournalEvidence(
+  store: AgentStore,
+  input: ReadJournalEvidenceInput,
+): JournalEvidenceRead | null {
+  const result = readConversationEvidence(store, {
+    ...input,
+    offset: 0,
+    maxChars: 64 * 1024,
+  });
+  if (!result) return null;
+  const turn = requireJournalTurn(store, input.conversationId, input.turnId);
+  const evidence = conversationEvidenceById(turn.metadataJson, input.evidenceId);
+  return evidence ? { conversationId: input.conversationId, turnId: input.turnId, evidence } : null;
+}
+
+/**
+ * Owner-scoped bounded evidence read. The cursor is a character offset into
+ * the locally retained body, so the tool can page through 64 KiB without ever
+ * placing the full source into one model context packet.
+ */
+export function readConversationEvidence(
+  store: AgentStore,
+  input: ReadConversationEvidenceInput,
+): ConversationEvidenceReadResult | null {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  if (!input.turnId) {
+    throw new Error("read_conversation_evidence requires an exact turnId; search first");
+  }
+  if (!input.evidenceId) {
+    throw new Error("read_conversation_evidence requires an exact evidenceId; search first");
+  }
+  const offset = boundedEvidenceOffset(input.offset);
+  const maxChars = boundedEvidenceChars(input.maxChars);
+  const turnRow = store.getOptionalRow(
+    `SELECT ${TURN_COLUMNS} FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+    [input.conversationId, input.turnId],
+  );
+  if (!turnRow) return null;
+  const turn = conversationTurnFromRow(turnRow);
+  let envelope: ReturnType<typeof parseConversationEvidenceMetadata>;
+  try {
+    envelope = parseConversationEvidenceMetadata(turn.metadataJson);
+  } catch {
+    // Legacy or corrupt evidence must not fail the authorized read tool;
+    // exact retrieval of a missing/unreadable source is `found: false`.
+    return null;
+  }
+  const evidence = envelope?.items.find((item) => item.id === input.evidenceId);
+  const candidate = evidence ? { turn, evidence } : null;
+  if (!candidate) return null;
+  const body = candidate.evidence.bodyText ?? "";
+  const chunk = body.slice(offset, offset + maxChars);
+  const nextOffset = offset + chunk.length < body.length ? offset + chunk.length : null;
+  const available = candidate.evidence.availability === "available"
+    || candidate.evidence.availability === "partial";
+  return {
+    conversationId: input.conversationId,
+    turnId: candidate.turn.turnId,
+    evidenceId: candidate.evidence.id,
+    kind: candidate.evidence.kind,
+    title: candidate.evidence.title,
+    chunk,
+    offset,
+    nextOffset,
+    complete: candidate.evidence.availability !== "pending" && nextOffset === null,
+    available,
+    availability: candidate.evidence.availability,
+    extractionCompleteness: candidate.evidence.extractionCompleteness,
+    ...(candidate.evidence.provenance ? { provenance: candidate.evidence.provenance } : {}),
+    ...(candidate.evidence.digest ? { digest: candidate.evidence.digest } : {}),
+  };
+}
+
+/**
+ * Search only the current journal generation. This returns bounded descriptors
+ * and excerpts; callers must use readJournalEvidence for the full local body.
+ */
+export function searchJournalEvidence(
+  store: AgentStore,
+  input: SearchJournalEvidenceInput,
+): JournalEvidenceSearchMatch[] {
+  return searchConversationEvidence(store, input).matches;
+}
+
+/** Search evidence with an opaque fixed-width evidence cursor. Eight slots per
+ * turn means a page can resume inside one turn without repeating or skipping
+ * any of its evidence items, while the SQL scan remains bounded by turns. */
+export function searchConversationEvidence(
+  store: AgentStore,
+  input: SearchConversationEvidenceInput,
+): SearchConversationEvidenceResult {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const query = input.query.trim();
+  if (!query) throw new Error("search_journal_evidence query must not be empty");
+  if (query.length > 512) throw new Error("search_journal_evidence query is too long");
+  const limit = boundedEvidenceSearchLimit(input.limit);
+  const maxChars = boundedEvidenceChars(input.maxChars);
+  const offset = boundedEvidenceOffset(input.offset);
+  const rowOffset = Math.floor(offset / MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR);
+  const itemOffset = offset % MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR;
+  store.execute(
+    `INSERT INTO conversation_journal_state(
+       conversation_id, generation, high_water_turn_seq, updated_at_ms
+     ) VALUES (?, 1, 0, ?)
+     ON CONFLICT(conversation_id) DO NOTHING`,
+    [input.conversationId, Date.now()],
+  );
+  const state = requireJournalState(store, input.conversationId);
+  const rows = store.allRows(
+    `SELECT turn_json
+     FROM (
+       SELECT turn_json, turn_id, turn_seq,
+              ROW_NUMBER() OVER (PARTITION BY turn_id ORDER BY turn_seq DESC) AS revision_rank
+       FROM conversation_turn_revisions
+       WHERE conversation_id = ? AND generation = ?
+     )
+     WHERE revision_rank = 1
+     ORDER BY turn_seq DESC
+     LIMIT ? OFFSET ?`,
+    [input.conversationId, state.generation, MAX_CHAT_HISTORY_SEARCH_SCAN + 1, rowOffset],
+  );
+  const pageRows = rows.slice(0, MAX_CHAT_HISTORY_SEARCH_SCAN);
+  const matches: JournalEvidenceSearchMatch[] = [];
+  let scannedRows = 0;
+  for (const [rowIndex, row] of pageRows.entries()) {
+    scannedRows += 1;
+    const turn = JSON.parse(String(row.turn_json)) as ConversationTurn;
+    let envelope: ReturnType<typeof parseConversationEvidenceMetadata>;
+    try {
+      envelope = parseConversationEvidenceMetadata(turn.metadataJson);
+    } catch {
+      // A malformed legacy envelope must not abort search of later valid turns.
+      continue;
+    }
+    if (!envelope) continue;
+    const firstItemIndex = rowIndex === 0 ? itemOffset : 0;
+    for (const [itemIndex, evidence] of envelope.items.entries()) {
+      if (itemIndex < firstItemIndex) continue;
+      if (!conversationEvidenceMatches(evidence, query)) continue;
+      matches.push({
+        timestamp: new Date(turn.createdAtMs).toISOString(),
+        turnId: turn.turnId,
+        role: turn.role,
+        evidenceId: evidence.id,
+        kind: evidence.kind,
+        title: evidence.title,
+        excerpt: conversationEvidenceExcerpt(evidence, query, maxChars),
+        availability: evidence.availability,
+        extractionCompleteness: evidence.extractionCompleteness,
+        fullReadRequired: evidence.availability === "pending"
+          ? false
+          : Boolean(evidence.bodyText || evidence.artifactId),
+      });
+      if (matches.length >= limit) {
+        const hasMore = itemIndex + 1 < envelope.items.length || rows.length > rowIndex + 1;
+        const nextCursor = (rowOffset + rowIndex) * MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR + itemIndex + 1;
+        return {
+          matches,
+          offset,
+          nextOffset: hasMore ? nextCursor : null,
+          hasMore,
+          scanned: scannedRows,
+        };
+      }
+    }
+  }
+  const hasMore = rows.length > pageRows.length;
+  return {
+    matches,
+    offset,
+    nextOffset: hasMore
+      ? (rowOffset + pageRows.length) * MAX_EVIDENCE_ITEMS_PER_TURN_CURSOR
+      : null,
+    hasMore,
+    scanned: pageRows.length,
+  };
 }
 
 export function appendChatFirstBlocksToProducingTurn(
@@ -1611,7 +1944,8 @@ export function assertPublicJournalUpdatePolicy(
   }
   const appendBlocks = input.appendContentBlocks ?? [];
   const appendResources = input.appendResources ?? [];
-  const hasAppend = appendBlocks.length > 0 || appendResources.length > 0;
+  const appendEvidence = input.appendEvidence ?? [];
+  const hasAppend = appendBlocks.length > 0 || appendResources.length > 0 || appendEvidence.length > 0;
   const hasForbiddenMutation = input.status !== undefined
     || input.content !== undefined
     || input.replaceContentBlocks !== undefined
@@ -2532,7 +2866,9 @@ export function importRemoteJournalTurn(
   const now = input.nowMs ?? Date.now();
   const contentBlocks = validateContentBlocks(input.contentBlocks);
   const resources = validateResources(input.resources ?? []);
-  const metadataJson = validObjectJson(input.metadataJson ?? "{}", "metadataJson");
+  const metadataJson = conversationEvidenceForBackendImport(
+    validObjectJson(input.metadataJson ?? "{}", "metadataJson"),
+  );
 
   return store.withTransaction(() => {
     assertConversationOwner(store, input.conversationId, input.ownerId);
@@ -4287,6 +4623,30 @@ function boundedLimit(limit: number): number {
   return Math.min(limit, MAX_DRAIN_BATCH);
 }
 
+function boundedEvidenceSearchLimit(limit: number | undefined): number {
+  const requested = limit ?? DEFAULT_EVIDENCE_SEARCH_LIMIT;
+  if (!Number.isInteger(requested) || requested <= 0) {
+    throw new Error("search_journal_evidence limit must be a positive integer");
+  }
+  return Math.min(requested, MAX_EVIDENCE_SEARCH_LIMIT);
+}
+
+function boundedEvidenceOffset(offset: number | undefined): number {
+  const requested = offset ?? 0;
+  if (!Number.isSafeInteger(requested) || requested < 0 || requested > 1_000_000_000) {
+    throw new Error("Conversation evidence offset is outside the bounded range");
+  }
+  return requested;
+}
+
+function boundedEvidenceChars(maxChars: number | undefined): number {
+  const requested = maxChars ?? 4_096;
+  if (!Number.isSafeInteger(requested) || requested <= 0) {
+    throw new Error("Conversation evidence maxChars must be a positive integer");
+  }
+  return Math.min(requested, 64 * 1024);
+}
+
 function boundedErrorCode(value: string): string {
   const code = nonEmpty(value, "errorCode");
   if (code.length > 128 || !/^[A-Za-z0-9_.:-]+$/.test(code)) {
@@ -4310,6 +4670,7 @@ function validObjectJson(raw: string, field: string): string {
   if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
     throw new Error(`${field} must contain a JSON object`);
   }
+  validateConversationEvidenceMetadata(parsed as Record<string, unknown>);
   return JSON.stringify(parsed);
 }
 
@@ -4344,6 +4705,7 @@ function assertTerminalRevisionShape(input: UpdateJournalTurnInput): void {
     || input.appendContentBlocks !== undefined
     || input.replaceResources !== undefined
     || input.appendResources !== undefined
+    || input.appendEvidence !== undefined
     || input.producingRunId !== undefined
     || input.producingAttemptId !== undefined
   ) {
@@ -4391,7 +4753,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     return pathless;
   });
   const backendMetadata = {
-    ...messageMetadata,
+    ...conversationEvidenceForBackend(messageMetadata),
     ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()

@@ -8,6 +8,7 @@ import {
   omiToolManifest,
   toolNamesForAdapter,
   toolsForAdapter,
+  toolsForSurface,
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
@@ -104,6 +105,8 @@ describe("omi tool manifest", () => {
       "save_knowledge_graph",
       "get_conversations",
       "search_conversations",
+      "read_conversation_evidence",
+      "search_conversation_evidence",
       "get_memories",
       "search_memories",
       "get_action_items",
@@ -529,6 +532,58 @@ describe("omi tool manifest", () => {
       expect(createStandingTrigger?.promptGuidelines?.join("\n")).toContain("explicit standing-intent request");
       expect(closeFact?.promptGuidelines?.join("\n")).toContain("nothing should replace the closed fact");
     });
+  });
+
+  it("keeps create_memory off realtime voice while advertising reminder and task writes", () => {
+    const voiceNames = toolsForSurface("realtime_voice").map((tool) => tool.name);
+    const voiceCreateMemory = omiToolManifest.find((entry) => entry.name === "create_memory");
+
+    expect(voiceNames).toContain("create_context_reminder");
+    expect(voiceNames).toContain("create_action_item");
+    expect(voiceNames).toContain("read_conversation_evidence");
+    expect(voiceNames).toContain("search_conversation_evidence");
+    expect(voiceNames).not.toContain("create_memory");
+    expect(voiceCreateMemory?.surfaces).toEqual(["desktop_chat"]);
+    expect(voiceCreateMemory?.voice).toBeUndefined();
+    expect(
+      toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "realtime_voice", executionRole: "coordinator" }),
+    ).not.toContain("create_memory");
+  });
+
+  it("states retained evidence vs reminder/task/memory writes without topic special cases (static prompt contract)", () => {
+    const reminder = omiToolManifest.find((entry) => entry.name === "create_context_reminder");
+    const task = omiToolManifest.find((entry) => entry.name === "create_action_item");
+    const memory = omiToolManifest.find((entry) => entry.name === "create_memory");
+    const readEvidence = omiToolManifest.find((entry) => entry.name === "read_conversation_evidence");
+    const searchEvidence = omiToolManifest.find((entry) => entry.name === "search_conversation_evidence");
+    const reminderVoice = String(reminder?.voice?.realtimeDescription);
+    const taskVoice = String(task?.voice?.realtimeDescription);
+    const reminderPolicy = [reminder?.description, reminder?.promptGuidelines?.join("\n"), reminderVoice].join("\n");
+    const taskPolicy = [task?.description, task?.promptGuidelines?.join("\n"), taskVoice].join("\n");
+    const memoryPolicy = [memory?.description, memory?.promptGuidelines?.join("\n"), memory?.capabilityDoc.bullets.join("\n")].join("\n");
+    const evidencePolicy = [
+      readEvidence?.voice?.realtimeDescription,
+      searchEvidence?.voice?.realtimeDescription,
+      readEvidence?.promptGuidelines?.join("\n"),
+      searchEvidence?.promptGuidelines?.join("\n"),
+    ].join("\n");
+    const allPolicy = [reminderPolicy, taskPolicy, memoryPolicy, evidencePolicy].join("\n");
+
+    expect(reminderVoice).toContain("explicitly ask to be notified next time they return here with a specific action");
+    expect(reminderVoice).toContain("remind me next time I'm here to renew it");
+    expect(reminderVoice).toContain("already retained as evidence");
+    expect(reminderVoice).toContain("do not substitute this for a fact-memory write if that tool is not advertised");
+    expect(taskVoice).toContain("only when the user explicitly asks to add something to their list");
+    expect(taskVoice).toContain("already retained as evidence");
+    expect(taskVoice).toContain("create_context_reminder");
+    expect(memoryPolicy).toContain("already retained as evidence");
+    expect(memoryPolicy).toContain("fact or preference");
+    expect(evidencePolicy).toContain("already retained");
+    expect(evidencePolicy).toContain("do not create a reminder, task, or memory");
+    expect(reminderPolicy).toContain("never grants this tool authority");
+    expect(taskPolicy).toContain("never grants this tool authority");
+    expect(allPolicy.toLowerCase()).not.toContain("checklist");
+    expect(allPolicy.toLowerCase()).not.toContain("stock plan");
   });
 
   it("requires surfaces and capabilityDoc on every manifest entry", () => {

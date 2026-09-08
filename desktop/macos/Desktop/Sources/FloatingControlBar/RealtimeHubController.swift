@@ -131,6 +131,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
   /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
+  /// Process-local OCR obligations keyed by the exact authenticated owner and
+  /// voice turn. Durable truth remains the kernel journal; this ledger only
+  /// bridges capture completion to the existing journal persistence fence.
+  let turnEvidenceLedger = RealtimeTurnEvidenceLedger()
   let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
   var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
   /// Assistant rows this process sealed `.completed` at provider-response-finish
@@ -445,6 +449,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    if let previousOwnerID {
+      _ = turnEvidenceLedger.revoke(ownerID: previousOwnerID)
+    } else {
+      _ = turnEvidenceLedger.revokeAll()
+    }
     sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1

@@ -4941,11 +4941,17 @@ class ChatProvider: ObservableObject {
       attachments: attachmentsForMessage,
       references: composerReferencesForMessage
     )
+    let attachmentEvidence = await ChatAttachmentEvidence.capture(
+      attachments: attachmentsForMessage
+    )
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
       text: effectivePrompt,
       sender: .user,
+      metadata: attachmentEvidence.isEmpty
+        ? nil
+        : MessageMetadata(evidence: attachmentEvidence),
       attachments: attachmentsForMessage,
       resources: userMessageResources,
       turnOwner: turnOwner

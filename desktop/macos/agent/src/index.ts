@@ -180,6 +180,7 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import type { ConversationEvidence } from "./runtime/conversation-evidence.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
 import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
@@ -1082,24 +1083,45 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              if (authorized.canonicalToolName === "search_chat_history") {
+              if (
+                authorized.canonicalToolName === "search_chat_history" ||
+                authorized.canonicalToolName === "read_conversation_evidence" ||
+                authorized.canonicalToolName === "search_conversation_evidence"
+              ) {
                 void (async () => {
                   let result: string;
                   let outcome: "succeeded" | "failed" = "succeeded";
                   try {
                     if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
                     runtimeKernel.markRunToolInvocationDispatched(authorized);
-                    const search = runtimeKernel.searchAuthorizedChatHistory({
-                      invocation: authorized,
-                      toolInput: routedProposal.toolInput,
-                      activeOwnerId: () => currentOwnerId,
-                    });
-                    result = JSON.stringify(search);
-                  } catch {
+                    const value = authorized.canonicalToolName === "search_chat_history"
+                      ? runtimeKernel.searchAuthorizedChatHistory({
+                        invocation: authorized,
+                        toolInput: routedProposal.toolInput,
+                        activeOwnerId: () => currentOwnerId,
+                      })
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? runtimeKernel.readAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        })
+                        : runtimeKernel.searchAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        });
+                    result = JSON.stringify(value);
+                  } catch (error) {
                     outcome = "failed";
                     // Search results and journal details are transcript data.
                     // Keep relay diagnostics shape-only even on malformed input.
-                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                    const code = authorized.canonicalToolName === "search_chat_history"
+                      ? "chat_history_search_failed"
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? "conversation_evidence_read_failed"
+                        : "conversation_evidence_search_failed";
+                    result = relayError(code, error instanceof Error ? error.message : "Conversation evidence could not be read");
                   }
                   const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
                   const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
@@ -2392,6 +2414,67 @@ async function main(): Promise<void> {
             break;
           }
 
+          if (
+            authorized.canonicalToolName === "read_conversation_evidence" ||
+            authorized.canonicalToolName === "search_conversation_evidence"
+          ) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            try {
+              const value = authorized.canonicalToolName === "read_conversation_evidence"
+                ? kernel.readAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                })
+                : kernel.searchAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                });
+              result = JSON.stringify(value);
+            } catch (error) {
+              outcome = "failed";
+              const code = authorized.canonicalToolName === "read_conversation_evidence"
+                ? "conversation_evidence_read_failed"
+                : "conversation_evidence_search_failed";
+              result = relayError(code, error instanceof Error ? error.message : "Conversation evidence could not be read");
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
           kernel.markRunToolInvocationDispatched(authorized);
           registerPendingExternalToolCall(request, authorized);
           send({
@@ -2768,6 +2851,9 @@ async function main(): Promise<void> {
               : undefined,
             appendResources: Array.isArray(update.appendResources)
               ? update.appendResources as ConversationResource[]
+              : undefined,
+            appendEvidence: Array.isArray(update.appendEvidence)
+              ? update.appendEvidence as ConversationEvidence[]
               : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
             terminalRevision: update.terminalRevision === true,
