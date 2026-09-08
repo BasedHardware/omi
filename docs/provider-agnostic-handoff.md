@@ -244,7 +244,9 @@ Cloud Linux after `b2d74d008e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `3b67ab72b5`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation-detail chat history treats a cancelled assistant message as Response stopped instead of a completed blank Omi line. Partial cancelled text stays visible and still says Response stopped. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the macOS Home Ask-exchange clock slice: macOS Home chat rows use the same Today/Yesterday/date clock as compact Home and conversation-detail history instead of sender and text only. A zero createdAt says Time unavailable instead of omitting the clock. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `d573850591`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Home chat rows use the same Today/Yesterday/date clock as compact Home and conversation-detail history instead of sender and text only. A zero createdAt says Time unavailable instead of omitting the clock. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Settings Account wire-copy slice: mobile Settings Plan and desktop Settings Current plan humanize plan and status tokens instead of showing plus · active. Data protection humanizes standard instead of the raw enum. Empty tokens say Plan unavailable or Data protection unavailable. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

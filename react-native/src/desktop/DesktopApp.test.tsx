@@ -1509,7 +1509,7 @@ test('Settings shows already-loaded transcription seconds on Current plan', asyn
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(
-    'plus · active · 90 / 3600 transcribed seconds',
+    'Plus · Active · 90 / 3600 transcribed seconds',
   );
   expect(renderedText(renderer)).not.toContain('Plan is unavailable.');
   expect(renderedText(renderer)).not.toContain('Company');
@@ -1561,7 +1561,8 @@ test('Settings shows already-loaded company, job, and data protection', async ()
   expect(tree).toContain('Job');
   expect(tree).toContain('Engineer');
   expect(tree).toContain('Data protection');
-  expect(tree).toContain('standard');
+  expect(tree).toContain('Standard');
+  expect(tree).not.toContain('standard');
 });
 
 test('Settings reports a nested non-retryable profile read as unavailable', async () => {

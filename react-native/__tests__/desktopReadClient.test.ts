@@ -6,6 +6,7 @@ import {
   conversationDayLabel,
   conversationGroupLabel,
   conversationStatusCopy,
+  dataProtectionCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -32,6 +33,8 @@ import {
   formatTaskDue,
   projectionClockLabel,
   projectionTimestamp,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
   taskDisplaySummary,
   taskGroup,
   timelineGroups,
@@ -600,6 +603,16 @@ test('conversation status copy is not a raw wire token', () => {
   expect(conversationStatusCopy('failed')).toBe('Failed');
   expect(conversationStatusCopy('')).toBe('Status unavailable');
   expect(conversationStatusCopy('queued')).toBe('queued');
+});
+
+test('account subscription copy is not a raw wire token', () => {
+  expect(subscriptionPlanCopy('plus')).toBe('Plus');
+  expect(subscriptionStatusCopy('active')).toBe('Active');
+  expect(subscriptionStatusCopy('past_due')).toBe('Past due');
+  expect(subscriptionPlanCopy('')).toBe('Plan unavailable');
+  expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
+  expect(dataProtectionCopy('standard')).toBe('Standard');
+  expect(dataProtectionCopy('')).toBe('Data protection unavailable');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

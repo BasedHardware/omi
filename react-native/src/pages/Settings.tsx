@@ -26,6 +26,9 @@ import {
   desktopBackendServiceCopy,
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
+  dataProtectionCopy,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -367,7 +370,7 @@ export function SettingsPage({
             )}
             {snapshot.profile.dataProtectionLevel !== null && (
               <SettingRow
-                copy={snapshot.profile.dataProtectionLevel}
+                copy={dataProtectionCopy(snapshot.profile.dataProtectionLevel)}
                 title="Data protection"
               />
             )}
@@ -380,8 +383,8 @@ export function SettingsPage({
         ) : (
           <SettingRow
             copy={[
-              snapshot.subscription.plan,
-              snapshot.subscription.status,
+              subscriptionPlanCopy(snapshot.subscription.plan),
+              subscriptionStatusCopy(snapshot.subscription.status),
               snapshot.subscription.transcriptionSecondsUsed !== null &&
               snapshot.subscription.transcriptionSecondsLimit !== null
                 ? `${snapshot.subscription.transcriptionSecondsUsed} / ${snapshot.subscription.transcriptionSecondsLimit} transcribed seconds`

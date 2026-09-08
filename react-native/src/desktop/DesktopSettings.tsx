@@ -11,7 +11,12 @@ import {
   setStoreRecordingPermission,
   type AccountSettingsSnapshot,
 } from '../desktopCloudClient';
-import {desktopReadErrorCopy} from '../desktopReadClient';
+import {
+  dataProtectionCopy,
+  desktopReadErrorCopy,
+  subscriptionPlanCopy,
+  subscriptionStatusCopy,
+} from '../desktopReadClient';
 import {
   defaultDesktopPreferences,
   loadDesktopPreferences,
@@ -484,15 +489,15 @@ export function DesktopSettings({
       ) : null}
       {account?.profile?.dataProtectionLevel != null ? (
         <Row
-          copy={account.profile.dataProtectionLevel}
+          copy={dataProtectionCopy(account.profile.dataProtectionLevel)}
           title="Data protection"
         />
       ) : null}
       {account?.subscription != null ? (
         <Row
           copy={[
-            account.subscription.plan,
-            account.subscription.status,
+            subscriptionPlanCopy(account.subscription.plan),
+            subscriptionStatusCopy(account.subscription.status),
             account.subscription.transcriptionSecondsUsed !== null &&
             account.subscription.transcriptionSecondsLimit !== null
               ? `${account.subscription.transcriptionSecondsUsed} / ${account.subscription.transcriptionSecondsLimit} transcribed seconds`

@@ -69,6 +69,37 @@ export function conversationStatusCopy(status: string): string {
   return status === '' ? 'Status unavailable' : status;
 }
 
+export function accountWireCopy(value: string, unavailable: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return unavailable;
+  }
+  const words = trimmed.split(/[_-]+/).filter(part => part !== '');
+  if (words.length === 0) {
+    return unavailable;
+  }
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      return index === 0
+        ? `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`
+        : lower;
+    })
+    .join(' ');
+}
+
+export function subscriptionPlanCopy(plan: string): string {
+  return accountWireCopy(plan, 'Plan unavailable');
+}
+
+export function subscriptionStatusCopy(status: string): string {
+  return accountWireCopy(status, 'Plan unavailable');
+}
+
+export function dataProtectionCopy(level: string): string {
+  return accountWireCopy(level, 'Data protection unavailable');
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;
