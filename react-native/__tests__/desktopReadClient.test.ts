@@ -1096,6 +1096,9 @@ test('surfaces nested non-retryable projection_unavailable without retry copy', 
   await expect(loadMemories(backend)).rejects.toThrow(
     desktopBackendUnavailableCopy,
   );
+  await expect(loadTasks(backend)).rejects.toThrow(
+    desktopBackendUnavailableCopy,
+  );
   expect(desktopBackendUnavailableCopy).not.toBe(
     desktopProjectionUnavailableCopy,
   );

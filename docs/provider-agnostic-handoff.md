@@ -324,7 +324,9 @@ Cloud Linux after `2e617df985`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `19d951cca1`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. A developer webhook row with a missing enablement bit no longer says Status unknown. That row says Status unavailable, matching empty webhook types. Enabled and Disabled stay. This does not invent a Settings identity producer.
 
-Cloud Linux after the Worker memories retryability slice: Worker `GET /v1/memories` no longer advertises retry when no canonical store is bound or a 200 page cannot be parsed. Those doors are nested `{error:{code:"projection_unavailable",retryable:false,action:"none"}}`. Canonical transport timeouts stay retryable. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `93db2c300b`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker `GET /v1/memories` no longer advertises retry when no canonical store is bound or a 200 page cannot be parsed. Those doors are nested `{error:{code:"projection_unavailable",retryable:false,action:"none"}}`. Canonical transport timeouts stay retryable. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Worker tasks GET unreadable slice: a bound canonical `GET /v1/tasks` whose 200 page cannot be parsed is nested `{error:{code:"projection_unavailable",retryable:false,action:"none"}}` without `retry-after`, instead of retryable `{"error":"internal_server_error"}`. Canonical transport failures stay retryable. Unbound Worker tasks still read D1. This does not invent a task producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
