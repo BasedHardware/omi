@@ -1258,6 +1258,7 @@ describe("static PostgreSQL schema contract", () => {
     expect(emptyChatTitleSql).toContain("ELSE btrim(title_text, v_ws)");
     expect(emptyChatTitleSql).toContain("ELSE btrim(last_text, v_ws)");
     expect(emptyChatTitleSql).toContain("chr(160)");
+    expect(emptyChatTitleSql).toContain("chr(133)");
     expect(emptyChatTitleSql).toContain("chr(65279)");
   });
 });
