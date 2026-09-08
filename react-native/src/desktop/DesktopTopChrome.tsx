@@ -74,6 +74,8 @@ export function DesktopChrome({
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
+  const sendDisabled =
+    activeGenerationId === null && (sendUnavailable || draft.trim() === '');
 
   useEffect(() => {
     if (activeNav === null) {
@@ -211,9 +213,7 @@ export function DesktopChrome({
           accessibilityLabel="Search what you have seen and heard"
           blurOnSubmit={false}
           onChangeText={onDraftChange}
-          onSubmitEditing={
-            sendUnavailable && activeGenerationId === null ? undefined : onSend
-          }
+          onSubmitEditing={sendDisabled ? undefined : onSend}
           placeholder={desktopSearchPlaceholder}
           placeholderTextColor={token.color.inkMuted}
           ref={omnibarRef}
@@ -229,27 +229,23 @@ export function DesktopChrome({
               : 'Stop'
           }
           accessibilityRole="button"
-          disabled={sendUnavailable && activeGenerationId === null}
+          disabled={sendDisabled}
           onPress={
             activeGenerationId === null
-              ? sendUnavailable
+              ? sendDisabled
                 ? () => undefined
                 : onSend
               : onStop
           }
           style={({pressed}) => [
             styles.send,
-            sendUnavailable &&
-              activeGenerationId === null &&
-              styles.sendUnavailable,
+            sendDisabled && styles.sendUnavailable,
             pressed && styles.pressed,
           ]}>
           <Text
             style={[
               styles.sendText,
-              sendUnavailable &&
-                activeGenerationId === null &&
-                styles.sendTextUnavailable,
+              sendDisabled && styles.sendTextUnavailable,
             ]}>
             {activeGenerationId === null ? 'Ask' : 'Stop'}
           </Text>

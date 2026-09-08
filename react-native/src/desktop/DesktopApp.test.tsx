@@ -349,7 +349,11 @@ test('omnibar send uses the existing chat send path', () => {
 test('sending from another page returns to Home and an active response can stop', async () => {
   const onSend = jest.fn();
   const onStop = jest.fn();
-  const renderer = renderDesktop({onSend, onStop});
+  const renderer = renderDesktop({
+    draft: 'What did we decide?',
+    onSend,
+    onStop,
+  });
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Tasks')
@@ -695,7 +699,7 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
       node => node.props.placeholder === "Search what you've seen and heard…",
     )!;
   expect(omnibar.props.onSubmitEditing).toBeUndefined();
-  const live = renderDesktop();
+  const live = renderDesktop({draft: 'What did we decide?'});
   const liveSend = live.root.find(
     node => node.props.accessibilityLabel === 'Send',
   );
@@ -707,6 +711,32 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
   expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
     '"opacity":0.35',
   );
+});
+
+test('desktop empty Ask is disabled without omitting Search', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '   ', onSend});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  expect(renderedText(renderer)).toContain('Ask');
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.editable).not.toBe(false);
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
 });
 
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
