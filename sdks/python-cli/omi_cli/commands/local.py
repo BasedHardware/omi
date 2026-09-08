@@ -225,9 +225,13 @@ def _emit_tool(
 
 
 def _same_file(source: Path, output: Path) -> bool:
-    """True when source and output resolve to the same existing file."""
+    """True when source and output refer to the same existing file.
+
+    Uses ``os.path.samefile`` so hard links to the same inode are
+    detected even when their path strings differ.
+    """
     try:
-        return source.exists() and source.resolve() == output.resolve()
+        return source.exists() and os.path.samefile(source, output)
     except OSError:
         return False
 
