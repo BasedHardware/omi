@@ -50,6 +50,9 @@ export function emptyDeviceListHint(
   if (trimmed === 'Bluetooth permission is required') {
     return bluetoothStatusLabel('unauthorized');
   }
+  if (trimmed === 'Bluetooth is unavailable') {
+    return emptyDeviceListHint('', bluetooth, scanBusy);
+  }
   if (trimmed === '' || wireToken !== null) {
     return bluetoothStatusLabel(wireToken ?? bluetooth);
   }

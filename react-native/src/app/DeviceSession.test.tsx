@@ -298,6 +298,8 @@ test.each([
     'Bluetooth permission needed',
     'unauthorized',
   ],
+  ['Bluetooth is unavailable', 'Bluetooth status unknown', 'unknown'],
+  ['Bluetooth is unavailable', 'Bluetooth off', 'poweredOff'],
 ] as const)(
   'empty device list maps Bluetooth lastEvent %s',
   async (lastEvent, expected, bluetooth) => {
@@ -329,6 +331,7 @@ test.each([
     expect(output).not.toContain('unauthorized');
     expect(output).not.toContain('Bluetooth is not powered on');
     expect(output).not.toContain('Bluetooth permission is required');
+    expect(output).not.toContain('Bluetooth is unavailable');
     await act(async () => renderer.unmount());
   },
 );

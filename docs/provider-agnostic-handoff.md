@@ -312,7 +312,9 @@ Cloud Linux after `49df6300bd`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `a9baea4462`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. A connected device row no longer says Connected while audio is live. Waiting for audio stays Waiting for audio. Live capture uses Listening, matching the compact Home capture badge and `Connected · Listening` header. Idle stays Connected. This does not invent an STT or capture producer.
 
-Cloud Linux after the empty-list Bluetooth lastEvent honesty slice: an empty Devices list no longer keeps native lastEvent sentences Bluetooth is not powered on or Bluetooth permission is required when the Devices header already says Bluetooth off or Bluetooth permission needed. Android location-permission copy stays. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `6dfd128e16`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. An empty Devices list no longer keeps native lastEvent sentences Bluetooth is not powered on or Bluetooth permission is required when the Devices header already says Bluetooth off or Bluetooth permission needed. Android location-permission copy stays. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer.
+
+Cloud Linux after the empty-list Bluetooth unavailable lastEvent honesty slice: an empty Devices list no longer keeps native lastEvent Bluetooth is unavailable when the radio is off or unchecked. That path uses the same header label as the bluetooth field, including Bluetooth off after Android radio-off. Distinct scanner-unavailable copy stays. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
