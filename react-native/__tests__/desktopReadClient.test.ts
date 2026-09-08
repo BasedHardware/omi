@@ -39,6 +39,7 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryCitationCopy,
+  memorySynthesisCopy,
   parseMemoryText,
   chatClockLabel,
   formatTaskDue,
@@ -865,6 +866,15 @@ test('memory citation copy matches the citation count', () => {
   expect(memoryCitationCopy([])).toBe('0 citations');
   expect(memoryCitationCopy(['citation-v1:launch'])).toBe('1 citation');
   expect(memoryCitationCopy(['a', 'b'])).toBe('2 citations');
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: null}}),
+  ).toBeNull();
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: ' \t\n'}}),
+  ).toBeNull();
+  expect(memorySynthesisCopy({provenance: {synthesisVersion: '1'}})).toBe(
+    'Synthesized memory',
+  );
 });
 
 test('task due copy uses a calendar date instead of a raw epoch', () => {

@@ -383,6 +383,57 @@ test('nested non-retryable later memory pages do not claim a load blip', async (
   }
 });
 
+test('omitted memory lineage does not claim Synthesized memory', () => {
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('omitted-lineage'),
+                provenance: {
+                  label: null,
+                  synthesisVersion: null,
+                  inputDigest: null,
+                  outputDigest: null,
+                },
+              },
+              {
+                ...memory('whitespace-lineage'),
+                provenance: {
+                  label: null,
+                  synthesisVersion: ' \t\n',
+                  inputDigest: 'a',
+                  outputDigest: 'b',
+                },
+              },
+              memory('present-lineage'),
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    const copy = textOf(view);
+    expect(copy).toContain('0 citations');
+    expect(copy).toContain('Synthesized memory');
+    expect(
+      view.root.findAll(
+        node =>
+          node.type === Text && node.props.children === 'Synthesized memory',
+      ),
+    ).toHaveLength(1);
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
 test('empty memory bodies stay visible instead of a blank card', async () => {
   let view!: Renderer.ReactTestRenderer;
   await act(async () => {

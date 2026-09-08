@@ -14,6 +14,7 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryCitationCopy,
+  memorySynthesisCopy,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type MemoryProjection,
@@ -133,8 +134,9 @@ export function MemoriesPage({
       }
     }
   };
-  const renderItem = useCallback(
-    ({item}: {item: MemoryProjection}) => (
+  const renderItem = useCallback(({item}: {item: MemoryProjection}) => {
+    const synthesis = memorySynthesisCopy(item);
+    return (
       <View
         accessibilityLabel={`Memory: ${memoryDisplayBody(item)}`}
         style={styles.memoryCard}>
@@ -147,11 +149,12 @@ export function MemoriesPage({
           </Text>
         </View>
         <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>
-        <Text style={styles.memoryProvenance}>Synthesized memory</Text>
+        {synthesis !== null ? (
+          <Text style={styles.memoryProvenance}>{synthesis}</Text>
+        ) : null}
       </View>
-    ),
-    [],
-  );
+    );
+  }, []);
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtering = query.trim() !== '';
   return (

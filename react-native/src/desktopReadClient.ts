@@ -244,6 +244,13 @@ export function memoryCitationCopy(citations: readonly string[]): string {
     : `${citations.length} citations`;
 }
 
+export function memorySynthesisCopy(item: {
+  provenance: {synthesisVersion: string | null};
+}): string | null {
+  const version = item.provenance.synthesisVersion?.trim() ?? '';
+  return version !== '' ? 'Synthesized memory' : null;
+}
+
 export function epochMilliseconds(value: number): number {
   return value > 100_000_000_000 ? value : value * 1000;
 }
