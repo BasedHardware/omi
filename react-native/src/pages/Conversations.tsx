@@ -94,13 +94,13 @@ const ConversationRow = memo(function ConversationRow({
         <Text style={styles.conversationRowTime}>
           {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
-        <Text
-          accessibilityLabel={
-            item.starred ? 'Starred conversation' : 'Not starred'
-          }
-          style={styles.conversationRowStar}>
-          {item.starred ? '★' : '☆'}
-        </Text>
+        {item.starred ? (
+          <Text
+            accessibilityLabel="Starred conversation"
+            style={styles.conversationRowStar}>
+            ★
+          </Text>
+        ) : null}
       </View>
       <Text numberOfLines={1} style={styles.resultTitle}>
         {conversationDisplayTitle(item)}

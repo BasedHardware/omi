@@ -254,7 +254,9 @@ Cloud Linux after `3b6b12edb2`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `ed2cac9659`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Desktop Settings Data Retention shows Forever instead of 0. Native capture treats days greater than 0 as an expiry cutoff and 0 as no cutoff. Stored rewindRetentionDays stays 0. 7 / 14 / 30 stay numeric. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Apps category copy slice: mobile Apps and the macOS Apps gallery humanize category tokens such as productivity instead of showing the raw enum. Empty categories stay omitted. This does not invent an Apps catalogue producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `02d67c1424`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Mobile Apps and the macOS Apps gallery humanize category tokens such as productivity instead of showing the raw enum. Empty categories stay omitted. This does not invent an Apps catalogue producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the conversation star display slice: conversation list rows show a star only when the backend marked the conversation starred, matching wide Home search. Unstarred rows no longer show an empty star that looks like a toggle this connection cannot perform. This does not invent a conversation metadata mutation. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

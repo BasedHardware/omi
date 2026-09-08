@@ -631,6 +631,73 @@ test('conversation capture time uses the same clock as Started and not 1970', ()
   expect(copy).not.toContain('1970');
 });
 
+test('conversation list stars only when the backend marked the row starred', () => {
+  const base = {
+    kind: 'conversation' as const,
+    summary: 'Kept for later.',
+    searchableText: 'Kept for later.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'listen:open-one',
+                title: 'Open note',
+                searchableText: 'Open note\nKept for later.',
+                starred: false,
+              },
+              {
+                ...base,
+                id: 'listen:kept-one',
+                title: 'Kept note',
+                searchableText: 'Kept note\nKept for later.',
+                starred: true,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('★');
+  expect(copy).not.toContain('☆');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Starred conversation',
+    ),
+  ).toBeTruthy();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toEqual([]);
+});
+
 test('conversation detail status is not a raw wire token', () => {
   const item: ConversationProjection = {
     kind: 'conversation',
