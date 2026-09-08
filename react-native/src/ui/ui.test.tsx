@@ -1083,6 +1083,80 @@ test('a cancelled whitespace-only chat message says Response stopped instead of 
   });
 });
 
+test('a whitespace-only human chat message says Message text unavailable instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-whitespace',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  expect(copies).not.toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a completed whitespace-only chat message says Message text unavailable instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-completed-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  expect(copies).not.toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a cancelled chat message with text still says Response stopped', () => {
   const renderer = render(
     <ChatMessageRow

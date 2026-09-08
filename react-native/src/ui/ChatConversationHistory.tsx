@@ -2,7 +2,7 @@ import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
-import {chatClockLabel} from '../desktopReadClient';
+import {chatClockLabel, chatMessageDisplayText} from '../desktopReadClient';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
@@ -73,15 +73,7 @@ export function ChatConversationHistory({
           ) : (
             result.messages.map(message => {
               const sender = message.sender === 'human' ? 'You' : 'Omi';
-              const body =
-                message.generationOutcome === 'failed'
-                  ? message.generationRetryable === true
-                    ? 'Response failed. Try again.'
-                    : 'Response failed.'
-                  : message.generationOutcome === 'cancelled' &&
-                    message.text.trim() === ''
-                  ? 'Response stopped'
-                  : message.text;
+              const body = chatMessageDisplayText(message);
               return (
                 <View key={message.id}>
                   <Text selectable style={styles.conversationTranscriptText}>

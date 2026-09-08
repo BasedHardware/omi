@@ -643,6 +643,37 @@ test('a cancelled whitespace-only conversation-detail chat message says Response
   expect(textOf(renderer)).not.toContain('Omi ·  \t\n');
 });
 
+test('a whitespace-only conversation-detail chat message says Message text unavailable instead of a blank answer', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-whitespace',
+        text: ' \t\n',
+        sender: 'human',
+        generationOutcome: null,
+      },
+      {
+        id: 'ai-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        generationOutcome: 'completed',
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · Message text unavailable');
+  expect(textOf(renderer)).toContain('Omi · Message text unavailable');
+  expect(textOf(renderer)).not.toContain('Response stopped');
+});
+
 test('a cancelled conversation-detail chat message with text still says Response stopped', async () => {
   mockRequest.mockResolvedValue(
     historyResponse([

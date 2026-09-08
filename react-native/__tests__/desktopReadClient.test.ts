@@ -11,6 +11,7 @@ import {
   developerWebhookTypeCopy,
   appCategoryCopy,
   appDisplaySource,
+  chatMessageDisplayText,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -682,6 +683,55 @@ test('empty app source stays visible instead of a blank meta line', () => {
       description: '  Calendar sync  ',
     }),
   ).toBe('Calendar sync');
+});
+
+test('empty chat bodies stay visible instead of a blank bubble', () => {
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: null,
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: ' \t\n',
+      generationOutcome: 'completed',
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '\u00A0',
+      generationOutcome: null,
+    }),
+  ).toBe('Message text unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'cancelled',
+    }),
+  ).toBe('Response stopped');
+  expect(
+    chatMessageDisplayText(
+      {
+        text: ' \t',
+        generationOutcome: 'cancelled',
+      },
+      'Response stopped.',
+    ),
+  ).toBe('Response stopped.');
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+    }),
+  ).toBe('Hello');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'failed',
+      generationRetryable: true,
+    }),
+  ).toBe('Response failed. Try again.');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

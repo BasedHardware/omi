@@ -441,6 +441,31 @@ test('desktop chat treats a cancelled whitespace-only reply as Response stopped'
   expect(copy).not.toContain(' \t\n');
 });
 
+test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'human-whitespace',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+      },
+      {
+        id: 'completed-whitespace',
+        text: ' \t\n',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Message text unavailable');
+  expect(copy).not.toContain('Response stopped.');
+  expect(copy).not.toContain(' \t\n');
+});
+
 test('a zero macOS Home chat timestamp says Time unavailable instead of omitting the clock', () => {
   const renderer = renderDesktop({
     messages: [

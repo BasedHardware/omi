@@ -11,6 +11,7 @@ import {
 import type {ChatMessage} from '../chatClient';
 import {
   chatClockLabel,
+  chatMessageDisplayText,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   type DesktopReadOutcomes,
@@ -129,14 +130,7 @@ function AskExchange({
                 : undefined
             }
             style={styles.rowTitle}>
-            {item.generationOutcome === 'failed'
-              ? item.generationRetryable === true
-                ? 'Response failed. Try again.'
-                : 'Response failed.'
-              : item.generationOutcome === 'cancelled' &&
-                item.text.trim() === ''
-              ? 'Response stopped.'
-              : item.text}
+            {chatMessageDisplayText(item, 'Response stopped.')}
           </Text>
           <Text style={styles.rowMeta}>
             {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}

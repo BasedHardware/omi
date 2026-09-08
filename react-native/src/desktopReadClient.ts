@@ -146,6 +146,29 @@ export function appDisplaySource(app: {
   return description !== '' ? description : 'App details unavailable';
 }
 
+export function chatMessageDisplayText(
+  message: {
+    text: string;
+    generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
+    generationRetryable?: boolean;
+  },
+  cancelledEmptyCopy = 'Response stopped',
+): string {
+  if (message.generationOutcome === 'failed') {
+    return message.generationRetryable === true
+      ? 'Response failed. Try again.'
+      : 'Response failed.';
+  }
+  const text = message.text.trim();
+  if (text !== '') {
+    return text;
+  }
+  if (message.generationOutcome === 'cancelled') {
+    return cancelledEmptyCopy;
+  }
+  return 'Message text unavailable';
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

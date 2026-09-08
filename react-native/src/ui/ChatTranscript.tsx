@@ -1,7 +1,7 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
-import {chatClockLabel} from '../desktopReadClient';
+import {chatClockLabel, chatMessageDisplayText} from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
 
@@ -68,15 +68,12 @@ const ChatMessageRow = memo(function ChatMessageRow({
           ]}>
           {message.generationOutcome === 'failed' ? (
             <Text style={styles.failedLabel}>
-              {message.generationRetryable === true
-                ? 'Response failed. Try again.'
-                : 'Response failed.'}
+              {chatMessageDisplayText(message)}
             </Text>
-          ) : message.generationOutcome === 'cancelled' &&
-            message.text.trim() === '' ? (
-            <Text style={styles.message}>Response stopped</Text>
           ) : (
-            <Text style={styles.message}>{message.text}</Text>
+            <Text style={styles.message}>
+              {chatMessageDisplayText(message)}
+            </Text>
           )}
         </View>
         {message.generationOutcome === 'cancelled' &&
