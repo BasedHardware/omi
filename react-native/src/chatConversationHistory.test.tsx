@@ -11,7 +11,9 @@ import {ChatBackendError} from './chatClient';
 const mockRequest = jest.fn();
 jest.mock('./omiNative', () => ({
   omiBackend: {request: (request: unknown) => mockRequest(request)},
-  subscribeOmiBackendSessionInvalidated: () => () => {},
+  subscribeOmiBackendSessionInvalidated: (_listener: () => void) => {
+    return () => undefined;
+  },
 }));
 
 const {ConversationsPage} = require('./pages/Conversations');
