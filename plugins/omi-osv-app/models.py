@@ -1,6 +1,6 @@
 """Public package lookup inputs; Omi identity/location metadata is ignored."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -34,7 +34,7 @@ class QueryPackageRequest(BaseModel):
     def normalize_ecosystem(cls, value: object) -> object:
         if not isinstance(value, str):
             return value
-        names = ("PyPI", "npm", "Go", "Maven", "RubyGems", "crates.io", "NuGet", "Packagist", "Pub")
+        names = get_args(Ecosystem)
         return next((name for name in names if name.casefold() == value.strip().casefold()), value)
 
 
