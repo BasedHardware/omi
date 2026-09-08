@@ -919,7 +919,7 @@ def extract_action_items(
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
     • Use clear, direct language
     • Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
-    • When transcript lines begin with [segment:ID start-end], include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no segment markers.
+    • When transcript lines begin with [segment-id k] turn headers, include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no turn headers.
     • Include only essential details
 
     • CRITICAL - Resolve ALL vague references:
@@ -1127,7 +1127,8 @@ def render_sections_markdown(sections: List[Any]) -> str:
 
 # Diarization placeholders are transcript machinery, not people. Prompt wording alone
 # does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
-_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b:?[ \t]*')
+# `spk N` is the compact speaker-map key (SCA-454) and leaks the same way.
+_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]\d+\b:?[ \t]*')
 
 
 def strip_speaker_placeholders(text: str) -> str:
@@ -1253,20 +1254,22 @@ FACTUAL FIDELITY
   described. Words like "after", "because", and "therefore" need explicit source support.
   Use natural local qualification such as "estimated" or "said they would"; do not add boilerplate
   about the transcript or missing evidence.
-- NEVER emit diarization placeholders (`Speaker 0`, `Speaker 1`, `Speaker 2`, `SPEAKER_00`)
-  in the title, overview, section bullets, or action items, whether or not calendar or
-  screen context exists. Use a real person name only when it appears in meeting-identity
-  metadata or is already a non-placeholder transcript label. If identity is unknown,
-  write the fact without a speaker label. Do not infer who the account owner is from a placeholder.
+- Speaker keys are diarization clusters, not names: `spk k` map entries and the `k` in
+  `[segment-id k]` turn headers identify clusters (`?` = unresolved). Prose may use a name
+  bound in the map. NEVER write a bare cluster key, `spk`, `Speaker N`, or `SPEAKER_00` into
+  the title, overview, sections, or action items, whether or not calendar or screen context
+  exists. Attribute an unresolved cluster as "one speaker" / "another speaker" or write the
+  fact without a speaker label; never invent a name, and never infer who the account owner is
+  from a cluster key.
 - For selected details, preserve supported proper nouns, numbers, dates, and unusual spellings.
   Never normalize or "correct" an uncertain name from general knowledge. Prefer the exact transcript spelling;
   omit an unclear incidental name instead of inventing a repair.
 - Narrow exception: when participant metadata corroborates a spelling, prefer that spelling over a conflicting transcript
   spelling. A participant name corroborates that person's name; a recognizable participant email domain corroborates
   its organization name (for example, fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra").
-- When the source contains [segment:ID] markers, cite the smallest sufficient exact IDs in source_segment_ids.
-  If the source has no segment markers, return empty source_segment_ids lists. Never invent IDs.
-  Copy only the ID (for [segment:s01234], use "s01234", not "segment:s01234" or a range).
+- When the source contains [segment-id k] turn headers, cite the smallest sufficient exact IDs in
+  source_segment_ids. If the source has no turn headers, return empty source_segment_ids lists.
+  Never invent IDs. Copy only the ID (for [s01234 0], use "s01234", not "s01234 0" or a range).
   Keep citations in that field, not in the prose. Check that the cited segments support each factual
   clause, and remove unsupported details before returning.
 
@@ -1616,7 +1619,9 @@ Respond in {language_code}.'''
         response = model.invoke(
             [*prompt_prefix.messages(cache_enabled=cache_enabled), SystemMessage(content=instructions)]
         )
-        return _content_str(response).replace('```json', '').replace('```', '')
+        # apps_results render on the summary card like notes; strip diarization
+        # placeholders the same way (SCA-454) — getSummarizedApp shows this verbatim.
+        return strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
 
     gateway_mode_enabled = should_route_features_through_gateway()
     explicit_cache_enabled = _gpt56_explicit_cache_enabled()
@@ -1628,7 +1633,7 @@ Respond in {language_code}.'''
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     response = app_result_llm.invoke(prompt)
-    content = _content_str(response).replace('```json', '').replace('```', '')
+    content = strip_speaker_placeholders(_content_str(response).replace('```json', '').replace('```', ''))
     return content
 
 
