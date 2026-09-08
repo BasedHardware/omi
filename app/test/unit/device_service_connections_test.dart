@@ -1,8 +1,10 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
@@ -63,7 +65,27 @@ void main() {
   late Map<String, _FakeConnection> built;
   late DeviceService service;
 
+  final mockedChannels = <String>{};
+
+  void mockBleHostApi(String method) {
+    final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
+    mockedChannels.add(channel);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+      channel,
+      (ByteData? message) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]),
+    );
+  }
+
+  tearDown(() {
+    for (final channel in mockedChannels) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
+    }
+    mockedChannels.clear();
+  });
+
   setUp(() async {
+    mockBleHostApi('stopScan');
+    mockBleHostApi('startScan');
     final audio = _device(audioId);
     final glass = _device(glassId, type: DeviceType.openglass);
     SharedPreferences.setMockInitialValues({});
@@ -119,6 +141,17 @@ void main() {
     expect(built[audioId]!.transport.disposed, isTrue);
     expect(service.connectionFor(glassId)?.status, DeviceConnectionState.connected);
     expect(built[glassId]!.transport.disposed, isFalse);
+  });
+
+  test('stopping the service tears down every connection', () async {
+    await service.ensureConnection(audioId, force: true);
+    await service.ensureConnection(glassId, force: true);
+
+    await service.stop();
+
+    expect(service.connections, isEmpty);
+    expect(built[audioId]!.transport.disposed, isTrue);
+    expect(built[glassId]!.transport.disposed, isTrue);
   });
 
   test('without force a device that has never connected is not connected', () async {

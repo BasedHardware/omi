@@ -199,13 +199,17 @@ class DeviceService {
     // TODO: Start watchdog to discover automatically, re-connect automatically
   }
 
-  void stop() {
+  Future<void> stop() async {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
     // Stop all discoverers to prevent resource leaks and battery drain
     for (final discoverer in _discoverers) {
       discoverer.stop();
+    }
+
+    for (final deviceId in _connections.keys.toList()) {
+      await _teardownConnection(deviceId);
     }
 
     _subscriptions.clear();
