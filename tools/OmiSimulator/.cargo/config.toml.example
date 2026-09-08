@@ -1,0 +1,5 @@
+# Optional machine-local overrides. Copy to config.toml (gitignored) if you need
+# a path checkout instead of the git pins in Cargo.toml. Do NOT commit config.toml.
+#
+# [patch."https://github.com/tschk/crepuscularity"]
+# crepuscularity-gpui = { path = "/ABS/PATH/crepuscularity/crates/crepuscularity-gpui" }

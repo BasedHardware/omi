@@ -10,7 +10,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crepuscularity_gpui::prelude::*;
-use gpui::{bounds, point, px, size, App, ClickEvent, WindowBounds};
+use gpui::{bounds, point, size, App, ClickEvent, WindowBounds};
 use tokio::sync::mpsc;
 
 use audio::AudioCapture;
@@ -166,7 +166,7 @@ fn main() {
         .try_init();
 
     crepuscularity_gpui::application().run(|cx: &mut App| {
-        use gpui::prelude::*;
+        use crepuscularity_gpui::prelude::*;
         let window_options = gpui_window_options(
             "com.basedhardware.OmiSimulator",
             "Omi Simulator",
