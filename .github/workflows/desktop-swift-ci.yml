@@ -36,6 +36,7 @@ jobs:
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
+      desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -96,6 +97,20 @@ jobs:
           )
           echo "should_run_static=$SHOULD_RUN_STATIC" >> "$GITHUB_OUTPUT"
 
+          # The PR test lane defers ratcheted slow suites to the full lane
+          # (every main push and the scheduled health run) unless this diff
+          # touches their own inputs. Ship the exact deferral-relevant subset
+          # to the runner: test sources, the package manifest, and the runner
+          # scripts whose change must re-baseline the whole suite selection.
+          DESKTOP_SWIFT_CHANGED=$(printf '%s\n' "$FILES" | grep -Ex \
+            'desktop/macos/(Desktop/Tests/[^ ]+\.swift|Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json))' \
+            || true)
+          {
+            echo "desktop_swift_changed_files<<DESKTOP_SWIFT_CHANGED_EOF"
+            printf '%s\n' "$DESKTOP_SWIFT_CHANGED"
+            echo "DESKTOP_SWIFT_CHANGED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
   # Hosted macOS capacity is deliberately scarce. Run static contracts and the
   # optional full suite as steps in one selected job, rather than claiming two
   # runners in parallel. The stable Ubuntu aggregate below remains the exact
@@ -105,11 +120,13 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    # Bounds manifest checks, launcher coverage, and the full debug suite.
-    # (The release-mode UserNotifications regression lives in the Release
-    # Compile job, next to the release build it consumes.) Generous headroom
-    # so a successful final link is not cancelled by the job deadline.
-    timeout-minutes: 90
+    # Bounds manifest checks, launcher coverage, and the debug suite. The PR
+    # lane defers ratcheted slow suites and holds one runner for ~15-20 min;
+    # the full lane (main push, scheduled health, manual dispatch) still runs
+    # everything and needs the larger share of this ceiling. (The release-mode
+    # UserNotifications regression lives in the Release Compile job, next to
+    # the release build it consumes.)
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -236,8 +253,10 @@ jobs:
           exit "$failed"
 
       # Debug build+test only on the PR critical path. Release compile is a
-      # separate job (main push, or PRs that touch Package.swift) so we do not
-      # pay for a second configuration that tests never consume.
+      # separate job (main push, scheduled health, manual dispatch, or a PR
+      # that touches Package.swift/Package.resolved) so ordinary PRs do not
+      # pay for a second configuration — or a second hosted Mac — that tests
+      # never consume.
       - name: Test desktop Swift app
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: desktop_swift_tests
@@ -253,6 +272,11 @@ jobs:
           # performance harness starts timing out.
           OMI_SWIFT_TEST_SUITE_WORKERS: "3"
           OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
+          # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
+          # the full lane unless this diff touches their own inputs; pushes,
+          # scheduled health runs, and manual dispatch always run everything.
+          OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+          OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
         run: ./scripts/run-swift-ci.sh --test
 
       # Preserve resolved dependency downloads after a failed test command, but
@@ -330,9 +354,14 @@ jobs:
     # Literal for the same reason as `desktop-swift` above.
     name: Desktop Swift Release Compile
     needs: changes
-    # The notification flag is structurally a subset of should_release_compile
-    # (every notification input is a releasable desktop path), but gate on both
-    # so a future pathspec change cannot silently skip the regression's runner.
+    # Ordinary PRs no longer claim this second hosted Mac: a release compile
+    # holds it for ~25 min, and one runner per PR halved concurrent macos-15
+    # demand against the ~5-runner cap that was producing 60-97 min queues
+    # (2026-09-08). The lane still runs for every main push, the scheduled
+    # health run, manual dispatch, PRs that change the package manifest (the
+    # inputs most likely to shift whole-module behavior), and notification
+    # boundary paths — the notification flag is gated on both outputs so a
+    # future pathspec change cannot silently skip the regression's runner.
     if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-15
     timeout-minutes: 60
@@ -357,19 +386,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode164-
 
-      # Unlike the verify job's Desktop/.build (PR-scoped, always misses), this
-      # cache is written from main pushes, so it is readable by every PR and
-      # every later main push. A warm restore turns the ~20 min cold release
-      # build into an incremental one.
-      - name: Restore release build products
-        id: release-build-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-
-            ${{ runner.os }}-desktop-swift-release-xcode164-
+      # No Desktop/.build build-products cache, by measurement: the release
+      # compile step took 23-25 min on every recent run whether a 5.3 GB
+      # archive hit exactly, partially, or not at all (whole-module
+      # optimization recompiles on any source change, and runners are
+      # ephemeral). Worse, each main-push save of that 5.3 GB archive evicted
+      # the small swift-format/swiftlint tool caches from the repository's
+      # 10 GB cache budget, which made the verify job's launcher tests rebuild
+      # swift-format from source (~15 min) on cache misses.
 
       - name: Install Swift system dependencies
         run: brew install pkg-config webp
@@ -396,12 +420,3 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
-
-      # Save only from main pushes: PR-scoped saves are unreadable by other
-      # refs and would spend upload minutes for nothing.
-      - name: Save release build products
-        if: ${{ github.event_name == 'push' }}
-        uses: actions/cache/save@v6
-        with:
-          path: desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}

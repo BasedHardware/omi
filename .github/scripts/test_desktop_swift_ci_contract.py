@@ -42,7 +42,12 @@ MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
 MACOS_JOB_TIMEOUT_MINUTES = {
-    "desktop-swift-verify": 90,
+    # The PR lane defers ratcheted slow suites and holds one runner for
+    # ~15-20 min; the full lane still needs the larger share of this ceiling.
+    "desktop-swift-verify": 45,
+    # A notification-boundary change compiles release mode AND builds the
+    # release test target for the regression (~50 min observed on
+    # run 34239723019), so this lane keeps the wider bound.
     "desktop-swift-release-compile": 60,
 }
 
@@ -108,6 +113,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("should_run_static", changes)
         self.assertIn("should_run_tests", changes)
         self.assertIn("should_release_compile", changes)
+        self.assertIn("desktop_swift_changed_files", changes)
         self.assertIn("diff_base", changes)
 
         for job_id, output in (("desktop-swift-release-compile", "should_release_compile"),):
@@ -374,6 +380,55 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
         self.assertIn("~/Library/Caches/org.swift.swiftpm", job)
         self.assertNotIn("desktop/macos/Desktop/.build", job)
+
+    def test_release_job_does_not_archive_build_products(self):
+        """The 5.3 GB release .build archive is gone from both directions.
+
+        Measurement on every recent run showed the release compile step at
+        23-25 min whether the archive hit exactly, partially, or not at all,
+        while each main-push save evicted the small swift-format/swiftlint
+        tool caches from the repository's ~10 GB cache budget — and a tools
+        cache miss made the verify job's launcher tests rebuild swift-format
+        from source for ~15 min. Neither job may restore or save it again.
+        """
+        release_job = self.jobs["desktop-swift-release-compile"]
+        self.assertNotIn("desktop/macos/Desktop/.build", release_job)
+        self.assertNotIn("desktop-swift-release-xcode164", release_job)
+        self.assertIn("Restore SwiftPM dependency cache", release_job)
+
+    def test_pr_test_lane_defers_slow_suites_with_changed_file_wake(self):
+        """The PR lane defers ratcheted slow suites; their own diffs wake them.
+
+        Deferral is the runner's decision from swift-test-slow-suites.json; the
+        workflow only selects the lane and forwards the deferral-relevant diff
+        so a PR that edits a deferred suite's own test file still executes it.
+        """
+        verify_job = self.jobs["desktop-swift-verify"]
+        self.assertIn("OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}", verify_job)
+        self.assertIn("OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}", verify_job)
+        # The slow list and its validator are full-suite inputs: editing them
+        # must wake the debug test lane.
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
+
+    def test_release_compile_is_reserved_off_ordinary_prs(self):
+        """One hosted Mac per ordinary PR; pushes and package edits compile release.
+
+        The predictor owns this asymmetry; pin it here because the required
+        aggregate check and the release planner both consume the job's verdict.
+        """
+        source_probe = ["desktop/macos/Desktop/Sources/OmiApp.swift"]
+        self.assertFalse(resolve_impact(source_probe, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(resolve_impact(source_probe, event="push").includes("desktop-swift-release-compile"))
+        self.assertTrue(
+            resolve_impact(["desktop/macos/Desktop/Package.swift"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+        for event in ("schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                self.assertTrue(
+                    resolve_impact(["backend/database/users.py"], event=event).includes("desktop-swift-release-compile")
+                )
 
     # --- changed-file gate assertions --------------------------------------
 

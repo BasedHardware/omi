@@ -191,6 +191,19 @@ if [ -n "${FAKE_XCRUN_SLOW_SUITE:-}" ] && has_suite "$FAKE_XCRUN_SLOW_SUITE"; th
   sleep "${FAKE_XCRUN_SLOW_SECONDS:-4}"
 fi
 
+# Optional XCTest-shaped per-suite timing blocks, so the duration-harvest
+# summary can be exercised hermetically. Includes the "All tests" aggregate
+# wrapper, which the harvest must not record as a suite. Only test
+# invocations emit it — `swift build` (prebuild) never does.
+if [ -n "${FAKE_XCRUN_XCTEST_TIMING:-}" ] && [ "${#suites[@]}" -gt 0 ]; then
+  for filtered_suite in ${suites[@]+"${suites[@]}"}; do
+    echo "Test Suite '$filtered_suite' passed at 2026-09-08 00:00:00.000."
+    echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds"
+  done
+  echo "Test Suite 'All tests' passed at 2026-09-08 00:00:00.000."
+  echo "	 Executed 4 tests, with 0 failures (0 unexpected) in 0.400 (0.900) seconds"
+fi
+
 for filtered_suite in ${suites[@]+"${suites[@]}"}; do
   echo "$filtered_suite passed"
 done
@@ -534,5 +547,119 @@ solo_invocations="$(grep -c "swift test" "$FAKE_XCRUN_LOG" | tr -d ' ')"
 if [ "$solo_invocations" != "5" ]; then
   fail "solo scenario used $solo_invocations SwiftPM invocations, expected 1 batch + 1 solo + 3 sequential"
 fi
+
+# --- PR-lane deferral of ratcheted slow suites ---
+#
+# The PR lane holds one hosted Mac for minutes, not tens of minutes: a suite
+# with measured slow evidence (swift-test-slow-suites.json) is deferred to the
+# full lane (pushes, scheduled health, manual dispatch, local runs) unless
+# this diff edits its own declaring files.
+mkdir -p "$TMPDIR/pr-tests"
+cp "$TMPDIR"/green-tests/*.swift "$TMPDIR/pr-tests/"
+cat >"$TMPDIR/slow-suites.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "BetaTests": {
+      "reason": "Fixture: measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/pr-tests"
+export OMI_SWIFT_TEST_LANE=pr
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-defer-runner.out" 2>"$TMPDIR/pr-defer-runner.err"; then
+  fail "green PR lane with a deferred suite failed"
+fi
+if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-defer-runner.out"; then
+  fail "PR lane did not drop the deferred suite from the executed count"
+fi
+if ! grep -q "Deferred 1 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-defer-runner.out"; then
+  fail "runner did not announce the deferred slow suite"
+fi
+if ! grep -q "BetaTests" "$TMPDIR/pr-defer-runner.out" || ! grep -q "Deferred" "$TMPDIR/pr-defer-runner.out"; then
+  fail "deferred announcement did not name the deferred suite"
+fi
+if grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "deferred slow suite still executed in the PR lane"
+fi
+
+# A diff that edits the deferred suite's own declaring file wakes it.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/BetaTests.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-wake-runner.out" 2>"$TMPDIR/pr-wake-runner.err"; then
+  fail "PR lane failed when the deferred suite's own file changed"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-wake-runner.out"; then
+  fail "changed declaring file did not wake the deferred slow suite"
+fi
+if grep -q "Deferred" "$TMPDIR/pr-wake-runner.out"; then
+  fail "woken deferred suite was still reported as deferred"
+fi
+
+# A diff to the deferral infrastructure re-baselines the whole selection.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/scripts/swift-test-slow-suites.json"
+if ! "$RUNNER" >"$TMPDIR/pr-rebaseline-runner.out" 2>"$TMPDIR/pr-rebaseline-runner.err"; then
+  fail "PR lane failed when the deferral list itself changed"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-rebaseline-runner.out"; then
+  fail "deferral-list change did not re-baseline the full selection"
+fi
+
+# An unrelated declaring file does not wake the deferred suite...
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AlphaTests.swift"
+if ! "$RUNNER" >"$TMPDIR/pr-unrelated-runner.out" 2>"$TMPDIR/pr-unrelated-runner.err"; then
+  fail "PR lane failed on an unrelated changed test file"
+fi
+if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-unrelated-runner.out"; then
+  fail "unrelated changed file wrongly woke the deferred suite"
+fi
+unset OMI_SWIFT_TEST_CHANGED_FILES
+
+# ...and the full lane (the default, and every non-PR CI event) runs it all.
+unset OMI_SWIFT_TEST_LANE
+if ! "$RUNNER" >"$TMPDIR/full-runner.out" 2>"$TMPDIR/full-runner.err"; then
+  fail "full lane failed with a slow list present"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/full-runner.out"; then
+  fail "full lane deferred a slow suite"
+fi
+unset OMI_SWIFT_TEST_SLOW_SUITES_FILE
+
+# An invalid lane value fails closed before any suite executes.
+export OMI_SWIFT_TEST_LANE=pr-fast
+if "$RUNNER" >"$TMPDIR/bad-lane.out" 2>"$TMPDIR/bad-lane.err"; then
+  fail "invalid OMI_SWIFT_TEST_LANE unexpectedly succeeded"
+fi
+if ! grep -q "OMI_SWIFT_TEST_LANE must be 'pr' or 'full'" "$TMPDIR/bad-lane.err"; then
+  fail "invalid lane value did not fail with the validation message"
+fi
+unset OMI_SWIFT_TEST_LANE
+
+# --- per-suite duration harvest on the green path ---
+#
+# Green batches used to discard their logs with the temp directory, so the
+# slow tail stayed invisible until it broke a batch budget. The runner must
+# name the slowest executed suites every run, from XCTest's own per-suite
+# timing lines, without recording the "All tests" aggregate wrapper.
+export OMI_SWIFT_TEST_LANE=pr
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export FAKE_XCRUN_XCTEST_TIMING=1
+if ! "$RUNNER" >"$TMPDIR/timing-runner.out" 2>"$TMPDIR/timing-runner.err"; then
+  fail "green run with timing output failed"
+fi
+if ! grep -q "Slowest executed Swift suites this run (wall seconds):" "$TMPDIR/timing-runner.out"; then
+  fail "runner did not print the duration harvest summary"
+fi
+if ! grep -q "ChatDiscoverabilityTests" "$TMPDIR/timing-runner.out"; then
+  fail "duration harvest summary did not name an executed suite"
+fi
+if grep -q "All tests" "$TMPDIR/timing-runner.out"; then
+  fail "duration harvest recorded the aggregate 'All tests' wrapper as a suite"
+fi
+unset FAKE_XCRUN_XCTEST_TIMING OMI_SWIFT_TEST_SLOW_SUITES_FILE OMI_SWIFT_TEST_LANE
 
 echo "swift-test-suites tests passed"

@@ -1,0 +1,41 @@
+{
+  "max_slow_suite_count": 9,
+  "slow_suites": {
+    "MemoryAtlasPerformanceHarnessTests": {
+      "reason": "Performance harness: XCTest measure blocks run ten iterations; occupies a solo worker for minutes and is the dominant batch-timeout risk.",
+      "evidence": "~245s isolated on CI Xcode 16.4 (run 33553052046 era, pre-deferral timing), 80s under the 2026-09-08 local Xcode 26.6 harvest"
+    },
+    "ChatTranscriptGestureHarnessTests": {
+      "reason": "Gesture harness with long-running tests; occupied a worker for over 1.5 min on CI and forced batch fallbacks.",
+      "evidence": "97s isolated on CI run 34239811380; 74s in the 2026-09-08 local harvest"
+    },
+    "ChatStreamingRenderBudgetTests": {
+      "reason": "Render-budget measurement suite; 4th-slowest measured suite.",
+      "evidence": "9.0s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "MemoryBankConnectorTests": {
+      "reason": "Slowest non-render integration suite after the harness pair.",
+      "evidence": "8.9s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "MemoryAtlasForceLayoutTests": {
+      "reason": "Force-layout simulation suite adjacent to the deferred performance harness.",
+      "evidence": "5.2s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "ShellModalScrimTests": {
+      "reason": "Render-adjacent suite in the measured slow tail.",
+      "evidence": "4.3s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "ShellStatusIconLegibilityTests": {
+      "reason": "Render-adjacent suite in the measured slow tail.",
+      "evidence": "3.1s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "OnboardingGlassGroundRenderTests": {
+      "reason": "Render-adjacent suite in the measured slow tail.",
+      "evidence": "2.5s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    },
+    "TranscriptionFinalizationStateMachineTests": {
+      "reason": "State-machine suite at the measured slow-tail cutoff.",
+      "evidence": "2.3s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+    }
+  }
+}
