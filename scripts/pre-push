@@ -219,11 +219,37 @@ check_pr_preflight() {
   fi
 }
 
+check_firmware_formatters() {
+  local -a firmware_files=()
+  local file
+
+  for file in "${CHANGED_FILES[@]}"; do
+    [ -f "$file" ] || continue
+    case "$file" in
+      omi/*.c|omi/*.cc|omi/*.cpp|omi/*.cxx|omi/*.h|omi/*.hpp|omiGlass/*.c|omiGlass/*.cc|omiGlass/*.cpp|omiGlass/*.cxx|omiGlass/*.h|omiGlass/*.hpp)
+        firmware_files+=("$file")
+        ;;
+    esac
+  done
+
+  if [ "${#firmware_files[@]}" -eq 0 ]; then
+    return
+  fi
+
+  if command -v clang-format >/dev/null 2>&1; then
+    echo "==> clang-format --dry-run (${#firmware_files[@]} file(s))"
+    clang-format --dry-run --Werror "${firmware_files[@]}"
+  else
+    echo "FAIL: changed firmware C/C++ files require clang-format for local CI certification." >&2
+    echo "      Install clang-format (for example, 'brew install clang-format') and retry the push." >&2
+    return 1
+  fi
+}
+
 check_optional_formatters() {
   local -a dart_files=()
   local -a python_files=()
   local -a arb_files=()
-  local -a firmware_files=()
   local file
 
   for file in "${CHANGED_FILES[@]}"; do
@@ -239,9 +265,6 @@ check_optional_formatters() {
         ;;
       *.arb)
         arb_files+=("$file")
-        ;;
-      omi/*.c|omi/*.cc|omi/*.cpp|omi/*.cxx|omi/*.h|omi/*.hpp|omiGlass/*.c|omiGlass/*.cc|omiGlass/*.cpp|omiGlass/*.cxx|omiGlass/*.h|omiGlass/*.hpp)
-        firmware_files+=("$file")
         ;;
     esac
   done
@@ -300,14 +323,7 @@ if failed:
 PY
   fi
 
-  if [ "${#firmware_files[@]}" -gt 0 ]; then
-    if command -v clang-format >/dev/null 2>&1; then
-      echo "==> clang-format --dry-run (${#firmware_files[@]} file(s))"
-      clang-format --dry-run --Werror "${firmware_files[@]}"
-    else
-      echo "Skipping C/C++ format check; clang-format is not installed."
-    fi
-  fi
+  check_firmware_formatters
 }
 
 require_flutter_generated_prerequisites() {
