@@ -28,8 +28,7 @@ For physical-device builds, use the wrapper: it owns `dev + local_dev` and
 `prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
 `scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
 with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
-`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered
-(debug builds need `flutter run` attached on a physical iPhone; see README).
+`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered (debug builds need `flutter run`; see README).
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
@@ -60,10 +59,10 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
 - Android module: `android/app/src/main/kotlin/com/friend/ios/phonemic/` — AudioRecord capture with a self-healing rebuild loop + silencing detection (calls/assistant recover natively; Dart only mirrors state); `PhoneMicForegroundService` (microphone FGS) keeps background capture alive; batch opus encode via a JNI shim over the plugin-shipped libopus
 - Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
-- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session, and a `start()` onto a still-live native session adopts the new id and re-emits the current state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
+- Events carry a Dart-minted session id (`start(mode, sessionId)`); Dart drops any event whose id is not the current session's, so a late/stale native event can't clobber a fresh session; a `start()` onto a still-live session adopts the new id and re-emits state so the caller converges. `stop()` always forwards to native (kills an orphaned session) and runs local teardown once
 - Two capture modes, fixed per session at `start(mode)`: `stream` (realtime frames → Dart → socket/WAL) and `batch` (Transcribe Later — native opus encode (OpusKit on iOS, libopus JNI shim on Android) → WAL-compatible `audio_omibatchphone[auto]_…bin`; no frames cross to Dart; liveness = 1Hz `onBatchProgress`). Mode selection lives in `CaptureController.streamRecording` (explicit `batchModeEnabled` or automatic offline fallback; iOS + Android); `omibatchphoneauto` recordings auto-upload on reconnect
 
-On-device speech deadlines, cleanup, and tests: [speech contract](../.github/agent-docs/on-device-speech.md).
+On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-device-speech.md).
 
 ## Permission Matrix
 
@@ -97,16 +96,16 @@ flutter test test/unit/  # specific directory
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
 
-Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs production Swift writers for frame durability, preference freshness, and location snapshots (macOS manifest, local + CI).
+Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs the production Swift writers (macOS manifest, local + CI).
 
-PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
+PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`): analyzer errors always fail; new lint occurrences above `app/analysis_baseline.json` fail. Run it before committing Dart changes; deliberate acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
-- Chat transcript layout: a test that only pumps `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs. Chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes). That file is the Mobile App Checks contract for this class.
-- A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default. State in the PR how you ran it; it must not be the only evidence the change works.
+- Chat transcript layout: pumping `AIMessage` in a `SingleChildScrollView` alone misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
+- A test needing a live service, device, or real API goes under `integration_test/` (never run by `test.sh`/CI). For local-backend integration tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when the prod API default is intended. State in the PR how you ran it; it is not sufficient evidence alone.
 - Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 
 ## Localization (l10n)
@@ -116,7 +115,7 @@ PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.
 - Template: `lib/l10n/app_en.arb`
 - Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
 - Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
-- Regenerate after changes: `flutter gen-l10n`. Task is only complete when this command emits zero "untranslated message(s)" warnings. To get the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
+- Regenerate after changes: `flutter gen-l10n` — done only at zero "untranslated message(s)" warnings; for the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
 
 ## Auth & Security
 
