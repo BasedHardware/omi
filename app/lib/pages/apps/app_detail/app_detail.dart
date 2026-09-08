@@ -36,6 +36,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/app_detail/app_detail_config.dart';
 import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
@@ -263,6 +264,30 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
   }
 
+  void _onExternalIntegrationUpdated() {
+    if (!app.worksExternally()) return;
+    checkSetupCompleted();
+    final path = app.externalIntegration?.setupInstructionsFilePath;
+    if (path?.isNotEmpty == true && path!.contains('raw.githubusercontent.com')) {
+      getAppMarkdown(path).then((value) {
+        value = value.replaceAll(
+          '](assets/',
+          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
+        );
+        if (mounted) {
+          setState(() => instructionsMarkdown = value);
+        }
+      });
+    }
+  }
+
+  void _applyProviderAppUpdate(App updatedApp) {
+    setState(() {
+      app = updatedApp;
+    });
+    _onExternalIntegrationUpdated();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -272,16 +297,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Check if app has been updated in the provider
       final appProvider = context.read<AppProvider>();
       final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-      if (updatedApp != null) {
-        // Compare critical fields to detect if app was updated
-        final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-        final nameChanged = updatedApp.name != app.name;
-        final descriptionChanged = updatedApp.description != app.description;
-
-        if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-          // App was updated, refresh the details
-          await _refreshAppDetails();
-        }
+      if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+        // App was updated, refresh the details
+        await _refreshAppDetails();
+        _onExternalIntegrationUpdated();
       }
     });
   }
@@ -541,22 +560,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
       builder: (context, appProvider, child) {
         // Check if app has been updated in the provider
         final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-        if (updatedApp != null) {
-          // Compare critical fields to detect if app was actually updated
-          final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-          final nameChanged = updatedApp.name != app.name;
-          final descriptionChanged = updatedApp.description != app.description;
-
-          if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-            // Update local app state when provider's app changes
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {
-                  app = updatedApp;
-                });
-              }
-            });
-          }
+        if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+          // Update local app state when provider's app changes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _applyProviderAppUpdate(updatedApp);
+            }
+          });
         }
 
         bool isIntegration = app.worksExternally();
