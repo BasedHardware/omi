@@ -1930,7 +1930,15 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
           id: localModelId,
           name: localModelId,
           reasoning: false,
-          input: ["text"],
+          // pi-ai's openai-completions client strips image content blocks
+          // before sending the request whenever `input` doesn't list "image"
+          // (see providers/openai-completions.js) — declaring "text" only
+          // silently dropped screenshots even when the user's chosen model
+          // is actually vision-capable (e.g. running a single vision model
+          // with no separate vision-subagent configured). The user picks
+          // this model id themselves, same trust boundary as the vision
+          // and cloud providers below, which already declare both.
+          input: ["text", "image"],
           contextWindow: 32_000,
           maxTokens: 8_192,
           // Genuinely free — never tracked anywhere, client or server.
