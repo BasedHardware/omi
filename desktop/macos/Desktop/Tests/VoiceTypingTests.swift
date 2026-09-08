@@ -114,25 +114,39 @@ final class VoiceTypeCommandParserTests: XCTestCase {
 final class VoiceTypeSessionTests: XCTestCase {
 
   private final class RecordingSink: TextInsertionSink {
+    var insertionReceiptDidChange: (() -> Void)?
     var pasted: [String] = []
     var copied: [String] = []
     var pasteSucceeds = true
     var caretAfterWord = false
     var focus: String? = "1:com.example.editor"
 
-    func paste(_ text: String) -> Bool {
-      guard pasteSucceeds else { return false }
+    func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
+      guard pasteSucceeds, focusTarget() == target else { return .notInserted }
       pasted.append(text)
-      return true
+      return .inserted
     }
     func copy(_ text: String) { copied.append(text) }
-    func caretNeedsSeparatingSpace() -> Bool { caretAfterWord }
-    func focusTarget() -> String? { focus }
+    func focusTarget() -> TextInsertionTarget? {
+      guard let focus else { return nil }
+      return TextInsertionTarget(
+        elementID: AnyHashable(focus), processID: 1, bundleIdentifier: "com.example.editor",
+        selection: NSRange(location: 0, length: 0), valueDigest: Data(),
+        needsSeparatingSpace: caretAfterWord)
+    }
+  }
+
+  private func authorizedSession(sink: RecordingSink, trusted: Bool = true) -> VoiceTypeSession {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    return VoiceTypeSession(
+      sink: sink, isAccessibilityTrusted: { trusted },
+      captureAuthorization: { authority.capture(ownerID: "test-owner", expectedOwnerID: nil) },
+      isAuthorizationCurrent: { authority.isCurrent($0, ownerID: "test-owner") })
   }
 
   private func makeSession(trusted: Bool = true) -> (VoiceTypeSession, RecordingSink) {
     let sink = RecordingSink()
-    let session = VoiceTypeSession(sink: sink, isAccessibilityTrusted: { trusted })
+    let session = authorizedSession(sink: sink, trusted: trusted)
     session.begin()
     session.noteRelease()
     return (session, sink)
@@ -205,6 +219,7 @@ final class VoiceTypeSessionTests: XCTestCase {
   func testADictationThatContinuesALineOpensWithASpace() {
     let (session, sink) = makeSession()
     sink.caretAfterWord = true
+    session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type I think so"))
     // The space is on screen but not part of what the turn dictated.
     XCTAssertEqual(session.deliver("I think so"), .pasted("I think so"))
@@ -242,15 +257,16 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(sink.copied, ["Hello world"])
   }
 
-  func testAnUnreadableFocusAtReleaseStillPastes() {
+  func testAnUnreadableFocusAtReleaseCopiesInsteadOfGuessing() {
     let sink = RecordingSink()
     sink.focus = nil
-    let session = VoiceTypeSession(sink: sink, isAccessibilityTrusted: { true })
+    let session = authorizedSession(sink: sink)
     session.begin()
     session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type hello"))
-    XCTAssertEqual(session.deliver("Hello"), .pasted("Hello"))
-    XCTAssertEqual(sink.pasted, ["Hello"])
+    XCTAssertEqual(session.deliver("Hello"), .copied("Hello"))
+    XCTAssertTrue(sink.pasted.isEmpty)
+    XCTAssertEqual(sink.copied, ["Hello"])
   }
 
   func testFocusThatBecameUnreadableAfterReleaseCopies() {
@@ -410,6 +426,63 @@ final class DictationFormatterTests: XCTestCase {
 }
 
 final class DictationPolisherTests: XCTestCase {
+
+  private actor RequestProbe {
+    private(set) var calls = 0
+
+    func record() {
+      calls += 1
+    }
+  }
+
+  func testAnAlreadyCleanEnglishUtteranceSkipsTheRemotePolisher() {
+    let context = DictationPolisher.Context(appName: "Notes")
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: context),
+      .skip)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "thanks", formatted: "Thanks", context: context),
+      .required)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: .init(language: "es")),
+      .required)
+    XCTAssertEqual(
+      DictationPolisher.policy(original: "Thanks.", formatted: "Thanks.", context: .init(keywords: ["Project"])),
+      .required)
+  }
+
+  func testOnlyFiniteSafePhrasesCanSkipTheRemotePath() {
+    let context = DictationPolisher.Context()
+    for text in [
+      "Hello world.",
+      "Make it blue—actually red",
+      "Sorry, send it tomorrow",
+      "john at example dot com",
+      "I I need the report",
+      "Hello new paragraph world",
+      "Meet at three, no, four",
+      "Call me at four",
+    ] {
+      XCTAssertEqual(
+        DictationPolisher.policy(original: text, formatted: text, context: context),
+        .required,
+        "arbitrary or speech-like prose must keep the model path: \(text)")
+    }
+  }
+
+  func testInjectedPolishRequestCanApplyASelfCorrectionWithoutNetworkOrSleep() async throws {
+    let probe = RequestProbe()
+    let context = DictationPolisher.Context()
+    let result = try await DictationPolisher.polish(
+      "Meet at three, no, four", context: context,
+      using: { _, _, _ in
+        await probe.record()
+        return "Meet at four."
+      })
+    XCTAssertEqual(result, "Meet at four.")
+    let calls = await probe.calls
+    XCTAssertEqual(calls, 1)
+  }
 
   func testACleanRewriteIsAccepted() {
     XCTAssertEqual(

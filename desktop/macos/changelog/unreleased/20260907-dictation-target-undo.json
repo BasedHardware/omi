@@ -1,0 +1,3 @@
+{
+  "change": "Added Undo Last Dictation in supported editors and clearer recovery when dictation cannot be inserted safely"
+}

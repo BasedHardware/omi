@@ -1,4 +1,5 @@
 import ApplicationServices
+import Combine
 import Foundation
 
 /// One push-to-talk turn's worth of voice typing.
@@ -16,10 +17,14 @@ import Foundation
 /// probe hears a couple of seconds of a sentence the user has barely started,
 /// which is not evidence about the closing transcript.
 @MainActor
-final class VoiceTypeSession {
+final class VoiceTypeSession: ObservableObject {
 
   private let sink: TextInsertionSink
   private let isAccessibilityTrusted: () -> Bool
+  private let captureAuthorization: () -> RuntimeOwnerAuthorizationSnapshot?
+  private let isAuthorizationCurrent: (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  private var captureOwner: RuntimeOwnerAuthorizationSnapshot?
+  @Published private var insertionOwner: RuntimeOwnerAuthorizationSnapshot?
 
   private enum Latch {
     case none
@@ -35,25 +40,56 @@ final class VoiceTypeSession {
   /// nothing to record.
   enum Completion: Equatable {
     case none
-    /// The text was pasted into the app that had focus when the key came up.
+    /// The exact insertion was read back from the captured field.
     case pasted(String)
+    /// Paste was dispatched to the captured app, but its result is asynchronous
+    /// and has not been verified. Clipboard restoration still belongs to the sink.
+    case pasteRequested(String)
     /// Focus moved (or the paste could not be posted), so the text was left on
     /// the clipboard for the user instead of being pasted into the wrong app.
     case copied(String)
+    /// The editor may contain a partial insertion. The clipboard is unchanged;
+    /// inspect the destination before deciding whether to retry manually.
+    case insertionUncertain(String)
+
+    var statusHint: String? {
+      switch self {
+      case .none, .pasted: return nil
+      case .copied: return "Copied — press ⌘V to paste"
+      case .pasteRequested: return "Paste requested — check the editor"
+      case .insertionUncertain: return "Insertion unconfirmed — check the editor"
+      }
+    }
+
+    var journalAcknowledgement: String? {
+      switch self {
+      case .none: return nil
+      case .pasted(let text): return "Typed: \(text)"
+      case .pasteRequested(let text): return "Paste requested; check the editor: \(text)"
+      case .copied(let text): return "Copied to clipboard: \(text)"
+      case .insertionUncertain(let text):
+        return "Dictation insertion unconfirmed; check the editor: \(text)"
+      }
+    }
+
+    var isConfirmedDelivery: Bool {
+      switch self {
+      case .pasted, .copied: return true
+      case .none, .pasteRequested, .insertionUncertain: return false
+      }
+    }
 
     var text: String? {
       switch self {
       case .none: return nil
-      case .pasted(let text), .copied(let text): return text
+      case .pasted(let text), .pasteRequested(let text), .copied(let text), .insertionUncertain(let text): return text
       }
     }
   }
 
   private var latch: Latch = .none
-  /// Where the paste is aimed: the frontmost application when the key came
-  /// up. Observed live before this existed: a dock click brought Omi's own
-  /// window forward and a dictation was typed into it instead of the document.
-  private var releaseFocusTarget: String?
+  /// The exact field, selection and value revision captured at release.
+  private var releaseFocusTarget: TextInsertionTarget?
 
   /// True once this turn has been recognised as a dictation — whether or not
   /// it can be pasted. A blocked turn still owns the turn: the words are
@@ -62,15 +98,47 @@ final class VoiceTypeSession {
 
   init(
     sink: TextInsertionSink = PasteboardTextInsertionSink(),
-    isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }
+    isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
+    captureAuthorization: @escaping () -> RuntimeOwnerAuthorizationSnapshot? = {
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    },
+    isAuthorizationCurrent: @escaping (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    }
   ) {
     self.sink = sink
     self.isAccessibilityTrusted = isAccessibilityTrusted
+    self.captureAuthorization = captureAuthorization
+    self.isAuthorizationCurrent = isAuthorizationCurrent
+    sink.insertionReceiptDidChange = { [weak self] in self?.objectWillChange.send() }
   }
 
   func begin() {
     latch = .none
     releaseFocusTarget = nil
+    captureOwner = captureAuthorization()
+    invalidateUndoLastDictation()
+  }
+
+  /// Receipt availability only: menu tracking may temporarily own AX focus.
+  /// Reading this projection never consumes a receipt or authorizes an edit.
+  var canUndoLastDictation: Bool {
+    guard let owner = insertionOwner, isAuthorizationCurrent(owner), isAccessibilityTrusted() else { return false }
+    return sink.canUndoInsertion
+  }
+
+  @discardableResult
+  func undoLastDictation() -> Bool {
+    defer { invalidateUndoLastDictation() }
+    guard canUndoLastDictation else { return false }
+    // The sink validates the exact current field, full value and caret here,
+    // after menu dismissal. We never activate or guess the original target.
+    return sink.undoInsertion()
+  }
+
+  func invalidateUndoLastDictation() {
+    insertionOwner = nil
+    sink.discardInsertionReceipt()
   }
 
   /// Decides from a transcript — a mid-hold probe's or the closing one —
@@ -123,38 +191,54 @@ final class VoiceTypeSession {
     defer {
       latch = .none
       releaseFocusTarget = nil
+      captureOwner = nil
     }
     let blocked = latch == .blocked
     guard latch == .typing || blocked else { return .none }
+    guard let owner = captureOwner, isAuthorizationCurrent(owner) else {
+      invalidateUndoLastDictation()
+      return .none
+    }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     // Nothing detected means nothing typed: not an empty paste, and not a
     // stray "." or "…" the recognizer produced from a breath.
     guard DictationPolisher.hasContent(trimmed) else { return .none }
     // No Accessibility grant: a paste would not land, so go straight to the
     // clipboard rather than trying and failing silently.
-    guard !blocked else {
+    guard !blocked, isAccessibilityTrusted() else {
       log("VoiceTypeSession: Accessibility not granted — copied \(trimmed.count) chars instead of pasting")
-      sink.copy(trimmed)
+      copyFallback(trimmed)
       return .copied(trimmed)
     }
-    if let aimed = releaseFocusTarget {
-      let current = sink.focusTarget()
-      if current == nil || current != aimed {
-        log("VoiceTypeSession: focus left the dictation target — copied \(trimmed.count) chars instead")
-        sink.copy(trimmed)
-        return .copied(trimmed)
-      }
-    }
-    // Decided from where the caret is right now: the first word must not land
-    // flush against the word before it ("voiceI think").
-    let separator = sink.caretNeedsSeparatingSpace() ? " " : ""
-    guard sink.paste(separator + trimmed) else {
-      log("VoiceTypeSession: paste could not be posted — copied \(trimmed.count) chars instead")
-      sink.copy(trimmed)
+    guard let aimed = releaseFocusTarget, sink.focusTarget() == aimed else {
+      log("VoiceTypeSession: dictation target unavailable or changed — copied \(trimmed.count) chars instead")
+      copyFallback(trimmed)
       return .copied(trimmed)
     }
-    // The target's bundle id only (pid:bundle:window) — never the text.
-    let target = (releaseFocusTarget ?? "?").split(separator: ":").dropFirst().first.map(String.init) ?? "?"
+    let separator = aimed.needsSeparatingSpace ? " " : ""
+    switch sink.paste(separator + trimmed, into: aimed) {
+    case .inserted:
+      break
+    case .pastePosted:
+      log("VoiceTypeSession: requested paste of \(trimmed.count) chars into \(aimed.bundleIdentifier)")
+      return .pasteRequested(trimmed)
+    case .notInserted:
+      log("VoiceTypeSession: no insertion dispatched — copied \(trimmed.count) chars instead")
+      // Preserve line continuation only when the destination is still the
+      // exact unchanged capture.
+      copyFallback(sink.focusTarget() == aimed ? separator + trimmed : trimmed)
+      return .copied(trimmed)
+    case .uncertain:
+      log("VoiceTypeSession: insertion could not be verified for \(trimmed.count) chars")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "voice_typing", from: "ax_selected_text", to: "insertion_unconfirmed",
+        reason: "other", outcome: .degraded)
+      invalidateUndoLastDictation()
+      return .insertionUncertain(trimmed)
+    }
+    insertionOwner = owner
+    // Bundle id only — never a field value or Accessibility identifier.
+    let target = aimed.bundleIdentifier
     log(
       "VoiceTypeSession: pasted \(trimmed.count) chars into \(target)"
         + (separator.isEmpty ? "" : " (continuing a line)"))
@@ -165,6 +249,19 @@ final class VoiceTypeSession {
   func abandon() {
     latch = .none
     releaseFocusTarget = nil
+    captureOwner = nil
+    // Manager terminal cleanup also calls abandon after successful delivery.
+    // The short-lived insertion receipt survives that cleanup, until the next
+    // begin, owner revocation, explicit invalidation, or target mismatch.
+  }
+
+  private func copyFallback(_ text: String) {
+    sink.copy(text)
+    if latch != .blocked {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "voice_typing", from: "paste_injection", to: "clipboard_copy",
+        reason: "policy", outcome: .degraded)
+    }
   }
 
   private func arm() -> Bool {
