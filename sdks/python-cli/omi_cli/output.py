@@ -85,6 +85,13 @@ class Renderer:
         sys.stdout.write("\n")
         sys.stdout.flush()
 
+    def complete(self, data: Any, *, message: str) -> None:
+        """Emit a completed command's JSON result or its human success message."""
+        if self.json_mode:
+            self._emit_json(data)
+        else:
+            self.success(message)
+
     def _emit_table(
         self,
         rows: Sequence[Mapping[str, Any]],

@@ -158,5 +158,5 @@ def delete_action_item(
     if not confirm:
         typer.confirm(f"Delete action item {action_item_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/action-items/{action_item_id}")
-    ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
+        result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
+    ctx.renderer.complete(result, message=f"Deleted action item [bold]{action_item_id}[/bold].")

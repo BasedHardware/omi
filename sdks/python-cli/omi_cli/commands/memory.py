@@ -147,5 +147,5 @@ def delete_memory(
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
     with ctx.make_client() as client:
-        client.delete(f"/v1/dev/user/memories/{memory_id}")
-    ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
+        result = client.delete(f"/v1/dev/user/memories/{memory_id}")
+    ctx.renderer.complete(result, message=f"Deleted memory [bold]{memory_id}[/bold].")

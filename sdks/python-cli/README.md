@@ -257,6 +257,8 @@ The CLI is built so an LLM can use it without a wrapper:
 
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+  Cloud `delete` commands return the API response body, or JSON `null` when
+  the successful response has no body (for example, HTTP 204).
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Rate-limit errors include a `Retry-After` window in the message and surface

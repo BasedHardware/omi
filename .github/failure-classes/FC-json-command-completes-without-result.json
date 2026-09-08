@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-json-command-completes-without-result",
+  "violated_contract": "A successful cloud command invoked with --json must emit a JSON result to stdout, including when the API returns an empty successful response. A human-only success message that is suppressed in JSON mode must not be the command's sole output.",
+  "canonical_prevention": "Commands that complete with a human status message use Renderer.complete to emit the API result in JSON mode, including null for an empty response, or the status message in human mode. A shared command-level contract test covers all four cloud delete commands with JSON and empty response bodies, both output modes, and a failed request that must not emit success output.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_delete_output.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/output.py",
+    "sdks/python-cli/omi_cli/commands/**",
+    "sdks/python-cli/tests/**"
+  ],
+  "status": "open"
+}
