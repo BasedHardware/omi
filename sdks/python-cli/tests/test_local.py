@@ -401,6 +401,20 @@ def test_screenshot_copies_existing_file_response(config_path: Path, cli_runner,
     assert output.read_bytes() == source.read_bytes()
 
 
+def test_screenshot_same_source_and_output_is_noop(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    """Writing a screenshot onto its own source path must not raise SameFileError."""
+    _configure_local_profile(config_path)
+    source = tmp_path / "shot.jpg"
+    source.write_bytes(b"synthetic-image")
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(str(source))))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "9", "--output", str(source)])
+
+    assert result.exit_code == 0, repr(result.exception)
+    assert source.read_bytes() == b"synthetic-image"
+    assert json.loads(result.stdout)["bytes"] == len(b"synthetic-image")
+
+
 def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
     _configure_local_profile(config_path)
     output = tmp_path / "pending.jpg"
