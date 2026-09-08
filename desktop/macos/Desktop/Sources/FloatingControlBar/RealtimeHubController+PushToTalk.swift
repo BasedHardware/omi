@@ -197,6 +197,7 @@ extension RealtimeHubController {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = Self.voiceContinuityKey(for: turnID)
+    if journalSuppressedContinuityKey != turnIdempotencyKey { journalSuppressedContinuityKey = nil }
     turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
@@ -348,7 +349,27 @@ extension RealtimeHubController {
     return .accepted
   }
 
+  /// Whether a turn's just-spoken text may still be recovered into the journal.
+  /// A deliberately unwritten turn (Silent Type) has no accepted receipt to stand
+  /// recovery down, so it names itself here instead.
+  static func recoversInterruptedTurn(continuityKey: String, suppressedKey: String?) -> Bool {
+    continuityKey.isEmpty || suppressedKey != continuityKey
+  }
+
+  /// Never journal this turn's transcript, on any path: no producing row, and no
+  /// interrupted-turn recovery. Used by a Silent Type dictation, which delivered
+  /// its text to the focused app and must leave the chat untouched.
+  func suppressJournalRecoveryForUnwrittenTurn(turnID: VoiceTurnID) {
+    journalSuppressedContinuityKey = Self.voiceContinuityKey(for: turnID)
+    retireNativeTurnEvidenceAfterRejectedWrite(turnID: turnID)
+  }
+
   func captureInterruptedTurnPayloadIfNeeded() -> Task<InterruptedTurnPayload?, Never>? {
+    if !Self.recoversInterruptedTurn(
+      continuityKey: turnIdempotencyKey, suppressedKey: journalSuppressedContinuityKey)
+    {
+      return nil
+    }
     if turnPersistenceLedger.pendingContinuityKeys.contains(turnIdempotencyKey)
       || turnPersistenceLedger.receipt(for: turnIdempotencyKey)?.accepted == true
       || !prefetchedVoiceContextTurnIDs.isDisjoint(

@@ -105,6 +105,11 @@ struct SettingsSearchItem: Identifiable {
       name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost",
       keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription,
       icon: "waveform", settingId: "transcription.vadgate"),
+    SettingsSearchItem(
+      name: "Silent Type", subtitle: "Keeps what you dictate with Omi Type out of the chat",
+      keywords: ["silent", "type", "dictation", "voice typing", "private", "chat context"],
+      section: .transcription,
+      icon: "keyboard", settingId: "transcription.silenttype"),
 
     // Notifications
     SettingsSearchItem(

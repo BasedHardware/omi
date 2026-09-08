@@ -3596,25 +3596,37 @@ class PushToTalkManager: ObservableObject {
         transcriptLength: self.voiceTypingLastOutcome.characters)
       self.terminateVoiceTypingLifecycle(
         disposition: run.completion.isConfirmedDelivery ? .committed : .cancelled, totalSec: totalSec)
-      // The journal write is awaited before the turn ends, so a lifecycle
-      // change at turn end cannot drop it; the wait is bounded so a slow
-      // bridge cannot hold the bar, and the write itself is not cancelled
-      // at the bound — it finishes in the background.
-      let utterance = run.transcript ?? ""
-      let completion = run.completion
-      // Register the write under the native `voice:<uuid>` identity before the
-      // bounded wait so a timeout+cancel still sees persistPending.
-      let journal = RealtimeHubController.shared.enqueueTurnPersistence(
-        idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
-      ) {
-        await self.recordVoiceTypingExchange(
-          utterance: utterance, completion: completion, turnID: turnID)
-      }
-      let journaled =
-        (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
-        ?? false
-      if !journaled {
-        log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+      let record = VoiceTypingChatRecordPolicy.decide(
+        silentTypeEnabled: ShortcutSettings.shared.silentTypeEnabled)
+      if !record.journalsExchange {
+        // Both consequences of not writing: the reserved native source has no
+        // producing row to attach to, and recovery must not resurrect the
+        // transcript on a later provider failure.
+        if record.suppressesJournalRecovery, record.retiresReservedEvidence {
+          RealtimeHubController.shared.suppressJournalRecoveryForUnwrittenTurn(turnID: turnID)
+        }
+        log("PushToTalkManager: silent type — dictation kept out of the chat transcript")
+      } else {
+        // The journal write is awaited before the turn ends, so a lifecycle
+        // change at turn end cannot drop it; the wait is bounded so a slow
+        // bridge cannot hold the bar, and the write itself is not cancelled
+        // at the bound — it finishes in the background.
+        let utterance = run.transcript ?? ""
+        let completion = run.completion
+        // Register the write under the native `voice:<uuid>` identity before the
+        // bounded wait so a timeout+cancel still sees persistPending.
+        let journal = RealtimeHubController.shared.enqueueTurnPersistence(
+          idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
+        ) {
+          await self.recordVoiceTypingExchange(
+            utterance: utterance, completion: completion, turnID: turnID)
+        }
+        let journaled =
+          (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
+          ?? false
+        if !journaled {
+          log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
+        }
       }
       guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       if let hint = run.completion.statusHint {

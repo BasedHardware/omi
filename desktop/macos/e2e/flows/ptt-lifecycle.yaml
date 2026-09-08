@@ -35,6 +35,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypingChatRecordPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
