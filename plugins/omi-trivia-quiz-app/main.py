@@ -28,10 +28,7 @@ from models import (
 OPENTDB_API_URL = "https://opentdb.com/api.php"
 OPENTDB_CATEGORY_URL = "https://opentdb.com/api_category.php"
 REQUEST_TIMEOUT_SECONDS = 15.0
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (Omi-Trivia/1.0)"
-)
+USER_AGENT = "omi-trivia-quiz-app/1.0 (https://omi.me)"
 
 
 # ---------------------------------------------------------------------------

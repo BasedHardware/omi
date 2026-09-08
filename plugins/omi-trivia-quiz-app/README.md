@@ -108,6 +108,6 @@ curl -X POST http://localhost:8080/tools/list_trivia_categories \
 
 - **Standard OpenTDB Integration**: Direct connection to the open OpenTDB REST API with full HTML entity unescaping.
 - **Smart Category Mapping**: Fuzzy keyword matcher maps natural user topics ("movies", "tech", "computer science", "coding", "geo", "animals") to official category IDs preferring longest matches.
-- **In-Memory LRU Caching & Question Pool**: Caches category manifests and buffers pre-fetched questions in a bounded pool to ensure rapid voice responses and prevent rate-limit throttling.
+- **In-Memory Caching & Question Pooling**: Caches category manifests in `SimpleTTLCache` (1-hour TTL) and buffers pre-fetched questions in a bounded memory pool to minimize roundtrips and avoid rate-limiting.
 - **Omi Chat-Tool Protocol Compliant**: Exposes `/.well-known/omi-tools.json` function manifest with JSON schema validation, endpoints, method specifications, and strict `ChatToolResponse` error handling (null-excluded).
 - **Ready for Deployment**: Includes `railway.toml` (Nixpacks), `Procfile`, and `runtime.txt` (`python-3.11`).
