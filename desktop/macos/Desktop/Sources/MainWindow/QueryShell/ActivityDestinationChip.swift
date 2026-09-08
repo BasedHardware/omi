@@ -28,6 +28,7 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
   case memories
   case rewind
   case brainMap
+  case people
 
   var id: String { rawValue }
 
@@ -38,6 +39,7 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .rewind: return "Rewind"
     case .brainMap: return "Brain Map"
+    case .people: return "People"
     }
   }
 
@@ -54,6 +56,7 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
     case .memories: return .memories
     case .rewind: return .rewind
     case .brainMap: return .brainMap
+    case .people: return .people
     }
   }
 

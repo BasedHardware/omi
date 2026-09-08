@@ -16,6 +16,9 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   case activity
   /// The visual screen-history player. Appended to preserve every persisted raw value above.
   case rewind
+  /// Everyone Omi has heard you talk to, with the voices it remembers for them (and for you).
+  /// Appended last so every persisted raw value above keeps its meaning.
+  case people
 
   var id: Int { rawValue }
 
@@ -26,6 +29,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .brainMap: return "Brain Map"
     case .activity: return "Activity"
     case .rewind: return "Rewind"
+    case .people: return "People"
     }
   }
 
@@ -36,6 +40,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .brainMap: return "point.3.connected.trianglepath.dotted"
     case .activity: return "clock.arrow.circlepath"
     case .rewind: return "clock.arrow.circlepath"
+    case .people: return "person.2"
     }
   }
 

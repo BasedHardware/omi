@@ -1574,6 +1574,15 @@ class PushToTalkManager: ObservableObject {
     // the "thinking" indicator through the transcription/first-token gap; it hands
     // off to the conversation surface (or voice glow) the moment output arrives.
     recordSilentMicRecoveryOutcome(silentMicRecoveryPolicy.recordSuccessfulTurn())
+    if isOmniSTT || isBatch {
+      // Whoever holds the shortcut and talks to Omi is the user: the one sample of the
+      // user's voice that needs no guessing. Teaches the on-device diarizer (no-op when its
+      // models are not loaded, e.g. cloud STT) so the live transcript's "You" is right.
+      batchAudioLock.lock()
+      let userVoiceSample = batchAudioBuffer
+      batchAudioLock.unlock()
+      Task { await LocalSpeakerDiarizer.shared.enrollUserVoice(pcm16k: userVoiceSample) }
+    }
     voiceTurnCoordinator.publish(.transcriptionStarted(turnID: turnID))
 
     // Realtime omni: commit the turn and wait for the final transcript.

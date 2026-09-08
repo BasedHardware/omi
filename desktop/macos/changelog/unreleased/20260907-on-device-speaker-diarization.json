@@ -1,3 +1,3 @@
 {
-  "change": "Improved live transcription on Apple Silicon so other people talking near your Mac are labeled as separate speakers instead of as you, and your own voice is recognised across sessions"
+  "change": "Added a People view to Memories that remembers the voices of you and the people you name, so on-device live transcription labels other people in the room as separate speakers, recognises them by voice next time, and lets you mark a speaker as \"This is me\""
 }

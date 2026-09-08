@@ -618,8 +618,8 @@ actor TranscriptionStorage {
     }
   }
   /// Move every segment of `sessionId` whose speaker id is a key of `relabels` to that key's
-  /// new speaker id / label / isUser, in one statement so a swap (0↔1) cannot double-map.
-  /// `personId` is kept unless the row becomes the user. Returns the number of rows moved.
+  /// new speaker id / label / isUser / personId, in one statement so a swap (0↔1) cannot
+  /// double-map. Returns the number of rows moved.
   @discardableResult
   func relabelSpeakers(
     sessionId: Int64,
@@ -634,7 +634,7 @@ actor TranscriptionStorage {
     for (from, to) in entries { arguments += [from, to.speakerId] }
     for (from, to) in entries { arguments += [from, to.speakerLabel] }
     for (from, to) in entries { arguments += [from, to.isUser] }
-    for (from, to) in entries { arguments += [from, to.isUser] }
+    for (from, to) in entries { arguments += [from, to.personId] }
     arguments.append(sessionId)
     for (from, _) in entries { arguments.append(from) }
     let statementArguments = StatementArguments(arguments)
@@ -646,12 +646,36 @@ actor TranscriptionStorage {
           SET speaker = CASE speaker \(speakerCase) ELSE speaker END,
               speakerLabel = CASE speaker \(speakerCase) ELSE speakerLabel END,
               isUser = CASE speaker \(speakerCase) ELSE isUser END,
-              personId = CASE WHEN (CASE speaker \(speakerCase) ELSE 0 END) THEN NULL ELSE personId END
+              personId = CASE speaker \(speakerCase) ELSE personId END
           WHERE sessionId = ? AND speaker IN (\(placeholders))
           """,
         arguments: statementArguments
       )
       return database.changesCount
+    }
+  }
+
+  /// How often, and how recently, each named person appears in local sessions.
+  func personActivity() async throws -> [String: PersonActivity] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      let rows = try Row.fetchAll(
+        database,
+        sql: """
+          SELECT s.personId AS personId, COUNT(DISTINCT s.sessionId) AS sessions, MAX(t.startedAt) AS lastStartedAt
+          FROM transcription_segments s
+          JOIN transcription_sessions t ON t.id = s.sessionId
+          WHERE s.personId IS NOT NULL AND s.personId != ''
+          GROUP BY s.personId
+          """)
+      var activity: [String: PersonActivity] = [:]
+      for row in rows {
+        guard let personId: String = row["personId"] else { continue }
+        activity[personId] = PersonActivity(
+          conversationCount: row["sessions"] ?? 0,
+          lastTalkedAt: row["lastStartedAt"])
+      }
+      return activity
     }
   }
 

@@ -73,6 +73,9 @@ extension AppState {
       let translations = (segment.translations ?? []).map {
         SegmentTranslation(lang: $0.lang, text: $0.text)
       }
+      if lane != nil, !segment.is_user, let personId = segment.person_id, liveSpeakerPersonMap[speakerId] != personId {
+        liveSpeakerPersonMap[speakerId] = personId
+      }
       let newSeg = SpeakerSegment(
         segmentId: segment.id,
         speaker: speakerId,
@@ -202,11 +205,22 @@ extension AppState {
       guard let target = relabels[speakerSegments[index].speaker] else { continue }
       speakerSegments[index].speaker = target.speakerId
       speakerSegments[index].isUser = target.isUser
-      if target.isUser { speakerSegments[index].personId = nil }
+      speakerSegments[index].personId = target.personId
       moved += 1
     }
-    let summary = relabels.map { "\($0.key)→\($0.value.speakerId)\($0.value.isUser ? "(you)" : "")" }
-      .sorted().joined(separator: " ")
+    // The live name map is keyed by speaker id; move the names with the ids.
+    let previousNames = liveSpeakerPersonMap
+    for (from, target) in relabels {
+      liveSpeakerPersonMap[from] = nil
+      liveSpeakerPersonMap[target.speakerId] = target.personId
+    }
+    for (speakerId, personId) in previousNames where relabels[speakerId] == nil {
+      liveSpeakerPersonMap[speakerId] = personId
+    }
+    let summary = relabels.map {
+      "\($0.key)→\($0.value.speakerId)\($0.value.isUser ? "(you)" : "")\($0.value.personId.map { " person=\($0)" } ?? "")"
+    }
+    .sorted().joined(separator: " ")
     log("Transcript [RELABEL] \(summary): \(moved) in-memory segments moved")
     if moved > 0 {
       LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
@@ -219,6 +233,26 @@ extension AppState {
       } catch {
         logError("Transcript [RELABEL] failed to persist speaker relabel", error: error)
       }
+    }
+  }
+
+  /// "This is me" on a live bubble: the on-device diarizer makes that speaker the user and
+  /// remembers the voice, and every earlier bubble moves accordingly.
+  func markLiveSpeakerAsUser(_ speakerId: Int) {
+    Task { @MainActor [weak self] in
+      let relabels = await LocalSpeakerDiarizer.shared.markSpeakerAsUser(speakerId)
+      self?.applyLocalSpeakerRelabels(relabels)
+    }
+  }
+
+  /// A live speaker was named. Shows the name now and, on the on-device path, teaches the
+  /// diarizer that person's voice so it is stamped automatically next time.
+  func assignLiveSpeaker(_ speakerId: Int, toPerson personId: String?) {
+    liveSpeakerPersonMap[speakerId] = personId
+    guard sttSession.useLocalSTT else { return }
+    Task { @MainActor [weak self] in
+      let relabels = await LocalSpeakerDiarizer.shared.assignPerson(personId, toSpeaker: speakerId)
+      self?.applyLocalSpeakerRelabels(relabels)
     }
   }
 

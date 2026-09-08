@@ -153,6 +153,13 @@ struct MemoryHubPage: View {
         onSelectBrainDestination: select
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .people:
+      PeoplePage(
+        appState: appState,
+        brainDestination: destination,
+        onSelectBrainDestination: select
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .brainMap:
       BrainSectionPageLayout(
         selected: destination,

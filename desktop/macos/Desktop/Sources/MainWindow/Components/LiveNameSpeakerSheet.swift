@@ -10,6 +10,9 @@ struct LiveNameSpeakerSheet: View {
   let onSave: (_ personId: String) -> Void
   let onCreatePerson: (_ name: String) async -> Person?
   let onDismiss: () -> Void
+  /// On-device transcription only: this speaker is the user. Fixes a wrong "You" on the spot
+  /// and teaches Omi the user's voice.
+  var onMarkAsUser: (() -> Void)? = nil
 
   @State private var selectedPersonId: String? = nil
   @State private var isAddingNewPerson: Bool = false
@@ -214,6 +217,34 @@ struct LiveNameSpeakerSheet: View {
       .scaledFont(size: OmiType.caption)
       .foregroundColor(Ink.secondary)
       .padding(.top, OmiSpacing.xxs)
+
+      if let onMarkAsUser {
+        Divider()
+          .background(Ink.separator)
+          .padding(.vertical, OmiSpacing.xs)
+        Button(action: onMarkAsUser) {
+          HStack(spacing: OmiSpacing.sm) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+              .scaledFont(size: OmiType.body)
+            VStack(alignment: .leading, spacing: 2) {
+              Text("This is me")
+                .scaledFont(size: OmiType.body, weight: .medium)
+              Text("Label this speaker as you and remember your voice")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+            }
+            Spacer()
+          }
+          .padding(OmiSpacing.md)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+              .fill(Ink.rowFill)
+          )
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(Ink.primary)
+        .accessibilityIdentifier("live-speaker-this-is-me")
+      }
     }
   }
 

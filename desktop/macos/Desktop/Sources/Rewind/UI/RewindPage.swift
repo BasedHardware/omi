@@ -1595,7 +1595,7 @@ struct RewindPage: View {
           people: appState.people,
           currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
           onSave: { personId in
-            appState.liveSpeakerPersonMap[segment.speaker] = personId
+            appState.assignLiveSpeaker(segment.speaker, toPerson: personId)
             selectedSpeakerSegment = nil
           },
           onCreatePerson: { name in
@@ -1603,7 +1603,12 @@ struct RewindPage: View {
           },
           onDismiss: {
             selectedSpeakerSegment = nil
-          }
+          },
+          onMarkAsUser: appState.sttSession.useLocalSTT
+            ? {
+              appState.markLiveSpeakerAsUser(segment.speaker)
+              selectedSpeakerSegment = nil
+            } : nil
         )
       }
     }

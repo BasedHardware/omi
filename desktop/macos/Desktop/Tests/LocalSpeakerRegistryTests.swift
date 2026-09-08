@@ -35,8 +35,12 @@ final class LocalSpeakerRegistryTests: XCTestCase {
     XCTAssertNotNil(outcome)
     return outcome
       ?? LocalSpeakerRegistry.Outcome(
-        resolution: Resolution(speakerId: -1, isUser: false), relabels: [:], voiceprintToPersist: nil,
+        resolution: Resolution(speakerId: -1, isUser: false), relabels: [:], voiceprintsToPersist: [],
         nearestDistance: .infinity)
+  }
+
+  private func userUpdate(_ outcome: LocalSpeakerRegistry.Outcome) -> VoiceprintUpdate? {
+    outcome.voiceprintsToPersist.first { $0.personId == nil }
   }
 
   func testFirstMicVoiceIsYouAndASecondMicVoiceIsAnotherSpeaker() {
@@ -80,7 +84,7 @@ final class LocalSpeakerRegistryTests: XCTestCase {
   }
 
   func testStoredVoiceprintIdentifiesYouEvenWhenSomeoneElseSpeaksFirstAndMore() {
-    var registry = LocalSpeakerRegistry(userVoiceprint: voice(0))
+    var registry = LocalSpeakerRegistry(userVoiceprint: voice(0), userIsEnrolled: true)
 
     XCTAssertEqual(hear(&registry, 1, seconds: 10, rms: 0.05).resolution, Resolution(speakerId: 1, isUser: false))
     let user = hear(&registry, 0, seconds: 2, rms: 0.005)
@@ -107,12 +111,92 @@ final class LocalSpeakerRegistryTests: XCTestCase {
 
     for _ in 0..<3 {
       let outcome = hear(&registry, 0, seconds: 5)
-      XCTAssertNil(outcome.voiceprintToPersist, "15 s is not enough to persist")
+      XCTAssertNil(userUpdate(outcome), "15 s is not enough to persist")
     }
-    let voiceprint = try XCTUnwrap(hear(&registry, 0, seconds: 5).voiceprintToPersist)
-    XCTAssertEqual(voiceprint.count, 256)
-    XCTAssertLessThan(LocalSpeakerRegistry.cosineDistance(voiceprint, voice(0)), 0.05)
-    XCTAssertNil(hear(&registry, 0, seconds: 5).voiceprintToPersist, "re-persist only after another minute")
+    let update = try XCTUnwrap(userUpdate(hear(&registry, 0, seconds: 5)))
+    XCTAssertEqual(update.embedding.count, 256)
+    XCTAssertLessThan(LocalSpeakerRegistry.cosineDistance(update.embedding, voice(0)), 0.05)
+    XCTAssertFalse(update.isEnrolled, "a bootstrap guess is remembered as a guess, not a confirmed identity")
+    XCTAssertNil(userUpdate(hear(&registry, 0, seconds: 5)), "re-persist only after another minute")
+  }
+
+  /// The learned print from a previous session identifies the user early but does not lock them
+  /// in: the live session that motivated this had stored the *other* person as "You".
+  func testALearnedVoiceprintStillYieldsToADominantMicVoice() {
+    var registry = LocalSpeakerRegistry(userVoiceprint: voice(1), userIsEnrolled: false)
+
+    XCTAssertEqual(hear(&registry, 1, seconds: 3, rms: 0.005).resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertFalse(registry.userIsConfirmed)
+    let owner = hear(&registry, 0, seconds: 6, rms: 0.03)
+    XCTAssertEqual(owner.resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertEqual(owner.relabels, [0: Resolution(speakerId: 1, isUser: false)])
+  }
+
+  func testThisIsMeMovesTheUserLabelAndRemembersAnEnrolledVoice() throws {
+    var registry = LocalSpeakerRegistry()
+    XCTAssertEqual(hear(&registry, 1).resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertEqual(hear(&registry, 0).resolution, Resolution(speakerId: 1, isUser: false))
+
+    let result = try XCTUnwrap(registry.markAsUser(speakerId: 1))
+    XCTAssertEqual(
+      result.relabels,
+      [0: Resolution(speakerId: 1, isUser: false), 1: Resolution(speakerId: 0, isUser: true)])
+    XCTAssertTrue(result.persist.isEnrolled)
+    XCTAssertNil(result.persist.personId)
+    XCTAssertLessThan(LocalSpeakerRegistry.cosineDistance(result.persist.embedding, voice(0)), 0.05)
+    XCTAssertTrue(registry.userIsConfirmed)
+    // Locked: however much the other voice talks now, it stays Speaker 1.
+    XCTAssertEqual(hear(&registry, 1, seconds: 200, rms: 0.05).resolution, Resolution(speakerId: 1, isUser: false))
+    XCTAssertEqual(hear(&registry, 0).resolution, Resolution(speakerId: 0, isUser: true))
+  }
+
+  func testNamingASpeakerTeachesTheirVoiceForTheNextSession() throws {
+    var registry = LocalSpeakerRegistry()
+    _ = hear(&registry, 0)
+    XCTAssertEqual(hear(&registry, 1, seconds: 4).resolution, Resolution(speakerId: 1, isUser: false))
+
+    let named = try XCTUnwrap(registry.assignPerson("person-anna", toSpeakerId: 1))
+    XCTAssertEqual(named.relabels, [1: Resolution(speakerId: 1, isUser: false, personId: "person-anna")])
+    let update = try XCTUnwrap(named.persist)
+    XCTAssertEqual(update.personId, "person-anna")
+    XCTAssertTrue(update.isEnrolled)
+    XCTAssertEqual(
+      hear(&registry, 1).resolution, Resolution(speakerId: 1, isUser: false, personId: "person-anna"))
+    XCTAssertNil(registry.assignPerson("person-anna", toSpeakerId: 0), "the user is never a named person")
+
+    // Next session: Anna is recognised the moment she speaks.
+    var next = LocalSpeakerRegistry(knownVoices: [
+      .init(personId: nil, embedding: voice(0), isEnrolled: true),
+      .init(personId: "person-anna", embedding: update.embedding, isEnrolled: true),
+    ])
+    XCTAssertEqual(
+      hear(&next, 1, lane: .systemAudio, seconds: 4).resolution,
+      Resolution(speakerId: 1, isUser: false, personId: "person-anna"))
+    XCTAssertEqual(hear(&next, 0).resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertTrue(next.userIsConfirmed, "an enrolled user print confirms on match")
+  }
+
+  func testPushToTalkEnrollmentIdentifiesALiveSpeakerAsTheUser() throws {
+    var registry = LocalSpeakerRegistry()
+    XCTAssertEqual(hear(&registry, 1, seconds: 8, rms: 0.03).resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertEqual(hear(&registry, 0, seconds: 3, rms: 0.01).resolution, Resolution(speakerId: 1, isUser: false))
+
+    let enrolled = try XCTUnwrap(registry.enrollUser(embedding: voice(0), speechSeconds: 3))
+    XCTAssertEqual(
+      enrolled.relabels,
+      [0: Resolution(speakerId: 1, isUser: false), 1: Resolution(speakerId: 0, isUser: true)])
+    XCTAssertTrue(enrolled.persist.isEnrolled)
+    XCTAssertTrue(registry.userIsConfirmed)
+    XCTAssertEqual(hear(&registry, 0).resolution, Resolution(speakerId: 0, isUser: true))
+  }
+
+  func testForgettingTheUserVoiceReopensTheBootstrap() {
+    var registry = LocalSpeakerRegistry(userVoiceprint: voice(0), userIsEnrolled: true)
+    XCTAssertEqual(hear(&registry, 0).resolution, Resolution(speakerId: 0, isUser: true))
+    XCTAssertTrue(registry.userIsConfirmed)
+    registry.forgetVoice(personId: nil)
+    XCTAssertFalse(registry.userIsConfirmed)
+    XCTAssertNil(registry.knownUserVoice)
   }
 
   func testClusterCapJoinsTheNearestVoiceInsteadOfGrowing() {

@@ -37,7 +37,7 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testMemoryHubDestinationMenuHasStableRoutes() {
     XCTAssertEqual(
       MemoryHubDestination.allCases,
-      [.memories, .conversations, .brainMap, .activity, .rewind]
+      [.memories, .conversations, .brainMap, .activity, .rewind, .people]
     )
     // Storage identity, pinned: these raw values are persisted, so the enum may not be reordered.
     // Reading order is a different list and lives with the control that presents it — see

@@ -1053,6 +1053,8 @@ extension AppState {
     let onRelabel: LocalTranscriptionService.SpeakerRelabelHandler = { [weak self] relabels in
       self?.applyLocalSpeakerRelabels(relabels)
     }
+    // A push-to-talk enrollment can identify a live speaker too; route those here as well.
+    Task { await LocalSpeakerDiarizer.shared.setRelabelSink(onRelabel) }
     let mic = LocalTranscriptionService(language: language, isUser: true)
     mic.start(
       onSegments: { [weak self] segments in self?.handleBackendSegments(segments, lane: .microphone) },

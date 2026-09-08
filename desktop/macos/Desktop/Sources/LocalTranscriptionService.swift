@@ -319,7 +319,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
         speaker: resolution.speakerLabel,
         speaker_id: resolution.speakerId,
         is_user: resolution.isUser,
-        person_id: nil,
+        person_id: resolution.personId,
         start: snapshot.startSec,
         end: snapshot.startSec + snapshot.durSec,
         translations: nil
