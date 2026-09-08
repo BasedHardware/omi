@@ -77,7 +77,7 @@ def export_memories(
         while True:
             # Fetch one extra item at the ceiling to distinguish a complete export
             # from a truncated one. Nothing reaches stdout until every page succeeds.
-            limit = min(200, max_items - len(items) + 1)
+            limit = min(1000, max_items - len(items) + 1)
             page = client.get(
                 "/v1/dev/user/memories",
                 params={"limit": limit, "offset": len(items), "categories": categories},

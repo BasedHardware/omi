@@ -87,7 +87,7 @@ omi --json memory export --max-items 10000 > memories.json
 omi --json memory export --categories work,skills > work-memories.json
 ```
 
-Requires the global `--json` flag. Retrieves pages of up to 200 records and emits
+Requires the global `--json` flag. Retrieves pages of up to 1,000 records and emits
 one array with all returned fields. `--max-items` defaults to 10,000 and accepts
 1–100,000. Exceeding it is an error, not a successful truncated export. API errors
 also leave stdout empty. Records are buffered in memory until every page succeeds.
@@ -98,6 +98,10 @@ The result covers the Developer API's visible memory view, not a full account
 backup. Offset pagination can miss or repeat records during concurrent changes.
 Category filtering currently scans at most 5,000 underlying memories on the
 server. Conversations, recordings, and archived data are outside this export.
+
+Export uses at most 101 requests for the 100,000-item ceiling. Memory reads share
+the API’s hourly request quota with other clients, so earlier requests or concurrent
+activity can still cause HTTP 429. Wait for the quota to reset before retrying.
 
 ## `omi conversation`
 
