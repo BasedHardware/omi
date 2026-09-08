@@ -113,6 +113,28 @@ async function connectToDevice(deviceId) {
 ```
 
 
+## Omi CV1 Audio Codec
+
+`getAudioCodec()` returns `BleAudioCodec.OPUS_FS320` (`opus_fs320`) for Omi CV1
+devices reporting codec ID 21. These are 320-sample Opus frames (20 ms at 16 kHz),
+distinct from DevKit codec ID 20 (`BleAudioCodec.OPUS`, 160-sample / 10 ms frames).
+Both codecs carry Opus audio; do not interpret a CV1 stream as PCM8.
+
+`mapCodecToName(BleAudioCodec.OPUS_FS320)` returns `Opus FS320 (20 ms)`.
+
+### Codec Regression Tests
+
+From the repository root, with Bun 1.3.14 (the version used by Repo Checks):
+
+```bash
+bun test ./.github/tests/react_native_codec.test.ts
+```
+
+The test exercises the public connection and codec-reading methods with a mocked
+native BLE boundary. It needs no device, network service, or installed native
+modules and runs through the shared check manifest in local and CI lanes. It does
+not replace physical-device audio validation.
+
 ## Troubleshooting
 
 <AccordionGroup>

@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: react-native-sdk-cv1-codec
+    command: ["bun", "test", "./.github/tests/react_native_codec.test.ts"]
+    triggers: ["sdks/react-native/src/OmiConnection.ts", "sdks/react-native/src/types.ts", "sdks/react-native/src/codecs.ts", "sdks/device/PROTOCOL.md", ".github/tests/react_native_codec.test.ts"]
+    lanes: ["local", "ci"]
+    reason: "#13026: the React Native SDK reports CV1 codec 21 as PCM8; the public connection-path regression exercises discovery, characteristic decoding and codec selection without native hardware"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
