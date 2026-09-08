@@ -95,7 +95,7 @@ export function Onboarding({
         </Text>
         <Text style={[styles.copy, desktop && styles.desktopCopy]}>
           {setupRequired
-            ? 'Omi saves your conversations and recordings. Cloud AI services transcribe audio and use your messages to generate replies.'
+            ? 'Omi saves your conversations, memories, and tasks to your Omi account, and you can read them back on Home. Cloud AI services transcribe audio and use your messages to generate replies.'
             : 'Sign in to access your conversations and memories.'}
         </Text>
         {error == null ? null : (

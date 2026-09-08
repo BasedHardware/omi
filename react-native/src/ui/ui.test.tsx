@@ -358,6 +358,29 @@ describe('Onboarding chrome', () => {
     expect(complete).toHaveBeenCalledWith(false);
   });
 
+  test('setup disclosure names what Omi saves and where it is read back', () => {
+    mockPlatformOS = 'ios';
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        setupRequired
+        onCompleteSetup={() => undefined}
+      />,
+    );
+    const output = JSON.stringify(renderer.toJSON());
+
+    expect(output).toContain(
+      'Omi saves your conversations, memories, and tasks to your Omi account',
+    );
+    expect(output).toContain('read them back on Home');
+    expect(output).toContain(
+      'Cloud AI services transcribe audio and use your messages to generate replies',
+    );
+    expect(output).toContain('Agree and continue without a device');
+    expect(output).not.toContain('Claude');
+  });
+
   test('macOS onboarding renders dark ink on the light native window', () => {
     mockPlatformOS = 'macos';
     const renderer = render(
