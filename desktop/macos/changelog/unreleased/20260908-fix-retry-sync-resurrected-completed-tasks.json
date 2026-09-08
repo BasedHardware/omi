@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a bug where a task completed while offline could reappear as incomplete after the app reconnected"
+}
