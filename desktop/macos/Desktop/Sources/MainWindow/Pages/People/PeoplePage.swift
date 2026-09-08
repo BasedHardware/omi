@@ -39,9 +39,10 @@ struct PersonOverview: Identifiable {
       }
   }
 
-  /// Nil when no voice is known: the row says nothing rather than nagging.
+  /// Nil when no voice is known or no clip of it is kept: the row says nothing rather than
+  /// claiming a voice you cannot hear.
   static func voiceCaption(_ voice: LocalSpeakerDiarizer.VoiceSummary?) -> String? {
-    guard let voice else { return nil }
+    guard let voice, !voice.sampleURLs.isEmpty else { return nil }
     let minutes = Int(voice.speechSeconds / 60)
     let amount = minutes >= 1 ? "\(minutes) min heard" : "\(Int(voice.speechSeconds)) s heard"
     let clips =
