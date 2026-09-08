@@ -493,7 +493,10 @@ export function DesktopSettings({
         />
       ) : null}
       {account?.profile != null ? (
-        <Row copy={account.profile.uid} title="Account id" />
+        <Row
+          copy={accountFieldCopy(account.profile.uid, 'Account id unavailable')}
+          title="Account id"
+        />
       ) : null}
       {account?.profile != null &&
       (account.profile.company?.trim() ?? '') !== '' ? (

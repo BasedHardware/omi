@@ -371,7 +371,13 @@ export function SettingsPage({
               )}
               title="Email"
             />
-            <SettingRow copy={snapshot.profile.uid} title="Account id" />
+            <SettingRow
+              copy={accountFieldCopy(
+                snapshot.profile.uid,
+                'Account id unavailable',
+              )}
+              title="Account id"
+            />
             {(snapshot.profile.company?.trim() ?? '') !== '' && (
               <SettingRow
                 copy={(snapshot.profile.company ?? '').trim()}

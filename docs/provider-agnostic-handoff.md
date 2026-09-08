@@ -376,6 +376,8 @@ Cloud Linux after `fb986c2799`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `ef9b0caed5`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382`) and dry-run deploy (`--dry-run: exiting now.`). Worker generation history omits earlier messages whose text is only whitespace instead of sending blank turns to the model. GET history still keeps those rows. Visible padded history stays. Composer still has no attach UI. This does not invent a generation producer.
 
+Cloud Linux after `c3219d93ee`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382`) and dry-run deploy (`--dry-run: exiting now.`). Settings Account id uses Account id unavailable for whitespace instead of a blank row. Reported ids stay. This does not invent a Settings identity producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
