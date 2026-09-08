@@ -27,6 +27,8 @@ def test_user_agent_contains_version_and_repo() -> None:
         "example.invalid",
         "https://",
         "https://example.invalid:private-token",
+        "http://127.0.0.1:65536",
+        "https://user:secret@example.invalid:99999/?token=private-token",
     ],
 )
 def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch, api_base) -> None:

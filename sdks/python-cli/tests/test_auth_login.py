@@ -64,3 +64,68 @@ def test_login_http_503_keeps_existing_warning_policy(login_args, respx_mock, mo
     assert "Could not verify" in captured.err
     assert "It is stored" in captured.err
     assert "Logged in" in captured.err
+
+
+def test_explicit_login_key_recovers_from_invalid_environment_key(config_path, respx_mock, monkeypatch, capsys) -> None:
+    monkeypatch.setenv(cfg.ENV_API_KEY, "stale-malformed-key")
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "auth", "login", "--api-key", FAKE_API_KEY])
+    route = respx_mock.get(f"{cfg.DEFAULT_API_BASE}/v1/dev/user/memories").respond(200, json=[])
+
+    main()
+
+    captured = capsys.readouterr()
+    assert route.call_count == 1
+    assert route.calls[0].request.headers["Authorization"] == f"Bearer {FAKE_API_KEY}"
+    assert json.loads(captured.out) == {
+        "profile": "default",
+        "auth_method": "api_key",
+        "api_base": cfg.DEFAULT_API_BASE,
+    }
+    assert captured.err == ""
+    assert cfg.load().get_profile("default").api_key == FAKE_API_KEY
+
+
+@pytest.mark.parametrize("source", ["flag", "profile"])
+@pytest.mark.parametrize("auth_method", ["api_key", "browser"])
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "ftp://user:secret@example.invalid/?token=private-token",
+        "http://user:secret@127.0.0.1:99999/?token=private-token",
+    ],
+)
+def test_invalid_login_base_preserves_existing_profile(
+    authed_profile, config_path, monkeypatch, capsys, source, auth_method, api_base
+) -> None:
+    argv = ["omi", "--json"]
+    if source == "flag":
+        argv.extend(["--api-base", api_base])
+    else:
+        config = cfg.load()
+        config.get_profile("default").api_base = api_base
+        cfg.save(config)
+    original_config = config_path.read_bytes()
+    argv.extend(["auth", "login"])
+    argv.extend(["--browser"] if auth_method == "browser" else ["--api-key", "omi_dev_" + ("y" * 32)])
+    monkeypatch.setattr(sys, "argv", argv)
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("Invalid API configuration must fail before HTTP, browser login, or retry backoff")
+
+    monkeypatch.setattr(httpx, "Client", unexpected_call)
+    monkeypatch.setattr("omi_cli.auth.oauth.login_with_browser", unexpected_call)
+    monkeypatch.setattr(time, "sleep", unexpected_call)
+
+    with pytest.raises(SystemExit) as info:
+        main()
+
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err) == {
+        "error": "Invalid API base URL",
+        "detail": "Use a valid absolute http:// or https:// URL for the Omi API.",
+    }
+    assert "secret" not in captured.err
+    assert "private-token" not in captured.err
+    assert config_path.read_bytes() == original_config
