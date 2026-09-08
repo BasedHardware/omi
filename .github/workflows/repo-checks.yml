@@ -122,7 +122,7 @@ jobs:
       - name: Select Go SDK prerequisites
         id: go-sdk
         run: |
-          if grep -Eq '^(sdks/device/go/|\.github/checks-manifest\.yaml$|\.github/workflows/repo-checks\.yml$)' /tmp/changed-files.txt; then
+          if grep -Eq '^sdks/device/go/' /tmp/changed-files.txt; then
             echo 'needed=true' >> "$GITHUB_OUTPUT"
           fi
 
