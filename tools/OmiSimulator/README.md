@@ -41,7 +41,9 @@ When the advertisement local name is missing, the Android stack defaults the dis
 
 This simulator advertises local name **`Omi Devkit`**. On macOS, CoreBluetooth often **ignores** `CBAdvertisementDataLocalNameKey` and uses the Mac’s computer name instead — discovery still succeeds via the service UUID.
 
-After connect, RN reads standard Device Information Service `180A` characteristics (see `OmiDeviceInformation`):
+## GATT services exposed
+
+### Device Information (`180A`)
 
 | UUID | Field          | Simulator value   |
 |------|----------------|-------------------|
@@ -51,15 +53,58 @@ After connect, RN reads standard Device Information Service `180A` characteristi
 | 2A29 | manufacturer   | Based Hardware    |
 | 2A25 | serial         | OMI-SIM-0001      |
 
+### Battery (`180F`)
+
+| UUID | Field  | Notes                                      |
+|------|--------|--------------------------------------------|
+| 2A19 | level  | Read + notify; default **87%**; UI slider  |
+
+### Features (`19B10020-…`)
+
+| UUID       | Notes                                                                 |
+|------------|-----------------------------------------------------------------------|
+| 19B10021-… | 4-byte LE bitmask **388** = button (bit2) + LED (bit7) + mic (bit8) |
+
+Storage (bit6) is **not** advertised — no storage service in this cut.
+
+### Button (`23ba7924-…`)
+
+| UUID       | Notes                                                                 |
+|------------|-----------------------------------------------------------------------|
+| 23ba7925-… | Notify; UI **Double press** sends `[2,0,0,0,0,0,0,0]` (RN doublePress) |
+
+### Settings (`19B10010-…`)
+
+| UUID       | Field       | Notes                                      |
+|------------|-------------|--------------------------------------------|
+| 19B10011-… | LED         | Read/write 0–100; default 50               |
+| 19B10012-… | mic gain    | Read/write 0–8; default 4                  |
+| 19B10013-… | charging    | Read + notify; UI toggle (0/1)             |
+
+### Audio (`19B10000-…`)
+
+Unchanged: notify audio frames + read codec `0` (PCM16).
+
 ## Verify from the RN app
 
 1. Start this simulator (Bluetooth on).
 2. In the RN v5 app on **Android** or **macOS**, start a BLE scan.
 3. The device should appear (filtered by service UUID). Name may show as `Omi Devkit`, `Omi`, or your Mac name depending on platform/local-name behaviour.
-4. Connect — the device `information` map should include model / firmware / hardware / manufacturer / serial as above.
+4. Connect — expect:
+   - `information` map (DIS fields above)
+   - `battery` ≈ 87 (updates when you move the slider)
+   - `features` = 388 → `buttonSupported` once notify is up
+   - `ledBrightness` / `microphoneGain` / `charging` populated
+5. Tap **Double press** in the simulator → RN should emit a button double-press event (when audio notify is also active).
 
-Optional: confirm services with LightBlue or nRF Connect (`180A` + `19B10000-…`).
+Optional: confirm services with LightBlue or nRF Connect.
+
+## Still missing vs a full DevKit
+
+- **Haptic** service (`cab1ab95-…`) — Find Device write path
+- **Storage** service (`30295780-…`) + features bit6
+- Reliable BLE **local name** on same-Mac discovery (CoreBluetooth quirk)
 
 ## Remaining Mac limitation
 
-Advertised BLE local name is not reliably visible to other apps on the same Mac. Prefer service-UUID discovery and the Device Information characteristics for a recognisable Omi/DevKit identity.
+Advertised BLE local name is not reliably visible to other apps on the same Mac. Prefer service-UUID discovery and Device Information / Features characteristics for a recognisable Omi/DevKit identity.
