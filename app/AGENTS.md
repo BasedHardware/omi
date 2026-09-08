@@ -28,6 +28,8 @@ For physical-device builds, use the wrapper: it owns `dev + local_dev` and
 `prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
 `scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
 with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
+`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered
+(debug builds need `flutter run` attached on a physical iPhone; see README).
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
@@ -92,6 +94,8 @@ flutter test test/unit/  # specific directory
 ```
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+
+Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs production Swift writers for frame durability, preference freshness, and location snapshots (macOS manifest, local + CI).
 
 PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
