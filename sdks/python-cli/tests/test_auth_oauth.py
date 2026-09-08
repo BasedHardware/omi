@@ -155,15 +155,11 @@ def test_browser_login_status_goes_to_stderr_not_stdout(monkeypatch, capsys) -> 
     In --json mode stdout carries only the JSON payload, so the
     "Opening browser…" / fallback-URL messages belong on stderr.
     """
-    import threading
-
     monkeypatch.setattr(oauth.webbrowser, "open", lambda *a, **k: True)
-
-    # Force the OAuth wait to time out right after the status prints, so the
-    # test doesn't block for the real 300s browser timeout.
-    monkeypatch.setattr(threading.Event, "wait", lambda *a, **k: False)
-    # The real serve_forever thread never got a callback; make join() safe.
-    monkeypatch.setattr(threading.Thread, "join", lambda *a, **k: None)
+    # Make the OAuth wait time out quickly (right after the status prints)
+    # instead of the real 300s, without patching Event.wait globally (that
+    # would also affect the server's internal shutdown event).
+    monkeypatch.setattr(oauth, "_BROWSER_TIMEOUT_SECONDS", 0.2)
 
     with pytest.raises(oauth.AuthError):
         oauth.login_with_browser(
