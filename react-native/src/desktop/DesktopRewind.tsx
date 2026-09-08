@@ -225,29 +225,30 @@ export function DesktopRewind({
       </Text>
       {capture !== undefined ? (
         <View style={styles.toolbar}>
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              capture.capturing || capture.busy
-                ? 'Stop screen capture'
-                : 'Start screen capture'
-            }
-            disabled={!capture.available}
-            onPress={() => {
-              if (capture.capturing || capture.busy)
-                void capture.stop().catch(() => undefined);
-              else {
-                setSource('captured');
-                void capture.start();
+          {capture.available ? (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                capture.capturing || capture.busy
+                  ? 'Stop screen capture'
+                  : 'Start screen capture'
               }
-            }}
-            style={styles.button}>
-            <Text style={styles.text}>
-              {capture.capturing || capture.busy
-                ? 'Stop capture'
-                : 'Start capture'}
-            </Text>
-          </FocusPressable>
+              onPress={() => {
+                if (capture.capturing || capture.busy)
+                  void capture.stop().catch(() => undefined);
+                else {
+                  setSource('captured');
+                  void capture.start();
+                }
+              }}
+              style={styles.button}>
+              <Text style={styles.text}>
+                {capture.capturing || capture.busy
+                  ? 'Stop capture'
+                  : 'Start capture'}
+              </Text>
+            </FocusPressable>
+          ) : null}
           <Text style={[styles.meta, styles.status]}>
             {!capture.available
               ? 'Capture is available in the native Mac app.'

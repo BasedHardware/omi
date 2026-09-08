@@ -423,6 +423,28 @@ test('switching history source retires a delayed old-source page', async () => {
   ).toHaveLength(0);
 });
 
+test('unavailable capture omits Start instead of keeping a disabled Start control', async () => {
+  const capture = {
+    available: false,
+    capturing: false,
+    busy: false,
+    error: null,
+    start: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
+  };
+  const view = await render({capture});
+  expect(content(view)).toContain(
+    'Capture is available in the native Mac app.',
+  );
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Start screen capture',
+    ),
+  ).toHaveLength(0);
+  expect(content(view)).not.toContain('Start capture');
+  expect(content(view)).not.toContain('Stop capture');
+});
+
 test('explicit capture controls switch source and new capture hints preserve the selected image until refresh', async () => {
   const capture = {
     available: true,
