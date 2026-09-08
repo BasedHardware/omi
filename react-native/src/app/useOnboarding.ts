@@ -44,11 +44,15 @@ export function useOnboarding(
         if (!active || operation !== authOperationRef.current) {
           return;
         }
+        setAuthError(null);
         setSetupRequired(hasSession && !completed);
         setOnboardingRequired(!hasSession || !completed);
       })
       .catch(() => {
         if (active && operation === authOperationRef.current) {
+          setAuthError(
+            "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
+          );
           setSetupRequired(!nativeSessionRequired);
           setOnboardingRequired(true);
         }
@@ -81,7 +85,9 @@ export function useOnboarding(
         setSetupRequired(!completed);
         setOnboardingRequired(!completed);
         if (completed) {
-          await refreshReads(false, {ignoreEnabled: true});
+          await refreshReads(false, {ignoreEnabled: true}).catch(
+            () => undefined,
+          );
         }
       } else {
         setAuthError('Sign in was not completed. Try again.');
@@ -122,7 +128,7 @@ export function useOnboarding(
       }
       setSetupRequired(false);
       setOnboardingRequired(false);
-      await refreshReads(false, {ignoreEnabled: true});
+      await refreshReads(false, {ignoreEnabled: true}).catch(() => undefined);
       return operation === authOperationRef.current;
     } catch {
       if (operation === authOperationRef.current) {
