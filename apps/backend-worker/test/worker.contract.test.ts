@@ -1113,7 +1113,34 @@ describe("worker request contract", () => {
     expect(invalidLimit.status).toBe(400);
     expect(unsupportedCursor.status).toBe(400);
     expect(emptySession.status).toBe(400);
+    expect((await invalidLimit.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    expect((await unsupportedCursor.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    expect((await emptySession.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
     expect(accountCalls).toEqual([]);
+  });
+
+  test("chat history GET maps an undecodable olderCursor to refresh_history", async () => {
+    const invalidCursor = await fetchWorker(
+      "/v1/chat-messages?olderCursor=not-a-cursor",
+      {
+        headers: authenticatedHeaders,
+      }
+    );
+
+    expect(invalidCursor.status).toBe(400);
+    expect((await invalidCursor.json()) as unknown).toEqual({
+      error: {
+        code: "bad_request",
+        retryable: false,
+        action: "refresh_history",
+      },
+    });
   });
 
   test("chat history reads persisted messages from D1 without resolving the DO", async () => {
