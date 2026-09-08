@@ -627,6 +627,42 @@ test('whitespace-only Apps description does not leave a blank catalogue subtitle
   expect(blankCopy).toHaveLength(0);
 });
 
+test('NEXT LINE-only Apps description does not leave a blank catalogue subtitle', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            description: '\u0085',
+            author: '\u0085',
+            enabled: false,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
 test('whitespace-only Apps name stays visible instead of a blank catalogue title', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
@@ -988,6 +1024,32 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('day_summary');
   expect(tree).toContain('Status unavailable');
   expect(tree).not.toContain('Status unknown');
+});
+
+test('Settings omits NEXT LINE-only company and job instead of blank rows', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          uid: 'user-1',
+          name: 'Ada',
+          email: 'ada@example.com',
+          company: '\u0085',
+          job: '\u0085',
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('\u0085');
 });
 
 test('Settings developer webhook URLs omit empty or whitespace values', async () => {

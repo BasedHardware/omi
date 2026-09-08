@@ -33,6 +33,7 @@ import {
   connectionIdentityCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -378,15 +379,15 @@ export function SettingsPage({
               )}
               title="Account id"
             />
-            {(snapshot.profile.company?.trim() ?? '') !== '' && (
+            {visibleDisplayText(snapshot.profile.company ?? '') !== '' && (
               <SettingRow
-                copy={(snapshot.profile.company ?? '').trim()}
+                copy={visibleDisplayText(snapshot.profile.company ?? '')}
                 title="Company"
               />
             )}
-            {(snapshot.profile.job?.trim() ?? '') !== '' && (
+            {visibleDisplayText(snapshot.profile.job ?? '') !== '' && (
               <SettingRow
-                copy={(snapshot.profile.job ?? '').trim()}
+                copy={visibleDisplayText(snapshot.profile.job ?? '')}
                 title="Job"
               />
             )}

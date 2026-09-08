@@ -19,6 +19,7 @@ import {
   accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {
   audioRecordingModeCopy,
@@ -499,12 +500,15 @@ export function DesktopSettings({
         />
       ) : null}
       {account?.profile != null &&
-      (account.profile.company?.trim() ?? '') !== '' ? (
-        <Row copy={(account.profile.company ?? '').trim()} title="Company" />
+      visibleDisplayText(account.profile.company ?? '') !== '' ? (
+        <Row
+          copy={visibleDisplayText(account.profile.company ?? '')}
+          title="Company"
+        />
       ) : null}
       {account?.profile != null &&
-      (account.profile.job?.trim() ?? '') !== '' ? (
-        <Row copy={(account.profile.job ?? '').trim()} title="Job" />
+      visibleDisplayText(account.profile.job ?? '') !== '' ? (
+        <Row copy={visibleDisplayText(account.profile.job ?? '')} title="Job" />
       ) : null}
       {account?.profile?.dataProtectionLevel != null ? (
         <Row

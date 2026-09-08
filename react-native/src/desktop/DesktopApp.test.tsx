@@ -2035,6 +2035,51 @@ test('Settings treats whitespace-only Account name and email as unset', async ()
   expect(tree).not.toContain('Job');
 });
 
+test('Settings treats NEXT LINE-only company and job as unset', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-42',
+      name: 'Ada',
+      email: 'ada@example.com',
+      company: '\u0085',
+      job: '\u0085',
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Ada');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+  expect(tree).not.toContain('\u0085');
+});
+
 test('Settings treats whitespace-only Account id as unavailable', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

@@ -235,6 +235,11 @@ test('empty Rewind app and window names stay visible without a blank row', async
         windowTitle: '\u00A0',
       },
       {
+        ...frame('nel'),
+        appName: 'Preview app',
+        windowTitle: '\u0085',
+      },
+      {
         ...frame('three'),
         appName: '  Preview app  ',
         windowTitle: '  Window three  ',
@@ -248,6 +253,7 @@ test('empty Rewind app and window names stay visible without a blank row', async
   expect(output).toContain('Preview app');
   expect(output).toContain('Window three');
   expect(output).not.toContain(' \t\n');
+  expect(output).not.toContain('\u0085');
   await press(view, 'View capture one');
   expect(view.root.findByType(Image).props.accessibilityLabel).toBe(
     'Captured screen from Captured screen',

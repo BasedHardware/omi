@@ -26,6 +26,7 @@ import {
   desktopReadErrorCopy,
   appCategoryCopy,
   appDisplayName,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
@@ -33,7 +34,7 @@ import {styles} from '../ui/styles';
 
 function appRowMeta(app: CloudApp, installKnown: boolean): string {
   const category = appCategoryCopy(app.category);
-  const author = app.author.trim();
+  const author = visibleDisplayText(app.author);
   return [
     category !== '' ? category : null,
     author !== '' ? author : null,
@@ -250,15 +251,16 @@ export function ConnectorsPage({
                 section.items.map(app => {
                   const meta = appRowMeta(app, installKnown);
                   const name = appDisplayName(app.name);
+                  const description = visibleDisplayText(app.description);
                   return (
                     <View
                       key={`${section.key}-${app.id}`}
                       style={styles.cloudRow}>
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{name}</Text>
-                        {app.description.trim().length > 0 && (
+                        {description !== '' && (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
-                            {app.description.trim()}
+                            {description}
                           </Text>
                         )}
                         {meta.length > 0 && (

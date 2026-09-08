@@ -8,7 +8,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {accountFieldCopy, clockLabel} from '../desktopReadClient';
+import {
+  accountFieldCopy,
+  clockLabel,
+  visibleDisplayText,
+} from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
 import type {useRewindCapture} from '../app/useRewindCapture';
@@ -293,9 +297,9 @@ export function DesktopRewind({
                 selected?.id === frame.id && styles.selected,
               ]}>
               <Text style={styles.text}>{rewindAppName(frame.appName)}</Text>
-              {frame.windowTitle.trim() !== '' ? (
+              {visibleDisplayText(frame.windowTitle) !== '' ? (
                 <Text style={styles.meta} numberOfLines={2}>
-                  {frame.windowTitle.trim()}
+                  {visibleDisplayText(frame.windowTitle)}
                 </Text>
               ) : null}
               <Text style={styles.meta}>
