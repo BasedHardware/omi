@@ -154,31 +154,50 @@ struct ChatBubble: View {
   /// the Markdown body has only a few words.
   private static let messageColumnMaxWidth: CGFloat = 640
 
-  /// Whether this message should be truncated
-  private var shouldTruncate: Bool {
-    ChatBubbleTruncation.shouldTruncate(
-      text: bubbleText,
-      isStreaming: message.isStreaming,
-      isExpanded: isExpanded,
-      budget: truncationBudget
-    )
+  /// The row's text, derived once per body evaluation.
+  ///
+  /// `visibleAnswerText` walks and joins the message's blocks, and the
+  /// truncation policy re-counts the lines of what it returns. The body used
+  /// to derive both afresh at every site that read them — five or six times
+  /// per evaluation of a streaming row, once per flush. Sampled on a real
+  /// streaming turn, that derivation was the single largest main-thread cost.
+  private struct RowText {
+    /// `visibleAnswerText` — the copy payload and, for an assistant row with
+    /// blocks, the body.
+    let answer: String
+    /// Visible answer body. Pre-tool model commentary is not the turn output.
+    let bubble: String
+    /// The text to display (truncated or full) — keeps the start of the
+    /// message visible.
+    let display: String
+    let exceedsBudget: Bool
+    let shouldTruncate: Bool
   }
 
-  /// Visible answer body. Pre-tool model commentary is not the turn output.
-  private var bubbleText: String {
+  private func makeRowText() -> RowText {
+    let answer = message.visibleAnswerText
+    let bubble: String
     if message.sender == .ai, !message.contentBlocks.isEmpty {
-      return message.visibleAnswerText
+      bubble = answer
+    } else {
+      bubble = message.text
     }
-    return message.text
-  }
-
-  /// The text to display (truncated or full) — keeps the start of the message visible
-  private var displayText: String {
-    ChatBubbleTruncation.displayText(
-      bubbleText,
+    let budget = truncationBudget
+    let shouldTruncate = ChatBubbleTruncation.shouldTruncate(
+      text: bubble,
       isStreaming: message.isStreaming,
       isExpanded: isExpanded,
-      budget: truncationBudget
+      budget: budget
+    )
+    return RowText(
+      answer: answer,
+      bubble: bubble,
+      display: shouldTruncate
+        ? ChatBubbleTruncation.displayText(
+          bubble, isStreaming: message.isStreaming, isExpanded: isExpanded, budget: budget)
+        : bubble,
+      exceedsBudget: ChatBubbleTruncation.exceedsBudget(bubble, budget: budget),
+      shouldTruncate: shouldTruncate
     )
   }
 
@@ -204,6 +223,10 @@ struct ChatBubble: View {
   }
 
   var body: some View {
+    #if DEBUG
+      let _ = ChatStreamingRenderProbe.hit(.bubbleBodyEvaluation)
+    #endif
+    let rowText = makeRowText()
     Group {
       if message.hidesEmptyStreamingPlaceholder,
         message.isStreaming,
@@ -240,7 +263,7 @@ struct ChatBubble: View {
           // Bubbles hug their content up to a readable cap — omi replies sit
           // left, user messages sit right, neither spans the full column.
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-            messageContentView(groupedBlocks)
+            messageContentView(groupedBlocks, rowText: rowText)
           }
           // A max-width frame alone preserves the body's intrinsic width in
           // an unconstrained HStack. Expand first, then cap it, so metadata
@@ -308,7 +331,7 @@ struct ChatBubble: View {
     .onHover { updateMetadataHover(.row, hovering: $0) }
     // Copy without hunting for the hover strip — and the only copy affordance a
     // user turn has ever had.
-    .contextMenu { messageContextMenu }
+    .contextMenu { messageContextMenu(copyPayload: copyPayload(rowText)) }
     .accessibilityElement(children: .contain)
     .accessibilityLabel(message.sender == .user ? "You" : "Omi")
   }
@@ -316,6 +339,12 @@ struct ChatBubble: View {
   /// The text the row's copy actions put on the pasteboard. `copyableText`
   /// excludes pre-tool commentary, but it is empty for a user turn, whose whole
   /// body is the message.
+  private func copyPayload(_ rowText: RowText) -> String {
+    rowText.answer.isEmpty ? message.text : rowText.answer
+  }
+
+  /// For the sites that act later than the body that derived the row's text —
+  /// a keyboard shortcut, a metadata button — and so derive it again on demand.
   private var copyPayload: String {
     message.copyableText.isEmpty ? message.text : message.copyableText
   }
@@ -330,7 +359,7 @@ struct ChatBubble: View {
   }
 
   @ViewBuilder
-  private var messageContextMenu: some View {
+  private func messageContextMenu(copyPayload: String) -> some View {
     if !copyPayload.isEmpty {
       // Selecting is done in the words themselves now; this stays for the
       // whole message, which a drag would have to be exact to reproduce.
@@ -339,7 +368,7 @@ struct ChatBubble: View {
   }
 
   @ViewBuilder
-  private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
+  private func messageContentView(_ groupedBlocks: [ContentBlockGroup], rowText: RowText) -> some View {
     if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
       // Omi's own reply shows the spinning Omi-mark avatar while thinking, so no
       // extra typing dots are needed; only app personas (no spinning mark) do.
@@ -354,9 +383,9 @@ struct ChatBubble: View {
           groupView(group)
         }
       }
-      if !message.visibleAnswerText.isEmpty {
-        messageTextBubble(displayText)
-        truncationControl
+      if !rowText.answer.isEmpty {
+        messageTextBubble(rowText.display)
+        truncationControl(rowText)
       }
       if message.isStreaming, app != nil {
         let hasInFlightTool = groupedBlocks.contains { group in
@@ -414,10 +443,10 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          messageTextBubble(displayText)
+          messageTextBubble(rowText.display)
         }
 
-        truncationControl
+        truncationControl(rowText)
 
         if message.sender != .user, let resourceStrip {
           resourceStrip
@@ -455,7 +484,7 @@ struct ChatBubble: View {
       .foregroundColor(Ink.secondary)
     }
 
-    switch ChatBubbleMetadataBand.of(message) {
+    switch ChatBubbleMetadataBand.of(message, hasCopyableText: !rowText.answer.isEmpty) {
     case .hidden:
       EmptyView()
     case .timestampOnly:
@@ -513,8 +542,8 @@ struct ChatBubble: View {
   }
 
   @ViewBuilder
-  private var truncationControl: some View {
-    if backgroundAgentSummary == nil, ChatBubbleTruncation.exceedsBudget(bubbleText, budget: truncationBudget) {
+  private func truncationControl(_ rowText: RowText) -> some View {
+    if backgroundAgentSummary == nil, rowText.exceedsBudget {
       if isExpanded {
         Button(action: { isExpanded.toggle() }) {
           Text("Show less")
@@ -522,7 +551,7 @@ struct ChatBubble: View {
             .foregroundColor(Ink.accent)
         }
         .buttonStyle(.plain)
-      } else if shouldTruncate {
+      } else if rowText.shouldTruncate {
         showMoreButton
       }
     }
