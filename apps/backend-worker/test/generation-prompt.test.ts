@@ -227,6 +227,49 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("omits whitespace-only earlier messages from generation history", async () => {
+    const rows = [
+      ["human", "acct-a", "human", "My name is Ana", 1, null],
+      ["blank-human", "acct-a", "human", " \t\n", 2, null],
+      ["blank-assistant", "acct-a", "ai", " \t\n", 3, "completed"],
+      ["assistant", "acct-a", "ai", "Hello Ana", 4, "completed"],
+      ["padded", "acct-a", "human", "  still visible  ", 5, null],
+      ["current", "acct-a", "human", "What is my name?", 6, null],
+    ];
+    for (const [id, account, sender, text, position, outcome] of rows) {
+      await db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+        )
+        .bind(
+          id,
+          account,
+          sender,
+          text,
+          position,
+          JSON.stringify({ chatSessionId: "session-a", appId: null }),
+          outcome
+        )
+        .run();
+    }
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [
+        { role: "user", content: "My name is Ana" },
+        { role: "assistant", content: "Hello Ana" },
+        { role: "user", content: "  still visible  " },
+      ],
+    });
+  });
+
   test("bounds default-session history by message count and UTF-8 bytes", async () => {
     for (let position = 1; position <= 43; position += 1) {
       await db

@@ -96,6 +96,7 @@ async function readGenerationHistory(
   const history: GenerationHistoryMessage[] = [];
   let remaining = GENERATION_HISTORY_TEXT_BUDGET;
   for (const row of result.results) {
+    if (!isVisibleGenerationText(row.text)) continue;
     const size = utf8Bytes(row.text);
     if (size > remaining) break;
     remaining -= size;
