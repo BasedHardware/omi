@@ -13,7 +13,7 @@ import {
 export type ChatMessage = {
   id: string;
   text: string;
-  sender: 'human' | 'ai';
+  sender: 'human' | 'ai' | 'unknown';
   createdAt: number;
   generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
   generationId?: string;
@@ -203,7 +203,11 @@ function parseJson(body: string | null): unknown {
 }
 
 function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
-  if (message.sender !== 'human' && message.sender !== 'ai') {
+  if (
+    message.sender !== 'human' &&
+    message.sender !== 'ai' &&
+    message.sender !== 'unknown'
+  ) {
     throw new Error('Chat message sender is unsupported');
   }
   return {

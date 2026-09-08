@@ -82,6 +82,65 @@ test('loads main Chat history through the native boundary', async () => {
   expect(requests[0].path).toBe('/v1/chat-messages?limit=50');
 });
 
+test('keeps unknown chat senders instead of failing history', async () => {
+  const human = {
+    id: 'human-1',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const unknown = {
+    id: 'unknown-1',
+    text: 'unlabeled',
+    sender: 'unknown' as const,
+    createdAt: 200,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(backendFor(historyBody([human, unknown]))),
+  ).resolves.toEqual([
+    expect.objectContaining({id: 'human-1', sender: 'human'}),
+    expect.objectContaining({
+      id: 'unknown-1',
+      sender: 'unknown',
+      text: 'unlabeled',
+    }),
+  ]);
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            wireMessage(human),
+            {
+              ...wireMessage(human),
+              id: 'empty-1',
+              text: 'kept',
+              sender: '',
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).resolves.toEqual([
+    expect.objectContaining({id: 'human-1', sender: 'human'}),
+    expect.objectContaining({id: 'empty-1', sender: 'unknown', text: 'kept'}),
+  ]);
+});
+
 test('loads named chat session history without mixing the main session', async () => {
   const requests: NativeHttpRequest[] = [];
   const backend = {

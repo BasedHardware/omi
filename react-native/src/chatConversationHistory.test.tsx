@@ -27,7 +27,7 @@ function historyResponse(
   messages: Array<{
     id: string;
     text: string;
-    sender: 'human' | 'ai';
+    sender: 'human' | 'ai' | 'unknown';
     createdAt?: number;
     generationOutcome?: 'completed' | 'cancelled' | null;
   }>,
@@ -672,6 +672,37 @@ test('a whitespace-only conversation-detail chat message says Message text unava
   expect(textOf(renderer)).toContain('You · Message text unavailable');
   expect(textOf(renderer)).toContain('Omi · Message text unavailable');
   expect(textOf(renderer)).not.toContain('Response stopped');
+});
+
+test('an unknown conversation-detail chat sender stays visible instead of hiding the thread', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-known',
+        text: 'saved prompt',
+        sender: 'human',
+        generationOutcome: null,
+      },
+      {
+        id: 'unknown-sender',
+        text: 'unlabeled',
+        sender: 'unknown',
+        generationOutcome: null,
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · saved prompt');
+  expect(textOf(renderer)).toContain('Sender unavailable · unlabeled');
+  expect(textOf(renderer)).not.toContain('Omi · unlabeled');
 });
 
 test('a cancelled conversation-detail chat message with text still says Response stopped', async () => {

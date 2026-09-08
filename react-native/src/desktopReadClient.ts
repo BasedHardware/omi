@@ -210,6 +210,16 @@ export function chatMessageDisplayText(
   return 'Message text unavailable';
 }
 
+export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
+  if (sender === 'human') {
+    return 'You';
+  }
+  if (sender === 'ai') {
+    return 'Omi';
+  }
+  return 'Sender unavailable';
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

@@ -17,6 +17,7 @@ import {
   accountFieldCopy,
   connectionIdentityCopy,
   chatMessageDisplayText,
+  chatSenderCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -810,6 +811,12 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
       generationRetryable: true,
     }),
   ).toBe('Response failed. Try again.');
+});
+
+test('unknown chat senders stay visible instead of failing the history page', () => {
+  expect(chatSenderCopy('human')).toBe('You');
+  expect(chatSenderCopy('ai')).toBe('Omi');
+  expect(chatSenderCopy('unknown')).toBe('Sender unavailable');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

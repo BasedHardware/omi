@@ -2,7 +2,11 @@ import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
-import {chatClockLabel, chatMessageDisplayText} from '../desktopReadClient';
+import {
+  chatClockLabel,
+  chatMessageDisplayText,
+  chatSenderCopy,
+} from '../desktopReadClient';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
@@ -72,7 +76,7 @@ export function ChatConversationHistory({
             )
           ) : (
             result.messages.map(message => {
-              const sender = message.sender === 'human' ? 'You' : 'Omi';
+              const sender = chatSenderCopy(message.sender);
               const body = chatMessageDisplayText(message);
               return (
                 <View key={message.id}>

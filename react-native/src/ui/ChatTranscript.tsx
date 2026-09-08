@@ -50,7 +50,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
         human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
         {opacity, transform: [{translateY}]},
       ]}>
-      {!human && <OmiAvatar />}
+      {!human && message.sender === 'ai' && <OmiAvatar />}
       <View
         style={[
           styles.chatMessageColumn,

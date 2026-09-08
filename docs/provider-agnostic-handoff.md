@@ -350,6 +350,8 @@ Cloud Linux after `c7e116242a`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `714a0dc75d`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Canonical memory reads no longer treat omitted citations or provenance as a malformed page. Those optional ratified keys stay visible with empty citation counts and null lineage, matching old `/v3/memories`. Present provenance still requires nonempty fields. Empty memory text still fails closed. This does not invent a memory producer.
 
+Cloud Linux after `9d8495b80e`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Canonical chat history no longer treats an unknown or empty sender as a malformed page. Those rows stay visible as Sender unavailable instead of labeling them You or Omi. Human and AI senders stay. Admission and generation terminals still require human and AI. This does not invent a chat.write producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

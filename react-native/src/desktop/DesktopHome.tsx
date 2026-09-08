@@ -12,6 +12,7 @@ import type {ChatMessage} from '../chatClient';
 import {
   chatClockLabel,
   chatMessageDisplayText,
+  chatSenderCopy,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   type DesktopReadOutcomes,
@@ -120,9 +121,7 @@ function AskExchange({
       ) : null}
       {messages.map(item => (
         <View key={item.id} style={styles.exchangeRow}>
-          <Text style={styles.rowMeta}>
-            {item.sender === 'human' ? 'You' : 'Omi'}
-          </Text>
+          <Text style={styles.rowMeta}>{chatSenderCopy(item.sender)}</Text>
           <Text
             accessibilityLabel={
               item.generationOutcome === 'failed'
