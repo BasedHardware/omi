@@ -1,0 +1,24 @@
+[package]
+name = "omi-simulator"
+version = "0.2.0"
+edition = "2021"
+description = "Crepuscularity (GPUI) macOS Omi BLE peripheral simulator for RN v5 local discovery"
+publish = false
+
+[[bin]]
+name = "omi-simulator"
+path = "src/main.rs"
+
+[dependencies]
+# Local Crepuscularity checkout (UI framework — not an Omi API).
+# Docs: https://crepuscularity.tsc.hk  ·  repo: tschk/crepuscularity
+crepuscularity-gpui = { path = "/Users/undivisible/projects/crepuscularity/crates/crepuscularity-gpui" }
+gpui = { path = "/Users/undivisible/.cargo/git/checkouts/gpui-ce-866ba02453e968cb/c738623/crates/gpui", default-features = false, features = ["font-kit"] }
+gpui_platform = { path = "/Users/undivisible/.cargo/git/checkouts/gpui-ce-866ba02453e968cb/c738623/crates/gpui_platform", features = ["font-kit"] }
+
+ble-peripheral-rust = "0.2"
+uuid = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+log = "0.4"
+env_logger = "0.11"
+cpal = "0.15"
