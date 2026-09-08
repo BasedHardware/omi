@@ -64,6 +64,16 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     const accountId = this.accountId;
     const pending = await readPendingGeneration(this.env.DB, accountId);
     if (pending === null) return;
+    if (pending.input === "unreadable") {
+      const event = await failGeneration(
+        this.env.DB,
+        accountId,
+        pending.generationId
+      );
+      this.notifyWaiters(pending.generationId, event);
+      await this.ensureGenerationAlarm(accountId);
+      return;
+    }
     await this.runGeneration(accountId, pending.generationId, pending.input);
     await this.ensureGenerationAlarm(accountId);
   }

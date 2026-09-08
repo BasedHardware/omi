@@ -8,7 +8,12 @@ import {
   isGenerationTextMimeType,
   isVisibleGenerationText,
 } from "../src/generation-prompt";
-import { admitMessage, completeGeneration, failGeneration } from "../src/chat";
+import {
+  admitMessage,
+  completeGeneration,
+  failGeneration,
+  readPendingGeneration,
+} from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -1179,5 +1184,87 @@ describe("admit replay attachments", () => {
     );
     expect(admitted.message.chatSessionId).toBe("named-session");
     expect(JSON.parse(stored!.payload).chatSessionId).toBe("named-session");
+  });
+});
+
+describe("pending generation admission", () => {
+  const insertPending = async (
+    generationId: string,
+    messageId: string,
+    payload: string
+  ) => {
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(messageId, "acct-a", `op-${messageId}`, payload, generationId)
+      .run();
+    await db
+      .prepare(
+        "INSERT OR IGNORE INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '1', 1, ?)"
+      )
+      .bind(
+        generationId,
+        "acct-a",
+        JSON.stringify({ id: "1", kind: "snapshot", text: "" })
+      )
+      .run();
+  };
+
+  test("readPendingGeneration keeps an unreadable admission payload instead of throwing", async () => {
+    await insertPending("gen-broken", "broken-human", "{broken");
+    await insertPending(
+      "gen-ok",
+      "ok-human",
+      JSON.stringify({
+        op: "create",
+        opId: "op-ok-human",
+        id: "ok-human",
+        at: 1,
+        text: "hello",
+        sender: "human",
+        journalRevision: 0,
+        attachmentIds: [],
+      })
+    );
+    await expect(readPendingGeneration(db, "acct-a")).resolves.toEqual({
+      generationId: "gen-broken",
+      input: "unreadable",
+    });
+  });
+
+  test("failing an unreadable pending admission unblocks the next generation", async () => {
+    await insertPending("gen-broken", "broken-human", "null");
+    await insertPending(
+      "gen-ok",
+      "ok-human",
+      JSON.stringify({
+        op: "create",
+        opId: "op-ok-human",
+        id: "ok-human",
+        at: 1,
+        text: "hello",
+        sender: "human",
+        journalRevision: 0,
+        attachmentIds: [],
+      })
+    );
+    const pending = await readPendingGeneration(db, "acct-a");
+    expect(pending).toEqual({
+      generationId: "gen-broken",
+      input: "unreadable",
+    });
+    const failed = await failGeneration(db, "acct-a", "gen-broken");
+    expect(failed).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    const next = await readPendingGeneration(db, "acct-a");
+    expect(next).not.toBeNull();
+    expect(next).toMatchObject({
+      generationId: "gen-ok",
+      input: { id: "ok-human", text: "hello", sender: "human" },
+    });
   });
 });

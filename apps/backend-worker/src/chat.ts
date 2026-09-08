@@ -67,7 +67,7 @@ export type SettingsSnapshot = {
 
 export type PendingGeneration = {
   generationId: string;
-  input: ChatCreate;
+  input: ChatCreate | "unreadable";
 };
 
 export async function admitMessage(
@@ -329,10 +329,13 @@ export async function readPendingGeneration(
     .bind(accountId)
     .first<{ generationId: string; payload: string }>();
   if (row === null) return null;
-  return {
-    generationId: row.generationId,
-    input: JSON.parse(row.payload) as ChatCreate,
-  };
+  try {
+    const parsed: unknown = JSON.parse(row.payload);
+    if (isChatCreate(parsed)) {
+      return { generationId: row.generationId, input: parsed };
+    }
+  } catch {}
+  return { generationId: row.generationId, input: "unreadable" };
 }
 
 export async function completeGeneration(
