@@ -1,6 +1,6 @@
 # App (Flutter) — Operational Playbook
 
-Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
+Inherits root [`../AGENTS.md`](../AGENTS.md) rules; this file adds app-specific operational guidance.
 
 ## Build Bootstrap
 
@@ -22,14 +22,13 @@ Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds 
 ```bash
 bash setup.sh ios    # or: bash setup.sh android
 ```
-This handles: pub get, build_runner, gen-l10n, and flavor configuration.
+Handles pub get, build_runner, gen-l10n, and flavor configuration.
 
 For physical-device builds, use the wrapper: it owns `dev + local_dev` and
 `prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
 `scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
 with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
-`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered
-(debug builds need `flutter run` attached on a physical iPhone; see README).
+`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered (debug on-device needs `flutter run` attached; see README).
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
@@ -45,7 +44,6 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS side: `ios/Runner/PigeonCommunicator.g.swift`
 - Android side: `android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt`
 - Implementation: `ios/Runner/RecorderHostApiImpl.swift`
-- After editing the contract, regenerate: `flutter pub run build_runner build`
 
 ### MethodChannel (Phone Calls)
 - Channel: `com.omi/phone_calls` + EventChannel `com.omi/phone_calls/events`
@@ -76,7 +74,7 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
 | Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
-Android has 26 total permissions in AndroidManifest.xml. iOS has 11 background modes + 10 consent strings.
+Android: 26 manifest permissions; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 
@@ -93,16 +91,16 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
-`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+`bash test.sh` bootstraps missing generated files with an empty `API_BASE_URL`, keeping `test/` hermetic.
 
 Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs production Swift writers for frame durability, preference freshness, and location snapshots (macOS manifest, local + CI).
 
-PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
+PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run it locally before committing app Dart changes; deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
-- Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
+- Everything under `test/` must be hermetic — no network, live backends, or real devices — `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: a test that only pumps `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs. Chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes). That file is the Mobile App Checks contract for this class.
 - A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default. State in the PR how you ran it; it must not be the only evidence the change works.
 - Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
@@ -145,8 +143,7 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 ## App Flows & E2E
 
-- See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
-- See `e2e/flows/*.yaml` for individual flow definitions
+- See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows; individual flows live in `e2e/flows/*.yaml`
 
 ## Verifying UI Changes (agent-flutter)
 
