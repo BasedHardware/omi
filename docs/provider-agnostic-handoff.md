@@ -238,7 +238,9 @@ Cloud Linux after `33b611f19a`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `6988c0c214`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation list and detail treat a zero startedAt or finishedAt as Duration unavailable instead of a multi-year duration or "< 1 min". Null bounds already did. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Home current zero-clock slice: macOS Home currents and library conversation rows treat a missing or unix-epoch timestamp as Time unavailable instead of omitting the clock. Dead MemoryRow date formatting stays untouched. This does not invent a conversation or memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `52f6d85548`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Home currents and library conversation rows treat a missing or unix-epoch timestamp as Time unavailable instead of omitting the clock. Dead MemoryRow date formatting stays untouched. This does not invent a conversation or memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the conversation-detail chat clock slice: conversation-detail chat history uses the same Today/Yesterday/date clock as Home chat. A zero createdAt says Time unavailable instead of a blank clock or 1970. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

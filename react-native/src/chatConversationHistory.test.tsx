@@ -24,7 +24,12 @@ const {ConversationsPage} = require('./pages/Conversations');
 const {MAIN_CHAT_CONVERSATION_ID} = require('./chatConversationHistory');
 
 function historyResponse(
-  messages: Array<{id: string; text: string; sender: 'human' | 'ai'}>,
+  messages: Array<{
+    id: string;
+    text: string;
+    sender: 'human' | 'ai';
+    createdAt?: number;
+  }>,
   page: {olderCursor: string | null; hasOlder: boolean} = {
     olderCursor: null,
     hasOlder: false,
@@ -36,10 +41,10 @@ function historyResponse(
     body: JSON.stringify({
       messages: messages.map(message => ({
         ...message,
-        createdAt: 1_000,
+        createdAt: message.createdAt ?? Date.parse('2026-09-07T12:00:00.000Z'),
         generationOutcome: message.sender === 'ai' ? 'completed' : null,
         type: 'text',
-        updatedAt: 1_000,
+        updatedAt: message.createdAt ?? Date.parse('2026-09-07T12:00:00.000Z'),
         chatSessionId: null,
         appId: null,
         journalRevision: 1,
@@ -555,4 +560,29 @@ test('an empty chat page with a blocked older cursor does not claim the chat is 
       node => node.props.accessibilityLabel === 'Load older messages',
     ),
   ).toHaveLength(0);
+});
+
+test('a zero conversation-detail chat timestamp says Time unavailable instead of 1970', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-undated',
+        text: 'undated prompt',
+        sender: 'human',
+        createdAt: 0,
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · undated prompt');
+  expect(textOf(renderer)).toContain('Time unavailable');
+  expect(textOf(renderer)).not.toContain('1970');
 });

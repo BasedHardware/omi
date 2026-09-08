@@ -2,6 +2,7 @@ import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
 import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
+import {chatClockLabel} from '../desktopReadClient';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
@@ -71,14 +72,17 @@ export function ChatConversationHistory({
             )
           ) : (
             result.messages.map(message => (
-              <Text
-                key={message.id}
-                selectable
-                style={styles.conversationTranscriptText}>
-                {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
-                  message.text
-                }`}
-              </Text>
+              <View key={message.id}>
+                <Text selectable style={styles.conversationTranscriptText}>
+                  {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
+                    message.text
+                  }`}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  {chatClockLabel(message.createdAt, Date.now()) ||
+                    'Time unavailable'}
+                </Text>
+              </View>
             ))
           )}
         </>

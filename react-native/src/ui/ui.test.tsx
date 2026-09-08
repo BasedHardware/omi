@@ -905,6 +905,12 @@ test('coverage copy wins over a complete Home search miss', () => {
   );
   expect(transcript).toContain('chatClockLabel(');
   expect(transcript).not.toContain('function formatChatTime');
+  const conversationHistory = readFileSync(
+    resolve(__dirname, 'ChatConversationHistory.tsx'),
+    'utf8',
+  );
+  expect(conversationHistory).toContain('chatClockLabel(');
+  expect(conversationHistory).not.toContain('function formatChatTime');
 });
 
 test('chat message timestamps date older days instead of time only', () => {
