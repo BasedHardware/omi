@@ -68,6 +68,26 @@ test("keeps queued and failed recordings visible and never publishes an unfinish
   ).toBe("completed");
 });
 
+test("NEXT LINE-only completed excerpts stay untitled without inventing a Recording title", () => {
+  const record = parseConversationReadSnapshot({
+    revision: 1,
+    records: [row({ excerpt: "\u0085", locked: false })],
+  }).records[0]!.record;
+  expect(record.structured).toEqual({ title: "", overview: "" });
+  expect(record.status).toBe("completed");
+});
+
+test("completed excerpts omit leading and trailing NEXT LINE", () => {
+  const record = parseConversationReadSnapshot({
+    revision: 1,
+    records: [row({ excerpt: "\u0085Actual saved words\u0085" })],
+  }).records[0]!.record;
+  expect(record.structured).toEqual({
+    title: "Actual saved words",
+    overview: "Actual saved words",
+  });
+});
+
 test("rejects corrupt, ambiguous, oversized or reordered snapshots instead of silently claiming a partial page", () => {
   for (const records of [
     [row({ state: "unknown" })],

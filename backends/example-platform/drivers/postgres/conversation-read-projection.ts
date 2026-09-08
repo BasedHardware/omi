@@ -15,6 +15,8 @@ const integer = (value: unknown): number => {
     throw new TypeError("conversation_snapshot_invalid");
   return parsed;
 };
+const visibleExcerpt = (value: string): string =>
+  value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, "");
 const instant = (value: unknown): string => {
   if (typeof value !== "string" || !Number.isFinite(Date.parse(value)))
     throw new TypeError("conversation_snapshot_invalid");
@@ -80,7 +82,7 @@ export function parseConversationReadSnapshot(
         throw new TypeError("conversation_snapshot_invalid");
       const excerpt =
         row.state === "completed"
-          ? String(row.excerpt).trim().slice(0, 240)
+          ? visibleExcerpt(String(row.excerpt)).slice(0, 240)
           : "";
       const id = row.device
         ? `recording:${row.session_id}`
