@@ -81,7 +81,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
         )}
         <Text
           style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
-          {chatClockLabel(message.createdAt, Date.now())}
+          {chatClockLabel(message.createdAt, Date.now()) || 'Time unavailable'}
         </Text>
       </View>
     </Animated.View>

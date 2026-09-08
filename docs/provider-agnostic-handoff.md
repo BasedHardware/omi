@@ -230,7 +230,9 @@ Cloud Linux after `072838b042`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `3c5ce5a530`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Memories page treats a zero timestamp as Date unavailable instead of 1970. Null timestamps already did. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the task zero-due slice: Tasks page and Home search due copy treat a zero due timestamp as Date unavailable instead of 1970, and do not group that due into Today. Null dues still say No due date / Pending. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `051b25002a`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Tasks page and Home search due copy treat a zero due timestamp as Date unavailable instead of 1970, and do not group that due into Today. Null dues still say No due date / Pending. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the chat zero-timestamp slice: Home and conversation-detail chat history treat a zero createdAt as Time unavailable instead of a blank clock or 1970. Today stays time-only; Yesterday and older days stay dated. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

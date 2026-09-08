@@ -975,6 +975,27 @@ test('chat message timestamps date older days instead of time only', () => {
   }
 });
 
+test('a zero chat timestamp says Time unavailable instead of 1970', () => {
+  const tree = JSON.stringify(
+    render(
+      <ChatMessageRow
+        animate={false}
+        compact
+        message={{
+          id: 'chat-1',
+          text: 'Hello',
+          sender: 'human',
+          createdAt: 0,
+          generationOutcome: null,
+        }}
+        reduceMotion
+      />,
+    ).toJSON(),
+  );
+  expect(tree).toContain('Time unavailable');
+  expect(tree).not.toContain('1970');
+});
+
 test('wide Home search rows keep untitled processing conversations visible', () => {
   const renderer = render(
     <ProjectionRow
