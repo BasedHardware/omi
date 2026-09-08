@@ -10812,5 +10812,15 @@
     "chatBlockUnavailable": "دیگر در دسترس نیست",
     "chatBlockRecommendedNextSteps": "گام‌های بعدی پیشنهادی",
     "couldNotLoadMemories": "بارگذاری خاطرات ممکن نشد",
-    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد"
+    "couldNotLoadKnowledgeGraph": "بارگذاری گراف دانش ممکن نشد",
+    "speechProfileOwnerTitle": "نمایهٔ صوتی {name}",
+    "play": "پخش",
+    "redo": "ضبط دوباره",
+    "answerWithYourVoice": "با صدای خود پاسخ دهید:",
+    "speechProfileTopicLocation": "کجا زندگی می‌کنید؟",
+    "speechProfileTopicWork": "شغل شما چیست؟",
+    "speechProfileTopicGoal": "هدف بلندمدت شما چیست؟",
+    "speechToTextUnavailableDesc": "تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.",
+    "memoryHistoryPartial": "بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.",
+    "tapPlusToStartRecording": "برای شروع ضبط روی + بزنید"
 }

@@ -279,10 +279,22 @@ extension RealtimeHubController {
   }
 
   func voiceTurnDidTerminate(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let terminal = VoiceTurnCoordinator.shared.model.lastTerminal
+    let terminalForTurn = terminal?.turnID == turnID ? terminal : nil
+    if let key = turnEvidenceLedger.key(turnID: turnID, continuityKey: continuityKey) {
+      // In-flight journal writes and already-admitted producing rows may still
+      // receive the same-ID OCR result. Success without either is not a license.
+      let persistPending =
+        turnPersistenceLedger.pendingContinuityKeys.contains(continuityKey)
+        || streamingJournalWriteLedger.contains(continuityKey: continuityKey)
+      _ = RealtimeTurnEvidenceTerminalPolicy.finish(
+        ledger: turnEvidenceLedger,
+        key: key,
+        persistPending: persistPending)
+    }
     if admittedInputTurnID == turnID { admittedInputTurnID = nil }
-    if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
-      terminal.turnID == turnID
-    {
+    if let terminal = terminalForTurn {
       completeExternalRunAuthority(turnID: turnID, reason: terminal.reason)
       if screenEvidence?.descriptor.turnID == turnID {
         clearScreenGrounding(stage: terminal.reason == .success ? "released" : "cancelled")
@@ -1007,16 +1019,20 @@ extension RealtimeHubController {
     if acceptedSpawnOwnerID == ownerID
       || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
     {
-      return await RealtimeTurnJournalAuthority.persist(
+      let accepted = await RealtimeTurnJournalAuthority.persist(
         turnOwnerID: ownerID,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
         kernelOwnsExchange: kernelOwnsExchange,
         refreshAcceptedSpawn: {
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
           await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
-          return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          return await self.persistNativeEvidenceAfterJournalAdmission(
+            ownerID: ownerID, continuityKey: idempotencyKey)
         },
         recordProviderExchange: { false })
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+      return accepted
     }
 
     switch await finalizeStreamingRealtimeProjection(
@@ -1028,6 +1044,7 @@ extension RealtimeHubController {
       terminalReason: terminalReason
     ) {
     case .completed(let accepted):
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
       return accepted
     case .absent, .recordRejected:
       break
@@ -1040,12 +1057,21 @@ extension RealtimeHubController {
       refreshAcceptedSpawn: {
         guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
         await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
-        return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+        guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+        return await self.persistNativeEvidenceAfterJournalAdmission(
+          ownerID: ownerID, continuityKey: idempotencyKey)
       },
       recordProviderExchange: {
         guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
         for attempt in 0..<2 {
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          let turnID = Self.turnID(forVoiceContinuityKey: idempotencyKey)
+          let evidence: [ConversationEvidence] =
+            turnID.flatMap { turnID in
+              let key = RealtimeTurnEvidenceLedger.Key(
+                ownerID: ownerID, turnID: turnID, continuityKey: idempotencyKey)
+              return self.turnEvidenceLedger.evidence(for: key).map { [$0] }
+            } ?? []
           let accepted = await FloatingControlBarManager.shared.recordExchange(
             surface: surface,
             ownerID: ownerID,
@@ -1055,9 +1081,28 @@ extension RealtimeHubController {
             continuityKey: idempotencyKey,
             assistantStatus: journalStatus,
             terminalReason: terminalReason,
-            userScreenContext: self.screenContextByContinuityKey[idempotencyKey])
+            userScreenContext: self.screenContextByContinuityKey[idempotencyKey],
+            userEvidence: evidence)
           guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
-          if accepted { return true }
+          if accepted {
+            if let turnID {
+              let key = RealtimeTurnEvidenceLedger.Key(
+                ownerID: ownerID, turnID: turnID, continuityKey: idempotencyKey)
+              _ = self.turnEvidenceLedger.attachJournalUserTurn(
+                key: key,
+                turnID: KernelTurnProjection.stableTurnID(
+                  continuityKey: idempotencyKey, role: "user"))
+              if let admittedEvidence = self.turnEvidenceLedger.evidence(for: key),
+                evidence.contains(admittedEvidence)
+              {
+                _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+              }
+            }
+            let persisted = await self.persistNativeEvidenceAfterJournalAdmission(
+              ownerID: ownerID, continuityKey: idempotencyKey)
+            self.fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+            return persisted
+          }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
         }
         log("RealtimeHub: kernel journal rejected voice turn (code=journal_record_failed)")
@@ -1123,6 +1168,12 @@ extension RealtimeHubController {
     Task { @MainActor [weak self] in
       guard let self else { return }
       let receipt = await self.turnPersistenceLedger.consumeReceipt(for: idempotencyKey)
+      if let key = self.turnEvidenceLedger.key(turnID: turnID, continuityKey: idempotencyKey) {
+        _ = RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+          ledger: self.turnEvidenceLedger,
+          key: key,
+          accepted: receipt?.accepted == true)
+      }
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
       let accepted = receipt?.accepted == true
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }

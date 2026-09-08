@@ -170,7 +170,10 @@ class OmiClient:
                     message="Connection failed",
                     detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
                 ) from exc
-            raise
+            raise ServerError(
+                message="Connection failed",
+                detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
+            ) from exc
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")

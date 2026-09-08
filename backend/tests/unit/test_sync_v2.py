@@ -1312,6 +1312,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -1394,6 +1397,11 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -3054,6 +3062,9 @@ class TestV2EndpointExecution:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -3134,6 +3145,11 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

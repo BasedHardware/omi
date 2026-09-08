@@ -2,6 +2,49 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.321",
+      "date": "2026-09-08",
+      "changes": [
+        "Chat stays smooth while an answer streams through a conversation",
+        "Improved recall of screen information across voice and chat, with clearer responses when source content is unavailable",
+        "Improved how voice distinguishes remembering screen information from creating tasks and reminders"
+      ]
+    },
+    {
+      "version": "0.12.320",
+      "date": "2026-09-08",
+      "changes": [
+        "Fixed conversation durations that showed the whole recording session instead of the conversation, so a short capture no longer reads as tens of minutes"
+      ]
+    },
+    {
+      "version": "0.12.319",
+      "date": "2026-09-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.318",
+      "date": "2026-09-08",
+      "changes": [
+        "Added Undo Last Dictation in supported editors and clearer recovery when dictation cannot be inserted safely",
+        "Voice typing is now faster for simple, already-clean English dictation",
+        "Made locked listening visible in the notch with a stop and send control, and added clearer push-to-talk and dictation guidance",
+        "Offline voice questions stay available for five minutes for review or copy without being sent automatically"
+      ]
+    },
+    {
+      "version": "0.12.317",
+      "date": "2026-09-08",
+      "changes": [
+        "Added recent screen frames to the chat paperclip menu, so you can attach what you were looking at as an image",
+        "Fixed \"what's on my screen?\" asked from Omi's own window answering with Omi's interface — it now answers from the most recent frame of the app you were actually in, and when you switch into your first real app, the on-screen prompt includes that frame for you",
+        "Improved chat responsiveness with reusable Markdown rendering and a more compact composer with consistent Send and Stop controls",
+        "Added image pasting to the chat composer, so ⌘V with a screenshot or a copied file stages it as an attachment"
+      ]
+    },
+    {
       "version": "0.12.316",
       "date": "2026-09-07",
       "changes": [

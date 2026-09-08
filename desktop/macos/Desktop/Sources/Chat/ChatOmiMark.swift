@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -109,16 +110,118 @@ struct ChatOmiMark: View {
         )
       }
     case .animated(let motion):
-      TimelineView(.animation(minimumInterval: nil, paused: false)) { timeline in
-        Canvas { context, canvasSize in
-          model.advance(
-            to: timeline.date,
-            motion: motion,
-            reduceMotion: false
-          )
-          model.draw(into: &context, size: canvasSize, base: size, anchor: anchor)
-        }
-      }
+      // Drawn by AppKit on its own timer, not by a SwiftUI `TimelineView`. A timeline frame is a SwiftUI graph update, and on
+      // AppKit every graph update is rendered inside `NSHostingView.layout()`
+      // — a layout pass of the whole hosting view, an AppKit walk of its
+      // entire view tree and a Core Animation commit, at display refresh
+      // rate, for as long as an answer streams. Measured on the mounted
+      // transcript that alone kept the main thread fully busy with nothing
+      // arriving. A view that redraws its own layer costs one small
+      // `draw(_:)` per frame and lays nothing out.
+      ChatOmiMarkAnimatedFrames(model: model, motion: motion, base: size, anchor: anchor)
+    }
+  }
+}
+
+/// The animated mark as an AppKit view that repaints itself on its own timer.
+struct ChatOmiMarkAnimatedFrames: NSViewRepresentable {
+  let model: ChatMarkModel
+  let motion: ChatMarkMotion
+  let base: CGFloat
+  let anchor: ChatOmiMark.Anchor
+
+  func makeNSView(context: Context) -> ChatOmiMarkFrameView {
+    let view = ChatOmiMarkFrameView()
+    view.configure(model: model, motion: motion, base: base, anchor: anchor)
+    return view
+  }
+
+  func updateNSView(_ view: ChatOmiMarkFrameView, context: Context) {
+    view.configure(model: model, motion: motion, base: base, anchor: anchor)
+  }
+
+  static func dismantleNSView(_ view: ChatOmiMarkFrameView, coordinator: ()) {
+    view.stop()
+  }
+}
+
+final class ChatOmiMarkFrameView: NSView {
+  /// 60 Hz on the main run loop in `.common` mode, the cadence the live-edge
+  /// pinner already keeps. A display link would pause with the screen, but it
+  /// also never fires for a window that is not on one, which is where the
+  /// mounted transcript harness lives; a timer animates wherever the view is
+  /// mounted and costs one eight-dot `draw(_:)` per tick.
+  private static let frameInterval: TimeInterval = 1.0 / 60.0
+
+  private var model: ChatMarkModel?
+  private var motion: ChatMarkMotion = .gather
+  private var base: CGFloat = 30
+  private var anchor: ChatOmiMark.Anchor = .leading
+  private var timer: Timer?
+
+  /// Top-left origin, matching the SwiftUI `Canvas` the resting frame draws in.
+  override var isFlipped: Bool { true }
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    wantsLayer = true
+    layerContentsRedrawPolicy = .onSetNeedsDisplay
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { nil }
+
+  func configure(model: ChatMarkModel, motion: ChatMarkMotion, base: CGFloat, anchor: ChatOmiMark.Anchor) {
+    self.model = model
+    self.motion = motion
+    self.base = base
+    self.anchor = anchor
+    startIfNeeded()
+    needsDisplay = true
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    if window == nil { stop() } else { startIfNeeded() }
+  }
+
+  private func startIfNeeded() {
+    guard timer == nil, window != nil else { return }
+    let timer = Timer(timeInterval: Self.frameInterval, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.tick() }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    self.timer = timer
+  }
+
+  func stop() {
+    timer?.invalidate()
+    timer = nil
+  }
+
+  private func tick() {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.markFrame)
+    #endif
+    model?.advance(to: Date(), motion: motion, reduceMotion: false)
+    needsDisplay = true
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    guard let model, let context = NSGraphicsContext.current?.cgContext else { return }
+    model.draw(in: context, size: bounds.size, base: base, anchor: anchor)
+  }
+
+  deinit {
+    // An NSView's dealloc is not guaranteed to land on the main thread —
+    // SwiftUI can release a representable-backed view from a background
+    // queue — and an unconditional `MainActor.assumeIsolated` would trap
+    // there, turning a routine teardown into a crash. The timer's block only
+    // weakly captures self, so an off-main teardown costs at most one wasted
+    // tick before the next `tick()` no-ops; `dismantleNSView` stops the timer
+    // on the main thread for every SwiftUI-managed teardown.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { stop() }
     }
   }
 }
@@ -197,6 +300,12 @@ final class ChatMarkModel {
     }
   }
 
+  /// One dot's place and opacity for the current frame.
+  struct DotPlacement: Equatable {
+    let rect: CGRect
+    let opacity: Double
+  }
+
   func draw(
     into context: inout GraphicsContext,
     size: CGSize,
@@ -204,6 +313,31 @@ final class ChatMarkModel {
     anchor: ChatOmiMark.Anchor,
     resting: Bool = false
   ) {
+    for dot in dotPlacements(size: size, base: base, anchor: anchor, resting: resting) {
+      context.fill(Path(ellipseIn: dot.rect), with: .color(Ink.primary.opacity(dot.opacity)))
+    }
+  }
+
+  /// The same frame, drawn with Core Graphics for the AppKit-hosted animation.
+  /// The fill is resolved through the glass's pinned appearance, not the
+  /// window's: on a dark-Aqua window the transcript panel is still light, and
+  /// a dynamic `labelColor` would resolve near-white there — dots on glass,
+  /// invisible. The resting `Ink.primary` Canvas reads the pinned scheme
+  /// through the environment; this is its AppKit twin.
+  func draw(in context: CGContext, size: CGSize, base: CGFloat, anchor: ChatOmiMark.Anchor) {
+    let fill = Ink.nsPrimaryOnGlass
+    for dot in dotPlacements(size: size, base: base, anchor: anchor, resting: false) {
+      context.setFillColor(fill.withAlphaComponent(dot.opacity).cgColor)
+      context.fillEllipse(in: dot.rect)
+    }
+  }
+
+  func dotPlacements(
+    size: CGSize,
+    base: CGFloat,
+    anchor: ChatOmiMark.Anchor,
+    resting: Bool
+  ) -> [DotPlacement] {
     let dotDiameter = base * Self.dotDiameterRatio
     let ringRadius = base * Self.ringRadiusRatio
     let centerY = size.height / 2
@@ -215,7 +349,7 @@ final class ChatMarkModel {
     let lineEnd = size.width - dotDiameter / 2
     let lineStep = (lineEnd - lineStart) / CGFloat(Self.count - 1)
 
-    for index in 0..<Self.count {
+    return (0..<Self.count).map { index in
       let frame = resting ? DotFrame() : frame(dot: index)
       let angle =
         2 * Double.pi * Double(index) / Double(Self.count)
@@ -230,13 +364,9 @@ final class ChatMarkModel {
         + base * CGFloat(frame.offsetY)
 
       let diameter = dotDiameter * CGFloat(frame.scale)
-      let rect = CGRect(
-        x: x - diameter / 2,
-        y: y - diameter / 2,
-        width: diameter,
-        height: diameter
-      )
-      context.fill(Path(ellipseIn: rect), with: .color(Ink.primary.opacity(frame.opacity)))
+      return DotPlacement(
+        rect: CGRect(x: x - diameter / 2, y: y - diameter / 2, width: diameter, height: diameter),
+        opacity: frame.opacity)
     }
   }
 

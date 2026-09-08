@@ -1865,9 +1865,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openSettings => 'Buka Tetapan';
 
   @override
-  String get wantDifferentName => 'Mahu dipanggil dengan nama lain?';
-
-  @override
   String get whatsYourName => 'Siapa nama anda?';
 
   @override
@@ -2049,7 +2046,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryDeleted => 'Ingatan Dipadam.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
 
   @override
   String get undo => 'Buat Asal';
@@ -9940,10 +9938,33 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil Suara $name';
+  }
+
+  @override
+  String get play => 'Mainkan';
+
+  @override
+  String get redo => 'Rakam semula';
+
+  @override
+  String get answerWithYourVoice => 'Jawab dengan suara anda:';
+
+  @override
+  String get speechProfileTopicLocation => 'Di manakah anda tinggal?';
+
+  @override
+  String get speechProfileTopicWork => 'Apakah pekerjaan anda?';
+
+  @override
+  String get speechProfileTopicGoal => 'Apakah matlamat jangka panjang anda?';
+
+  @override
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Ketik + untuk mula merakam';
 
   @override
   String get chatBlockTask => 'Tugas';
@@ -9980,4 +10001,8 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Tidak dapat memuatkan graf pengetahuan';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
 }
