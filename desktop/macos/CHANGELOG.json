@@ -2,6 +2,15 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.321",
+      "date": "2026-09-08",
+      "changes": [
+        "Chat stays smooth while an answer streams through a conversation",
+        "Improved recall of screen information across voice and chat, with clearer responses when source content is unavailable",
+        "Improved how voice distinguishes remembering screen information from creating tasks and reminders"
+      ]
+    },
+    {
       "version": "0.12.320",
       "date": "2026-09-08",
       "changes": [
