@@ -107,9 +107,20 @@ pub mod whisper {
             if self.buf.is_empty() {
                 return Ok(None);
             }
-            let text = (self.runner)(&self.buf)?;
-            self.buf.clear();
+            let chunk = std::mem::take(&mut self.buf);
+            let text = match (self.runner)(&chunk) {
+                Ok(text) => text,
+                Err(err) => {
+                    self.buf = chunk;
+                    return Err(err);
+                }
+            };
             Ok(if text.is_empty() { None } else { Some(text) })
+        }
+
+        #[cfg(test)]
+        pub(crate) fn buffered_capacity(&self) -> usize {
+            self.buf.capacity()
         }
     }
 }
@@ -289,6 +300,15 @@ mod tests {
             assert_eq!(calls.get(), 1);
             assert_eq!(transcriber.flush(), Ok(None));
             assert_eq!(calls.get(), 1);
+        }
+
+        #[test]
+        fn successful_oversized_append_releases_peak_allocation() {
+            let pcm = vec![7; 1_600_000];
+            let mut transcriber = WhisperTranscriber::new(|_: &[u8]| Ok("done".to_string()));
+
+            assert_eq!(transcriber.append_pcm(&pcm), Ok(Some("done".to_string())));
+            assert_eq!(transcriber.buffered_capacity(), 0);
         }
     }
 }
