@@ -8,7 +8,7 @@ import {
   isGenerationTextMimeType,
   isVisibleGenerationText,
 } from "../src/generation-prompt";
-import { completeGeneration, failGeneration } from "../src/chat";
+import { admitMessage, completeGeneration, failGeneration } from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -831,5 +831,77 @@ describe("completeGeneration visibility", () => {
     await expect(
       completeGeneration(db, "acct-a", "gen-missing", "")
     ).rejects.toThrow("admission not found for generation");
+  });
+});
+
+describe("admit replay attachments", () => {
+  test("replay keeps bound attachments when payload JSON is unreadable", async () => {
+    const create = {
+      op: "create" as const,
+      opId: "op-replay-attach",
+      id: "msg-replay-attach",
+      at: 1,
+      text: "hello with file",
+      sender: "human" as const,
+      journalRevision: 1,
+      attachmentIds: ["att-notes"],
+    };
+    const now = 1;
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(create.id, "acct-a", create.text, now, "{broken")
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_attachments (id, account_id, op_id, display_name, media_type, size_bytes, state, r2_key, expires_at, bound_message_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'bound', ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "att-notes",
+        "acct-a",
+        "op-att-notes",
+        "notes.pdf",
+        "application/pdf",
+        1024,
+        "attachments/acct-a/att-notes",
+        now + 86_400_000,
+        create.id,
+        now,
+        now
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        create.id,
+        "acct-a",
+        create.opId,
+        JSON.stringify({ ...create, journalRevision: 0 }),
+        "gen-replay-attach"
+      )
+      .run();
+
+    const admitted = await admitMessage(db, "acct-a", create, null);
+    expect(admitted).toMatchObject({ created: false });
+    if (typeof admitted === "string") throw new Error(admitted);
+    expect(admitted.message.attachments).toEqual([
+      {
+        id: "att-notes",
+        displayName: "notes.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 1024,
+        contentReference: "att-notes",
+      },
+    ]);
+    const stored = await db
+      .prepare("SELECT payload FROM chat_messages WHERE id = ?")
+      .bind(create.id)
+      .first<{ payload: string }>();
+    expect(JSON.parse(stored!.payload).attachments).toEqual(
+      admitted.message.attachments
+    );
   });
 });

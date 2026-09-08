@@ -496,7 +496,11 @@ async function readMessage(
     .bind(id, accountId)
     .first<StoredMessage>();
   if (row === null) return null;
-  return parseStoredMessage(row)?.message ?? null;
+  const parsed = parseStoredMessage(row);
+  if (parsed === null) return null;
+  return parsed.fromColumns
+    ? withBoundHistoryAttachments(db, accountId, parsed.message)
+    : parsed.message;
 }
 
 async function nextPosition(
