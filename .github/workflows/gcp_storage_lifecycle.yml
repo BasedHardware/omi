@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload lifecycle evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: storage-lifecycle-${{ env.RESOLVED_ENVIRONMENT }}-${{ github.run_id }}
           path: |

@@ -196,7 +196,7 @@ checks:
     reason: "locked invariant citation enforcement must keep rejecting an uncited path match"
   - id: pr-preflight-contract-tests
     command: ["python3", ".github/scripts/test_pr_preflight.py"]
-    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", "desktop/macos/scripts/check-e2e-flow-coverage.py", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/checks-manifest.yaml", ".github/workflows/**"]
+    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/pr_preflight.py", ".github/scripts/test_pr_preflight.py", ".github/scripts/pr_metadata.py", "desktop/macos/scripts/check-e2e-flow-coverage.py", "scripts/pre-push-singleflight", "scripts/pr-preflight", ".github/checks-manifest.yaml", ".github/workflows/**", ".github/actions/**"]
     lanes: ["local", "ci"]
     reason: "preflight resolves the check selection every PR depends on"
   - id: product-invariants
