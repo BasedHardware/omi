@@ -28,8 +28,10 @@ import {
   memoryCitationCopy,
   parseMemoryText,
   chatClockLabel,
+  formatTaskDue,
   projectionClockLabel,
   projectionTimestamp,
+  taskDisplaySummary,
   taskGroup,
   timelineGroups,
 } from '../src/desktopReadClient';
@@ -626,6 +628,44 @@ test('memory citation copy matches the citation count', () => {
   expect(memoryCitationCopy(['a', 'b'])).toBe('2 citations');
 });
 
+test('task due copy uses a calendar date instead of a raw epoch', () => {
+  const secondScaleDue = 1786000000;
+  const millisecondDue = Date.UTC(2026, 8, 8);
+  const secondScaleCopy = new Date(secondScaleDue * 1000).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
+  const millisecondCopy = new Date(millisecondDue).toLocaleDateString(
+    undefined,
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    },
+  );
+  expect(secondScaleCopy).toContain('2026');
+  expect(secondScaleCopy).not.toContain('1970');
+  expect(formatTaskDue(secondScaleDue)).toBe(secondScaleCopy);
+  expect(formatTaskDue(millisecondDue)).toBe(millisecondCopy);
+  expect(taskDisplaySummary({completed: false, dueAt: secondScaleDue})).toBe(
+    `Due ${secondScaleCopy}`,
+  );
+  expect(
+    taskDisplaySummary({completed: false, dueAt: secondScaleDue}),
+  ).not.toBe('Due 1786000000');
+  expect(taskDisplaySummary({completed: false, dueAt: null})).toBe('Pending');
+  expect(taskDisplaySummary({completed: true, dueAt: secondScaleDue})).toBe(
+    'Completed',
+  );
+  expect(formatTaskDue(null)).toBe('No due date');
+});
+
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {
   expect(
     conversationDisplaySummary({
@@ -1090,6 +1130,13 @@ test('groups task epochs by deterministic UTC day boundaries', () => {
   expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0), now)).toBe('Tomorrow');
   expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0), now)).toBe('Later');
   expect(taskGroup(null, now)).toBe('Later');
+});
+
+test('groups second-scale task dues on the same UTC day as millisecond dues', () => {
+  const now = Date.UTC(2026, 7, 5, 12, 0);
+  expect(taskGroup(1786000000, now)).toBe('Tomorrow');
+  expect(taskGroup(1786000000000, now)).toBe('Tomorrow');
+  expect(taskGroup(Date.UTC(2026, 7, 6, 7, 6, 40), now)).toBe('Tomorrow');
 });
 
 test('accepts an omitted account epoch and retains a null task revision', async () => {

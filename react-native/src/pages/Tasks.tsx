@@ -11,6 +11,7 @@ import {
 import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
+  formatTaskDue,
   taskGroup,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -27,18 +28,6 @@ import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
 
 const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
-
-function formatTaskDue(dueAt: number | null): string {
-  if (dueAt === null) {
-    return 'No due date';
-  }
-  return new Date(dueAt).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
 
 export function TasksPage({
   outcome,

@@ -70,6 +70,35 @@ export function memoryCitationCopy(citations: readonly string[]): string {
     : `${citations.length} citations`;
 }
 
+export function epochMilliseconds(value: number): number {
+  return value > 100_000_000_000 ? value : value * 1000;
+}
+
+export function formatTaskDue(dueAt: number | null): string {
+  if (dueAt === null) {
+    return 'No due date';
+  }
+  return new Date(epochMilliseconds(dueAt)).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+export function taskDisplaySummary(item: {
+  completed: boolean;
+  dueAt: number | null;
+}): string {
+  if (item.completed) {
+    return 'Completed';
+  }
+  if (item.dueAt === null) {
+    return 'Pending';
+  }
+  return `Due ${formatTaskDue(item.dueAt)}`;
+}
+
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
   return parsed.body !== '' ? parsed.body : 'Memory text unavailable';
@@ -150,7 +179,7 @@ export function taskGroup(
     return 'Later';
   }
   const today = Math.floor(nowMilliseconds / 86400000);
-  const dueDay = Math.floor(dueAt / 86400000);
+  const dueDay = Math.floor(epochMilliseconds(dueAt) / 86400000);
   if (dueDay <= today) {
     return 'Today';
   }
@@ -177,7 +206,9 @@ export function projectionTimestamp(
       ? item.timestamp === null
         ? null
         : item.timestamp * 1000
-      : item.createdAt;
+      : item.createdAt === null
+      ? null
+      : epochMilliseconds(item.createdAt);
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
 }
 
@@ -203,9 +234,7 @@ export function chatClockLabel(
   createdAt: number,
   nowEpochMilliseconds: number,
 ): string {
-  const milliseconds =
-    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
-  return clockLabel(milliseconds, nowEpochMilliseconds);
+  return clockLabel(epochMilliseconds(createdAt), nowEpochMilliseconds);
 }
 
 export function projectionClockLabel(

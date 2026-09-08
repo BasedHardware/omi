@@ -178,6 +178,45 @@ test('task due dates include the year so last-year dues do not look like this ye
   ).toBe(0);
 });
 
+test('task due dates use second-scale epochs as calendar days not 1970', () => {
+  const dueAt = 1786000000;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt}]},
+        }}
+      />,
+    );
+  });
+  const expected = new Date(dueAt * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  expect(expected).toContain('2026');
+  expect(expected).not.toContain('1970');
+  expect(
+    renderer.root.findAll(node => node.props.children === expected).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.children ===
+        new Date(dueAt).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        }),
+    ).length,
+  ).toBe(0);
+});
+
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
   const props = {writesAvailable: true, onTaskEdit: jest.fn()};
   const renderer = render(props);

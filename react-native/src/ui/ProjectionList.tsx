@@ -11,6 +11,7 @@ import {
   conversationDisplayTitle,
   memoryCitationCopy,
   memoryDisplayTitle,
+  taskDisplaySummary,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import {styles} from './styles';
@@ -32,7 +33,7 @@ function displaySummary(item: DesktopReadProjection): string {
   if (item.kind === 'conversation') {
     return conversationDisplaySummary(item);
   }
-  return item.summary;
+  return taskDisplaySummary(item);
 }
 
 export const ProjectionRow = memo(function ProjectionRow({

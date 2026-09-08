@@ -1144,3 +1144,39 @@ test('wide Home search rows report a single memory citation', () => {
   expect(tree).toContain('1 citation');
   expect(tree).not.toContain('Synthesized memory with source citations');
 });
+
+test('wide Home search rows date task dues instead of a raw epoch', () => {
+  const dueAt = 1786000000;
+  const expected = `Due ${new Date(dueAt * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })}`;
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'task',
+        id: 'task-due-home-search',
+        title: 'Prepare launch notes',
+        summary: `Due ${dueAt}`,
+        searchableText: 'Prepare launch notes',
+        completed: false,
+        completedAt: null,
+        dueAt,
+        owner: null,
+        source: 'assistant',
+        provenance: [],
+        sortOrder: 1,
+        indentLevel: 0,
+        createdAt: 1785900000,
+        updatedAt: 1785900100,
+        revision: null,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prepare launch notes');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('Due 1786000000');
+});

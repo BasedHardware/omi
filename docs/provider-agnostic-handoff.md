@@ -216,7 +216,9 @@ Cloud Linux after `615bebc93f`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `fe4ef470a4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Tasks page due dates no longer omit the year, so a last-year overdue due in Today cannot look like this year. UTC day boundaries stay. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the memory citation-count slice: wide Home search and Home currents no longer claim "Synthesized memory with source citations" over an empty citation list. Those rows use the same 0/1/N citation copy as the Memories page. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2b4c53521a`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Wide Home search and Home currents no longer claim "Synthesized memory with source citations" over an empty citation list. Those rows use the same 0/1/N citation copy as the Memories page. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the task due-date display slice: wide Home search no longer shows a raw epoch as a task due, and second-scale Worker/ratified dues use the same UTC calendar day and year as millisecond canonical dues instead of 1970. Tasks page grouping uses that same conversion. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
