@@ -17,7 +17,7 @@ import {
 type StoredMessage = {
   id: string;
   text: string;
-  sender: "human" | "ai";
+  sender: string;
   createdAt: number;
   generationOutcome: "completed" | "cancelled" | null;
   position: number;
@@ -556,14 +556,17 @@ async function projectHistoryMessage(
 ): Promise<ChatMessage | null> {
   const parsed = parseStoredMessage(row);
   if (parsed === null) return null;
-  if (parsed.sender !== "ai") {
+  if (parsed.sender === "ai") {
+    const outcome = historyOutcomeFromTerminal(
+      await readGenerationEvents(db, accountId, row.id),
+      parsed
+    );
+    return outcome === null ? null : { ...parsed, generationOutcome: outcome };
+  }
+  if (parsed.sender === "human") {
     return { ...parsed, sender: "human", generationOutcome: null };
   }
-  const outcome = historyOutcomeFromTerminal(
-    await readGenerationEvents(db, accountId, row.id),
-    parsed
-  );
-  return outcome === null ? null : { ...parsed, generationOutcome: outcome };
+  return { ...parsed, sender: "unknown" };
 }
 
 function historyOutcomeFromTerminal(
@@ -647,17 +650,20 @@ function parseStoredMessage(row: StoredMessage): ChatMessage | null {
   if (row.sender === "human") {
     return { ...base, sender: "human", generationOutcome: null };
   }
-  if (
-    row.generationOutcome !== "completed" &&
-    row.generationOutcome !== "cancelled"
-  ) {
-    return null;
+  if (row.sender === "ai") {
+    if (
+      row.generationOutcome !== "completed" &&
+      row.generationOutcome !== "cancelled"
+    ) {
+      return null;
+    }
+    return {
+      ...base,
+      sender: "ai",
+      generationOutcome: row.generationOutcome,
+    };
   }
-  return {
-    ...base,
-    sender: "ai",
-    generationOutcome: row.generationOutcome,
-  };
+  return { ...base, sender: "unknown", generationOutcome: null };
 }
 
 function parseEvent(payload: string): GenerationEvent {

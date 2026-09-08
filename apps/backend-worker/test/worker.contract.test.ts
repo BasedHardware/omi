@@ -1367,6 +1367,73 @@ describe("worker request contract", () => {
     expect(missingOutcome.status).toBe(503);
   });
 
+  test("history GET keeps unknown senders instead of labeling them human", async () => {
+    const unknownMessage = {
+      id: "unknown-sender",
+      text: "stored without a known sender",
+      sender: "unknown",
+      type: "text",
+      createdAt: 2,
+      updatedAt: 2,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "2",
+      attachments: [],
+    };
+    await insertChatMessage({
+      id: "known-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+      )
+      .bind(
+        unknownMessage.id,
+        "test-account",
+        unknownMessage.text,
+        "unknown",
+        unknownMessage.createdAt,
+        2,
+        JSON.stringify(unknownMessage)
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, '', ?, NULL, 3, NULL)"
+      )
+      .bind("empty-sender", "test-account", "empty sender row", 3)
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.sender)).toEqual([
+      "human",
+      "unknown",
+      "unknown",
+    ]);
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored without a known sender",
+      "empty sender row",
+    ]);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",
