@@ -143,6 +143,98 @@ test.each(['affordance', 'compact', 'overview'] as const)(
   },
 );
 
+test.each(['affordance', 'compact', 'overview'] as const)(
+  '%s keeps a whitespace-only remembered device name visible',
+  async variant => {
+    const onForget = jest.fn();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          nativeSnapshot={null}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          rememberedDevice={{id: 'saved-id', name: ' \t\n'}}
+          onForgetRemembered={onForget}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    try {
+      const output = JSON.stringify(renderer.toJSON());
+      expect(output).toContain('Device name unavailable');
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.accessibilityLabel ===
+            'Reconnect Device name unavailable',
+        ),
+      ).not.toHaveLength(0);
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.accessibilityLabel === 'Forget Device name unavailable',
+        ),
+      ).not.toHaveLength(0);
+      expect(
+        renderer.root.find(
+          node =>
+            node.props.accessibilityLabel === 'Forget Device name unavailable',
+        ).props.disabled,
+      ).toBe(false);
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  },
+);
+
+test.each(['compact', 'overview'] as const)(
+  '%s keeps a whitespace-only discovered device name visible',
+  async variant => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          nativeSnapshot={{
+            bluetooth: 'poweredOn',
+            devices: [{id: 'omi', name: ' \t\n', connected: false, rssi: -40}],
+            connectedDeviceId: null,
+            phase: 'disconnected',
+            capture: 'idle',
+            lastEvent: '',
+            microphone: 'unknown',
+            notifications: 'unknown',
+          }}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    try {
+      const output = JSON.stringify(renderer.toJSON());
+      expect(output).toContain('Device name unavailable');
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.accessibilityLabel === 'Connect Device name unavailable',
+        ),
+      ).not.toHaveLength(0);
+      expect(
+        renderer.root.findAll(
+          node => node.props.accessibilityLabel === 'Scan for Omi devices',
+        ),
+      ).not.toHaveLength(0);
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  },
+);
+
 test.each(['compact', 'overview'] as const)(
   '%s never invents signal strength for a retrieved device',
   async variant => {

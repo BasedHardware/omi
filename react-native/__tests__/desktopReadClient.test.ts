@@ -12,6 +12,7 @@ import {
   appCategoryCopy,
   appDisplaySource,
   appDisplayName,
+  deviceDisplayName,
   accountFieldCopy,
   connectionIdentityCopy,
   chatMessageDisplayText,
@@ -729,6 +730,13 @@ test('empty app names stay visible instead of a blank title', () => {
   expect(appDisplayName(' \t\n')).toBe('App name unavailable');
   expect(appDisplayName('\u00A0')).toBe('App name unavailable');
   expect(appDisplayName('  Owned app  ')).toBe('Owned app');
+});
+
+test('empty device names stay visible instead of a blank row', () => {
+  expect(deviceDisplayName('')).toBe('Device name unavailable');
+  expect(deviceDisplayName(' \t\n')).toBe('Device name unavailable');
+  expect(deviceDisplayName('\u00A0')).toBe('Device name unavailable');
+  expect(deviceDisplayName('  Omi  ')).toBe('Omi');
 });
 
 test('empty chat bodies stay visible instead of a blank bubble', () => {

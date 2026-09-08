@@ -155,6 +155,10 @@ export function appDisplayName(name: string): string {
   return accountFieldCopy(name, 'App name unavailable');
 }
 
+export function deviceDisplayName(name: string): string {
+  return accountFieldCopy(name, 'Device name unavailable');
+}
+
 export function appDisplaySource(app: {
   author: string;
   category: string;

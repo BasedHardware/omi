@@ -9,6 +9,7 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
+import {deviceDisplayName} from '../desktopReadClient';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -124,13 +125,15 @@ export function DeviceSession({
       <View accessibilityLabel="Remembered Omi device" style={styles.deviceRow}>
         <View style={styles.homeDeviceRowLead}>
           <Text numberOfLines={1} style={[styles.deviceName, {flexShrink: 1}]}>
-            {rememberedDevice.name}
+            {deviceDisplayName(rememberedDevice.name)}
           </Text>
         </View>
         {!devices.some(device => device.connected || device.connecting) && (
           <FocusPressable
             accessibilityRole="button"
-            accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
+            accessibilityLabel={`Reconnect ${deviceDisplayName(
+              rememberedDevice.name,
+            )}`}
             disabled={deviceBusy || rememberedBusy || reconnectUnavailable}
             onPress={
               reconnectUnavailable
@@ -146,7 +149,9 @@ export function DeviceSession({
         )}
         <FocusPressable
           accessibilityRole="button"
-          accessibilityLabel={`Forget ${rememberedDevice.name}`}
+          accessibilityLabel={`Forget ${deviceDisplayName(
+            rememberedDevice.name,
+          )}`}
           disabled={deviceBusy || rememberedBusy}
           onPress={onForgetRemembered}
           style={styles.scanButton}>
@@ -178,7 +183,7 @@ export function DeviceSession({
                   : device.connected
                   ? 'Disconnect'
                   : 'Connect'
-              } ${device.name}`}
+              } ${deviceDisplayName(device.name)}`}
               accessibilityRole="button"
               disabled={deviceBusy || connectUnavailable(device)}
               key={device.id}
@@ -194,7 +199,7 @@ export function DeviceSession({
                 pressed && styles.pressed,
               ]}>
               <Text style={styles.macHomeDeviceChipText}>
-                {device.name} ·{' '}
+                {deviceDisplayName(device.name)} ·{' '}
                 {device.connecting
                   ? 'Connecting…'
                   : device.connected
@@ -283,7 +288,7 @@ export function DeviceSession({
           : device.connected
           ? 'Disconnect'
           : 'Connect'
-      } ${device.name}`}
+      } ${deviceDisplayName(device.name)}`}
       accessibilityRole="button"
       disabled={deviceBusy || connectUnavailable(device)}
       key={device.id}
@@ -307,7 +312,9 @@ export function DeviceSession({
             ]}
           />
           <View>
-            <Text style={styles.deviceName}>{device.name}</Text>
+            <Text style={styles.deviceName}>
+              {deviceDisplayName(device.name)}
+            </Text>
             <Text style={styles.deviceMeta}>
               {device.connecting
                 ? 'Connecting…'
@@ -321,7 +328,9 @@ export function DeviceSession({
         </View>
       ) : (
         <View>
-          <Text style={styles.deviceName}>{device.name}</Text>
+          <Text style={styles.deviceName}>
+            {deviceDisplayName(device.name)}
+          </Text>
           <Text style={styles.deviceMeta}>
             {device.connecting
               ? 'Connecting…'

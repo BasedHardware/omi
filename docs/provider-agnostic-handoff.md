@@ -332,7 +332,7 @@ Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
 
-Cloud Linux after `2925ddca32`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Whitespace-only Settings identity, name, and email use the same unset/unavailable copy as empty strings. Whitespace-only company and job rows are omitted. Desktop Apps tiles and Connectors catalogue rows no longer leave a blank title when the app name is empty or whitespace. That title says App name unavailable. Install and Remove labels use that visible name. This does not invent a Settings identity or Apps catalogue producer.
+Cloud Linux after `e61bc4b1fb`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Desktop Apps tiles and Connectors catalogue rows no longer leave a blank title when the app name is empty or whitespace. That title says App name unavailable. Discovered and remembered device rows no longer leave a blank name. That name says Device name unavailable. Scan, Reconnect, Connect, Forget, Disconnect, and Cancel stay. Forget is not dimmed. This does not invent an Apps catalogue or BLE producer.
 
 ## Verified and pushed
 
