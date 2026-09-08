@@ -56,6 +56,9 @@ final class PeoplePageOverviewTests: XCTestCase {
       PersonOverview.voiceCaption(summary("a", seconds: 125, clips: 2)), "Voice known · 2 min heard · 2 clips")
     XCTAssertEqual(
       PersonOverview.conversationCaption(count: 0, last: nil), "Not heard in a conversation yet")
+    XCTAssertEqual(
+      PersonOverview.conversationCaption(count: 4, last: nil), "4 conversations",
+      "a count with no usable date still says Omi heard them")
     XCTAssertTrue(
       PersonOverview.conversationCaption(count: 1, last: now.addingTimeInterval(-7200), now: now)
         .hasPrefix("1 conversation · last"))

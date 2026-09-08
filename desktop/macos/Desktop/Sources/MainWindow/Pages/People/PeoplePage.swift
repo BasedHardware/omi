@@ -51,8 +51,11 @@ struct PersonOverview: Identifiable {
   }
 
   static func conversationCaption(count: Int, last: Date?, now: Date = Date()) -> String {
-    guard count > 0, let last else { return "Not heard in a conversation yet" }
+    guard count > 0 else { return "Not heard in a conversation yet" }
     let noun = count == 1 ? "conversation" : "conversations"
+    // A count without a usable date still means Omi heard them; saying "not heard yet" beside a
+    // real count would be the page contradicting itself.
+    guard let last else { return "\(count) \(noun)" }
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .short
     return "\(count) \(noun) · last \(formatter.localizedString(for: last, relativeTo: now))"
