@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Reject non-finite goal values before requests
+
+Goal numeric options and progress values must be finite. NaN, infinities, and overflowing exponents are rejected before an API request.
+
 ## Development
 
 ```bash

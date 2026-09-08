@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -22,6 +23,14 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     if obj is None:  # pragma: no cover
         raise RuntimeError("AppContext not initialized")
     return obj  # type: ignore[no-any-return]
+
+
+def _finite_number(value: Optional[float]) -> Optional[float]:
+    if value is not None and not math.isfinite(value):
+        raise UsageError(
+            message="Invalid goal value", detail="Goal numbers must be finite; NaN and infinity are not supported."
+        )
+    return value
 
 
 _LIST_COLUMNS = ["id", "title", "goal_type", "current_value", "target_value", "unit", "is_active"]
@@ -73,11 +82,11 @@ def get_goal(
 def create_goal(
     typer_ctx: typer.Context,
     title: str = typer.Argument(..., help="Goal title (1-500 chars)."),
-    target_value: float = typer.Option(..., "--target", help="Target value to achieve."),
+    target_value: float = typer.Option(..., "--target", callback=_finite_number, help="Target value to achieve."),
     goal_type: GoalType = typer.Option(GoalType.scale, "--type", help="boolean, scale, or numeric."),
-    current_value: float = typer.Option(0, "--current", help="Current progress value."),
-    min_value: float = typer.Option(0, "--min", help="Minimum scale value."),
-    max_value: float = typer.Option(10, "--max", help="Maximum scale value."),
+    current_value: float = typer.Option(0, "--current", callback=_finite_number, help="Current progress value."),
+    min_value: float = typer.Option(0, "--min", callback=_finite_number, help="Minimum scale value."),
+    max_value: float = typer.Option(10, "--max", callback=_finite_number, help="Maximum scale value."),
     unit: Optional[str] = typer.Option(None, "--unit", help="Unit label (e.g. 'users', 'points')."),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -102,10 +111,10 @@ def update_goal(
     typer_ctx: typer.Context,
     goal_id: str = typer.Argument(..., help="Goal ID."),
     title: Optional[str] = typer.Option(None, "--title"),
-    target_value: Optional[float] = typer.Option(None, "--target"),
-    current_value: Optional[float] = typer.Option(None, "--current"),
-    min_value: Optional[float] = typer.Option(None, "--min"),
-    max_value: Optional[float] = typer.Option(None, "--max"),
+    target_value: Optional[float] = typer.Option(None, "--target", callback=_finite_number),
+    current_value: Optional[float] = typer.Option(None, "--current", callback=_finite_number),
+    min_value: Optional[float] = typer.Option(None, "--min", callback=_finite_number),
+    max_value: Optional[float] = typer.Option(None, "--max", callback=_finite_number),
     unit: Optional[str] = typer.Option(None, "--unit"),
 ) -> None:
     ctx = _ctx(typer_ctx)
@@ -136,7 +145,7 @@ def update_goal(
 def update_progress(
     typer_ctx: typer.Context,
     goal_id: str = typer.Argument(..., help="Goal ID."),
-    current_value: float = typer.Argument(..., help="New progress value."),
+    current_value: float = typer.Argument(..., callback=_finite_number, help="New progress value."),
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
