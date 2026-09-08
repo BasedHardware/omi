@@ -1489,6 +1489,68 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET keeps bound attachments when payload JSON is unreadable", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-payload",
+        "test-account",
+        "stored beside unreadable json",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+    await insertAttachment({
+      id: "att-notes",
+      accountId: "test-account",
+      state: "bound",
+      boundMessageId: "broken-payload",
+      displayName: "notes.pdf",
+      mimeType: "application/pdf",
+    });
+    await insertAttachment({
+      id: "att-staged",
+      accountId: "test-account",
+      state: "staged",
+      boundMessageId: "broken-payload",
+      displayName: "ignored.txt",
+      mimeType: "text/plain",
+    });
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.id)).toEqual([
+      "readable-human",
+      "broken-payload",
+    ]);
+    expect(envelope!.messages[0]!.attachments).toEqual([]);
+    expect(envelope!.messages[1]!.attachments).toEqual([
+      {
+        id: "att-notes",
+        displayName: "notes.pdf",
+        mediaType: "application/pdf",
+        sizeBytes: 1024,
+        contentReference: "att-notes",
+      },
+    ]);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",

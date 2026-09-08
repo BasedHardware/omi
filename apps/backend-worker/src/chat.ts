@@ -4,6 +4,7 @@ import type { ChatCompletedAssistantMessage } from "@omi-core/contracts";
 
 import {
   bindAttachmentStatement,
+  listBoundAttachments,
   resolveAttachmentsForAdmit,
 } from "./attachments";
 import { isVisibleGenerationText } from "./generation-prompt";
@@ -556,17 +557,38 @@ async function projectHistoryMessage(
 ): Promise<ChatMessage | null> {
   const parsed = parseStoredMessage(row);
   if (parsed === null) return null;
-  if (parsed.sender === "ai") {
+  const message = parsed.fromColumns
+    ? await withBoundHistoryAttachments(db, accountId, parsed.message)
+    : parsed.message;
+  if (message.sender === "ai") {
     const outcome = historyOutcomeFromTerminal(
       await readGenerationEvents(db, accountId, row.id),
-      parsed
+      message
     );
-    return outcome === null ? null : { ...parsed, generationOutcome: outcome };
+    return outcome === null ? null : { ...message, generationOutcome: outcome };
   }
-  if (parsed.sender === "human") {
-    return { ...parsed, sender: "human", generationOutcome: null };
+  if (message.sender === "human") {
+    return { ...message, sender: "human", generationOutcome: null };
   }
-  return { ...parsed, sender: "unknown" };
+  return { ...message, sender: "unknown" };
+}
+
+async function withBoundHistoryAttachments(
+  db: D1Database,
+  accountId: string,
+  message: ChatMessage
+): Promise<ChatMessage> {
+  const bound = await listBoundAttachments(db, accountId, message.id);
+  return {
+    ...message,
+    attachments: bound.map((attachment) => ({
+      id: attachment.id,
+      displayName: attachment.displayName,
+      mediaType: attachment.mediaType,
+      sizeBytes: attachment.sizeBytes,
+      contentReference: attachment.id,
+    })),
+  };
 }
 
 function historyOutcomeFromTerminal(
@@ -588,7 +610,9 @@ function historyOutcomeFromTerminal(
   return terminal.kind === "done" ? "completed" : "cancelled";
 }
 
-function parseStoredMessage(row: StoredMessage): ChatMessage | null {
+function parseStoredMessage(
+  row: StoredMessage
+): { message: ChatMessage; fromColumns: boolean } | null {
   if (row.payload !== null) {
     try {
       const parsed = JSON.parse(row.payload) as unknown;
@@ -605,7 +629,7 @@ function parseStoredMessage(row: StoredMessage): ChatMessage | null {
         ) {
           return null;
         }
-        return message;
+        return { message, fromColumns: false };
       }
     } catch {}
   }
@@ -646,7 +670,10 @@ function parseStoredMessage(row: StoredMessage): ChatMessage | null {
     attachments: [],
   };
   if (row.sender === "human") {
-    return { ...base, sender: "human", generationOutcome: null };
+    return {
+      message: { ...base, sender: "human", generationOutcome: null },
+      fromColumns: true,
+    };
   }
   if (row.sender === "ai") {
     if (
@@ -656,12 +683,18 @@ function parseStoredMessage(row: StoredMessage): ChatMessage | null {
       return null;
     }
     return {
-      ...base,
-      sender: "ai",
-      generationOutcome: row.generationOutcome,
+      message: {
+        ...base,
+        sender: "ai",
+        generationOutcome: row.generationOutcome,
+      },
+      fromColumns: true,
     };
   }
-  return { ...base, sender: "unknown", generationOutcome: null };
+  return {
+    message: { ...base, sender: "unknown", generationOutcome: null },
+    fromColumns: true,
+  };
 }
 
 function parseEvent(payload: string): GenerationEvent {
