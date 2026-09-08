@@ -4948,7 +4948,9 @@ class FloatingControlBarManager {
     origin: String = "realtime_voice",
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil, userScreenContext: String? = nil
+    terminalReason: String? = nil,
+    userScreenContext: String? = nil,
+    userEvidence: [ConversationEvidence] = []
   ) async -> Bool {
     await historyChatProvider?.kernelTurnProjection.recordExchange(
       surface: surface,
@@ -4957,7 +4959,9 @@ class FloatingControlBarManager {
       origin: origin,
       continuityKey: continuityKey,
       assistantStatus: assistantStatus,
-      terminalReason: terminalReason, userScreenContext: userScreenContext,
+      terminalReason: terminalReason,
+      userScreenContext: userScreenContext,
+      userEvidence: userEvidence,
       ownerID: ownerID
     ) ?? false
   }
@@ -5283,6 +5287,19 @@ class FloatingControlBarManager {
     return screenshotCues.contains(where: { m.contains($0) })
   }
 
+  /// Bind reserved native OCR onto the typed/voice-fallback journal row. The
+  /// existing `recordExchange` / `sendMessage` APIs are unchanged; this is the
+  /// producing-row identity ChatProvider already admitted.
+  private static func bindVoiceTurnEvidenceToProducingRow(
+    voiceTurnID: VoiceTurnID?,
+    clientTurnId: String
+  ) {
+    guard let voiceTurnID else { return }
+    RealtimeHubController.shared.bindNativeTurnEvidenceToProducingRow(
+      turnID: voiceTurnID,
+      journalUserTurnID: ChatProvider.messageIds(forAttemptId: clientTurnId).user)
+  }
+
   private func sendAIQuery(
     _ message: String,
     barWindow: FloatingControlBarWindow,
@@ -5449,6 +5466,8 @@ class FloatingControlBarManager {
             clientTurnId: clientTurnId,
             onAccepted: { [weak barWindow] in
               barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+              Self.bindVoiceTurnEvidenceToProducingRow(
+                voiceTurnID: voiceTurnID, clientTurnId: clientTurnId)
             },
             onJournalFinalized: { accepted in
               journalAccepted = accepted
@@ -5662,6 +5681,10 @@ class FloatingControlBarManager {
           imageData: screenshotData,
           turnOwner: .floatingVoice,
           clientTurnId: clientTurnId,
+          onAccepted: {
+            Self.bindVoiceTurnEvidenceToProducingRow(
+              voiceTurnID: voiceTurnID, clientTurnId: clientTurnId)
+          },
           onJournalFinalized: { accepted in
             journalAccepted = accepted
           }

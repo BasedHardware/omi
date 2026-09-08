@@ -2,6 +2,25 @@ import Foundation
 import VoiceTurnDomain
 
 extension FloatingControlBarManager {
+  /// Appends native OCR to the exact user row after a late extractor result.
+  /// This uses the existing kernel journal update path; the stable user turn ID
+  /// and owner-bound surface prevent a replacement PTT from receiving it.
+  func attachRealtimeUserEvidence(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    userTurnID: String,
+    evidence: ConversationEvidence
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let provider = sharedFloatingProvider
+    else { return false }
+    return await provider.kernelTurnProjection.appendEvidence(
+      surface: surface,
+      turnID: userTurnID,
+      evidence: evidence,
+      ownerID: ownerID) != nil
+  }
+
   /// Admits the user turn and its assistant target atomically so all chat
   /// surfaces show one shared realtime exchange.
   func recordStreamingRealtimeExchange(

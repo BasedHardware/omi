@@ -303,8 +303,8 @@ final class RealtimeScreenEvidenceHonestFailureTests: XCTestCase {
     let attached = RealtimeHubTools.screenRule(turnFrameAttached: true)
     let notAttached = RealtimeHubTools.screenRule(turnFrameAttached: false)
 
-    XCTAssertTrue(attached.contains("every turn arrives with an image of the user's screen"))
-    XCTAssertFalse(notAttached.contains("every turn arrives with an image of the user's screen"))
+    XCTAssertTrue(attached.contains("a turn can include an image of the user's screen"))
+    XCTAssertFalse(notAttached.contains("a turn can include an image of the user's screen"))
     XCTAssertTrue(notAttached.contains("needs the screenshot tool first"))
     for rule in [attached, notAttached] {
       XCTAssertTrue(rule.contains("report_screen_observation"), "grounding contract is unconditional")

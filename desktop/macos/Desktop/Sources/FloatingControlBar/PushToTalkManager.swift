@@ -917,7 +917,10 @@ class PushToTalkManager: ObservableObject {
   private func performTerminalCleanup(discardBufferedAudio: Bool = false, parkWarm: Bool = false) {
     // Always restore audio on teardown (cancel, error, cleanup) so we never leave it muted.
     SystemAudioMuteController.shared.restore()
-    contextCaptureTask?.cancel()
+    // OCR is a turn-scoped evidence producer, not a prerequisite for ending
+    // audio. Leave the task alive after normal cleanup so a late result can
+    // finish the exact journal row through RealtimeTurnEvidenceLedger. Its
+    // owner/turn fence prevents it from touching a replacement turn.
     contextCaptureTask = nil
     micCaptureStartInFlight = false
     stopAudioTranscription(discardBufferedAudio: discardBufferedAudio, parkWarm: parkWarm)
@@ -1781,11 +1784,9 @@ class PushToTalkManager: ObservableObject {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     let contextKeywords = currentContextSnapshot?.keywords ?? []
-    // Context improves lexical correction but is no longer needed once this
-    // transcript is ready. Cancel any still-running OCR before clearing the
-    // snapshot so a late callback cannot repopulate state for this turn or the
-    // next one between transcription and terminal cleanup.
-    contextCaptureTask?.cancel()
+    // Context improves lexical correction. OCR completion is also durable
+    // evidence, so it must not be cancelled when transcript finalization wins
+    // the race; the exact turn key fences its eventual journal update.
     contextCaptureTask = nil
     if !query.isEmpty {
       query = PTTTranscriptContextualCorrector.correct(query, keywords: contextKeywords)
@@ -1907,16 +1908,36 @@ class PushToTalkManager: ObservableObject {
 
   private func captureContextAndStartAudio(preOverlayImage: CGImage? = nil) {
     guard let turnID = currentVoiceTurnID else { return }
-    contextCaptureTask?.cancel()
+    let captureStartedAt = Date()
+    let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    let evidenceKey = RealtimeHubController.shared.beginNativeTurnEvidence(
+      turnID: turnID, capturedAt: captureStartedAt)
+    // A prior turn's extractor may still be finishing. It is deliberately not
+    // cancelled here: its exact owner/turn key is independent of this turn.
+    contextCaptureTask = nil
     // QueryTracer: audio capture runs until finalize; context OCR runs in
     // parallel (the `parallel_with` marker + overlapping start/end windows make
     // the concurrency visible in the trace).
     activeTracer?.begin("audio_capture")
     startAudioTranscription()
     activeTracer?.begin("context_ocr", metadata: ["parallel_with": "audio_capture"])
-    let captureStartedAt = Date()
     contextCaptureTask = Task { [weak self] in
-      let snapshot = await PTTContextVocabularyProvider.capture(at: captureStartedAt, preOverlayImage: preOverlayImage)
+      let snapshot = await PTTContextVocabularyProvider.capture(
+        at: captureStartedAt,
+        intent: .frozen(preOverlayImage))
+      if let ownerID {
+        RealtimeHubController.shared.resolveNativeTurnEvidence(
+          turnID: turnID,
+          ownerID: ownerID,
+          capturedAt: snapshot.capturedAt,
+          text: snapshot.evidenceText,
+          textWasTruncated: snapshot.evidenceTextWasTruncated)
+      } else if let evidenceKey {
+        _ = RealtimeHubController.shared.turnEvidenceLedger.resolve(
+          key: evidenceKey,
+          evidence: nil,
+          state: .unavailable)
+      }
       await MainActor.run {
         guard let self, !Task.isCancelled else { return }
         guard self.currentVoiceTurnID == turnID,
@@ -3552,8 +3573,13 @@ class PushToTalkManager: ObservableObject {
       // at the bound — it finishes in the background.
       let utterance = run.transcript ?? ""
       let completion = run.completion
-      let journal = Task { @MainActor in
-        await self.recordVoiceTypingExchange(utterance: utterance, completion: completion, turnID: turnID)
+      // Register the write under the native `voice:<uuid>` identity before the
+      // bounded wait so a timeout+cancel still sees persistPending.
+      let journal = RealtimeHubController.shared.enqueueTurnPersistence(
+        idempotencyKey: RealtimeHubController.voiceContinuityKey(for: turnID)
+      ) {
+        await self.recordVoiceTypingExchange(
+          utterance: utterance, completion: completion, turnID: turnID)
       }
       let journaled =
         (try? await DeadlinedOperation.run(seconds: Self.voiceTypingJournalWaitSeconds) { await journal.value })
@@ -3645,22 +3671,40 @@ class PushToTalkManager: ObservableObject {
   private func recordVoiceTypingExchange(
     utterance: String, completion: VoiceTypeSession.Completion, turnID: VoiceTurnID
   ) async -> Bool {
-    guard let assistantText = completion.journalAcknowledgement else { return false }
+    guard let assistantText = completion.journalAcknowledgement else {
+      RealtimeHubController.shared.retireNativeTurnEvidenceAfterRejectedWrite(turnID: turnID)
+      return false
+    }
     let manager = FloatingControlBarManager.shared
     // `realtime_voice`, not a voice-typing origin of its own: the journal
     // runtime accepts a closed set of origins (agent/src/index.ts), and a
     // dictation is a realtime voice turn — one that types instead of asking.
     // The "Typed:" prefix is what distinguishes it in the transcript.
+    // Continuity stays the historical `voice-typing-` key; native OCR is
+    // reserved under `voice:<uuid>` and rebound onto this producing row.
+    let continuityKey = "voice-typing-\(turnID)"
+    let producingUserTurnID = KernelTurnProjection.stableTurnID(
+      continuityKey: continuityKey, role: "user")
+    let hub = RealtimeHubController.shared
+    let evidence = hub.resolvedNativeTurnEvidence(for: turnID)
     let recorded = await manager.recordExchange(
       surface: manager.realtimeVoiceSurfaceReference(),
       userText: utterance,
       assistantText: assistantText,
       origin: "realtime_voice",
-      continuityKey: "voice-typing-\(turnID)")
+      continuityKey: continuityKey,
+      userEvidence: evidence.map { [$0] } ?? [])
+    let ownerIsCurrent = RuntimeOwnerIdentity.currentOwnerId() != nil
+    if recorded, ownerIsCurrent {
+      hub.bindNativeTurnEvidenceToProducingRow(
+        turnID: turnID, journalUserTurnID: producingUserTurnID)
+      return true
+    }
+    hub.retireNativeTurnEvidenceAfterRejectedWrite(turnID: turnID)
     if !recorded {
       log("PushToTalkManager: voice typing exchange not journaled")
     }
-    return recorded
+    return false
   }
 
   private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
