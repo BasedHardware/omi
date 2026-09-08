@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 
-from omi_cli.main import app
+import pytest
+
+from omi_cli.main import app, main
 
 
 def test_goal_list(authed_profile, respx_mock, cli_runner) -> None:
@@ -172,3 +175,35 @@ def test_goal_delete(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.delete("/v1/dev/user/goals/g1").respond(json={"success": True})
     result = cli_runner.invoke(app, ["goal", "delete", "g1", "-y"])
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (["--unit", "liters"], {"unit": "liters"}),
+        (["--unit", ""], {"unit": ""}),
+        (["--clear-unit"], {"unit": None}),
+        (["--title", "drink water"], {"title": "drink water"}),
+        (["--clear-unit", "--current", "2"], {"unit": None, "current_value": 2.0}),
+    ],
+)
+def test_goal_update_unit_patch(authed_profile, respx_mock, cli_runner, options, expected) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1", **expected})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", *options])
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == expected
+    assert json.loads(result.stdout) == {"id": "g1", **expected}
+
+
+@pytest.mark.parametrize("unit", ["liters", ""])
+def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monkeypatch, capsys, unit) -> None:
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", "--unit", unit, "--clear-unit"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    error = json.loads(output.err)
+    assert "--unit" in error["detail"]
+    assert "--clear-unit" in error["detail"]
+    assert not respx_mock.calls

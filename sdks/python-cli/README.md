@@ -228,7 +228,7 @@ omi
     ├── list [--limit N] [--include-inactive]
     ├── get <id>
     ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [...]
+    ├── update <id> [--unit ... | --clear-unit] [...]
     ├── progress <id> <value>
     ├── history <id> [--days N]
     └── delete <id> [-y]

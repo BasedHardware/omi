@@ -131,8 +131,11 @@ def update_goal(
     min_value: Optional[float] = typer.Option(None, "--min"),
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
+    clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if clear_unit and unit is not None:
+        raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title
@@ -144,11 +147,14 @@ def update_goal(
         body["min_value"] = min_value
     if max_value is not None:
         body["max_value"] = max_value
-    if unit is not None:
+    if clear_unit:
+        body["unit"] = None
+    elif unit is not None:
         body["unit"] = unit
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide one of --title/--target/--current/--min/--max/--unit."
+            message="No fields to update",
+            detail="Provide one of --title/--target/--current/--min/--max/--unit/--clear-unit.",
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
