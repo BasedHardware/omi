@@ -458,7 +458,7 @@ struct QueryHeroBar: View {
   }
 
   private var placeholder: String {
-    mode == .answer ? "Ask a follow-up…" : RewindSearchMetrics.placeholder
+    QueryComposerPlaceholder.text(mode: mode)
   }
 
   private var fontSize: CGFloat {
