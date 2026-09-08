@@ -680,6 +680,13 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
     node => node.props.accessibilityLabel === 'Send unavailable',
   );
   expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
   send.props.onPress();
   expect(onSend).not.toHaveBeenCalled();
   const omnibar = renderer.root
@@ -688,6 +695,18 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
       node => node.props.placeholder === "Search what you've seen and heard…",
     )!;
   expect(omnibar.props.onSubmitEditing).toBeUndefined();
+  const live = renderDesktop();
+  const liveSend = live.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(liveSend.props.disabled).toBe(false);
+  const liveStyle =
+    typeof liveSend.props.style === 'function'
+      ? liveSend.props.style({pressed: false})
+      : liveSend.props.style;
+  expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
 });
 
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {

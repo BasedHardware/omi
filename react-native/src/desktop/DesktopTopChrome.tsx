@@ -237,8 +237,20 @@ export function DesktopChrome({
                 : onSend
               : onStop
           }
-          style={({pressed}) => [styles.send, pressed && styles.pressed]}>
-          <Text style={styles.sendText}>
+          style={({pressed}) => [
+            styles.send,
+            sendUnavailable &&
+              activeGenerationId === null &&
+              styles.sendUnavailable,
+            pressed && styles.pressed,
+          ]}>
+          <Text
+            style={[
+              styles.sendText,
+              sendUnavailable &&
+                activeGenerationId === null &&
+                styles.sendTextUnavailable,
+            ]}>
             {activeGenerationId === null ? 'Ask' : 'Stop'}
           </Text>
         </FocusPressable>
@@ -349,12 +361,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
+  sendUnavailable: {opacity: 0.35},
   sendText: {
     color: token.color.ink,
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600',
   },
+  sendTextUnavailable: {color: token.color.inkMuted},
   settingsButton: {
     alignItems: 'center',
     borderRadius: 17,
