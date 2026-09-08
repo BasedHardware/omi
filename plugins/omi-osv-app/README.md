@@ -71,6 +71,20 @@ PATH="$PWD/.venv/bin:$PATH" bash test.sh
 
 `test.sh` runs Python `unittest` using already-installed dependencies. It never installs packages, skips the suite or contacts the network. Tests use FastAPI's real `TestClient`, Pydantic validation and `httpx.MockTransport` to exercise manifest-based invocation, package-scoped fix output, empty/unknown semantics, pagination, withdrawal, input validation, provider failures and response bounds. Omi metadata and exception-body canaries must not leak upstream or into tool responses.
 
+### Repository preflight prerequisites
+
+The repository manifest runs this suite in both local and CI lanes. CI installs the app dependencies when the check is selected. For local `make preflight` or pre-push checks, first complete the repository's normal setup and prepare this app's environment. From the repository root:
+
+```bash
+python3 -m venv plugins/omi-osv-app/.venv
+plugins/omi-osv-app/.venv/bin/python -m pip install -r plugins/omi-osv-app/requirements-test.txt
+export PATH="$PWD/plugins/omi-osv-app/.venv/bin:$PATH"
+export PYTHON="$PWD/plugins/omi-osv-app/.venv/bin/python"
+make preflight
+```
+
+The `uv` setup alternative above also applies, using the repository-relative paths. Supply your PR body as described in the repository contribution guide. Keep this environment selected when pushing so `test.sh` finds FastAPI, HTTPX and Pydantic; the check intentionally does not download dependencies during test execution.
+
 Local HTTP/API validation does not establish that this app is deployed, registered, approved or funded by Omi. Those steps remain separate from this service.
 
 API references: [POST /v1/query](https://google.github.io/osv.dev/post-v1-query/), [GET /v1/vulns](https://google.github.io/osv.dev/get-v1-vulns/).
