@@ -43,7 +43,8 @@ final class MainChatNavigationRequestStore {
   private var requestGeneration = 0
 
   func request(
-    draft: String? = nil, attachment: ChatAttachment? = nil,
+    draft: String? = nil,
+    attachment: ChatAttachment? = nil,
     disposition: DraftDisposition = .replace,
     authorization: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
@@ -84,17 +85,9 @@ final class MainChatNavigationRequestStore {
   }
 
   /// Returns the pending composer draft, and clears it. Exactly one composer
-  /// takes it; a second caller gets `nil`.
-  func consumeDraft() -> String? {
-    consumeDraft(existingDraft: "")
-  }
-
-  /// Returns the pending composer draft merged onto `existingDraft` when the
-  /// request asked to append, and clears it. Exactly one composer takes it; a
-  /// second caller gets `nil`. A request carrying an authorization snapshot
-  /// is dropped when that owner is no longer current, so one session's
-  /// recovered question can never surface in another session's composer.
-  func consumeDraft(existingDraft: String) -> String? {
+  /// takes it; a second caller gets `nil`. `existingDraft` defaults to empty
+  /// so plain replace-style callers can omit it.
+  func consumeDraft(existingDraft: String = "") -> String? {
     defer {
       pendingDraft = nil
       draftAuthorization = nil
