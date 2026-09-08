@@ -43,8 +43,10 @@ MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # cold-runner ceiling than the narrower release-compile job.
 MACOS_JOB_TIMEOUT_MINUTES = {
     # The PR lane defers ratcheted slow suites and holds one runner for
-    # ~15-20 min; the full lane still needs the larger share of this ceiling.
-    "desktop-swift-verify": 45,
+    # ~15-20 min once the formatter/linter tool cache is warm; the ceiling
+    # must also cover one legitimate cold-tools run (~15 min from-source
+    # bootstrap) ahead of the full lane, which still runs everything.
+    "desktop-swift-verify": 55,
     # A notification-boundary change compiles release mode AND builds the
     # release test target for the regression (~50 min observed on
     # run 34239723019), so this lane keeps the wider bound.
@@ -395,6 +397,27 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertNotIn("desktop/macos/Desktop/.build", release_job)
         self.assertNotIn("desktop-swift-release-xcode164", release_job)
         self.assertIn("Restore SwiftPM dependency cache", release_job)
+
+    def test_tools_cache_covers_the_launcher_test_lane(self):
+        """The launcher tests exercise the pinned swift-format binary.
+
+        The tools restore used to be gated on the static lane alone, so a
+        tests-only diff (static selection empty) rebuilt swift-format from
+        source for ~15 min inside the launcher tests, every run: the cache was
+        never restored, and the save ran before the step that built the tools,
+        caching nothing. The restore must cover the tests lane, and the save
+        must come after the launcher tests so a cold bootstrap is captured.
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn(
+            "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
+            job,
+        )
+        restore_index = job.index("Restore Swift formatter and linter tools")
+        launcher_index = job.index("Desktop launcher script tests")
+        save_index = job.rindex("Save Swift formatter and linter tools after checks")
+        self.assertLess(restore_index, launcher_index)
+        self.assertLess(launcher_index, save_index)
 
     def test_pr_test_lane_defers_slow_suites_with_changed_file_wake(self):
         """The PR lane defers ratcheted slow suites; their own diffs wake them.

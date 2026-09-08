@@ -121,12 +121,11 @@ jobs:
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
     # Bounds manifest checks, launcher coverage, and the debug suite. The PR
-    # lane defers ratcheted slow suites and holds one runner for ~15-20 min;
-    # the full lane (main push, scheduled health, manual dispatch) still runs
-    # everything and needs the larger share of this ceiling. (The release-mode
-    # UserNotifications regression lives in the Release Compile job, next to
-    # the release build it consumes.)
-    timeout-minutes: 45
+    # lane defers ratcheted slow suites and holds one runner for ~15-20 min
+    # once the formatter/linter tool cache is warm; the ceiling must also
+    # cover one legitimate cold-tools run (a ~15 min from-source bootstrap)
+    # ahead of the full lane, which still runs everything.
+    timeout-minutes: 55
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -141,7 +140,10 @@ jobs:
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Restore Swift formatter and linter tools
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
+        # Restored for the tests lane too, not only static: the launcher
+        # script tests exercise the pinned swift-format binary, and without
+        # the restore a tests-only diff pays a ~15 min from-source rebuild.
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
         id: swift-tools-cache
         uses: actions/cache/restore@v6
         with:
@@ -181,15 +183,10 @@ jobs:
             --skip-pr-body-checks \
             "${MANIFEST_ARGS[@]}"
 
-      - name: Save Swift formatter and linter tools after checks
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
-
+      # The formatter/linter tools cache save waits until after the launcher
+      # tests below: on a tests-only diff the manifest lane never runs and the
+      # from-source bootstrap happens inside the launcher tests, so a save
+      # placed here would cache nothing and every run would rebuild.
       # A Desktop/.build archive is about 5.3 GB. GitHub scopes those archives
       # to a PR ref, so they miss for normal new commits and spend over a minute
       # uploading without reducing a subsequent run. Retain only SwiftPM's
@@ -289,6 +286,18 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+
+      # Placed after every consumer (manifest checks and the launcher tests):
+      # whichever step bootstrapped the pinned tools, this captures the built
+      # binaries so the next run restores instead of rebuilding from source.
+      - name: Save Swift formatter and linter tools after checks
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
       - name: Require independent macOS phase verdicts
         if: ${{ always() && !cancelled() }}
