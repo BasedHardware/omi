@@ -1182,6 +1182,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         )}
         onAskChange={setDraft}
         onAskSubmit={() => {
+          if (draft.trim() === '') {
+            return;
+          }
           setRoute('Home');
           setHomeChatOpen(true);
           send().catch(() => undefined);

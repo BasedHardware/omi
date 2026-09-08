@@ -335,6 +335,7 @@ export function MobileAppSurface({
   mindMapCoverageCopy,
   onRefresh,
 }: MobileAppSurfaceProps): React.JSX.Element {
+  const sendDisabled = askUnavailable || askValue.trim() === '';
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(
@@ -741,7 +742,7 @@ export function MobileAppSurface({
             accessibilityLabel="Ask Omi"
             editable={!askUnavailable}
             onChangeText={onAskChange}
-            onSubmitEditing={askUnavailable ? undefined : onAskSubmit}
+            onSubmitEditing={sendDisabled ? undefined : onAskSubmit}
             placeholder={
               askUnavailable
                 ? 'Sending messages is not available on this backend yet.'
@@ -760,11 +761,11 @@ export function MobileAppSurface({
               askUnavailable ? 'Send to Omi unavailable' : 'Send to Omi'
             }
             accessibilityRole="button"
-            disabled={askUnavailable}
-            onPress={askUnavailable ? () => undefined : onAskSubmit}
+            disabled={sendDisabled}
+            onPress={sendDisabled ? () => undefined : onAskSubmit}
             style={[
               styles.askButton,
-              askUnavailable && styles.askButtonUnavailable,
+              sendDisabled && styles.askButtonUnavailable,
             ]}>
             <ArrowUp color={mobileColor.background} size={18} />
           </Pressable>
