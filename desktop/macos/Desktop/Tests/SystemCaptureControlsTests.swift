@@ -23,4 +23,28 @@ final class SystemCaptureOutcomeTests: XCTestCase {
     XCTAssertNotEqual(SystemCaptureOutcome.failedToStart, .disabled)
     XCTAssertNotEqual(SystemCaptureOutcome.blockedPaywall, .blockedPermission)
   }
+
+  func testMicrophonePromptOnlyBelongsToAnOffToEnabledTransition() {
+    XCTAssertTrue(
+      AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+        currentMode: .off,
+        requestedMode: .onlyMeetings,
+        permissionGranted: false))
+    XCTAssertFalse(
+      AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+        currentMode: .onlyMeetings,
+        requestedMode: .always,
+        permissionGranted: false),
+      "Changing enabled modes must not reopen a denied permission flow")
+    XCTAssertFalse(
+      AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+        currentMode: .off,
+        requestedMode: .always,
+        permissionGranted: true))
+    XCTAssertFalse(
+      AudioRecordingPermissionTransitionPolicy.shouldRequestPermission(
+        currentMode: .always,
+        requestedMode: .off,
+        permissionGranted: false))
+  }
 }

@@ -120,6 +120,7 @@ final class PTTAttemptLifecycleRecorder {
     case committed
     case silentRejected = "silent_rejected"
     case tooShort = "too_short"
+    case permissionDenied = "permission_denied"
     case cancelled
   }
 
@@ -142,6 +143,7 @@ final class PTTAttemptLifecycleRecorder {
     case recoveryOutcomeNotJudgeable = "recovery_outcome_not_judgeable"
     case committed
     case tooShortAudible = "too_short_audible"
+    case permissionDenied = "permission_denied"
     case cancelled
   }
 
@@ -505,6 +507,7 @@ final class PTTAttemptLifecycleRecorder {
     if resolvedRecoveryOutcome == .notJudgeable { return .recoveryOutcomeNotJudgeable }
 
     if disposition == .cancelled { return .cancelled }
+    if disposition == .permissionDenied { return .permissionDenied }
 
     // (1) Capture never became operational for this press: the start failed, it
     // was requested but never delivered a callback before the turn ended
