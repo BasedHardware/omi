@@ -30,9 +30,9 @@ _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"
 
 
 def _read_utf8_file(path: Path) -> str:
-    """Read UTF-8 text from a file, mapping failures to UsageError."""
+    """Read UTF-8 (BOM-tolerant) text from a file, mapping failures to UsageError."""
     try:
-        content = path.read_text(encoding="utf-8")
+        content = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         raise UsageError(
             message=f"File not found: {path}",
@@ -99,6 +99,11 @@ def _read_batch_memories(file_path: Path) -> list[dict[str, object]]:
             raise UsageError(
                 message=f"Memory entry {index} has empty content",
                 detail="Every entry needs non-empty string content.",
+            )
+        if len(content.strip()) > 500:
+            raise UsageError(
+                message=f"Memory entry {index} exceeds 500 characters",
+                detail="The batch endpoint rejects content longer than 500 characters.",
             )
         entry: dict[str, object] = {"content": content.strip()}
         visibility = item.get("visibility", MemoryVisibility.private.value)
