@@ -96,3 +96,13 @@ def test_goal_delete(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.delete("/v1/dev/user/goals/g1").respond(json={"success": True})
     result = cli_runner.invoke(app, ["goal", "delete", "g1", "-y"])
     assert result.exit_code == 0
+
+
+def test_goal_list_pretty_shows_full_id(authed_profile, respx_mock, cli_runner) -> None:
+    """Regression for #13039: pretty list must not truncate IDs (copy -> get)."""
+    full_id = "12345678-1234-4234-8234-123456789abc"
+    respx_mock.get("/v1/dev/user/goals").respond(json=[{"id": full_id, "title": "ship cli"}])
+    result = cli_runner.invoke(app, ["--no-color", "goal", "list"])
+    assert result.exit_code == 0
+    assert full_id in result.stdout
+    assert "12345678-1234…" not in result.stdout

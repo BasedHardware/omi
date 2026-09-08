@@ -125,3 +125,15 @@ def test_memory_get_found_in_later_page(authed_profile, respx_mock, cli_runner) 
     )
     result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
     assert result.exit_code == 0
+
+
+def test_memory_list_pretty_shows_full_id(authed_profile, respx_mock, cli_runner) -> None:
+    """Regression for #13039: pretty list must not truncate IDs (copy -> get)."""
+    full_id = "12345678-1234-4234-8234-123456789abc"
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": full_id, "content": "hello", "category": "core", "visibility": "private", "tags": []}]
+    )
+    result = cli_runner.invoke(app, ["--no-color", "memory", "list"])
+    assert result.exit_code == 0
+    assert full_id in result.stdout
+    assert "12345678-1234…" not in result.stdout
