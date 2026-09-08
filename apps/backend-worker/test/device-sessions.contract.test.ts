@@ -278,6 +278,56 @@ describe("device session request validators", () => {
       },
     });
   });
+  test("missing transcription attachments is nested non-retryable without inventing speech", async () => {
+    const opened = await fetchWorker("/v1/device-sessions", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ ...openBody, codec: 1 }),
+    });
+    const { session } = (await opened.json()) as { session: { id: string } };
+    const path = `/v1/device-sessions/${session.id}/transcribe`;
+    expect(
+      (
+        await fetchWorker(
+          `/v1/device-sessions/${session.id}/audio`,
+          {
+            method: "POST",
+            headers: authenticatedHeaders,
+            body: JSON.stringify({
+              chunks: [
+                {
+                  chunkIndex: 0,
+                  bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+                },
+              ],
+            }),
+          }
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await fetchWorker(
+          `/v1/device-sessions/${session.id}/complete`,
+          { method: "POST", headers: authenticatedHeaders }
+        )
+      ).status
+    ).toBe(200);
+    const transcribe = await fetchWorker(
+      path,
+      { method: "POST", headers: authenticatedHeaders },
+      { ...env, ATTACHMENTS: undefined }
+    );
+    expect(transcribe.status).toBe(503);
+    expect(transcribe.headers.get("retry-after")).toBeNull();
+    expect((await transcribe.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+  });
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {

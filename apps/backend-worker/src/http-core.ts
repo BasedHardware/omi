@@ -877,8 +877,10 @@ export async function handleTranscribe(
   context: CoreContext
 ): Promise<Response> {
   const { DB, ATTACHMENTS, AI } = context.env;
-  if (DB === undefined || ATTACHMENTS === undefined || AI === undefined)
+  if (DB === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (ATTACHMENTS === undefined || AI === undefined)
+    return backendError("service_unavailable", "none", 503);
   const accountId = context.get("accountId"),
     sessionId = context.req.param("id");
   const session = await DB.prepare(
