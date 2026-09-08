@@ -92,6 +92,26 @@ async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
     return data.get("result", {})
 
 
+async def _fetch_efetch_abstract(client: httpx.AsyncClient, pmid: str) -> str:
+    """Fetch the abstract for a single PMID via EFetch XML.
+
+    ESummary does not include abstract text.  EFetch with ``retmode=xml``
+    provides the ``AbstractText`` element used by the article-detail tool.
+    Returns an empty string when no abstract is available.
+    """
+    import re as _re
+
+    resp = await client.get(
+        f"{EUTILS}/efetch.fcgi",
+        params={"db": "pubmed", "id": pmid, "retmode": "xml", "rettype": "abstract"},
+    )
+    resp.raise_for_status()
+    # Extract all AbstractText segments and join them (some articles have
+    # structured abstracts with multiple labelled sections).
+    parts = _re.findall(r"<AbstractText[^>]*>([^<]+)</AbstractText>", resp.text)
+    return " ".join(html.unescape(p) for p in parts if p.strip())
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -211,6 +231,12 @@ async def get_pubmed_article(request: Request):
             return ChatToolResponse(error=f"No PubMed record found for PMID {pmid}")
 
         record = _extract_article_fields(summaries[pmid])
+
+        # ESummary does not include abstract text; fetch it from EFetch when absent.
+        if not record["abstract"]:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                record["abstract"] = await _fetch_efetch_abstract(client, pmid)
+
         lines = [
             f"PMID {pmid}",
             f"Title: {record['title']}",
