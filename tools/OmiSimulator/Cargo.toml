@@ -1,0 +1,26 @@
+[package]
+name = "omi-simulator"
+version = "0.2.0"
+edition = "2021"
+description = "Crepuscularity (GPUI) macOS Omi BLE peripheral simulator for RN v5 local discovery"
+publish = false
+
+[[bin]]
+name = "omi-simulator"
+path = "src/main.rs"
+
+[dependencies]
+# Crepuscularity UI framework (https://crepuscularity.tsc.hk · tschk/crepuscularity).
+# Not an Omi API / CDN / firmware host.
+# pin/gpui-ce-c738623 pins transitive gpui-ce to c738623 (tip submodule is broken).
+crepuscularity-gpui = { git = "https://github.com/tschk/crepuscularity", rev = "afaabfc9306fd66da70071dce091274d310c551e" }
+
+# view! macro resolves `gpui::` — same rev as crepuscularity pin.
+gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97", package = "gpui", default-features = false, features = ["font-kit"] }
+
+ble-peripheral-rust = "0.2"
+uuid = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+log = "0.4"
+env_logger = "0.11"
+cpal = "0.15"
