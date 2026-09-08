@@ -74,11 +74,17 @@ def login(
             )
         return _do_api_key_login(ctx, piped)
 
+    if renderer.json_mode:
+        raise UsageError(
+            message="Choose an authentication method",
+            detail="Use --api-key, --browser, or pipe an API key on stdin in JSON mode.",
+        )
+
     # Interactive picker — the new default UX.
     if not ctx.renderer.json_mode:
         renderer.info("How would you like to log in?")
-        renderer.info("  [bold]1[/bold]) Browser  — sign in with Google or Apple via OAuth (recommended for humans)")
-        renderer.info("  [bold]2[/bold]) API key  — paste a developer key from app.omi.me (recommended for agents/CI)")
+        renderer.info("  1) Browser  — sign in with Google or Apple via OAuth (recommended for humans)")
+        renderer.info("  2) API key  — paste a developer key from app.omi.me (recommended for agents/CI)")
     choice = typer.prompt("Choose 1 or 2", default="1").strip()
 
     if choice in {"1", "browser", "b"}:
@@ -115,7 +121,7 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
             f"Could not verify the new token right now ({exc.message}). It is stored — try again shortly."
         )
 
-    ctx.renderer.success(f"Logged in via [bold]{provider}[/bold] OAuth as profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Logged in via {provider} OAuth as profile {profile.name}.")
     if not ctx.renderer.json_mode:
         ctx.renderer.info(
             "A developer API key for this machine was created in your Omi dashboard "
@@ -151,7 +157,7 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
     except CliError as exc:
         ctx.renderer.warn(f"Could not verify the key right now ({exc.message}). It is stored — try again shortly.")
 
-    ctx.renderer.success(f"Logged in as profile [bold]{profile.name}[/bold] ({profile.masked_credential()}).")
+    ctx.renderer.success(f"Logged in as profile {profile.name} ({profile.masked_credential()}).")
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"profile": profile.name, "auth_method": profile.auth_method, "api_base": profile.api_base})
 
@@ -161,9 +167,9 @@ def logout(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     cleared = clear_credentials(ctx.profile_name)
     if cleared:
-        ctx.renderer.success(f"Cleared credentials for profile [bold]{ctx.profile_name}[/bold].")
+        ctx.renderer.success(f"Cleared credentials for profile {ctx.profile_name}.")
     else:
-        ctx.renderer.warn(f"Profile [bold]{ctx.profile_name}[/bold] was not authenticated.")
+        ctx.renderer.warn(f"Profile {ctx.profile_name} was not authenticated.")
     if ctx.renderer.json_mode:
         ctx.renderer.emit({"profile": ctx.profile_name, "logged_out": cleared})
 
@@ -216,7 +222,7 @@ def refresh(typer_ctx: typer.Context) -> None:
             ),
         )
     oauth_auth.refresh_id_token(profile.name)
-    ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Refreshed Firebase ID token for profile {profile.name}.")
 
 
 def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover — utility for sibling commands

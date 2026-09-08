@@ -125,7 +125,7 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    ctx.renderer.success(f"Conversation queued: {result.get('id')} (status={result.get('status')})")
     ctx.renderer.emit(result)
 
 
@@ -163,7 +163,7 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Conversation queued: {result.get('id')}")
     ctx.renderer.emit(result)
 
 
@@ -184,7 +184,7 @@ def update_conversation(
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
-    ctx.renderer.success(f"Updated conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Updated conversation {conversation_id}.")
     ctx.renderer.emit(result)
 
 
@@ -195,8 +195,7 @@ def delete_conversation(
     confirm: bool = typer.Option(False, "--yes", "-y"),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
+    ctx.renderer.confirm(f"Delete conversation {conversation_id}?", yes=confirm)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
-    ctx.renderer.complete(result, message=f"Deleted conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.complete(result, message=f"Deleted conversation {conversation_id}.")

@@ -93,7 +93,7 @@ def create_goal(
         body["unit"] = unit
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
-    ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Goal created: {result.get('id')}")
     ctx.renderer.emit(result)
 
 
@@ -128,7 +128,7 @@ def update_goal(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
-    ctx.renderer.success(f"Updated goal [bold]{goal_id}[/bold].")
+    ctx.renderer.success(f"Updated goal {goal_id}.")
     ctx.renderer.emit(result)
 
 
@@ -142,7 +142,7 @@ def update_progress(
     with ctx.make_client() as client:
         # The progress endpoint takes current_value as a query param.
         result = client.patch(f"/v1/dev/user/goals/{goal_id}/progress", params={"current_value": current_value})
-    ctx.renderer.success(f"Updated progress on [bold]{goal_id}[/bold] → {current_value}.")
+    ctx.renderer.success(f"Updated progress on {goal_id} → {current_value}.")
     ctx.renderer.emit(result)
 
 
@@ -165,8 +165,7 @@ def delete_goal(
     confirm: bool = typer.Option(False, "--yes", "-y"),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete goal {goal_id}?", abort=True)
+    ctx.renderer.confirm(f"Delete goal {goal_id}?", yes=confirm)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/goals/{goal_id}")
-    ctx.renderer.complete(result, message=f"Deleted goal [bold]{goal_id}[/bold].")
+    ctx.renderer.complete(result, message=f"Deleted goal {goal_id}.")

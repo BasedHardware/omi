@@ -62,7 +62,7 @@ def configure(
         "local_api_url": profile.local_api_url,
         "local_token": _mask_token(profile.local_token),
     }
-    ctx.renderer.success(f"Configured local Omi Desktop API for profile [bold]{profile.name}[/bold].")
+    ctx.renderer.success(f"Configured local Omi Desktop API for profile {profile.name}.")
     ctx.renderer.emit(payload, title="local configuration")
 
 
@@ -144,7 +144,7 @@ def screenshot(
     written = _write_screenshot_result(result, output)
     raw_metadata = result.get("metadata") if isinstance(result, Mapping) else None
     metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
-    ctx.renderer.success(f"Wrote screenshot to [bold]{written}[/bold].")
+    ctx.renderer.success(f"Wrote screenshot to {written}.")
     ctx.renderer.emit(
         {
             "path": str(written),
@@ -192,7 +192,7 @@ def complete_task(
     task_id: str = typer.Argument(..., help="Task backend ID."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{task_id}[/bold].")
+    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task {task_id}.")
 
 
 @task_app.command("delete", help="Delete a task permanently.")
@@ -202,9 +202,8 @@ def delete_task(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete task {task_id}?", abort=True)
-    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{task_id}[/bold].")
+    ctx.renderer.confirm(f"Delete task {task_id}?", yes=confirm)
+    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task {task_id}.")
 
 
 def _emit_tool(

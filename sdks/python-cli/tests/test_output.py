@@ -134,3 +134,44 @@ def test_pretty_table_cell_with_invalid_markup_does_not_crash(capsys) -> None:
     renderer.emit([{"id": "m1", "content": UNSAFE_CONTENT}], columns=["id", "content"], title="memories")
     captured = capsys.readouterr()
     assert UNSAFE_CONTENT in captured.out
+
+
+@pytest.mark.parametrize("shape", ["scalar", "mapping", "table", "scalar-list"])
+def test_all_data_shapes_preserve_markup_and_emoji_text(capsys, shape) -> None:
+    literal = "[/bold] :rocket:"
+    renderer = Renderer(no_color=True)
+    if shape == "scalar":
+        renderer.emit(literal)
+        expected_count = 1
+    elif shape == "mapping":
+        renderer.emit({literal: literal}, title=literal)
+        expected_count = 3  # title, key, value
+    elif shape == "table":
+        renderer.emit([{literal: literal}], title=literal)
+        expected_count = 3  # title, column header, cell
+    else:
+        renderer.emit([literal, 42])
+        expected_count = 1
+    captured = capsys.readouterr()
+    assert captured.out.count(literal) == expected_count
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize("method", ["info", "success", "warn", "debug"])
+def test_all_status_messages_are_literal(capsys, method) -> None:
+    literal = "[/bold] :rocket:"
+    renderer = Renderer(no_color=True, verbose=True)
+    getattr(renderer, method)(literal)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert literal in captured.err
+
+
+def test_finishing_a_result_does_not_emit_a_second_json_document(capsys) -> None:
+    renderer = Renderer(json_mode=True)
+    renderer.emit({"done": True})
+    renderer.finish()
+    renderer.finish()
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"done": True}
+    assert captured.err == ""

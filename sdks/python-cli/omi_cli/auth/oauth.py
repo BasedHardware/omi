@@ -134,8 +134,11 @@ def login_with_browser(
         thread.start()
 
         try:
-            print(f"Opening browser for {provider} sign-in...")
-            print(f"If your browser does not open, visit:\n  {auth_url}")
+            from omi_cli.output import current_renderer
+
+            renderer = current_renderer()
+            renderer.info(f"Opening browser for {provider} sign-in...")
+            renderer.info(f"If your browser does not open, visit:\n  {auth_url}")
             if open_browser:
                 # webbrowser.open returns False on failure but is otherwise
                 # silent; we always print the URL above as a fallback.

@@ -244,11 +244,12 @@ omi
 
 ```text
 0  success
-1  usage error (bad flags, missing args, validation)
+1  usage error (bad flags, missing args, validation) or unexpected local failure
 2  auth error (no creds, expired token, insufficient scope)
 3  server error (5xx, connection failure)
 4  rate limited (429) — retry recommended
 5  not found (404)
+130 interrupted (Ctrl-C / Ctrl-D)
 ```
 
 For requests through the shared Omi API client, including post-login credential
@@ -267,10 +268,24 @@ the client attempts a request or refreshes credentials.
 
 The CLI is built so an LLM can use it without a wrapper:
 
-* `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
-  mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
-  Cloud `delete` commands return the API response body, or JSON `null` when
-  the successful response has no body (for example, HTTP 204).
+* `omi` and `python -m omi_cli` share the same output and exit-code contract.
+* Successful commands with the global `--json` flag return a JSON result to
+  stdout. Cloud `delete` commands preserve the API response body. An empty
+  successful response (such as HTTP 204), or a status-only command such as
+  `config set`, returns JSON `null`.
+* Errors leave stdout empty and use stderr as
+  `{"error": "...", "detail": "..."}`. This includes bad flags, missing
+  arguments, HTTP errors, and exhausted transport failures. With `--verbose`,
+  stderr is JSON Lines: `{"debug": "..."}` diagnostics followed by the error
+  object if the command fails. Unexpected local errors report their type
+  without exposing raw exception details.
+* `--json version` and `--json --version` return `{"version": "..."}`.
+  Explicit `--help` and shell-completion actions remain text interfaces.
+  Human-mode implicit help also keeps the framework's text and exit status.
+  An incomplete command in JSON mode is a usage error, without implicit help.
+* Use `--yes` with commands that require confirmation. JSON mode never prompts
+  to confirm a mutation. For `auth login`, pass `--browser` or `--api-key`, or
+  pipe an API key on stdin; the interactive picker is for human output only.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Rate-limit errors include a `Retry-After` window in the message and surface
@@ -282,6 +297,20 @@ The CLI is built so an LLM can use it without a wrapper:
 
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.
+
+Command implementations send results, statuses, and diagnostics through the
+shared `Renderer`. Human output treats API data, identifiers, profile names,
+and error details literally, including Rich-like brackets and emoji shortcodes.
+Pass plain strings; callers do not add markup or escape data themselves.
+
+For contributors, use `ctx.renderer.emit(result)` for data and
+`ctx.renderer.success(message)` for status. Successful commands with no data
+inherit the JSON `null` result from the root completion callback. Use
+`ctx.renderer.confirm(message, yes=confirm)` for confirmation, and raise a
+`CliError` for an expected failure. Lower-level helpers use `current_renderer()`
+for progress and debug output. Add behavior cases to `tests/test_public_contract.py`;
+its reusable fixture runs both installed entrypoint targets in human and JSON
+modes within the existing CLI test suite.
 
 ## Rate limits
 

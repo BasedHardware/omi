@@ -22,6 +22,7 @@ from typing import Optional
 
 import click
 import typer
+from typer.main import get_command
 
 from omi_cli import __version__
 from omi_cli import config as cfg
@@ -34,11 +35,16 @@ from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
 from omi_cli.commands import local as local_cmd
 from omi_cli.commands import memory as memory_cmd
-from omi_cli.errors import CliError
+from omi_cli.errors import EXIT_USAGE, CliError
 from omi_cli.local_client import LocalOmiClient
-from omi_cli.output import Renderer
+from omi_cli.output import Renderer, current_renderer
 
-_LAST_RENDERER: Optional[Renderer] = None
+
+@click.pass_context
+def _finish_output(ctx: click.Context, /, result: object, **options: object) -> None:
+    """Every successfully completed command owes JSON callers one result."""
+    ctx.obj.renderer.finish()
+
 
 app = typer.Typer(
     name="omi",
@@ -50,6 +56,7 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=True,
     rich_markup_mode="rich",
+    result_callback=_finish_output,
 )
 
 
@@ -100,16 +107,22 @@ class AppContext:
         return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
 
 
-def _version_callback(value: bool) -> None:
-    if value:
-        typer.echo(f"omi-cli {__version__}")
+def _emit_version(renderer: Renderer) -> None:
+    renderer.emit({"version": __version__} if renderer.json_mode else f"omi-cli {__version__}")
+
+
+def _version_callback(ctx: typer.Context, value: bool) -> None:
+    if value and not ctx.resilient_parsing:
+        _emit_version(current_renderer())
         raise typer.Exit(code=0)
 
 
 @app.callback()
 def _root(
     ctx: typer.Context,
-    json_output: bool = typer.Option(False, "--json", help="Emit JSON to stdout (machine-readable, agent-friendly)."),
+    json_output: bool = typer.Option(
+        False, "--json", is_eager=True, help="Emit JSON to stdout (machine-readable, agent-friendly)."
+    ),
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
@@ -133,12 +146,14 @@ def _root(
     ),
 ) -> None:
     """Root callback: parse global flags, build per-invocation context."""
+    renderer = (
+        ctx.obj
+        if isinstance(ctx.obj, Renderer)
+        else Renderer(json_mode=json_output, no_color=no_color, verbose=verbose)
+    )
     config = cfg.load()
     profile_name = cfg.resolve_profile_name(profile, config)
 
-    renderer = Renderer(json_mode=json_output, no_color=no_color, verbose=verbose)
-    global _LAST_RENDERER
-    _LAST_RENDERER = renderer
     ctx.obj = AppContext(
         profile_name=profile_name,
         api_base_override=api_base,
@@ -149,7 +164,7 @@ def _root(
 
 @app.command(help="Print the omi-cli version.")
 def version() -> None:
-    typer.echo(f"omi-cli {__version__}")
+    _emit_version(current_renderer())
 
 
 @app.command(help="Ask a natural-language question, answered from your own Omi conversations.")
@@ -169,12 +184,13 @@ def ask(
         ctx.renderer.emit(result)
         return
     payload = result or {}
-    typer.echo(payload.get("answer", ""))
+    lines = [payload.get("answer", "")]
     sources = payload.get("sources") or []
     if sources:
-        typer.echo("\nSources:")
+        lines.append("\nSources:")
         for s in sources:
-            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+            lines.append(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+    ctx.renderer.emit("\n".join(lines))
 
 
 # ---------------------------------------------------------------------------
@@ -200,47 +216,60 @@ def _exit_with_cli_error(error: CliError, renderer: Renderer) -> int:
     return error.exit_code
 
 
+def _require_subcommands(command: click.Command) -> None:
+    """In JSON mode, incomplete commands are usage errors instead of implicit help."""
+    if isinstance(command, click.Group):
+        command.no_args_is_help = False
+        for child in command.commands.values():
+            _require_subcommands(child)
+
+
 def main() -> None:
-    """Module-level entry point that converts CliError into stable exit codes.
+    """One public output/error boundary for the console and module entrypoints.
 
-    We run Click in non-standalone mode so we can shape the exit codes ourselves.
-    The exception ladder, in order of specificity:
-
-    * :class:`CliError` (our own, subclass of ClickException) — already knows how
-      to render via the active Renderer; just call ``show()`` and exit with its
-      ``exit_code``.
-    * Other :class:`click.ClickException` (e.g. ``NoSuchOption`` for a typo'd
-      flag) — let Click's default ``show()`` print the friendly usage message,
-      then exit with its built-in ``exit_code`` (typically 2 for Click usage).
-    * :class:`typer.Exit` — Typer's "clean exit at this code", e.g. from
-      ``--version``. Pass through.
-    * KeyboardInterrupt / EOFError — Ctrl-C / Ctrl-D. Conventional 130.
-    * Anything else — last-chance handler. Print a clean line, exit 1.
+    A resilient parse of the declared global options chooses the output mode
+    before normal parsing can fail. It does not invoke commands, load config,
+    or run eager actions. Click then performs its normal strict invocation with
+    that Renderer, which remains available after Click unwinds its contexts.
     """
-    global _LAST_RENDERER
-    _LAST_RENDERER = None
+    renderer = Renderer()
     try:
-        app(standalone_mode=False)
+        command = get_command(app)
+        args = sys.argv[1:]
+        with command.make_context("omi", list(args), resilient_parsing=True, ignore_unknown_options=True) as ctx:
+            renderer = Renderer(
+                json_mode=bool(ctx.params.get("json_output", False)),
+                no_color=bool(ctx.params.get("no_color", False)),
+                verbose=bool(ctx.params.get("verbose", False)),
+            )
+        if renderer.json_mode:
+            _require_subcommands(command)
+        result = command.main(prog_name="omi", standalone_mode=False, obj=renderer)
+        if isinstance(result, int):
+            sys.exit(result)
     except CliError as exc:
-        # If the error happens before the root callback ran, ``ctx.obj`` might
-        # not exist — fall back to a default Renderer preserving --json.
-        renderer = _LAST_RENDERER or Renderer(
-            json_mode="--json" in sys.argv,
-        )
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
-        # Click's own usage errors (unknown flag, missing argument, etc.).
-        # Let Click format it the way users expect; honor its exit_code.
-        exc.show()
-        sys.exit(exc.exit_code)
+        message = exc.format_message()
+        if message:
+            if isinstance(exc, click.UsageError) and exc.ctx is not None:
+                renderer.info(exc.ctx.get_usage())
+            renderer.error(message)
+        else:
+            # Rich may already have printed implicit help. Preserve its text
+            # interface and status instead of adding an empty error message.
+            sys.exit(exc.exit_code)
+        sys.exit(EXIT_USAGE if isinstance(exc, click.UsageError) else exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
-    except (KeyboardInterrupt, EOFError):
-        sys.stderr.write("\nAborted.\n")
+    except (click.Abort, KeyboardInterrupt, EOFError):
+        renderer.error("Aborted")
         sys.exit(130)
     except Exception as exc:  # noqa: BLE001 — last-chance handler
-        sys.stderr.write(f"omi: unexpected error: {exc}\n")
-        sys.exit(1)
+        renderer.error(
+            "Unexpected error", detail=f"{type(exc).__name__}. Please report this with your omi-cli version."
+        )
+        sys.exit(EXIT_USAGE)
 
 
 if __name__ == "__main__":

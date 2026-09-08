@@ -33,6 +33,7 @@ from tenacity import (
 from omi_cli import __version__
 from omi_cli.config import Profile
 from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, UsageError, from_status
+from omi_cli.output import current_renderer
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -221,11 +222,8 @@ class OmiClient:
     def _maybe_log(self, method: str, path: str, response: httpx.Response) -> None:
         if not self._verbose:
             return
-        # Use stderr via direct sys.stderr.write to avoid pulling Renderer in here.
-        import sys
-
-        sys.stderr.write(
-            f"[debug] {method} {path} → {response.status_code} ({response.elapsed.total_seconds():.2f}s)\n"
+        current_renderer(verbose=True).debug(
+            f"{method} {path} → {response.status_code} ({response.elapsed.total_seconds():.2f}s)"
         )
 
     @staticmethod

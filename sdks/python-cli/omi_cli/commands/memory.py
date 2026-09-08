@@ -104,7 +104,7 @@ def create_memory(
         body["category"] = category.value
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Memory created: {result.get('id')}")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -133,7 +133,7 @@ def update_memory(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/memories/{memory_id}", json_body=body)
-    ctx.renderer.success(f"Memory updated: [bold]{memory_id}[/bold]")
+    ctx.renderer.success(f"Memory updated: {memory_id}")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -144,8 +144,7 @@ def delete_memory(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not confirm:
-        typer.confirm(f"Delete memory {memory_id}?", abort=True)
+    ctx.renderer.confirm(f"Delete memory {memory_id}?", yes=confirm)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/memories/{memory_id}")
-    ctx.renderer.complete(result, message=f"Deleted memory [bold]{memory_id}[/bold].")
+    ctx.renderer.complete(result, message=f"Deleted memory {memory_id}.")
