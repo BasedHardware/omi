@@ -38,9 +38,9 @@ final class OfflinePTTQuestionRecovery: ObservableObject {
 
   @discardableResult
   func capture(_ text: String, authorization: RuntimeOwnerAuthorizationSnapshot) -> Bool {
-    clear()
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, isAuthorized(authorization) else { return false }
+    clear()
     let captured = Question(text: trimmed, authorization: authorization, expiresAt: now().addingTimeInterval(300))
     question = captured
     hasQuestion = true

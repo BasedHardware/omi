@@ -8,7 +8,9 @@ extension DesktopAutomationActionRegistry {
       params: ["text"], category: "voice", surfaces: ["floating_bar"], safety: "local_ui_state"
     ) { params in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
-      guard let text = params["text"], !text.isEmpty else { return ["error": "text required"] }
+      guard let text = params["text"], !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return ["error": "text required"]
+      }
       return await PushToTalkManager.shared.dictateForAutomation(
         pcm16k: Data(), allowNetwork: false, knownTranscript: "type " + text)
     }
@@ -40,7 +42,10 @@ extension DesktopAutomationActionRegistry {
       params: ["text"], category: "voice", surfaces: ["floating_bar"], safety: "local_ui_state"
     ) { params in
       guard AppBuild.isNonProduction else { return ["error": "non-production only"] }
-      guard let text = params["text"], let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      guard let text = params["text"],
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      else {
         return ["error": "text and a current authenticated owner required"]
       }
       let stored = OfflinePTTQuestionRecovery.shared.capture(text, authorization: owner)

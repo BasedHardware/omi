@@ -1292,7 +1292,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
   }
 
   @MainActor @objc private func undoLastDictationFromMenu() {
-    PushToTalkManager.shared.undoLastDictation()
+    PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
   }
 
   @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {

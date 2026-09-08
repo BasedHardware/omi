@@ -114,16 +114,17 @@ final class VoiceTypeCommandParserTests: XCTestCase {
 final class VoiceTypeSessionTests: XCTestCase {
 
   private final class RecordingSink: TextInsertionSink {
+    var insertionReceiptDidChange: (() -> Void)?
     var pasted: [String] = []
     var copied: [String] = []
     var pasteSucceeds = true
     var caretAfterWord = false
     var focus: String? = "1:com.example.editor"
 
-    func paste(_ text: String, into target: TextInsertionTarget) -> Bool {
-      guard pasteSucceeds, focusTarget() == target else { return false }
+    func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
+      guard pasteSucceeds, focusTarget() == target else { return .notInserted }
       pasted.append(text)
-      return true
+      return .inserted
     }
     func copy(_ text: String) { copied.append(text) }
     func focusTarget() -> TextInsertionTarget? {

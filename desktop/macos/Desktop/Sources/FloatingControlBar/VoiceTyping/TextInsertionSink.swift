@@ -40,21 +40,41 @@ struct FocusedDictationText {
   static func digest(_ value: String) -> Data { Data(SHA256.hash(data: Data(value.utf8))) }
 }
 
+/// A dispatched AX request can fail or time out after changing the editor.
+/// Only a rejection before dispatch proves that nothing was written.
+enum DictationTextReplacementResult: Equatable {
+  case notAttempted
+  case applied
+  case uncertain
+}
+
+enum TextInsertionResult: Equatable {
+  case inserted
+  /// Legacy paste dispatch is accepted, but its asynchronous result cannot
+  /// support a verified insertion receipt.
+  case pastePosted
+  case notInserted
+  /// Text may already be partly or fully present. Do not copy for a retry.
+  case uncertain
+}
+
 /// All AX mutations are addressed to a captured element, never a generic Undo
 /// command. Injectable so the real validation boundary runs in hermetic tests.
 @MainActor
 protocol DictationTextAccess: AnyObject {
   func readFocusedText() -> FocusedDictationText?
-  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> Bool
+  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> DictationTextReplacementResult
   func select(_ range: NSRange, in target: TextInsertionTarget) -> Bool
 }
 
 @MainActor
 protocol TextInsertionSink: AnyObject {
-  func paste(_ text: String, into target: TextInsertionTarget) -> Bool
+  func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult
   func copy(_ text: String)
   func focusTarget() -> TextInsertionTarget?
+  /// Receipt availability only. The action must separately validate the editor.
   var canUndoInsertion: Bool { get }
+  var insertionReceiptDidChange: (() -> Void)? { get set }
   func undoInsertion() -> Bool
   func discardInsertionReceipt()
 }
@@ -74,6 +94,9 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
   private let now: () -> TimeInterval
   private let clipboardPaste: ((String, TextInsertionTarget) -> Bool)?
   private let clipboardCopy: ((String) -> Void)?
+  private let sleepForReceiptExpiry: @MainActor (TimeInterval) async throws -> Void
+  private var receiptExpiryTask: Task<Void, Never>?
+  var insertionReceiptDidChange: (() -> Void)?
   private struct InsertionReceipt {
     let target: TextInsertionTarget
     let insertedRange: NSRange
@@ -86,66 +109,72 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     access: DictationTextAccess = AccessibilityDictationTextAccess(),
     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
     clipboardPaste: ((String, TextInsertionTarget) -> Bool)? = nil,
-    clipboardCopy: ((String) -> Void)? = nil
+    clipboardCopy: ((String) -> Void)? = nil,
+    sleepForReceiptExpiry: @escaping @MainActor (TimeInterval) async throws -> Void = { remaining in
+      try await Task.sleep(for: .seconds(remaining))
+    }
   ) {
     self.access = access
     self.now = now
     self.clipboardPaste = clipboardPaste
     self.clipboardCopy = clipboardCopy
+    self.sleepForReceiptExpiry = sleepForReceiptExpiry
   }
+
+  deinit { receiptExpiryTask?.cancel() }
 
   func focusTarget() -> TextInsertionTarget? { access.readFocusedText()?.target }
 
-  func paste(_ text: String, into target: TextInsertionTarget) -> Bool {
+  func paste(_ text: String, into target: TextInsertionTarget) -> TextInsertionResult {
     discardInsertionReceipt()
-    guard !text.isEmpty, let before = access.readFocusedText(), before.target == target else { return false }
+    guard !text.isEmpty, let before = access.readFocusedText(), before.target == target else { return .notInserted }
     if before.canReplaceSelection {
       // A reported write failure may be partial. Never retry with Cmd-V or
       // restore the whole document after attempting an addressed mutation.
-      guard access.replaceSelection(text, in: target) else { return false }
+      let replacement = access.replaceSelection(text, in: target)
+      guard replacement != .notAttempted else { return .notInserted }
       let expected = (before.value as NSString).replacingCharacters(in: before.selection, with: text)
       guard let after = access.readFocusedText(), after.target.isSameField(as: target),
         after.value == expected,
         after.selection == NSRange(location: before.selection.location + (text as NSString).length, length: 0)
-      else { return false }
+      else { return .uncertain }
       if before.selection.length == 0 {
-        insertionReceipt = InsertionReceipt(
-          target: after.target,
-          insertedRange: NSRange(location: before.selection.location, length: (text as NSString).length),
-          originalDigest: target.valueDigest, expiresAt: now() + 30)
+        installInsertionReceipt(
+          InsertionReceipt(
+            target: after.target,
+            insertedRange: NSRange(location: before.selection.location, length: (text as NSString).length),
+            originalDigest: target.valueDigest, expiresAt: now() + 30))
       }
-      return true
+      return .inserted
     }
-    guard access.readFocusedText()?.target == target else { return false }
+    guard access.readFocusedText()?.target == target else { return .notInserted }
     let pasted = clipboardPaste?(text, target) ?? pasteViaClipboard(text, into: target)
     if pasted {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "voice_typing", from: "ax_selected_text", to: "clipboard_paste",
         reason: "policy", outcome: .degraded)
     }
-    return pasted
+    return pasted ? .pastePosted : .notInserted
   }
 
+  /// Opening an Omi menu can temporarily hide the focused text element. A
+  /// presentation read must not consume the receipt or decide where to edit.
   var canUndoInsertion: Bool {
-    guard let receipt = insertionReceipt, now() < receipt.expiresAt,
-      let focused = access.readFocusedText(), focused.canReplaceSelection,
-      focused.target == receipt.target
-    else {
-      discardInsertionReceipt()
-      return false
-    }
-    return true
+    guard let receipt = insertionReceipt else { return false }
+    return now() < receipt.expiresAt
   }
 
   func undoInsertion() -> Bool {
     guard canUndoInsertion, let receipt = insertionReceipt else { return false }
     // One shot, including failure: a later retry must never affect a new edit.
     discardInsertionReceipt()
-    guard access.select(receipt.insertedRange, in: receipt.target),
+    guard let focused = access.readFocusedText(), focused.canReplaceSelection,
+      focused.target == receipt.target,
+      access.select(receipt.insertedRange, in: receipt.target),
       let selected = access.readFocusedText(), selected.target.isSameField(as: receipt.target),
       selected.target.valueDigest == receipt.target.valueDigest,
       selected.selection == receipt.insertedRange,
-      access.replaceSelection("", in: selected.target)
+      access.replaceSelection("", in: selected.target) != .notAttempted
     else { return false }
     guard let after = access.readFocusedText(), after.target.isSameField(as: receipt.target),
       after.target.valueDigest == receipt.originalDigest,
@@ -154,7 +183,33 @@ final class PasteboardTextInsertionSink: TextInsertionSink {
     return true
   }
 
-  func discardInsertionReceipt() { insertionReceipt = nil }
+  func discardInsertionReceipt() {
+    receiptExpiryTask?.cancel()
+    receiptExpiryTask = nil
+    guard insertionReceipt != nil else { return }
+    insertionReceiptDidChange?()
+    insertionReceipt = nil
+  }
+
+  private func installInsertionReceipt(_ receipt: InsertionReceipt) {
+    discardInsertionReceipt()
+    insertionReceiptDidChange?()
+    insertionReceipt = receipt
+    let sleepForReceiptExpiry = self.sleepForReceiptExpiry
+    let expiresAt = receipt.expiresAt
+    receiptExpiryTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        guard let remaining = self.map({ expiresAt - $0.now() }) else { return }
+        // The monotonic timestamp remains the authority. An early wake sleeps
+        // the remaining interval; cancellation fences a superseded receipt.
+        guard remaining > 0 else {
+          self?.discardInsertionReceipt()
+          return
+        }
+        do { try await sleepForReceiptExpiry(remaining) } catch { return }
+      }
+    }
+  }
 
   /// How long the focused app gets to read the pasteboard before the previous
   /// contents are put back. Apps read it synchronously on ⌘V; the delay only
@@ -324,12 +379,15 @@ final class AccessibilityDictationTextAccess: DictationTextAccess {
       canReplaceSelection: canReplace)
   }
 
-  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> Bool {
-    guard readFocusedText()?.target == target else { return false }
+  func replaceSelection(_ text: String, in target: TextInsertionTarget) -> DictationTextReplacementResult {
+    guard readFocusedText()?.target == target else { return .notAttempted }
     let object = target.elementID.base as AnyObject
-    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return false }
+    guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return .notAttempted }
     let element = unsafeDowncast(object, to: AXUIElement.self)
-    return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
+    let result = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
+    // Even a timeout may have applied. An unchanged immediate reread is not
+    // proof of no write, because the editor may still be processing the request.
+    return result == .success ? .applied : .uncertain
   }
 
   func select(_ range: NSRange, in target: TextInsertionTarget) -> Bool {
