@@ -141,7 +141,9 @@ same moment are serialized, and each ends up holding a distinct slot.
 live slot held by another worktree is refused even when the caller names the
 slot directly. `--worktree PATH` supplies the caller identity for a harness
 invoked outside that checkout. Defunct leases remain releasable so a vanished
-lane can be cleaned up.
+lane can be cleaned up. Ownership is compared on the canonical worktree path,
+so a lease acquired through a relative path or a symlink is released by the
+owner's default resolution without repeating `--worktree`.
 
 A holder that comes back after the backstop simply refreshes its own lease; the
 backstop reclaims slots from lanes that vanished, it does not lock a live lane

@@ -18,6 +18,9 @@ assert_contains() { printf '%s' "$1" | grep -q -- "$2" || fail "${3:-} expected 
 $1"; }
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/omi-e2e-pool-test.XXXXXX")"
+# The contract asserts exact worktree spellings; pin the tmpdir to its physical
+# path so a symlinked TMPDIR (/var/folders, /tmp) cannot leak logical spellings.
+TMP="$(cd -P "$TMP" && pwd)"
 trap 'rm -rf "$TMP"' EXIT
 
 export OMI_E2E_POOL_DIR="$TMP/pool"
@@ -103,6 +106,19 @@ assert_eq "$("$POOL" acquire --quiet --worktree "$WT_C" --slot 02)" "2" "--slot 
 [ ! -e "$OMI_E2E_POOL_DIR/slots/02" ] || fail "no padded slot directory may be created"
 OMI_E2E_POOL_WORKTREE="$WT_C" "$POOL" release --quiet --slot 02
 [ ! -f "$OMI_E2E_POOL_DIR/slots/2/lease" ] || fail "--slot 02 must release canonical slot 2"
+
+# ── ownership matches on the canonical path, not the acquire spelling ──────
+mkdir -p "$WT_A"
+ln -s "$WT_A" "$TMP/wt-a-link"
+assert_eq "$("$POOL" acquire --quiet --worktree "$TMP/wt-a-link" --holder lane-a)" "1" "acquire through a symlink"
+grep -q "^worktree=$WT_A$" "$OMI_E2E_POOL_DIR/slots/1/lease" || fail "a lease must be stored under the canonical worktree path"
+( cd "$WT_A" && "$POOL" release --quiet --slot 1 ) || fail "owner's default release must accept a lease acquired via a symlink"
+assert_eq "$("$POOL" acquire --quiet --worktree "$WT_A" --holder lane-a)" "1" "re-acquire after symlink release"
+out="$(cd "$TMP" && "$POOL" acquire --quiet --worktree wt-b --holder lane-b)"
+assert_eq "$out" "2" "acquire with a relative --worktree"
+( cd "$WT_B" && "$POOL" release --quiet --slot 2 ) || fail "owner's default release must accept a relative acquire spelling"
+assert_eq "$("$POOL" acquire --quiet --worktree "$WT_B" --holder lane-b)" "2" "re-acquire after relative release"
+OMI_E2E_POOL_WORKTREE="$WT_B" "$POOL" release --quiet --slot 2
 
 # ── liveness: a vanished worktree gives its slot up ───────────────────────
 rm -rf "$WT_A"

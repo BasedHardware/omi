@@ -264,10 +264,32 @@ lease_defunct_reason() {
 # A lease belongs to a worktree. The current one is the git toplevel of the cwd,
 # or OMI_E2E_POOL_WORKTREE when a harness wants to be explicit.
 current_worktree() {
-  if [ -n "${OMI_E2E_POOL_WORKTREE:-}" ]; then
-    printf '%s' "$OMI_E2E_POOL_WORKTREE"; return 0
+  local wt
+  if [ -n "${OMI_E2E_POOL_WORKTREE:-}" ]; then wt="$OMI_E2E_POOL_WORKTREE"
+  else wt="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
   fi
-  git rev-parse --show-toplevel 2>/dev/null || pwd
+  canonical_worktree "$wt"
+}
+
+# Lease identity must be spelling-independent: a lease acquired through a
+# relative path or a symlink must still match the canonical toplevel the owner
+# resolves to later, or `release --slot` would refuse the actual owner. Resolve
+# symlinks when the path exists (physical identity, like git's toplevel); fall
+# back to an absolute non-symlinked spelling otherwise, so a dangling path
+# never errors.
+canonical_worktree() {
+  local wt
+  wt="$(cd -P "$1" 2>/dev/null && pwd)" && { printf '%s' "$wt"; return 0; }
+  python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$1"
+}
+
+# The caller's identity for every command: an explicit --worktree when given
+# (canonicalized, so the spelling used at acquire time does not matter later),
+# else the current worktree.
+caller_worktree() {
+  if [ -n "$ARG_WORKTREE" ]; then canonical_worktree "$ARG_WORKTREE"
+  else current_worktree
+  fi
 }
 
 random_token() {
@@ -328,7 +350,7 @@ resolve_slot_for_worktree() {
 # ── commands ────────────────────────────────────────────────────────────────
 cmd_acquire() {
   parse_common "$@"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  local wt; wt="$(caller_worktree)"
   local holder="${ARG_HOLDER:-$(basename "$wt")}"
   case "${ARG_AUTH:-}" in
     ''|shared|isolated) ;;
@@ -431,7 +453,7 @@ write_env_file() {
 
 cmd_env() {
   parse_common "$@"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  local wt slot; wt="$(caller_worktree)"
   slot="$(resolve_slot_for_worktree "$wt")"
   read_lease "$slot" || die "slot $slot is not leased"
   if [ "$L_WORKTREE" != "$wt" ]; then
@@ -444,7 +466,7 @@ cmd_env() {
 cmd_run() {
   parse_common "$@"
   [ "${#REST[@]}" -gt 0 ] || die "usage: omi-e2e-pool run [--slot N] -- <command...>"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  local wt slot; wt="$(caller_worktree)"
   local acquire_args=(--quiet --worktree "$wt")
   [ -n "$ARG_SLOT" ] && acquire_args+=(--slot "$ARG_SLOT")
   [ -n "$ARG_AUTH" ] && acquire_args+=(--auth "$ARG_AUTH")
@@ -462,7 +484,7 @@ cmd_verify() {
   local slug="${REST[0]:-}"; [ -n "$slug" ] || die "usage: omi-e2e-pool verify <app-slug>"
   local slot; slot="$(slug_slot "$slug")"
   [ -n "$slot" ] || return 0
-  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  local wt; wt="$(caller_worktree)"
   if ! read_lease "$slot" || [ -n "$(lease_defunct_reason)" ]; then
     {
       say "omi-e2e-pool: '$slug' is pool slot $slot and nobody holds its lease."
@@ -494,7 +516,7 @@ cmd_release() {
   # worktree so `release --slot N` cannot free another live lane's lease.
   # An explicit --worktree is the caller identity for harnesses invoked from
   # outside the checkout, matching the other pool commands' semantics.
-  local caller_wt="${ARG_WORKTREE:-$(current_worktree)}"
+  local caller_wt; caller_wt="$(caller_worktree)"
   pool_lock
 
   local slot
@@ -502,7 +524,7 @@ cmd_release() {
     valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"
     slot="$ARG_SLOT"
   else
-    local wt="${ARG_WORKTREE:-$(current_worktree)}"
+    local wt; wt="$(caller_worktree)"
     if ! slot="$(worktree_slot "$wt")"; then
       [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: $wt holds no slot — nothing to release"
       pool_unlock
@@ -594,7 +616,7 @@ cmd_check() {
   if [ -n "$ARG_SLOT" ]; then
     valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"; slot="$ARG_SLOT"
   else
-    slot="$(resolve_slot_for_worktree "${ARG_WORKTREE:-$(current_worktree)}")"
+    slot="$(resolve_slot_for_worktree "$(caller_worktree)")"
   fi
   local port; port="$(automation_port "$slot")"
   local ctl="$SCRIPT_DIR/omi-ctl"
