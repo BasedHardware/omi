@@ -98,15 +98,22 @@ print(path)
     curl_bridge "$BASE/actions"; echo ;;
   action)
     name="${1:?usage: omi-ctl action <name> [key=value ...]}"; shift || true
-    params=""
-    for kv in "$@"; do
-      key="${kv%%=*}"; val="${kv#*=}"
-      [ -n "$params" ] && params="$params,"
-      params="$params\"$key\":\"$val\""
-    done
-    body="{\"name\":\"$name\""
-    [ -n "$params" ] && body="$body,\"params\":{$params}"
-    body="$body}"
+    body="$(python3 - "$name" "$@" <<'PY'
+import json
+import sys
+
+body = {"name": sys.argv[1]}
+params = {}
+for argument in sys.argv[2:]:
+    key, separator, value = argument.partition("=")
+    if not separator or not key:
+        raise SystemExit("omi-ctl: action parameters must be nonempty key=value pairs")
+    params[key] = value
+if params:
+    body["params"] = params
+print(json.dumps(body))
+PY
+)"
     curl_bridge -X POST "$BASE/action" -d "$body"; echo ;;
   wait-ready)
     tries="${1:-30}"
