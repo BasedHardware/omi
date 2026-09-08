@@ -527,6 +527,10 @@ realTest(
         `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'saved prompt','human','text',1000,1000,NULL,NULL,0,'sha256:human','desktop_chat',NULL,false,'rev-human','[]'::jsonb,'gen_human')`,
         [account, "11111111-1111-4111-8111-111111111111"]
       );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as chat-main','human','text',1100,1100,'chat-main',NULL,0,'sha256:main','desktop_chat',NULL,false,'rev-main','[]'::jsonb,'gen_main')`,
+        [account, "55555555-5555-4555-8555-555555555555"]
+      );
       const withoutGrant = (await (await call()).json()) as { items: Array<{ id: string }> };
       expect(ids(withoutGrant)).not.toContain("chat:chat-main");
       await owner.unsafe(
@@ -547,7 +551,7 @@ realTest(
         expect.objectContaining({
           id: "chat:chat-main",
           title: "saved prompt",
-          overview: "saved prompt",
+          overview: "stored as chat-main",
           source: "chat",
           status: "in_progress",
         }),

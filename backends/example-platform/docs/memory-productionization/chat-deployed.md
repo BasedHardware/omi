@@ -3,9 +3,10 @@
 The deployed service mounts `GET /v1/chat-messages` through the same admission,
 readiness and drain boundary as the other REST routes. It verifies the original
 Firebase identity and requires a registered active credential with the exact
-`chat.read` grant. History defaults to the main session (`chat_session_id` null
-or blank). One optional `chatSessionId` filters that named session the same way
-Worker history does; unknown extra keys remain 400. A `memories.read`,
+`chat.read` grant. History defaults to the main session (`chat_session_id` null,
+blank, or the stored token `chat-main`). One optional `chatSessionId` filters that
+named session the same way Worker history does; `chatSessionId=chat-main` is that
+same main filter. Unknown extra keys remain 400. A `memories.read`,
 `tasks.read` or `conversations.read` grant
 does not confer this read permission. Missing or revoked grants return 403; they
 never become an empty successful transcript. Deployment still needs the
@@ -14,8 +15,11 @@ authoritative account, control, credential and grant records described in
 
 Migration 0055 adds account-owned chat message rows and generation events.
 Migration 0057 adds the session-filtered history read and grouped conversation
-session list. History uses the insertion snapshot and opaque HMAC cursor already
-used by the local service; that cursor binds the requested session so a named
+session list. Migration 0060 treats a stored `chat_session_id` of `chat-main` as
+that same main session, matching Worker history and conversation grouping, and
+does not invent empty `chat:chat-main` or Chat titles. History uses the insertion
+snapshot and opaque HMAC cursor already used by the local service; that cursor
+binds the requested session so a named
 page cannot continue as main history. An empty granted account is an honest empty
 page with the existing attachment capability advertisement. Assistant rows require
 a unique terminal generation event; an orphan or mismatched terminal is 503 rather
@@ -35,7 +39,7 @@ and conversation-list composition of granted `chat:` sessions, including named
 sessions only after history GET can serve them. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
-Do not apply migrations 55-59 or deploy this entry until the existing operator
+Do not apply migrations 55-60 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
 migrations 1–54.

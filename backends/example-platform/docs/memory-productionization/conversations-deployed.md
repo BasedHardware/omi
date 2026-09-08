@@ -55,7 +55,8 @@ revision so a chat write or recording-state change invalidates continuation.
 A Listen-sequence cursor cannot continue on the union path. The last item may be
 a `chat:` or Listen row; the position table stores that identity instead of a
 fake Listen sequence. Missing `chat.read`, revoked grants, and empty chat history
-never invent `chat:chat-main`. Without `chat.read`, later pages keep the Listen
+never invent `chat:chat-main`. Stored `chat_session_id` `chat-main` groups with
+that main session instead of a second named row. Without `chat.read`, later pages keep the Listen
 sequence path. Chat writes, editable metadata, folders and star mutations still
 need their own persisted domain composition. Full recording transcript data
 remains on the existing account-scoped device-session transcript route.
