@@ -50,7 +50,11 @@ export async function composeGenerationPrompt(
     const excerpt = await readTextExcerpt(r2, attachment.r2Key, remaining);
     if (excerpt === null || !isVisibleGenerationText(excerpt)) continue;
     usedBytes += utf8Bytes(excerpt);
-    excerpts.push(`Attachment "${attachment.displayName}":\n${excerpt}`);
+    excerpts.push(
+      isVisibleGenerationText(attachment.displayName)
+        ? `Attachment "${attachment.displayName}":\n${excerpt}`
+        : excerpt
+    );
   }
 
   const parts: string[] = [];

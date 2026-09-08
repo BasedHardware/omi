@@ -487,6 +487,32 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).not.toContain("notes.txt");
   });
 
+  test("omits a whitespace-only attachment name while keeping visible file bytes", async () => {
+    await insertBound(db, {
+      id: "att-blank-name",
+      accountId: "acct-a",
+      messageId: "msg-blank-name",
+      mimeType: "text/plain",
+      displayName: " \t\n",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-blank-name",
+      new TextEncoder().encode("visible file bytes")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-blank-name",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("summarize this");
+    expect(result.prompt).toContain("visible file bytes");
+    expect(result.prompt).not.toContain('Attachment "');
+  });
+
   test("whitespace-only user text still composes when a bound text file loads", async () => {
     await insertBound(db, {
       id: "att-whitespace-ok",
