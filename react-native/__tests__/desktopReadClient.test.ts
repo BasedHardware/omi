@@ -593,8 +593,17 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(conversationDisplayTitle({title: '', status: 'completed'})).toBe(
     'Conversation title unavailable',
   );
+  expect(conversationDisplayTitle({title: ' \t\n', status: 'processing'})).toBe(
+    'Processing conversation…',
+  );
+  expect(conversationDisplayTitle({title: ' \t\n', status: 'completed'})).toBe(
+    'Conversation title unavailable',
+  );
   expect(
     conversationDisplayTitle({title: 'Morning walk', status: 'processing'}),
+  ).toBe('Morning walk');
+  expect(
+    conversationDisplayTitle({title: '  Morning walk  ', status: 'completed'}),
   ).toBe('Morning walk');
 });
 
@@ -672,6 +681,15 @@ test('empty memory text stays visible instead of a blank row', () => {
   expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
     'A walk.',
   );
+  expect(memoryDisplayTitle({title: ' \t', summary: ''})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayBody({title: '', summary: ' \t\n'})).toBe(
+    'Memory text unavailable',
+  );
+  expect(memoryDisplayTitle({title: ' \t', summary: 'A walk.'})).toBe(
+    'A walk.',
+  );
 });
 
 test('memory citation copy matches the citation count', () => {
@@ -741,6 +759,24 @@ test('empty conversation summaries stay visible instead of a blank subtitle', ()
     conversationDisplaySummary({
       summary: 'Walked to the market.',
       status: 'processing',
+    }),
+  ).toBe('Walked to the market.');
+  expect(
+    conversationDisplaySummary({
+      summary: ' \t\n',
+      status: 'processing',
+    }),
+  ).toBe('Conversation summary is not ready yet.');
+  expect(
+    conversationDisplaySummary({
+      summary: ' \t\n',
+      status: 'completed',
+    }),
+  ).toBe('Conversation summary unavailable');
+  expect(
+    conversationDisplaySummary({
+      summary: '  Walked to the market.  ',
+      status: 'completed',
     }),
   ).toBe('Walked to the market.');
 });

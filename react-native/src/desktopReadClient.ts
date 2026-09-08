@@ -30,8 +30,9 @@ export function conversationDisplayTitle(item: {
   title: string;
   status: string;
 }): string {
-  if (item.title !== '') {
-    return item.title;
+  const title = item.title.trim();
+  if (title !== '') {
+    return title;
   }
   return item.status === 'processing'
     ? 'Processing conversation…'
@@ -42,8 +43,9 @@ export function conversationDisplaySummary(item: {
   summary: string;
   status: string;
 }): string {
-  if (item.summary !== '') {
-    return item.summary;
+  const summary = item.summary.trim();
+  if (summary !== '') {
+    return summary;
   }
   return item.status === 'processing'
     ? 'Conversation summary is not ready yet.'
@@ -131,14 +133,18 @@ export function memoryDisplayTitle(item: {
   title: string;
   summary: string;
 }): string {
-  return visibleMemoryText(item.title !== '' ? item.title : item.summary);
+  const title = item.title.trim();
+  const summary = item.summary.trim();
+  return visibleMemoryText(title !== '' ? title : summary);
 }
 
 export function memoryDisplayBody(item: {
   title: string;
   summary: string;
 }): string {
-  return visibleMemoryText(item.summary !== '' ? item.summary : item.title);
+  const title = item.title.trim();
+  const summary = item.summary.trim();
+  return visibleMemoryText(summary !== '' ? summary : title);
 }
 
 export function memoryCitationCopy(citations: readonly string[]): string {
@@ -184,7 +190,8 @@ export function taskDisplaySummary(item: {
 
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
-  return parsed.body !== '' ? parsed.body : 'Memory text unavailable';
+  const body = parsed.body.trim();
+  return body !== '' ? body : 'Memory text unavailable';
 }
 
 export function conversationGroupLabel(
