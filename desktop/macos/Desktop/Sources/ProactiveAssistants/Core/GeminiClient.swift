@@ -218,6 +218,9 @@ actor GeminiClient {
     case networkError(Error)
     case invalidResponse
     case apiError(String, retryable: Bool? = nil)
+    /// Identified basic + non-BYOK, or a typed 402 `plan_gated` from the proxy.
+    /// Non-retryable. Distinct from chat-quota 402 (`error` field).
+    case planGated
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
@@ -243,7 +246,7 @@ actor GeminiClient {
           || lower.contains("internal error")
       case .networkError:
         return true
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return false
       }
     }
@@ -259,7 +262,7 @@ actor GeminiClient {
         // A transport error after dispatch is ambiguous. Only a typed backend
         // response may authorize replay.
         return false
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return false
       }
     }
@@ -278,7 +281,7 @@ actor GeminiClient {
           || lower.contains("usage limit")
           || lower.contains("quota exceeded")
           || lower.contains("http 402")
-      case .missingAPIKey:
+      case .missingAPIKey, .planGated:
         return true
       case .networkError, .invalidResponse:
         return false
@@ -295,6 +298,8 @@ actor GeminiClient {
         return "AI service returned an unexpected response. Please try again."
       case .apiError(let message, _):
         return Self.userFacingMessage(for: message)
+      case .planGated:
+        return "AI features require an active plan or BYOK keys."
       }
     }
 
@@ -417,6 +422,10 @@ actor GeminiClient {
     guard let httpResponse = response as? HTTPURLResponse else { return nil }
     let status = httpResponse.statusCode
     guard !(200..<300).contains(status) else { return nil }
+
+    if ManagedPlanGateHTTP.isPlanGated(status: status, data: data) {
+      return .planGated
+    }
 
     let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
     let retryable: Bool?
@@ -551,7 +560,7 @@ actor GeminiClient {
           return "provider_5xx"
         }
         return "other"
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return "other"
       }
     }
@@ -565,6 +574,22 @@ actor GeminiClient {
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
     try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+  }
+
+  /// Client UX gate. Server 402 `plan_gated` remains the invariant.
+  static func requireManagedProactivity(_ decision: SubscriptionEntitlementDecision) throws {
+    guard decision == .planGated else { return }
+    // S24 / TBD-2 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route to
+    // `LocalInferenceRuntime.generateStructuredFailClosed` / `runToolLoopFailClosed`.
+    // This shard only types the gate. Flag read is the seam; the lane is not built.
+    if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+      // Local lane not shipped — still fail closed to `.planGated`.
+    }
+    throw GeminiClientError.planGated
+  }
+
+  static func enforceManagedProactivity() async throws {
+    try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
   }
 
   /// Send a request to the Gemini API with an image
@@ -582,6 +607,7 @@ actor GeminiClient {
     responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     let maxRetries = 2
     var lastError: Error?
 
@@ -669,6 +695,7 @@ actor GeminiClient {
     timeout: TimeInterval = 300,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     var lastError: Error?
 
     for attempt in 0...maxRetries {
@@ -741,6 +768,7 @@ actor GeminiClient {
     responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     let maxRetries = 2
     var lastError: Error?
 
@@ -1032,6 +1060,7 @@ extension GeminiClient {
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0
   ) async throws -> ToolChatResult {
+    try await Self.enforceManagedProactivity()
     // Try the primary model first; if it keeps failing transiently, fall back to the
     // secondary model (e.g. Pro overloaded → Flash) before giving up.
     let models: [String] = {

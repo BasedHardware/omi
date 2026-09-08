@@ -8,13 +8,14 @@
 //  actually happened in, newest first.
 //
 //  **Conversations stay dominant and every extracted record stays first-class.** Memories, tasks,
-//  and screen moments
-//  render *indented under* the conversation that produced them, which is what keeps a conversation
-//  the thing your eye lands on. They are not children of a card, though: they are rows of the same
-//  spine, so filtering to one kind is a real filter over the whole stream rather than a different
-//  screen. When one kind is soloed the indent collapses and every row states its own time (see
-//  `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays a clock rather than
-//  degrading into a flat list.
+//  and screen moments render *close under* the conversation that produced them — tighter air, no
+//  timestamp of their own — which is what keeps a conversation the thing your eye lands on. They
+//  are not children of a card, though: they are rows of the same spine, and every row sits on the
+//  same leading grid, so a strip of frames starts at the same left edge whether it hangs under a
+//  conversation or stands on its own. Filtering to one kind is a real filter over the whole stream
+//  rather than a different screen. When one kind is soloed the closeness collapses and every row
+//  states its own time (see `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays
+//  a clock rather than degrading into a flat list.
 //
 //  Everything here is a pure function of its inputs, deliberately: the composition is the part with
 //  rules in it (what attaches to what, what a day header counts, where the brain map is filed), and
@@ -245,8 +246,9 @@ struct SpineRow: Identifiable, Equatable {
   let anchor: Date
   /// Never `.everything`: a row is one kind of thing.
   let kind: SpineKind
-  /// True when this row was produced by the conversation directly above it. Indented while the
-  /// whole spine is shown; flattened — and given its own timestamp — the moment one kind is soloed.
+  /// True when this row was produced by the conversation directly above it. Set close under it —
+  /// on the same leading grid as every other row — while the whole spine is shown; flattened, and
+  /// given its own timestamp, the moment one kind is soloed.
   let isAttached: Bool
   let content: Content
 
@@ -255,6 +257,18 @@ struct SpineRow: Identifiable, Equatable {
 }
 
 // MARK: - Day
+
+/// Formats `SpineDay.id` (local start-of-day) as the backend's `YYYY-MM-DD` key.
+///
+/// Must use the same calendar the day was composed in. A UTC formatter here renders the
+/// previous evening in every zone east of UTC, and every recap lookup misses.
+enum SpineDayDateKey {
+  static func string(from dayID: Date, calendar: Calendar) -> String? {
+    let parts = calendar.dateComponents([.year, .month, .day], from: dayID)
+    guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
+    return String(format: "%04d-%02d-%02d", year, month, day)
+  }
+}
 
 /// One day of the spine, with the header that counts it.
 struct SpineDay: Identifiable, Equatable {
@@ -375,8 +389,8 @@ enum SpineComposer {
   /// Recomposing on every keystroke would make the query bar feel like the list is thinking; this
   /// way the store composes when the *data* changes and filters when the *question* does.
   ///
-  /// It also keeps the day header honest: `filter(_:kind:query:)` never touches the counts, so a
-  /// filtered spine still says how big the day really was.
+  /// It also keeps the day header honest: `filter(_:kind:query:)` recomputes the counts from the
+  /// rows it leaves on screen, so a filtered spine does not claim that hidden records are visible.
   ///
   /// - Parameters:
   ///   - conversations: the loaded page(s) of the real conversation list, any order.
@@ -502,12 +516,28 @@ enum SpineComposer {
         }
       }
 
+      // The day header describes the rows currently on screen. Carrying the composed day's totals
+      // through a query made an empty-looking kind filter still say "1 conversation · 1 memory";
+      // recompute each unit count after narrowing while keeping the timeline's row ordering intact.
+      let momentCount = rows.reduce(0) { total, row in
+        guard case .moments(_, let count) = row.content else { return total }
+        return total + count
+      }
+      let conversationCount = rows.reduce(0) { total, row in
+        guard case .conversation = row.content else { return total }
+        return total + 1
+      }
+      let taskCount = rows.reduce(0) { total, row in
+        guard case .tasks(let tasks) = row.content else { return total }
+        return total + tasks.count
+      }
+
       return SpineDay(
         id: day.id,
         title: day.title,
-        momentCount: day.momentCount,
-        conversationCount: day.conversationCount,
-        taskCount: day.taskCount,
+        momentCount: momentCount,
+        conversationCount: conversationCount,
+        taskCount: taskCount,
         rows: rows
       )
     }
@@ -603,7 +633,7 @@ enum SpineComposer {
 
     // Re-seat every attached row directly under its conversation. Sorting by anchor alone would
     // interleave them with anything that happened mid-conversation, which is the exact reading
-    // failure the indent exists to prevent.
+    // failure the attachment exists to prevent.
     rows = reseatAttachments(rows)
 
     // The brain map is filed under memories at the foot of the day, never as a destination.

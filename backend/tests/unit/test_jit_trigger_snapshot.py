@@ -14,11 +14,30 @@ from models.product_memory import (
     ProcessingState,
 )
 from utils.memory.jit_trigger_snapshot import (
+    _budget_authority,
     is_authoritative_trigger_for_paid_work,
     read_authoritative_trigger_snapshot,
 )
 
 NOW = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+
+def test_budget_authority_uses_profile_timezone_across_local_midnight_and_dst():
+    class _ProfileClient:
+        def document(self, path):
+            assert path == 'users/owner'
+            return _Document(_Snapshot('owner', {'time_zone': 'America/Los_Angeles'}))
+
+    # 05:30 UTC is already Aug 24 in New York but still Aug 23 in Los Angeles.
+    assert _budget_authority('owner', datetime(2026, 8, 24, 5, 30, tzinfo=timezone.utc), _ProfileClient()) == (
+        '2026-08-23',
+        'America/Los_Angeles',
+    )
+    # The DST jump does not change the local-day contract.
+    assert _budget_authority('owner', datetime(2026, 3, 8, 8, 30, tzinfo=timezone.utc), _ProfileClient()) == (
+        '2026-03-08',
+        'America/Los_Angeles',
+    )
 
 
 class _Snapshot:
@@ -56,17 +75,24 @@ class _Query:
 
 
 class _Client:
-    def __init__(self, rows, generation=3, trailing_head=None):
+    def __init__(self, rows, generation=3, trailing_head=None, *, missing_head=False, head_error=False):
         self.rows = rows
         self.generation = generation
         self.trailing_head = trailing_head
+        self.missing_head = missing_head
+        self.head_error = head_error
         self.head_reads = 0
 
     def document(self, _path):
         self.head_reads += 1
-        generation, head_commit_id, commit_sequence = (
-            self.trailing_head if self.head_reads > 1 and self.trailing_head else (self.generation, 'head-7', 7)
-        )
+        if self.head_error:
+            raise RuntimeError('state head read failed')
+        if self.head_reads > 1 and self.trailing_head:
+            generation, head_commit_id, commit_sequence = self.trailing_head
+        elif self.missing_head:
+            return _Document(_Snapshot('head', None, exists=False))
+        else:
+            generation, head_commit_id, commit_sequence = (self.generation, 'head-7', 7)
         return _Document(
             _Snapshot(
                 'head',
@@ -206,6 +232,48 @@ def test_torn_head_read_never_certifies_complete_snapshot():
     assert result.failure_reason == 'authority_changed'
     assert result.snapshot_revision == ''
     assert result.rows == ()
+
+
+def test_missing_head_returns_complete_empty_watchlist():
+    client = _Client([], missing_head=True)
+    result = read_authoritative_trigger_snapshot('owner', firestore_client=client)
+
+    assert result.complete is True
+    assert result.owner_id == 'owner'
+    assert result.account_generation == 0
+    assert result.head_commit_id == ''
+    assert result.commit_sequence == 0
+    assert result.rows == ()
+    assert result.failure_reason is None
+    assert len(result.snapshot_revision) == 64
+    assert client.head_reads == 3, 'absence must be fenced by a trailing re-read and budget authority read'
+
+
+def test_empty_watchlist_revision_is_stable_and_owner_bound():
+    first = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([], missing_head=True))
+    second = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([], missing_head=True))
+    other_owner = read_authoritative_trigger_snapshot('stranger', firestore_client=_Client([], missing_head=True))
+
+    assert first.snapshot_revision == second.snapshot_revision
+    assert first.snapshot_revision != other_owner.snapshot_revision
+
+
+def test_head_appearing_mid_read_never_certifies_empty_generation():
+    result = read_authoritative_trigger_snapshot(
+        'owner', firestore_client=_Client([], missing_head=True, trailing_head=(3, 'head-7', 7))
+    )
+
+    assert result.complete is False
+    assert result.failure_reason == 'generation_unavailable'
+    assert result.snapshot_revision == ''
+    assert result.rows == ()
+
+
+def test_unreadable_head_stays_incomplete():
+    result = read_authoritative_trigger_snapshot('owner', firestore_client=_Client([], head_error=True))
+
+    assert result.complete is False
+    assert result.failure_reason == 'generation_unavailable'
 
 
 def test_revision_binds_condition_action_budget_and_canonical_order():

@@ -15,6 +15,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from config.stt_provider_policy import (
+    DEEPGRAM_PROVIDERS,
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
     SONIOX_PROVIDER,
@@ -24,6 +25,7 @@ from config.stt_provider_policy import (
     modulate_supports_language,
     normalized_stt_language,
     parakeet_supports_language,
+    provider_for_model_token,
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
@@ -34,7 +36,7 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
-from utils.stt.soniox import SafeSonioxSocket as SafeSonioxSocket, process_audio_soniox as process_audio_soniox
+from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
 from utils.stt.provider_resilience import (
     EXPECTED_REJECTIONS,
     ProviderCircuitBreaker,
@@ -110,13 +112,79 @@ def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
+def open_provider_selection_circuit(provider: str | None, *, reason: str) -> bool:
+    """Open a provider's process-local selection circuit after a serve-time death.
+
+    Selection normally learns from connect-time outcomes alone, so a provider
+    that accepts the upgrade and dies while serving audio is invisible to it:
+    the next reconnect's successful connect resets the failure counter. The
+    live-session terminal path calls this so reconnecting clients skip the
+    provider that just died for one cooldown window. Returns whether a known
+    provider's circuit was opened; unknown provider names are tolerated
+    (same shapes metrics accept) and simply report ``False``.
+    """
+    if not provider:
+        return False
+    try:
+        service = STTService(provider)
+    except ValueError:
+        return False
+    circuit = _circuit_for_primary(service)
+    logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
+    circuit.record_serve_failure()
+    return True
+
+
+def _primary_streaming_service() -> Optional[STTService]:
+    """Return the STT service leading ``STT_SERVICE_MODELS`` for streaming.
+
+    Walks the same policy-owned preference list ``get_stt_service_for_language``
+    selects from, so a provider migration (e.g. Deepgram -> Modulate) that
+    reorders that list is honored here automatically instead of leaving a
+    call site naming a provider that stopped being primary.
+    """
+    for model in (m.strip() for m in stt_service_models):
+        provider = provider_for_model_token(model)
+        if provider is None:
+            continue
+        if provider in DEEPGRAM_PROVIDERS:
+            return STTService.deepgram
+        if provider == MODULATE_PROVIDER:
+            return STTService.modulate
+        if provider == PARAKEET_PROVIDER:
+            return STTService.parakeet
+        if provider == SONIOX_PROVIDER:
+            return STTService.soniox
+    return None
+
+
+def is_stt_available() -> bool:
+    """Best-effort, process-local signal for a client pre-flight check.
+
+    Reuses the existing per-process circuit breaker (a latency optimization,
+    not a fleet-wide coordinator - see provider_resilience.py) for whichever
+    provider is currently configured as the streaming primary, rather than a
+    provider hardcoded at the call site: false only while that provider's
+    breaker is open and its cooldown hasn't elapsed yet after repeated recent
+    failures. Uses ``cooldown_elapsed()`` rather than raw ``state`` because
+    the open->half_open transition otherwise only happens inside
+    ``allow_request()`` — without this, a quiet process with no concurrent
+    listen traffic would stay reporting "unavailable" forever after the
+    provider actually recovered.
+    """
+    primary = _primary_streaming_service()
+    if primary is None:
+        return True
+    return _circuit_for_primary(primary).cooldown_elapsed()
+
+
 def _fallback_failure_reason(error: BaseException) -> str:
     """Classify why a fallback provider could not serve, for the next leg's telemetry."""
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
         return 'timeout'
     detail = str(error).lower()
-    if 'limit' in detail or 'quota' in detail:
-        return 'quota'
+    if 'limit' in detail or 'quota' in detail or 'exhausted' in detail or 'balance' in detail:
+        return 'quota'  # incl. Soniox 402 'organization_balance_exhausted'
     return 'provider_5xx'
 
 
@@ -479,8 +547,13 @@ def get_stt_service_for_language(
     *,
     surface: STTServingSurface = STTServingSurface.STREAMING,
     preferred_service: Optional[str] = None,
+    exclude: frozenset[str] = frozenset(),
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
+
+    ``exclude`` holds provider tokens that already died for this session, so a
+    mid-session failover asks for the next provider down the chain rather than
+    reselecting the one that just failed.
 
     A ``dg-*`` configuration serves from whichever Deepgram deployment the
     runtime is configured for — self-hosted when its endpoint is set, otherwise
@@ -503,6 +576,8 @@ def get_stt_service_for_language(
         parakeet_fallback_reason: Optional[str] = None
         for model in _models_with_preferred_service(models, preferred_service=preferred_service):
             model = model.strip()
+            if provider_for_model_token(model) in exclude:
+                continue
             if (
                 model.startswith('dg-')
                 and provider_is_enabled(deepgram_provider_for_runtime(is_dg_self_hosted), surface)
@@ -903,6 +978,40 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
     return buf.getvalue()
 
 
+MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
+
+# Velma's in-stream error frames are free text, so the fault boundary is
+# matched on normalized text. Server-fault shapes say the provider could not
+# serve the stream it accepted (5xx wording, or an explicit account-state
+# refusal); everything else — invalid audio we sent, rate limits — is either
+# our fault or this session's, and must not bench the provider fleet-wide.
+_MODULATE_SERVER_FAULT_MARKERS: Final = (
+    'internal server error',
+    'internal error',
+    'unable to complete the request',
+    'server error',
+    'monthly usage limit',  # account-state refusal: no stream can be served
+    'usage limit reached',
+    'quota exceeded',
+)
+
+
+def modulate_death_reason(err: Any) -> Optional[str]:
+    """Bound a Velma in-stream error frame to a typed death reason.
+
+    Returns ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider
+    failed to serve the stream it accepted, else ``None`` (untyped — the raw
+    text stays on the death latch for logs). New provider wordings degrade to
+    untyped rather than growing a new bounded token per message.
+    """
+    normalized = str(err or '').strip().lower().rstrip('.')
+    if not normalized:
+        return None
+    if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
+        return MODULATE_DEATH_SERVE_ERROR
+    return None
+
+
 class SafeModulateSocket(STTSocket):
     def __init__(
         self,
@@ -914,10 +1023,13 @@ class SafeModulateSocket(STTSocket):
         self._ws: Any = ws
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
         self._loop: asyncio.AbstractEventLoop = loop
-        self._preseconds = preseconds
+        self._preseconds: int = preseconds
         self._dead = False
         self._closed = False
         self._death_reason: Optional[str] = None
+        # Typed, bounded death reason (MODULATE_DEATH_SERVE_ERROR) for the
+        # terminal-failure vocabulary; None until the socket dies.
+        self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
@@ -945,11 +1057,17 @@ class SafeModulateSocket(STTSocket):
     def death_reason(self) -> Optional[str]:
         return self._death_reason
 
-    def _mark_dead(self, reason: str) -> None:
+    @property
+    def typed_death_reason(self) -> Optional[str]:
+        """Bounded reason for the terminal-failure vocabulary (None = untyped)."""
+        return self._typed_death_reason
+
+    def _mark_dead(self, reason: str, typed_reason: Optional[str] = None) -> None:
         with self._lock:
             if not self._dead:
                 self._dead = True
                 self._death_reason = reason
+                self._typed_death_reason = typed_reason
 
     def send(self, data: bytes) -> bool:
         """Synchronously accept audio only when it reaches the provider queue.
@@ -1085,11 +1203,22 @@ class SafeModulateSocket(STTSocket):
                 msg_type = msg.get('type', '')
                 if msg_type == 'error':
                     err = msg.get('error', msg.get('message', 'unknown error'))
-                    logger.error(f'Modulate streaming error: {err}')
+                    typed = modulate_death_reason(err)
+                    if typed is not None:
+                        # The provider accepted the stream and then failed to
+                        # serve it: a provider fault, and the outage signal an
+                        # on-call needs (backend-listen #3 signature,
+                        # 2026-08-31: ×11/30m "Internal server error", ×5/30m
+                        # "Unable to complete the request").
+                        logger.error(f'Modulate streaming error: {err}')
+                    else:
+                        # Client/session-caused frames (e.g. invalid audio we
+                        # sent) are the protocol answering, not an outage.
+                        logger.warning(f'Modulate stream closed: {err}')
                     if self._prev_partial_text:
                         self._flush_partial()
                     self._done_event.set()
-                    self._mark_dead(f'modulate error: {err}')
+                    self._mark_dead(f'modulate error: {err}', typed_reason=typed)
                     break
                 elif msg_type == 'done':
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))

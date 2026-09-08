@@ -8,7 +8,7 @@ class ViewModelContainer: ObservableObject {
   let tasksStore = TasksStore.shared
   /// Universal canonical goal projection. It is injected only by the
   /// capability-gated chat-first shell.
-  let canonicalGoalsStore = CanonicalGoalsStore()
+  let canonicalGoalsStore = CanonicalGoalsStore.shared
   /// Process-launch anchor for startup warmups. Captured at container init
   /// (≈ app launch) so post-onboarding / late main-content appearance does
   /// not re-pay launch-protection delays.
@@ -90,15 +90,18 @@ class ViewModelContainer: ObservableObject {
     // API calls and data fetches continue in the background
     isInitialLoadComplete = true
     loadedUserId = currentUserId
-    let timeToInteractive = CFAbsoluteTimeGetCurrent() - startupStart
+    // This is the critical startup path inside loadAllData, not time from
+    // process start. It is reported as `data_load_ms`; `time_to_interactive_ms`
+    // comes from the kernel's process-start stamp.
+    let dataLoadDuration = CFAbsoluteTimeGetCurrent() - startupStart
 
     // Track startup timing
     logPerf(
-      "DATA LOAD: DB init \(String(format: "%.1f", dbInitDuration * 1000))ms, time-to-interactive \(String(format: "%.1f", timeToInteractive * 1000))ms, uncleanShutdown=\(hadUncleanShutdown)"
+      "DATA LOAD: DB init \(String(format: "%.1f", dbInitDuration * 1000))ms, data load \(String(format: "%.1f", dataLoadDuration * 1000))ms, uncleanShutdown=\(hadUncleanShutdown)"
     )
     AnalyticsManager.shared.trackStartupTiming(
       dbInitMs: dbInitDuration * 1000,
-      timeToInteractiveMs: timeToInteractive * 1000,
+      dataLoadMs: dataLoadDuration * 1000,
       hadUncleanShutdown: hadUncleanShutdown,
       databaseInitFailed: databaseInitFailed
     )

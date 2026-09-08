@@ -1,7 +1,7 @@
 // The Insight assistant's prompt. Pure: every input is injected, nothing is
 // fetched here, so the exact text we ship to Gemini is unit-testable.
 //
-// DEFAULT_ANALYSIS_PROMPT is Mac's `InsightAssistantSettings.defaultAnalysisPrompt`
+// DEFAULT_ANALYSIS_PROMPT is Mac's insight-assistant settings `defaultAnalysisPrompt`
 // VERBATIM — it is product copy (the "impress the user" bar, the GOOD/BAD example
 // gallery, the confidence rubric). The ONE re-grounding: the WORKFLOW's example
 // SQL names Windows' `rewind_frames`/`ocr_text`/`app`/`ts`, not Mac's
@@ -126,8 +126,8 @@ export type InsightContextData = {
   previousInsights: string[]
 }
 
-// "Tuesday, August 25, 2026 at 3:45 PM (America/New_York)" — Mac's
-// InsightAssistant.analysisClockLine. The year and timezone are load-bearing:
+// "Tuesday, August 25, 2026 at 3:45 PM (America/New_York)" — the macOS
+// counterpart's analysisClockLine. The year and timezone are load-bearing:
 // without them the model falls back to its training-cutoff year and flags
 // correctly recorded current-era dates as mistakes (SCA-358).
 export function formatDateTime(

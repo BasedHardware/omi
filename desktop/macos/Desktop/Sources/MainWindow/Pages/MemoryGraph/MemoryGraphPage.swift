@@ -37,6 +37,7 @@ enum MemoryGraphPresentationMode: Equatable {
 
 struct MemoryGraphPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
+  var searchText = ""
 
   var body: some View {
     ZStack {
@@ -48,6 +49,10 @@ struct MemoryGraphPage: View {
       // a Memory tab now, not a modal, so there's no close button.)
       VStack {
         HStack {
+          if !viewModel.isEmpty {
+            legacyGraphLegend
+          }
+
           Spacer()
 
           // Rebuild control: while rebuilding it just dims and disables — the
@@ -56,19 +61,38 @@ struct MemoryGraphPage: View {
           Button {
             Task { await viewModel.rebuildGraph() }
           } label: {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary.opacity(viewModel.isRebuilding ? 0.4 : 1))
-              .frame(width: 28, height: 28)
+            PageQueryActionLabel(
+              icon: "arrow.clockwise",
+              title: viewModel.isRebuilding ? "Rebuilding…" : "Rebuild"
+            )
           }
           .buttonStyle(.plain)
           .disabled(viewModel.isRebuilding)
           .help("Rebuild graph")
         }
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.top, OmiSpacing.md)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.top, OmiSpacing.sm)
 
         Spacer()
+      }
+
+      if shouldShowSearchEmptyState {
+        VStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "magnifyingglass")
+            .scaledFont(size: OmiType.heading)
+            .foregroundStyle(Ink.surface)
+          Text("No entities match \u{201c}\(trimmedSearchText)\u{201d}")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundStyle(Ink.surface)
+          Text("Try a different search or clear the search above.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.surface.opacity(0.78))
+        }
+        .multilineTextAlignment(.center)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No entities match \(trimmedSearchText)")
+        .accessibilityHint("Try a different search or clear the search above.")
       }
 
       // Exactly one status view: a single centered spinner while loading or
@@ -92,12 +116,57 @@ struct MemoryGraphPage: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.md)
+    .padding(OmiSpacing.xs)
     .glassMediaMat(cornerRadius: PageGlass.cardRadius)
-    .padding(OmiSpacing.md)
+    .padding(OmiSpacing.xs)
     .task {
       await viewModel.prepareGraph()
+      viewModel.applySearch(query: searchText)
     }
+    .onChange(of: searchText) { _, query in
+      viewModel.applySearch(query: query)
+    }
+  }
+
+  private var trimmedSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var shouldShowSearchEmptyState: Bool {
+    !trimmedSearchText.isEmpty
+      && viewModel.searchMatchCount == 0
+      && !viewModel.isLoading
+      && !viewModel.isRebuilding
+      && !viewModel.isEmpty
+  }
+
+  private var legacyGraphLegend: some View {
+    let activeTypes = KnowledgeGraphNodeType.allCases.filter { type in
+      viewModel.graphResponse.nodes.contains { $0.nodeType == type }
+    }
+
+    return HStack(spacing: OmiSpacing.sm) {
+      Text("Legend")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundStyle(Ink.surface)
+
+      ForEach(activeTypes, id: \.self) { type in
+        HStack(spacing: OmiSpacing.xs) {
+          Circle()
+            .fill(type.color)
+            .frame(width: 6, height: 6)
+          Text(type.displayName)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.surface.opacity(0.84))
+        }
+      }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Brain Map legend")
+    .accessibilityValue(
+      activeTypes.map { "\($0.displayName), color coded" }.joined(separator: "; ")
+    )
+    .accessibilityHint("Legend only; these items are not interactive filters.")
   }
 }
 
@@ -156,11 +225,13 @@ struct MemoryGraphSceneView: NSViewRepresentable {
 class MemoryGraphViewModel: ObservableObject {
   typealias CanonicalGraphFetcher =
     (RuntimeOwnerAuthorizationSnapshot) async throws -> KnowledgeGraphResponse
+  typealias OwnerNameProvider = () -> String?
 
   @Published var isLoading = false
   @Published var isRebuilding = false
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
+  @Published private(set) var searchMatchCount: Int?
   @Published private(set) var graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
   /// Prepared off the main actor and retained for the complete lifetime of a
   /// canonical graph revision. The SwiftUI Brain Map can re-render freely
@@ -187,8 +258,10 @@ class MemoryGraphViewModel: ObservableObject {
   private var hasLoadedCanonicalAtlas = false
   private var hasRunEmptyBootstrap = false
   private var loadedGraphSignature: Int?
+  private var activeSearchQuery = ""
   private var sessionGeneration = 0
   private let canonicalGraphFetcher: CanonicalGraphFetcher
+  private let ownerNameProvider: OwnerNameProvider
 
   private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
     !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
@@ -199,19 +272,39 @@ class MemoryGraphViewModel: ObservableObject {
       try await APIClient.shared.getKnowledgeGraph(
         authorizationSnapshot: authorizationSnapshot)
     }
+    ownerNameProvider = Self.currentOwnerName
     setupCamera()
     setupLighting()
   }
 
-  init(
+  convenience init(
     canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
     initialGraphResponse: KnowledgeGraphResponse
   ) {
+    self.init(
+      canonicalGraphFetcher: canonicalGraphFetcher,
+      initialGraphResponse: initialGraphResponse,
+      ownerNameProvider: Self.currentOwnerName)
+  }
+
+  init(
+    canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
+    initialGraphResponse: KnowledgeGraphResponse,
+    ownerNameProvider: @escaping OwnerNameProvider
+  ) {
     self.canonicalGraphFetcher = canonicalGraphFetcher
+    self.ownerNameProvider = ownerNameProvider
     graphResponse = initialGraphResponse
     isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
     setupLighting()
+  }
+
+  private static func currentOwnerName() -> String? {
+    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let ownerName = givenName.isEmpty ? displayName : givenName
+    return ownerName.isEmpty ? nil : ownerName
   }
 
   private func setupCamera() {
@@ -339,11 +432,9 @@ class MemoryGraphViewModel: ObservableObject {
         let hasContent = Self.hasAtlasContent(response)
         var projection: MemoryAtlasProjection?
         if hasContent {
-          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let ownerName = givenName.isEmpty ? displayName : givenName
+          let ownerName = ownerNameProvider()
           projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return
@@ -409,11 +500,9 @@ class MemoryGraphViewModel: ObservableObject {
         }
 
         if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
-          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let ownerName = givenName.isEmpty ? displayName : givenName
+          let ownerName = ownerNameProvider()
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false
@@ -717,6 +806,7 @@ class MemoryGraphViewModel: ObservableObject {
 
     // Create scene nodes for new entries, animate them in
     addNewSceneNodes()
+    applySearch(query: activeSearchQuery)
     autoFitCamera(animated: true)
 
     // Re-enable animation for settling
@@ -735,6 +825,8 @@ class MemoryGraphViewModel: ObservableObject {
     isRebuilding = false
     isEmpty = true
     selectedNodeId = nil
+    searchMatchCount = nil
+    activeSearchQuery = ""
     graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
     canonicalAtlasProjection = nil
     isAnimating = false
@@ -752,6 +844,31 @@ class MemoryGraphViewModel: ObservableObject {
     for (_, node) in edgeSceneNodes { node.removeFromParentNode() }
     nodeSceneNodes.removeAll()
     edgeSceneNodes.removeAll()
+  }
+
+  /// The compatibility graph keeps its SceneKit renderer, but participates in the same Brain search
+  /// contract by dimming non-matching entities and their connections in place.
+  func applySearch(query: String) {
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    activeSearchQuery = needle
+    let matchingIDs = Set(
+      simulation.nodes.compactMap { node in
+        needle.isEmpty || node.label.localizedCaseInsensitiveContains(needle) ? node.id : nil
+      })
+    searchMatchCount = needle.isEmpty ? nil : matchingIDs.count
+    if !needle.isEmpty {
+      let resultsCount = matchingIDs.count
+      SearchAnalytics.scheduleQueryEntered(surface: .brainMap, query: needle) { resultsCount }
+    }
+
+    for (id, node) in nodeSceneNodes {
+      node.isHidden = !needle.isEmpty && !matchingIDs.contains(id)
+    }
+    for edge in simulation.edges {
+      edgeSceneNodes[edge.id]?.isHidden =
+        !needle.isEmpty
+        && (!matchingIDs.contains(edge.sourceId) && !matchingIDs.contains(edge.targetId))
+    }
   }
 
   /// Create scene nodes only for simulation nodes/edges not yet in the scene
@@ -841,6 +958,10 @@ class MemoryGraphViewModel: ObservableObject {
       containerNode.scale = SCNVector3(1, 1, 1)
       SCNTransaction.commit()
     }
+
+    // Search can be entered before the first scene build completes. Re-apply the query after the
+    // nodes exist so a matching query never leaves an unfiltered graph behind on its first render.
+    applySearch(query: activeSearchQuery)
   }
 
   // MARK: - Scene Nodes
@@ -982,6 +1103,10 @@ class MemoryGraphViewModel: ObservableObject {
 
     // Auto-fit camera to graph bounds
     autoFitCamera()
+
+    // Search may have been entered while the graph was loading. Re-apply it after the SceneKit
+    // nodes exist so the initial render cannot briefly expose non-matching entities.
+    applySearch(query: activeSearchQuery)
   }
 
   /// Create a text label below a node

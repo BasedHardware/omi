@@ -28,7 +28,7 @@ import type { DesktopActionQueueItem } from "./desktop-action-queue.js";
 import type { DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
 import type { ResolveSurfaceSessionResult, SurfaceRef } from "./surface-session.js";
 import type { AgentStore } from "./types.js";
-import type { ContextSnapshotProjection } from "../protocol.js";
+import type { ContextSnapshotProjection, JitCostEvidenceProjection } from "../protocol.js";
 import type {
   DesktopArtifactDelivery,
   DesktopAttentionOverride,
@@ -94,6 +94,11 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   expectedCapabilityVersion?: string;
   /** Kernel-populated immutable admission snapshot; callers cannot select it. */
   admittedContextSnapshot?: ContextSnapshotProjection;
+  /**
+   * QA-only source-owned prompt projection. It is persisted with this run's
+   * input, never merged into adapter metadata or inherited by child runs.
+   */
+  jitCostEvidenceProjection?: JitCostEvidenceProjection;
   /** Revokes adapter execution when the authorizing parent invocation expires. */
   authoritySignal?: AbortSignal;
 }
@@ -103,6 +108,8 @@ export interface BeginExternalSurfaceRunInput {
   sessionId: string;
   turnId: string;
   prompt: string;
+  /** The prompt is an internal instruction, not user speech. */
+  promptIsSynthetic?: boolean;
   mode: RunMode;
   clientId: string;
   requestId: string;
@@ -123,6 +130,8 @@ export interface CompleteExternalSurfaceRunInput {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /** Text the external surface streamed, persisted to `runs.final_text` (#12731). */
+  finalText?: string;
   errorCode?: string;
 }
 
@@ -133,6 +142,12 @@ export interface CompleteExternalSurfaceRunResult {
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
   duplicate: boolean;
+  /** Whether this call wrote `finalText`, so an older kernel is detectable by its absence. */
+  finalTextPersisted: boolean;
+  /** Whether the canonical assistant journal row exists after completion. */
+  journalMaterialized: boolean;
+  /** Internal daemon projection events; omitted from the completion wire receipt. */
+  journalChanges: import("./external-surface-journal.js").ExternalSurfaceJournalChange[];
 }
 
 export type ExternalSurfaceAuthorityErrorCode =

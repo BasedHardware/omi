@@ -5,6 +5,7 @@ import com.friend.ios.ble.OmiBleManager
 import android.content.Context
 import android.util.Log
 import org.json.JSONObject
+import java.io.File
 import java.util.Locale
 
 /**
@@ -51,6 +52,16 @@ class OmiBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context, TAG,
 
     @Volatile
     private var wasEnabled = false
+
+    override fun onOpenedLocked(partFile: File) {
+        val rawGeolocation = runCatching {
+            JSONObject(stringPref("nativeBleStreamConfig"))
+                .optJSONObject("geolocation")
+                ?.toString()
+        }.getOrNull() ?: return
+        val audioFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
+        persistNativeBatchGeolocationSidecar(audioFile, rawGeolocation, TAG)
+    }
 
     /** Audio target for this device if batch mode is on — used by the foreground
      *  service to subscribe to the audio characteristic when Flutter is dead. */

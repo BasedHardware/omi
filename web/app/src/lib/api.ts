@@ -428,6 +428,7 @@ export async function createActionItem(
 ): Promise<ActionItem> {
   return fetchWithAuth<ActionItem>('/v1/action-items', {
     method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify(params),
   });
 }
@@ -602,15 +603,6 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
  */
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
   return fetchWithAuth<KnowledgeGraph>('/v1/knowledge-graph');
-}
-
-/**
- * Trigger knowledge graph rebuild
- */
-export async function rebuildKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth('/v1/knowledge-graph/rebuild', {
-    method: 'POST',
-  });
 }
 
 // ============================================================================

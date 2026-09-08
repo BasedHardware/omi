@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PrivateCloudSyncPage extends StatefulWidget {
@@ -40,7 +41,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       if (!mounted) return;
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.failedToUpdateSettings(e.toString())), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.failedToUpdateSettings(readableError(e))), backgroundColor: Colors.red),
       );
     }
   }

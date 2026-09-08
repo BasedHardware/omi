@@ -53,7 +53,7 @@ extension View {
   }
 }
 
-struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
+struct QueryResultsPanel<Content: View, TopAccessory: View, Accessory: View, Footer: View>: View {
   @Binding var request: QueryShellRequest
   let mode: QueryShellMode
   /// The whole corpus, for the resting sentence. Nil while it is still being counted, which reads as
@@ -72,6 +72,9 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// What the chip row does on this surface. Home narrows its search results in place; Activity's
   /// row is navigation — see `ActivityDestinationChip`.
   var chipBehavior: QueryPanelChipBehavior = .filterKinds
+  /// A full-width row above the filter/count header. Brain uses it for peer navigation so the
+  /// switcher belongs to the results panel rather than to the search field.
+  @ViewBuilder var topAccessory: () -> TopAccessory
 
   /// One slot in the header's leading cluster, next to `Filter ›` / `‹ Results`.
   ///
@@ -95,8 +98,9 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: QueryShellLayout.panelHeaderSpacing) {
+      topAccessory()
       header
-      if mode == .results {
+      if mode == .results, chipBehavior.showsChipRow {
         chips
       }
       content()
@@ -169,8 +173,15 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
     // own content — so without this the `Filter` control renders in the accent, which on a surface
     // that spends its single accent on `⌘⏎ Ask` reads as two primary actions.
     .tint(Ink.primary)
-    .help("Narrow the panel to a time window")
+    .help(filterHelp)
     .accessibilityIdentifier("query-shell-filter")
+  }
+
+  private var filterHelp: String {
+    if case .none = chipBehavior {
+      return "Choose a time range. The timeline rail below navigates within that range."
+    }
+    return "Narrow the panel to a time window"
   }
 
   /// In answer mode the same corner carries the way back, because asking is a mode of this query and
@@ -210,6 +221,8 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   private var chips: some View {
     HStack(spacing: QueryShellLayout.chipSpacing) {
       switch chipBehavior {
+      case .none:
+        EmptyView()
       case .filterKinds:
         ForEach(QueryShellKind.allCases) { kind in
           QueryTypeChip(
@@ -239,14 +252,21 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
 /// cannot quietly become the other: a row where some chips filter and some navigate teaches a rule
 /// and then breaks it.
 enum QueryPanelChipBehavior {
+  case none
   case filterKinds
   case openDestinations(selected: ActivityDestinationChip, open: (ActivityDestinationChip) -> Void)
+
+  var showsChipRow: Bool {
+    if case .none = self { return false }
+    return true
+  }
 
   /// What the row's own header calls it. The word has to follow the behaviour: on Home the chips
   /// narrow the results in place and `Filter` is the truth; on Activity they open pages, and a row
   /// of destinations under the word `Filter` describes something the row does not do.
   var disclosureLabel: String {
     switch self {
+    case .none: return "Time range"
     case .filterKinds: return "Filter"
     case .openDestinations: return "View"
     }

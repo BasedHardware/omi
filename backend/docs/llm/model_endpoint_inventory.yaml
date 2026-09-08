@@ -1,196 +1,621 @@
+# S7 columns (10 §1.6): each row is one user-triggerable surface =
+# (surface, entrypoint, feature, plan_gating, funding_owner, fallback_on_deny).
+# plan_gating reuses S1 DECISION_REASONS, plus unified_chat_quota for realtime.
+# fallback_on_deny=none_unwired means authorize_managed_compute is not at this
+# entrypoint today — recorded, not repaired (cut list).
+# call_sites is the exact-set pin: a managed get_llm / LLM REST host absent
+# from this list fails CI.
 schema_version: llm_model_endpoint_inventory.v1
 scope:
-  in_scope: backend chat/completion/generation/model calls, including streaming, tool calling, image generation, file chat, realtime relay, and provider web search
-  out_of_scope: embeddings/vector APIs only
-out_of_scope_surfaces:
-  - surface: openai_embeddings
-    code_path: backend/utils/llm/clients.py:OpenAIEmbeddings,generate_embedding
-    provider_model: openai/text-embedding-3-large
-    request_shape: embedding
-    reason: Embeddings are explicitly out of scope for this phase.
-  - surface: gemini_screen_activity_query_embedding
-    code_path: backend/utils/llm/clients.py:gemini_embed_query
-    provider_model: gemini/embedding-001
-    request_shape: embedding
-    reason: Embeddings are explicitly out of scope for this phase.
+  in_scope: backend chat/completion/generation/model calls, including streaming, tool calling, image generation, file chat,
+    realtime relay, provider web search, and embeddings
+  out_of_scope: none
+out_of_scope_surfaces: []
 model_config_features:
   status: gateway_lane_generated_from_model_config
   source_of_truth: backend/utils/llm/model_config.py
   gateway_lane: omi:auto:<feature-with-underscores-as-hyphens>
   code_paths:
-    - backend/utils/llm/clients.py:get_llm
-    - backend/llm_gateway/gateway/config_loader.py:_generated_feature_route_items
+  - backend/utils/llm/clients.py:get_llm
+  - backend/llm_gateway/gateway/config_loader.py:_generated_feature_route_items
   request_shapes:
     plain_chat:
-      - conv_action_items
-      - wake_word_adjudication
-      - conv_app_result
-      - conv_discard
-      - conv_folder
-      - conv_structure
-      - daily_summary
-      - daily_summary_simple
-      - followup
-      - goals
-      - goals_advice
-      - knowledge_graph
-      - learnings
-      - memories
-      - memory_category
-      - memory_conflict
-      - memory_conflict_flex
-      - memory_l1
-      - memory_l2_flex
-      - notifications
-      - onboarding
-      - openglass
-      - persona_chat
-      - persona_chat_premium
-      - persona_clone
-      - session_titles
-      - smart_glasses
-      - wrapped_analysis
-      - x_memory_extraction_flex
-      - app_generator
-      - app_integration
+    - conv_action_items
+    - wake_word_adjudication
+    - conv_app_result
+    - conv_discard
+    - conv_folder
+    - conv_structure
+    - daily_summary
+    - daily_summary_simple
+    - followup
+    - goals
+    - goals_advice
+    - knowledge_graph
+    - learnings
+    - memories
+    - memory_category
+    - memory_conflict
+    - memory_conflict_flex
+    - memory_l1
+    - memory_l2_flex
+    - notifications
+    - onboarding
+    - openglass
+    - persona_chat
+    - persona_chat_premium
+    - persona_clone
+    - session_titles
+    - smart_glasses
+    - wrapped_analysis
+    - x_memory_extraction_flex
+    - app_generator
+    - app_integration
     structured_output:
-      - chat_extraction
-      - conv_app_select
-      - desktop_proactive_extraction
-      - desktop_proactive_reasoning
-      - external_structure
-      - proactive_notification
-      - screen_frame_judge
-      - translation
-      - trends
-      - what_matters_now
+    - chat_extraction
+    - conv_app_select
+    - desktop_proactive_extraction
+    - desktop_proactive_reasoning
+    - external_structure
+    - proactive_notification
+    - screen_frame_judge
+    - translation
+    - trends
+    - what_matters_now
     streaming:
-      - chat_responses
-      - chat_graph
-      - persona_chat
-      - persona_chat_premium
+    - chat_responses
+    - chat_graph
+    - persona_chat
+    - persona_chat_premium
     tool_calling:
-      - chat_agent
-      - memory_l2
+    - chat_agent
+    - memory_l2
+    file_chat:
+    - file_chat_vision
+    - file_chat_documents
     provider_search:
-      - web_search
+    - web_search
     pinned:
-      - fair_use
-  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed.
+    - fair_use
+  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini,
+    openrouter, perplexity, and anthropic; OpenAI-compatible /v1/embeddings surface with openai and native Vertex :predict
+    adapters.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway
+    and does not retain a direct-provider fallback; gateway Gemini uses native Vertex generateContent authenticated by GKE
+    Workload Identity; Gemini BYOK remains unsupported and fails closed.
   test_guardrail_coverage:
-    - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
-    - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
+  - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
+  - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
 surfaces:
-  - surface: desktop_context_proactivity
-    code_path: backend/routers/desktop_proactivity.py:proactive_completion
-    current_provider_model: gateway lanes desktop_proactive_extraction and desktop_proactive_reasoning; direct OpenAI only when OMI_ENV_STAGE is dev or local and the gateway URL is absent
-    request_shape: non-streaming strict structured output with optional explicit prompt caching on reasoning
-    gateway_lane_capability_needed: OpenAI-compatible structured-output lanes with explicit-cache support for reasoning
-    migration_status: acknowledged_direct_dev_recovery_surface; production remains gateway-only and fails closed, while dev and local record shared fallback telemetry when recovering through direct OpenAI
-    test_guardrail_coverage: backend/tests/unit/test_desktop_proactivity.py and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: public_shared_conversation_chat
-    code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
-    current_provider_model: gateway-only openai/gpt-5-nano
-    request_shape: non-streaming plain chat with server-resolved shared transcript, at most eight user/assistant history entries, and no tools or retrieval
-    gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
-    migration_status: gateway_only_trusted_frontend_bff
-    test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
-  - surface: langchain_feature_routing
-    code_path: backend/utils/llm/clients.py:get_llm
-    current_provider_model: utils.llm.model_config feature profile
-    request_shape: plain chat, structured output, parser chain, streaming, tool calling via LangChain
-    gateway_lane_capability_needed: generated feature lanes
-    migration_status: gateway_capable_central_flip
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: anthropic_agentic_chat
-    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStream
-    current_provider_model: anthropic/chat_agent
-    request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
-    migration_status: gateway_only_fail_closed; transport failures and an open circuit return a typed gateway-unavailable error without constructing or calling a direct Anthropic client
-    test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
-  - surface: perplexity_web_search_tool
-    code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
-    current_provider_model: perplexity/web_search
-    request_shape: provider search chat completion
-    gateway_lane_capability_needed: perplexity OpenAI-compatible provider adapter on omi:auto:web-search
-    migration_status: gateway_only_fail_closed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_perplexity_tool_always_uses_gateway
-  - surface: app_icon_generation
-    code_path: backend/utils/llm/app_generator.py:generate_app_icon
-    current_provider_model: openai/dall-e-3
-    request_shape: image generation
-    gateway_lane_capability_needed: gateway-owned /v1/images/generations proxy
-    migration_status: gateway_only_fail_closed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
-  - surface: file_chat_vision
-    code_path: backend/utils/other/chat_file.py:_ask_vision_stream
-    current_provider_model: openai/gpt-5.6-luna
-    request_shape: streaming vision chat completion
-    gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: file_chat_assistants
-    code_path: backend/utils/other/chat_file.py:FileChatTool
-    current_provider_model: openai/gpt-4.1 with Assistants, Threads, Files, File Search
-    request_shape: file upload, assistants, file_search, streaming run deltas
-    gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: omni_realtime_relay
-    code_path: backend/routers/omni_relay.py
-    current_provider_model: openai realtime or gemini live selected by client query
-    request_shape: realtime websocket relay
-    gateway_lane_capability_needed: gateway-owned realtime websocket relay
-    migration_status: inventoried_direct_realtime_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: fair_use_classifier
-    code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
-    current_provider_model: openai/fair_use pinned feature
-    request_shape: async plain chat JSON
-    gateway_lane_capability_needed: generated omi:auto:fair-use lane
-    migration_status: get_llm_routed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: production_like_memory_ingestion
-    code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
-    current_provider_model: openai/memories feature
-    request_shape: parser chain
-    gateway_lane_capability_needed: generated omi:auto:memories lane
-    migration_status: get_llm_routed
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
-  - surface: knowledge_graph_extract
-    code_path: backend/routers/knowledge_graph.py:extract_knowledge_graph
-    current_provider_model: openai/gpt-5.6-luna knowledge_graph feature
-    request_shape: return-only entity/edge extraction JSON
-    gateway_lane_capability_needed: generated omi:auto:knowledge-graph lane
-    migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
-    test_guardrail_coverage: backend/tests/unit/test_knowledge_graph_extract_route.py
-  - surface: memories_extract
-    code_path: backend/routers/memories.py:extract_memory_log
-    current_provider_model: openai/gpt-5.6-luna memories feature
-    request_shape: return-only memory-log JSON (memories + profile)
-    gateway_lane_capability_needed: generated omi:auto:memories lane
-    migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
-    test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
-  - surface: connector_synthesis
-    code_path: backend/routers/integrations.py:synthesize_connector_data
-    current_provider_model: openai/gpt-5.6-luna memories feature
-    request_shape: return-only calendar/gmail/notes memories + tasks + profile
-    gateway_lane_capability_needed: generated omi:auto:memories lane
-    migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
-    test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
-  - surface: conversation_topic
-    code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
-    current_provider_model: openai/gpt-5.6-luna conv_structure feature
-    request_shape: return-only emoji + short title for a finished transcript
-    gateway_lane_capability_needed: generated omi:auto:conv-structure lane
-    migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
-    test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
-  - surface: ai_user_profile_synthesis
-    code_path: backend/routers/users.py:synthesize_ai_profile
-    current_provider_model: openai/gpt-5.6-luna memories feature
-    request_shape: return-only two-stage user profile document from desktop source lines
-    gateway_lane_capability_needed: generated omi:auto:memories lane
-    migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
-    test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py
+- surface: desktop_context_proactivity
+  code_path: backend/routers/desktop_proactivity.py:proactive_completion
+  entrypoint: POST desktop proactivity completion
+  feature: desktop_proactive_reasoning
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - routers/desktop_proactivity.py::host:api.openai.com
+  current_provider_model: gateway lanes desktop_proactive_extraction and desktop_proactive_reasoning; direct OpenAI only when
+    OMI_ENV_STAGE is dev or local and the gateway URL is absent
+  request_shape: non-streaming strict structured output with optional explicit prompt caching on reasoning
+  gateway_lane_capability_needed: OpenAI-compatible structured-output lanes with explicit-cache support for reasoning
+  migration_status: acknowledged_direct_dev_recovery_surface; production remains gateway-only and fails closed, while dev
+    and local record shared fallback telemetry when recovering through direct OpenAI
+  test_guardrail_coverage: backend/tests/unit/test_desktop_proactivity.py and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: public_shared_conversation_chat
+  code_path: backend/routers/public_shared_conversation_chat.py:public_shared_conversation_chat
+  entrypoint: POST public shared-conversation chat BFF
+  feature: public_shared_conversation_chat
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites: []
+  current_provider_model: gateway-only openai/gpt-5-nano
+  request_shape: non-streaming plain chat with server-resolved shared transcript, at most eight user/assistant history entries,
+    and no tools or retrieval
+  gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
+  migration_status: gateway_only_trusted_frontend_bff
+  test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
+- surface: langchain_feature_routing
+  code_path: backend/utils/llm/clients.py:get_llm
+  entrypoint: get_llm central feature router
+  feature: '*'
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/chat.py::feature:chat_responses
+  - utils/llm/chat.py::feature:chat_extraction
+  - utils/llm/conversation_folder.py::feature:conv_folder
+  - utils/llm/conversation_processing.py::feature:conv_discard
+  - utils/llm/conversation_processing.py::feature:conv_action_items
+  - utils/llm/conversation_processing.py::feature:conv_structure
+  - utils/llm/conversation_processing.py::feature:conv_app_result
+  - utils/llm/conversation_processing.py::feature:conv_app_select
+  - utils/llm/conversation_processing.py::feature:daily_summary
+  - utils/llm/followup.py::feature:followup
+  - utils/llm/goals.py::feature:goals
+  - utils/llm/goals.py::feature:goals_advice
+  - utils/llm/notifications.py::feature:notifications
+  - utils/llm/openglass.py::feature:openglass
+  - utils/llm/persona.py::feature:<dynamic>
+  - utils/llm/persona.py::feature:persona_clone
+  - utils/llm/proactive_notification.py::feature:proactive_notification
+  - utils/llm/trends.py::feature:trends
+  - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
+  - utils/llm/working_observations.py::feature:memory_l1
+  - utils/memory/belief_backfill.py::feature:<dynamic>
+  - utils/memory/belief_evidence.py::feature:memory_conflict
+  - utils/memory/canonical_consolidation.py::feature:memory_conflict
+  - utils/retrieval/graph.py::feature:chat_graph
+  - utils/screen_frames/judge.py::feature:<dynamic>
+  - utils/translation_core/providers.py::feature:translation
+  - utils/llm/clients.py::host:openrouter.ai
+  - utils/llm/providers.py::host:generativelanguage.googleapis.com
+  - utils/llm/providers.py::host:openrouter.ai
+  - llm_gateway/gateway/providers.py::host:api.openai.com
+  - llm_gateway/gateway/providers.py::host:api.anthropic.com
+  - llm_gateway/routers/anthropic_messages.py::host:api.anthropic.com
+  - llm_gateway/routers/dependencies.py::host:openrouter.ai
+  current_provider_model: utils.llm.model_config feature profile
+  request_shape: plain chat, structured output, parser chain, streaming, tool calling via LangChain
+  gateway_lane_capability_needed: generated feature lanes
+  migration_status: gateway_capable_central_flip
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: openai_agentic_chat
+  code_path: backend/utils/retrieval/agentic.py:_run_openai_agent_stream
+  entrypoint: chat agentic stream
+  feature: chat_agent
+  plan_gating: free_allowlist
+  funding_owner: omi
+  fallback_on_deny: n/a_allowed
+  call_sites:
+  - utils/retrieval/agentic.py::feature:chat_agent
+  current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-5.6-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
+  request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently
+  gateway_lane_capability_needed: openai.chat_completions surface with streaming and tools on omi:auto:chat-agent
+  migration_status: gateway_luna_chat_agent; Omi-managed traffic is get_llm('chat_agent') through the generated OpenAI lane
+    and fails closed on gateway transport / open circuit. Anthropic Messages (gateway_anthropic / anthropic_messages router)
+    remains for desktop specialist/BYOK callers, not this chat lane.
+  test_guardrail_coverage: backend/tests/unit/test_chat_agent_provider_retry.py and backend/tests/unit/test_chat_agent_loop_guard.py
+- surface: perplexity_web_search_tool
+  code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
+  entrypoint: chat web_search tool
+  feature: web_search
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites:
+  - llm_gateway/routers/dependencies.py::host:api.perplexity.ai
+  current_provider_model: perplexity/web_search
+  request_shape: provider search chat completion
+  gateway_lane_capability_needed: perplexity OpenAI-compatible provider adapter on omi:auto:web-search
+  migration_status: gateway_only_fail_closed
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_perplexity_tool_always_uses_gateway
+- surface: app_icon_generation
+  code_path: backend/utils/llm/app_generator.py:generate_app_icon
+  entrypoint: POST app icon generation
+  feature: app_generator
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites:
+  - llm_gateway/routers/openai_compatible.py::host:api.openai.com
+  current_provider_model: openai/dall-e-3
+  request_shape: image generation
+  gateway_lane_capability_needed: gateway-owned /v1/images/generations proxy
+  migration_status: gateway_only_fail_closed
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_client_config.py::test_app_icon_generation_always_uses_gateway
+- surface: file_chat_vision
+  code_path: backend/utils/other/chat_file.py:_ask_files_stream
+  entrypoint: chat file vision
+  feature: file_chat_vision
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites: []
+  current_provider_model: gateway lane omi:auto:file-chat-vision (openai/gpt-5.6-luna); direct OpenAI when OMI_LLM_GATEWAY_FEATURE_MODE
+    is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
+  request_shape: streaming vision chat completion (image_url data URIs)
+  gateway_lane_capability_needed: generated omi:auto:file-chat-vision lane with image_url content parts
+  migration_status: gateway_routed_file_chat; OpenAI Files upload/download stays direct by design (file bytes/file_id lifecycle,
+    no model tokens) and the completions call hops the gateway in feature mode; the model-not-found degrade calls OpenAI directly,
+    so that request is not recorded in llm_gateway_attempts and carries no lane accounting; BYOK OpenAI is not used (Files
+    file_id namespace is company-owned, so completions stay Omi-paid)
+  test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
+- surface: file_chat_completions
+  code_path: backend/utils/other/chat_file.py:FileChatTool
+  entrypoint: chat file documents
+  feature: file_chat_documents
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites: []
+  current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-5.6-luna file parts for PDFs); direct OpenAI
+    when OMI_LLM_GATEWAY_FEATURE_MODE is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
+  request_shape: file upload purpose=user_data, streaming chat completion file input parts
+  gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with OpenAI file content parts
+  migration_status: gateway_routed_file_chat; Assistants/Threads retired after the 2026-08-26 sunset; OpenAI Files upload/download
+    stays direct by design; the model-not-found degrade calls OpenAI directly, so that request is not recorded in llm_gateway_attempts
+    and carries no lane accounting; BYOK OpenAI is not used (same company-owned file_id namespace as vision)
+  test_guardrail_coverage: backend/tests/unit/test_chat_file_gateway_surface.py and backend/tests/unit/test_chat_file_completions.py
+- surface: desktop_gemini_proxy
+  code_path: backend/routers/desktop_proxy.py:_proxy_unobserved
+  entrypoint: POST /v1/proxy/gemini/{path}
+  feature: desktop_vertex
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: http_402
+  call_sites:
+  - routers/desktop_proxy.py::host:generativelanguage.googleapis.com
+  - utils/llm/vertex_pt_routing.py::host:aiplatform.googleapis.com
+  current_provider_model: gateway lanes omi:auto:desktop-vertex-{flash,pro,target,flash-lite} and omi:auto:gemini-embeddings
+    for company-paid generateContent/streamGenerateContent/embedContent; Gemini BYOK keeps a thin direct AI Studio path; batchEmbedContents
+    stays direct AI Studio
+  request_shape: Gemini JSON proxied for desktop clients; translated to OpenAI shape at the BFF (utils/llm/desktop_gemini_gateway.py)
+    and back to Gemini native in the gateway Vertex adapter
+  gateway_lane_capability_needed: desktop vertex lanes with PT pin/overflow and multi-region host policy in VertexGeminiProvider;
+    OpenAI-shaped /v1/embeddings with task_type pass-through
+  migration_status: gateway_routed_desktop_vertex; the BFF keeps auth, trial paywall, S14 generate/stream
+    plan gate (402 plan_gated via authorize_managed_compute on screen_frame_judge; embedContent ungated), redis metering, body limits, and model
+    allowlist; PT pin/overflow/host policy moved into the gateway provider via vertex_pt_routing (no second policy); FEATURE_MODE=off
+    keeps the legacy direct Vertex path
+  test_guardrail_coverage: backend/tests/unit/test_desktop_proxy.py and backend/tests/unit/test_vertex_pt_routing.py
+- surface: openai_embeddings
+  code_path: backend/utils/llm/clients.py:_OpenAIEmbeddingsProxy
+  entrypoint: OpenAI embeddings proxy
+  feature: openai_embeddings
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites: []
+  current_provider_model: gateway lane omi:auto:openai-embeddings (openai/text-embedding-3-large); BYOK OpenAI keys are forwarded
+    to the gateway with the omi-paid lane as fallback; direct OpenAIEmbeddings only when OMI_LLM_GATEWAY_FEATURE_MODE is off
+  request_shape: OpenAI embeddings (embed_query/embed_documents, sync and async) for vector_db, mcp, app integrations, and
+    conversation structuring
+  gateway_lane_capability_needed: OpenAI-compatible /v1/embeddings surface on the gateway with accounting
+  migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct LangChain OpenAIEmbeddings kill-switch path
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
+- surface: gemini_screen_activity_query_embedding
+  code_path: backend/utils/llm/clients.py:gemini_embed_query
+  entrypoint: gemini_embed_query
+  feature: gemini_embeddings
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites:
+  - utils/llm/clients.py::host:generativelanguage.googleapis.com
+  current_provider_model: gateway lane omi:auto:gemini-embeddings (Vertex gemini-embedding-001 :predict) in feature mode;
+    Gemini BYOK keys keep the thin direct AI Studio embedding-001 path because the gateway Vertex adapter fail-closes BYOK
+  request_shape: single RETRIEVAL_QUERY embedding for screen-activity search
+  gateway_lane_capability_needed: OpenAI-shaped /v1/embeddings with task_type/title pass-through onto the Vertex predict adapter
+  migration_status: gateway_routed_embeddings; FEATURE_MODE=off keeps the direct AI Studio kill-switch path
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py and backend/tests/unit/test_embeddings_gateway.py
+- surface: omni_realtime_relay
+  code_path: backend/routers/omni_relay.py
+  entrypoint: WebSocket omni realtime relay
+  feature: omni_relay
+  plan_gating: unified_chat_quota
+  funding_owner: omi
+  fallback_on_deny: quota_refuse
+  call_sites:
+  - routers/omni_relay.py::host:generativelanguage.googleapis.com
+  - routers/omni_relay.py::host:api.openai.com
+  current_provider_model: openai realtime or gemini live selected by client query
+  request_shape: realtime websocket relay
+  gateway_lane_capability_needed: gateway-owned realtime websocket relay
+  migration_status: inventoried_direct_realtime_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in
+    serving configuration does not permit the exception
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: fair_use_classifier
+  code_path: backend/utils/llm/fair_use_classifier.py:classify_user_purpose
+  entrypoint: fair-use classifier
+  feature: fair_use
+  plan_gating: free_allowlist
+  funding_owner: omi
+  fallback_on_deny: n/a_allowed
+  call_sites:
+  - utils/llm/fair_use_classifier.py::feature:fair_use
+  current_provider_model: openai/fair_use pinned feature
+  request_shape: async plain chat JSON
+  gateway_lane_capability_needed: generated omi:auto:fair-use lane
+  migration_status: get_llm_routed
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: production_like_memory_ingestion
+  code_path: backend/utils/memory_ingestion/adapters/production_like_model.py:_memory_llm
+  entrypoint: memory-ingestion production-like adapter
+  feature: memories
+  plan_gating: basic_not_entitled
+  funding_owner: system
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/memory_ingestion/adapters/production_like_model.py::feature:memories
+  current_provider_model: openai/memories feature
+  request_shape: parser chain
+  gateway_lane_capability_needed: generated omi:auto:memories lane
+  migration_status: get_llm_routed
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: knowledge_graph_extract
+  code_path: backend/routers/knowledge_graph.py:extract_knowledge_graph
+  entrypoint: POST knowledge-graph extract
+  feature: knowledge_graph
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/knowledge_graph.py::feature:knowledge_graph
+  current_provider_model: openai/gpt-5.6-luna knowledge_graph feature
+  request_shape: return-only entity/edge extraction JSON
+  gateway_lane_capability_needed: generated omi:auto:knowledge-graph lane
+  migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
+  test_guardrail_coverage: backend/tests/unit/test_knowledge_graph_extract_route.py
+- surface: memories_extract
+  code_path: backend/routers/memories.py:extract_memory_log
+  entrypoint: POST memories extract
+  feature: memories
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/memories.py::feature:memories
+  - utils/llm/memories.py::feature:learnings
+  - utils/llm/memories.py::feature:memory_category
+  - utils/llm/memories.py::feature:memory_conflict
+  current_provider_model: openai/gpt-5.6-luna memories feature
+  request_shape: return-only memory-log JSON (memories + profile)
+  gateway_lane_capability_needed: generated omi:auto:memories lane
+  migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
+  test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
+- surface: connector_synthesis
+  code_path: backend/routers/integrations.py:synthesize_connector_data
+  entrypoint: POST connector synthesis
+  feature: memories
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/connector_synthesis.py::feature:memories
+  current_provider_model: openai/gpt-5.6-luna memories feature
+  request_shape: return-only calendar/gmail/notes memories + tasks + profile
+  gateway_lane_capability_needed: generated omi:auto:memories lane
+  migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
+  test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
+- surface: conversation_topic
+  code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
+  entrypoint: POST /v1/conversations/{id}/topic
+  feature: conv_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/conversation_topic.py::feature:conv_structure
+  current_provider_model: openai/gpt-5.6-luna conv_structure feature
+  request_shape: return-only emoji + short title for a finished transcript
+  gateway_lane_capability_needed: generated omi:auto:conv-structure lane
+  migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
+  test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
+- surface: ai_user_profile_synthesis
+  code_path: backend/routers/users.py:synthesize_ai_profile
+  entrypoint: POST users AI profile synthesis
+  feature: memories
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/ai_user_profile.py::feature:memories
+  current_provider_model: openai/gpt-5.6-luna memories feature
+  request_shape: return-only two-stage user profile document from desktop source lines
+  gateway_lane_capability_needed: generated omi:auto:memories lane
+  migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
+  test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py
+- surface: desktop_realtime_token_mint
+  code_path: backend/routers/desktop_realtime.py:mint_session
+  entrypoint: POST /v2/realtime/session
+  feature: desktop_chat_realtime
+  plan_gating: unified_chat_quota
+  funding_owner: omi
+  fallback_on_deny: quota_refuse
+  call_sites:
+  - routers/desktop_realtime.py::host:api.openai.com
+  - routers/desktop_realtime.py::host:generativelanguage.googleapis.com
+  current_provider_model: OpenAI realtime client_secrets or Gemini Live auth_tokens over raw REST
+  request_shape: provider token mint; idle rewarm never debits
+  gateway_lane_capability_needed: none — REST mint stays at the hub
+  migration_status: allowed_for_all_plans_unified_chat_quota_gated; mint refuses at zero remaining; BYOK does not exempt
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: desktop_realtime_usage
+  code_path: backend/routers/desktop_realtime.py:_record_usage
+  entrypoint: POST /v2/realtime/usage
+  feature: desktop_chat_realtime
+  plan_gating: unified_chat_quota
+  funding_owner: omi
+  fallback_on_deny: quota_refuse
+  call_sites: []
+  current_provider_model: no model call — debit of the unified chat-quota counter
+  request_shape: client-reported turn usage
+  gateway_lane_capability_needed: none
+  migration_status: allowed_for_all_plans_unified_chat_quota_gated; one question per turn_id
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: desktop_tts
+  code_path: backend/routers/desktop_tts_updates.py
+  entrypoint: POST desktop TTS synthesize
+  feature: desktop_tts
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - routers/desktop_tts_updates.py::host:api.openai.com
+  current_provider_model: OpenAI gpt-4o-mini-tts over raw REST
+  request_shape: audio/speech
+  gateway_lane_capability_needed: gateway-owned TTS proxy
+  migration_status: inventoried_direct_rest_surface; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: wrapped_generation
+  code_path: backend/routers/wrapped.py:generate_wrapped
+  entrypoint: POST /v1/wrapped/{year}/generate
+  feature: wrapped_analysis
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/wrapped/generate_2025.py::feature:wrapped_analysis
+  current_provider_model: openrouter/gemini-3-flash-preview via get_llm('wrapped_analysis')
+  request_shape: multiple plain-chat invokes per generation
+  gateway_lane_capability_needed: generated omi:auto:wrapped-analysis lane
+  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: listen_onboarding
+  code_path: backend/utils/onboarding.py:_ai_check_answer
+  entrypoint: /v4/listen onboarding_mode
+  feature: onboarding
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/onboarding.py::feature:onboarding
+  current_provider_model: gemini-2.5-flash-lite via get_llm('onboarding')
+  request_shape: plain chat answer check
+  gateway_lane_capability_needed: generated omi:auto:onboarding lane
+  migration_status: get_llm_routed from listen runtime; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: session_titles
+  code_path: backend/routers/chat_sessions.py:generate_session_title
+  entrypoint: POST chat session title
+  feature: session_titles
+  plan_gating: free_allowlist
+  funding_owner: omi
+  fallback_on_deny: n/a_allowed
+  call_sites:
+  - routers/chat_sessions.py::feature:session_titles
+  current_provider_model: gemini-2.5-flash-lite via get_llm('session_titles')
+  request_shape: short plain chat title
+  gateway_lane_capability_needed: generated omi:auto:session-titles lane
+  migration_status: get_llm_routed; S1 allowlists the feature; this route does not call authorize_managed_compute
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: what_matters_now
+  code_path: backend/routers/task_recommendations.py:_live_judgment
+  entrypoint: GET/POST What-Matters-Now
+  feature: what_matters_now
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - routers/task_recommendations.py::feature:what_matters_now
+  current_provider_model: openai/gpt-5.6-luna via get_llm('what_matters_now')
+  request_shape: structured live recommendation judgment
+  gateway_lane_capability_needed: generated omi:auto:what-matters-now lane
+  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: app_integration
+  code_path: backend/routers/apps.py:generate_sample_prompts_endpoint
+  entrypoint: POST app sample-prompts / description
+  feature: app_integration
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - routers/apps.py::feature:app_integration
+  - utils/app_integrations.py::feature:app_integration
+  - utils/llm/app_generator.py::feature:app_integration
+  current_provider_model: gemini-2.5-flash-lite via get_llm('app_integration')
+  request_shape: plain chat
+  gateway_lane_capability_needed: generated omi:auto:app-integration lane
+  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: app_generation
+  code_path: backend/routers/apps.py:generate_app_endpoint
+  entrypoint: POST generate app from prompt
+  feature: app_generator
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/app_generator.py::feature:app_generator
+  current_provider_model: openai via get_llm('app_generator')
+  request_shape: plain chat app spec
+  gateway_lane_capability_needed: generated omi:auto:app-generator lane
+  migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+- surface: conversation_test_prompt
+  code_path: backend/routers/conversations.py:test_prompt
+  entrypoint: POST /v1/conversations/{id}/test-prompt
+  feature: daily_summary
+  plan_gating: free_allowlist
+  funding_owner: omi
+  fallback_on_deny: n/a_allowed
+  call_sites: []
+  current_provider_model: get_llm('daily_summary') via generate_summary_with_prompt
+  request_shape: authenticated arbitrary summary prompt over a stored transcript
+  gateway_lane_capability_needed: generated omi:auto:daily-summary lane
+  migration_status: get_llm_routed; S1 allowlists daily_summary; this route does not call authorize_managed_compute
+  test_guardrail_coverage: backend/tests/unit/test_conversation_test_prompt_provider_failure.py
+- surface: phone_call_processing
+  code_path: backend/routers/developer.py:_create_conversation_from_segments
+  entrypoint: POST /v1/conversations/from-segments (default source=phone) and listen source=phone_call
+  feature: conv_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: deterministic_minimum
+  call_sites: []
+  current_provider_model: process_conversation coordinator (conv_* features)
+  request_shape: conversation processing bundle
+  gateway_lane_capability_needed: generated conv_* lanes
+  migration_status: S6 FREE_TIER_LOCAL_PROCESSING gates desktop sources only; phone is non-desktop so process_normally today
+    (follow-up)
+  test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
+- surface: external_integrations
+  code_path: backend/utils/llm/external_integrations.py:get_message_structure
+  entrypoint: developer create-from-text / external integration structuring
+  feature: external_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: none_unwired
+  call_sites:
+  - utils/llm/external_integrations.py::feature:external_structure
+  - utils/llm/external_integrations.py::feature:daily_summary_simple
+  - utils/llm/external_integrations.py::feature:daily_summary
+  current_provider_model: get_llm('external_structure') / daily_summary*
+  request_shape: parser chain and plain chat
+  gateway_lane_capability_needed: generated omi:auto:external-structure lane
+  migration_status: get_llm_routed; developer create-from-text is non-desktop process_normally (S6); this helper is not authorize_managed_compute-gated
+  test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
+- surface: sync_limitless
+  code_path: backend/utils/sync/pipeline.py:_reprocess_conversation_after_update
+  entrypoint: sync / Limitless create+reprocess
+  feature: conv_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: deterministic_minimum
+  call_sites: []
+  current_provider_model: process_conversation coordinator
+  request_shape: conversation processing bundle
+  gateway_lane_capability_needed: generated conv_* lanes
+  migration_status: S6 matrix covers this entry; flag-on basic desktop lands at the minimum; non-desktop sync process_normally
+  test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
+- surface: conversation_merge
+  code_path: backend/utils/conversations/merge_conversations.py:perform_merge_async
+  entrypoint: POST /v1/conversations/merge
+  feature: conv_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: deterministic_minimum
+  call_sites: []
+  current_provider_model: process_conversation coordinator
+  request_shape: conversation processing bundle
+  gateway_lane_capability_needed: generated conv_* lanes
+  migration_status: S6 matrix covers this entry; flag-on basic desktop merge lands at the minimum
+  test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
+- surface: conversation_reprocess
+  code_path: backend/routers/conversations.py:reprocess_conversation
+  entrypoint: POST /v1/conversations/{id}/reprocess
+  feature: conv_structure
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: deterministic_minimum
+  call_sites: []
+  current_provider_model: process_conversation coordinator
+  request_shape: conversation processing bundle
+  gateway_lane_capability_needed: generated conv_* lanes
+  migration_status: S6 matrix covers this entry; flag-on identified-basic reprocess is the minimum even with force_process
+  test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py

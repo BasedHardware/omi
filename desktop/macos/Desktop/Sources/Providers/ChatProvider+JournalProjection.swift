@@ -88,6 +88,7 @@ extension ChatProvider {
     if updatedMessages.map(\.id) != orderBeforeCanonicalSort {
       divergences.insert(.ordering)
     }
+    Self.inheritCitationsAcrossTurns(&updatedMessages)
     messages = updatedMessages
     flushPendingMessageRatings()
     Task { await bindKindOnlyCitationsIfNeeded() }
@@ -103,6 +104,23 @@ extension ChatProvider {
 
   func projectJournalTurn(_ turn: KernelJournalTurn) {
     projectJournalTurns([turn])
+  }
+
+  /// A settled follow-up that cites a number it never retrieved itself is
+  /// pointing at an earlier turn's list (`ChatCitationMarkup.inheritedReferences`).
+  /// The binding is a projection over the journal, not a row written to it: the
+  /// references it borrows were already persisted on the turn that earned them,
+  /// and re-deriving them here is what lets restored history open the same
+  /// source the reader could open live.
+  static func inheritCitationsAcrossTurns(_ messages: inout [ChatMessage]) {
+    for index in messages.indices where messages[index].sender == .ai && !messages[index].isStreaming {
+      let inherited = ChatCitationMarkup.inheritedReferences(
+        citedIn: messages[index],
+        resolved: messages[index].inlineCitationReferences,
+        earlierTurns: Array(messages[..<index]))
+      guard !inherited.isEmpty else { continue }
+      messages[index].persistCitedReferences(from: inherited)
+    }
   }
 
   /// Local memories/conversations/tasks used to bind kind-only labels such as `[memory]` when the
@@ -161,19 +179,34 @@ extension ChatProvider {
       durableToolReferences,
       ChatCitationProvenanceRegistry.references(
         fromToolCallBlocks: messages[index].contentBlocks))
+    // The authoritative answer replaces every streamed projection, so the raw
+    // accumulator this turn was built from has no further reader.
+    streamingBuffer.finishStreaming(messageId: messageId)
+    // The streamed projection applied sentence spacing to every flush; the
+    // terminal answer must honor the same contract or a joined agent handoff
+    // ("…handle it.Capture the…") that was only ever visible as fixed would
+    // reappear the moment the turn settles — and be persisted that way.
+    let normalizedTerminalText = Self.normalizeAssistantSentenceSpacing(queryText)
+    messages[index].applyAuthoritativeTerminalAnswer(normalizedTerminalText)
     messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,
       requestedSources: requestedSources,
       retrievedReferences: turnReferences,
-      fallbackText: queryText)
+      fallbackText: normalizedTerminalText)
     messages[index].isStreaming = false
+    // A number this turn never assigned is one the reader was shown a turn ago.
+    let inheritedReferences = ChatCitationMarkup.inheritedReferences(
+      citedIn: messages[index],
+      resolved: turnReferences,
+      earlierTurns: Array(messages[..<index]))
+    let bindableReferences = turnReferences + inheritedReferences
     let bindBase: [ChatCitationReference]
     if messages[index].hasKindOnlyCitationMarkers {
       bindBase = ChatCitationReference.appendingLookup(
         await kindCitationLookupReferences(),
-        to: turnReferences)
+        to: bindableReferences)
     } else {
-      bindBase = turnReferences
+      bindBase = bindableReferences
     }
     await applyKindOnlyCitationBinding(to: messageId, base: bindBase)
     guard let current = messages.first(where: { $0.id == messageId }) else { return queryText }

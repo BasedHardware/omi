@@ -1269,6 +1269,11 @@ class TestAsyncCoordinatorScenarios:
 # ---------------------------------------------------------------------------
 
 
+async def _passthrough_resolve_geolocation(geolocation):
+    """Stub for utils.conversations.location: identity, like the real resolver on a geocode miss."""
+    return geolocation
+
+
 def _install_sync_observability_stubs():
     """Stub observability modules + metrics for routers.sync imports.
 
@@ -1307,6 +1312,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -1326,6 +1334,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -1339,6 +1348,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -1371,6 +1381,12 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
+
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
@@ -1381,6 +1397,12 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -3040,6 +3062,9 @@ class TestV2EndpointExecution:
         prior_outcomes = sys.modules.get('utils.stt.outcomes')
         from utils.stt import outcomes as actual_outcomes
 
+        prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
+        from utils.stt import speaker_match as actual_speaker_match
+
         heavy_deps = [
             'redis',
             'database',
@@ -3059,6 +3084,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -3072,6 +3098,7 @@ class TestV2EndpointExecution:
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
+            'utils.conversations.location',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -3104,6 +3131,12 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
+
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
@@ -3112,6 +3145,12 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        saved_modules['utils.stt.speaker_match'] = prior_speaker_match
+        # Keep the decision policy real (pure, dependency-free): the sync pipeline now
+        # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
+        # decision whose fields blow up the %.3f log formatting even on an empty match set.
+        sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint

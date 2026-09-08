@@ -904,7 +904,7 @@ actor ContextWorkstreamReconciler {
       uncachedPrompt: Self.taggingData(batch: batch),
       jsonSchema: ContextWorkstreamTagging.schema,
       cacheKey: ContextPromptCacheKey.reconcilerTagging,
-      maxCompletionTokens: 800,
+      maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextWorkstreamTagging.parse(result.content) else {
       log("ContextWorkstreamReconciler: tagging response malformed")
@@ -949,7 +949,7 @@ actor ContextWorkstreamReconciler {
       uncachedPrompt: Self.candidateData(groups: eligible),
       jsonSchema: ContextProactiveCandidateWriter.schema,
       cacheKey: ContextPromptCacheKey.reconcilerCandidates,
-      maxCompletionTokens: 800,
+      maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextProactiveCandidateWriter.parse(result.content) else {
       log("ContextWorkstreamReconciler: candidate response malformed")

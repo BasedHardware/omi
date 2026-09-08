@@ -30,6 +30,7 @@ install_firebase_auth_mutation_guard()
 from routers import (
     chat,
     firmware,
+    static_map,
     transcribe,
     omni_relay,
     auto_model,
@@ -43,6 +44,7 @@ from routers import (
     payment,
     integration,
     conversations,
+    conversation_mutations,
     memories,
     api_key_management,
     mcp,
@@ -54,6 +56,7 @@ from routers import (
     candidates,
     chat_first,
     chat_first_e2e,
+    daily_summary_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -75,6 +78,7 @@ from routers import (
     tools,
     metrics,
     fair_use_admin,
+    feedback_admin,
     staged_tasks,
     focus_sessions,
     advice,
@@ -100,7 +104,9 @@ from routers import (
     public_shared_conversation_chat,
     screen_frames,
     jit_ledger_snapshot,
+    csat,
     jit_rollout,
+    email_preferences,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -118,10 +124,12 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
+from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 from utils.other.local_storage import local_storage_root_from_env
 
@@ -175,9 +183,11 @@ app.add_middleware(
 )
 
 app.include_router(transcribe.router)
+app.include_router(static_map.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(conversation_mutations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(account_cutover.router)
@@ -187,18 +197,24 @@ if is_chat_first_e2e_harness_runtime():
     # The fixture router has its own runtime check as defense in depth.  It is
     # intentionally absent from dev/prod route tables, not merely disabled.
     app.include_router(chat_first_e2e.router)
+    # Same stage boundary, same defense in depth: the desktop memory-review flow
+    # needs a daily summary carrying `memories_learned`, which only the nightly
+    # job produces in a deployable environment.
+    app.include_router(daily_summary_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
-# app.include_router(screenpipe.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
 app.include_router(referrals.router)
+app.include_router(csat.router)
+app.include_router(feedback_admin.router)
+app.include_router(email_preferences.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
@@ -431,11 +447,16 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic meeting-receipt reconciliation: {receipt_result}")
         except Exception as e:
             logger.error(f"Periodic meeting-receipt reconciliation failed: {e}")
+        try:
+            await run_blocking(db_executor, publish_all_queue_oldest_ready_ages)
+        except Exception as e:
+            logger.error(f"Periodic durable-queue age publish failed: {e}")
 
 
 @app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
+    await shutdown_managed_spend_ledger()
     await close_all_clients()
     close_posthog_control_plane()
     stop_metrics_sidecar_server()

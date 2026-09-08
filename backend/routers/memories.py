@@ -3,7 +3,9 @@ import uuid
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
+from database.legal_holds import DestructiveOperationInProgress
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.other.account_gate_http import account_gate_busy_http_exception
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -15,11 +17,14 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
-    MEMORY_LIST_SCAN_BUDGET_DETAIL,
+    MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
     fetch_memory_dict,
 )
+from utils.memory.canonical_memory_adapter import mint_direct_user_write_authority
+from utils.observability.fallback import record_fallback
+from utils.feedback import record_memory_feedback
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -372,6 +377,7 @@ async def create_memory(
             operation="create_memory",
             upsert_vector=False,
             require_canonical_promotion=True,
+            direct_user_authority=mint_direct_user_write_authority(),
         )
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
@@ -468,6 +474,7 @@ async def create_memories_batch(
             operation="batch_create_memory",
             upsert_vectors=False,
             require_canonical_promotion=True,
+            direct_user_authority=mint_direct_user_write_authority(),
         )
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
@@ -629,30 +636,27 @@ def get_memories(
                 include_archive=include_archive,
                 request_budget=budget,
             )
-        except HTTPException as exc:
+        except MemoryBackingStoreUnavailable as exc:
             # First page must succeed whenever the legacy offset read can serve
-            # it. The cursor path 503s on a missing cursor secret
-            # ("Memory cursor unavailable"); the canonical keyset scan wraps any
-            # underlying failure as "Canonical memory unavailable"; the
-            # historical keyset scan wraps its own as "Historical memory
-            # unavailable". The keyset scans order by (updated_at DESC,
-            # __name__) and so fail while that composite index is building,
-            # which the offset read's single-field order does not — so all three
-            # fall back to read(). The keyset scans also walk past every row they
-            # must not emit before they can fill the page, so an account whose
-            # historical set is fully suppressed by canonical exhausts the scan
-            # row budget ("Memory scan budget exceeded") — that walk is what took
-            # the first page past the 30s edge timeout in prod on 2026-08-18, and
-            # the offset read serves it without the walk.
-            # Unrelated errors (4xx, other 503s) propagate. The fallback runs on
-            # the SAME request budget, never a fresh unbudgeted window (#11831).
-            if exc.status_code != 503 or exc.detail not in (
-                "Memory cursor unavailable",
-                "Canonical memory unavailable",
-                "Historical memory unavailable",
-                MEMORY_LIST_SCAN_BUDGET_DETAIL,
-            ):
-                raise
+            # it. Catch the typed backing-store failure — not detail strings —
+            # so a renamed or newly added unavailable message still degrades
+            # instead of escaping as a hard 503. The cursor path, both keyset
+            # scans, and the scan-row budget all raise this type. Unrelated
+            # errors (4xx, other 503s) propagate. The fallback runs on the
+            # SAME request budget, never a fresh unbudgeted window (#11831).
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor_page',
+                to_mode='offset_read',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            logger.warning(
+                "memories first-page cursor scan unavailable; falling back to offset read stream=%s detail=%s",
+                exc.stream,
+                exc.detail,
+            )
         else:
             return _finalize(
                 page.memories,
@@ -818,6 +822,8 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
+    except DestructiveOperationInProgress as exc:
+        raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
@@ -832,6 +838,8 @@ def delete_memory(
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
+    except DestructiveOperationInProgress as exc:
+        raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
@@ -866,6 +874,10 @@ def review_memory(
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
     service.review(uid, memory_id, value)
+    # Discarding a memory is this surface's thumbs-down. `user_review` on the
+    # memory is a mutable flag with no timestamp, so the ledger row is what
+    # gives the verdict a time and lands it in the daily report.
+    record_memory_feedback(uid, memory_id, value)
     return {'status': 'ok'}
 
 

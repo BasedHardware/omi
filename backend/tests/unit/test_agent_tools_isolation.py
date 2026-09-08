@@ -98,3 +98,72 @@ def test_jit_only_tool_execution_requires_fresh_enabled_authority():
 
     assert exc_info.value.status_code == 404
     assert resolve.await_args.kwargs["force_refresh"] is True
+
+
+# The three dormant knowledge-ledger write verbs (save_playbook,
+# create_standing_trigger, close_fact) are newly wired to chat tools and must
+# be gated identically to the existing JIT-only read tools: invisible and
+# unexecutable for a uid the JIT rollout has not admitted, visible and
+# executable once it has.
+NEW_LEDGER_WRITE_TOOL_NAMES = ("save_playbook", "create_standing_trigger", "close_fact")
+
+
+def test_new_ledger_write_tools_are_registered_as_jit_only_core_tools():
+    for name in NEW_LEDGER_WRITE_TOOL_NAMES:
+        assert name in agent_tools.JIT_ONLY_TOOL_NAMES
+        assert any(t.name == name for t in agent_tools.CORE_TOOLS)
+
+
+@pytest.mark.parametrize("tool_name", NEW_LEDGER_WRITE_TOOL_NAMES)
+def test_ledger_write_tool_schema_is_hidden_when_rollout_is_not_enabled(tool_name):
+    jit_tool = _tool(tool_name)
+    legacy_tool = _tool("legacy_tool")
+    with (
+        patch.object(agent_tools, "CORE_TOOLS", [legacy_tool, jit_tool]),
+        patch.object(agent_tools, "load_app_tools", return_value=[]),
+        patch.object(
+            agent_tools,
+            "resolve_jit_rollout_sync",
+            return_value=SimpleNamespace(permits_work=False),
+        ),
+    ):
+        result = agent_tools.list_tools(uid="u1")
+
+    assert [tool["name"] for tool in result["tools"]] == ["legacy_tool"]
+
+
+@pytest.mark.parametrize("tool_name", NEW_LEDGER_WRITE_TOOL_NAMES)
+def test_ledger_write_tool_schema_is_listed_when_rollout_is_enabled(tool_name):
+    jit_tool = _tool(tool_name)
+    legacy_tool = _tool("legacy_tool")
+    with (
+        patch.object(agent_tools, "CORE_TOOLS", [legacy_tool, jit_tool]),
+        patch.object(agent_tools, "load_app_tools", return_value=[]),
+        patch.object(
+            agent_tools,
+            "resolve_jit_rollout_sync",
+            return_value=SimpleNamespace(permits_work=True),
+        ),
+    ):
+        result = agent_tools.list_tools(uid="u1")
+
+    assert {tool["name"] for tool in result["tools"]} == {"legacy_tool", tool_name}
+
+
+@pytest.mark.parametrize("tool_name", NEW_LEDGER_WRITE_TOOL_NAMES)
+def test_ledger_write_tool_execution_requires_fresh_enabled_authority(tool_name):
+    with patch.object(
+        agent_tools,
+        "resolve_jit_rollout",
+        AsyncMock(return_value=SimpleNamespace(permits_work=False)),
+    ) as resolve:
+        with pytest.raises(agent_tools.HTTPException) as exc_info:
+            asyncio.run(
+                agent_tools.execute_tool(
+                    agent_tools.ExecuteToolRequest(tool_name=tool_name),
+                    uid="u1",
+                )
+            )
+
+    assert exc_info.value.status_code == 404
+    assert resolve.await_args.kwargs["force_refresh"] is True

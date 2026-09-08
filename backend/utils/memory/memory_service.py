@@ -29,15 +29,16 @@ from models.knowledge_ledger_search import (
     is_ledger_row_admissible as is_ledger_row_admissible,
     ledger_row_is_rejected,
 )
+from models.memory_apply import WriterMode
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
     MemoryItem,
     MemoryItemStatus,
     MemoryKind,
+    MemorySubjectScope,
     LedgerWriteReason,
     MemoryTier,
-    MemorySubjectScope,
     ProcessingState,
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
@@ -67,6 +68,7 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_visibility,
     update_canonical_memory_product_fields,
     update_canonical_memory_review,
+    is_direct_user_write_authority,
     write_canonical_external_memory,
 )
 from utils.memory.product_memory_read_service import (
@@ -76,9 +78,11 @@ from utils.memory.product_memory_read_service import (
 from utils.memory.knowledge_ledger import (
     LEDGER_SCHEMA_VERSION,
     LedgerProvenance,
+    LedgerWrite,
     amend_user_fact as amend_fact,
     evidence_id_for_ledger_provenance,
     reopen_standalone_fact,
+    save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
@@ -87,7 +91,10 @@ from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system import ensure_canonical_apply_control_state
+from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.belief_model import public_belief_overlay_json
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -103,6 +110,23 @@ from utils.metrics import (
 )
 
 logger = logging.getLogger(__name__)
+
+MemoryBackingStoreStream = Literal['canonical', 'historical', 'cursor']
+
+
+class MemoryBackingStoreUnavailable(HTTPException):
+    """Recoverable backing-store failure for mixed-list reads.
+
+    Subclasses ``HTTPException`` so existing callers keep the same 503 body.
+    ``GET /v3/memories`` first-page fallback catches this type instead of
+    matching ``detail`` strings — a renamed or newly added unavailable
+    message must not escape to clients as a hard 503.
+    """
+
+    def __init__(self, detail: str, *, stream: MemoryBackingStoreStream) -> None:
+        super().__init__(status_code=503, detail=detail)
+        self.stream = stream
+
 
 MemoryPayload = Dict[str, Any]
 McpSearchPayload = Dict[str, Any]
@@ -760,7 +784,7 @@ class HistoricalMemoryAdapter:
         except ListReadBudgetExhausted:
             raise
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         adapted: Dict[str, HistoricalMemoryRecord] = {}
         for raw in raw_rows:
             record = self._adapt(uid, raw)
@@ -842,7 +866,7 @@ class HistoricalMemoryAdapter:
             )
             return records[bounded_offset : bounded_offset + bounded_limit]
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         records.sort(
             key=lambda record: (
                 -self._timestamp(record.memory).timestamp(),
@@ -922,7 +946,7 @@ class HistoricalMemoryAdapter:
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         slots = self._adapt_scan_payloads(
             uid,
             payloads,
@@ -956,7 +980,7 @@ class HistoricalMemoryAdapter:
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         slots = self._adapt_scan_payloads(
             uid,
             payloads,
@@ -971,7 +995,7 @@ class HistoricalMemoryAdapter:
         try:
             raw = memories_db.get_memory(uid, memory_id, **self._firestore_kwargs())
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         if not raw:
             return None
         return self._adapt(uid, raw)
@@ -995,7 +1019,7 @@ class HistoricalMemoryAdapter:
         try:
             rows = memories_db.get_memories_by_ids(uid, ids, **self._firestore_kwargs())
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         by_id: Dict[str, HistoricalMemoryRecord] = {}
         for raw in rows:
             record = self._adapt(uid, raw)
@@ -1125,7 +1149,7 @@ class HistoricalMemoryAdapter:
                 **({"firestore_client": db_client} if db_client is not None else {}),
             )
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         start = max(0, offset)
         selected = ids[start:] if limit is None else ids[start : start + max(1, limit)]
         return [memory_id for memory_id in selected if memory_id]
@@ -1206,20 +1230,20 @@ class _ScanRowBudget:
             self._deadline = clock() + max(0.0, float(seconds))
         self._clock = clock
 
-    def check(self) -> None:
+    def check(self, stream: MemoryBackingStoreStream = "historical") -> None:
         # Parent exhaustion is checked first and wins: a request out of time
         # must truncate, not fall back into another read.
         if self._parent is not None:
             self._parent.check()
         if self._remaining < 0 or self._clock() >= self._deadline:
-            raise HTTPException(status_code=503, detail=MEMORY_LIST_SCAN_BUDGET_DETAIL)
+            raise MemoryBackingStoreUnavailable(MEMORY_LIST_SCAN_BUDGET_DETAIL, stream=stream)
 
-    def charge(self) -> None:
+    def charge(self, stream: MemoryBackingStoreStream = "historical") -> None:
         self._remaining -= 1
         if self._parent is not None:
             # Rows the scan walks past still crossed the wire for this request.
             self._parent.charge(1)
-        self.check()
+        self.check(stream=stream)
 
 
 class _HistoricalRawStream:
@@ -1280,7 +1304,7 @@ class _HistoricalRawStream:
         except (HTTPException, ListReadBudgetExhausted):
             raise
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         self._slots = [
             (
                 record,
@@ -1503,7 +1527,7 @@ class _CanonicalCursorStream:
     def _ensure_slots(self) -> None:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
-        self._budget.check()
+        self._budget.check(stream="canonical")
         start_after: Optional[CanonicalScanCursor] = None
         if self.scan_keyset is not None:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
@@ -1529,7 +1553,7 @@ class _CanonicalCursorStream:
                 type(exc).__name__,
                 exc,
             )
-            raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Canonical memory unavailable", stream="canonical") from exc
         self._slots = [
             (
                 truncate_locked_memory_preview(memory) if memory is not None else None,
@@ -1553,14 +1577,14 @@ class _CanonicalCursorStream:
             memory, scan_keyset = self._slots[self._slot_index]
             # Raw scan position advances for filtered rows too.
             if memory is None:
-                self._budget.charge()
+                self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
             if self.emitted_keyset is not None and self._service.memory_cursor_sort_key(memory) <= (
                 self._service.keyset_sort_key(self.emitted_keyset)
             ):
-                self._budget.charge()
+                self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
@@ -2630,7 +2654,7 @@ class MemoryService:
         try:
             secret = cursor_secret()
         except UniversalListCursorError as exc:
-            raise HTTPException(status_code=503, detail="Memory cursor unavailable") from exc
+            raise MemoryBackingStoreUnavailable("Memory cursor unavailable", stream="cursor") from exc
 
         if cursor:
             try:
@@ -3116,6 +3140,7 @@ class MemoryService:
                     "agent_use": "default_access_memory",
                     "access_reason": "default_memory_allowed",
                     "superseded_by": None,
+                    **public_belief_overlay_json(memory, now=now or datetime.now(timezone.utc)),
                 }
             )
 
@@ -3300,6 +3325,74 @@ class MemoryService:
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
         return memory_item_to_memorydb(item)
+
+    def _direct_user_ledger_admitted(self, uid: str, authority: object | None) -> bool:
+        """Require route authority, fresh JIT ingress, and stable ledger mode."""
+        if not is_direct_user_write_authority(authority):
+            return False
+        decision = resolve_jit_rollout_sync(
+            uid,
+            stage=JITDecisionStage.INGRESS,
+            force_refresh=True,
+        )
+        if not decision.permits_work:
+            return False
+        control = ensure_canonical_apply_control_state(uid, db_client=self.db_client)
+        return control.writer_mode == WriterMode.ledger
+
+    def _write_direct_user_fact(
+        self,
+        uid: str,
+        memory_db: MemoryDB,
+        *,
+        consumer: str,
+        authority: object,
+    ) -> MemoryDB:
+        """Persist one explicitly typed memory through the ledger fact seam."""
+        provenance = self._direct_user_fact_provenance(memory_db, consumer=consumer)
+        memory_id = save_fact(
+            uid,
+            memory_db.content,
+            provenance=provenance,
+            write_reason=LedgerWriteReason.direct_user_statement,
+            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
+            subject_entity_id=memory_db.subject_entity_id,
+            predicate=memory_db.predicate,
+            arguments=memory_db.arguments,
+            valid_from=memory_db.valid_at,
+            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
+            db_client=self.db_client,
+            _direct_user_authority=authority,
+        )
+        item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
+        if item is None:
+            raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
+        return memory_item_to_memorydb(item)
+
+    @staticmethod
+    def _direct_user_fact_provenance(memory_db: MemoryDB, *, consumer: str) -> LedgerProvenance:
+        return LedgerProvenance(
+            source_id=f"{consumer}:{memory_db.id}",
+            source_type="explicit_user_statement",
+            source_version="v3_memory_create.v1",
+            action_id=f"{consumer}:memory:{memory_db.id}",
+            artifact_ref={"memory_id": memory_db.id},
+        )
+
+    def _validate_direct_user_fact(self, memory_db: MemoryDB, *, consumer: str) -> None:
+        """Run the same semantic model validation as save_fact without I/O."""
+        LedgerWrite(
+            kind=MemoryKind.fact,
+            content=memory_db.content,
+            provenance=self._direct_user_fact_provenance(memory_db, consumer=consumer),
+            write_reason=LedgerWriteReason.direct_user_statement,
+            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
+            subject_entity_id=memory_db.subject_entity_id,
+            predicate=memory_db.predicate,
+            arguments=memory_db.arguments,
+            valid_from=memory_db.valid_at,
+            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
+        )
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
@@ -3828,7 +3921,17 @@ class MemoryService:
         items: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         self.ensure_canonical_mutation_ready(uid)
-        result = replace_conversation_sourced_memories(uid, conversation_id, items, db_client=self.db_client)
+        # This wrapper is the conversation-extraction entry (finalize and
+        # reprocess). An empty extraction here is model variance, not deletion
+        # intent, so it keeps any existing rows instead of demanding the
+        # destructive gate the extraction path never holds.
+        result = replace_conversation_sourced_memories(
+            uid,
+            conversation_id,
+            items,
+            db_client=self.db_client,
+            empty_set_intent="extraction",
+        )
         retracted = list(result.get("retracted_memory_ids") or [])
         if retracted:
             self._write_historical_overrides(uid, retracted, MemoryItemStatus.tombstoned)
@@ -3844,9 +3947,19 @@ class MemoryService:
         operation: str,
         upsert_vector: bool = True,
         require_canonical_promotion: bool = True,
+        direct_user_authority: object | None = None,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
-        result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
+            assert direct_user_authority is not None
+            result = self._write_direct_user_fact(
+                uid,
+                memory_db,
+                consumer=consumer,
+                authority=direct_user_authority,
+            )
+        else:
+            result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
         self._invalidate_prompt_cache(uid)
         return result
 
@@ -3860,9 +3973,31 @@ class MemoryService:
         operation: str,
         upsert_vectors: bool = True,
         require_canonical_promotion: bool = True,
+        direct_user_authority: object | None = None,
     ) -> List[MemoryDB]:
         del memory_system, operation, upsert_vectors, require_canonical_promotion
         self.ensure_canonical_mutation_ready(uid)
+        if direct_user_authority is not None and any(memory.manually_added for memory in memory_dbs):
+            if self._direct_user_ledger_admitted(uid, direct_user_authority):
+                assert direct_user_authority is not None
+                if not all(memory.manually_added for memory in memory_dbs):
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Mixed explicit-user and external memory batch is not admitted in ledger mode",
+                    )
+                for memory in memory_dbs:
+                    self._validate_direct_user_fact(memory, consumer=consumer)
+                results = [
+                    self._write_direct_user_fact(
+                        uid,
+                        memory,
+                        consumer=consumer,
+                        authority=direct_user_authority,
+                    )
+                    for memory in memory_dbs
+                ]
+                self._invalidate_prompt_cache(uid)
+                return results
         payloads = [
             required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
             for memory in memory_dbs

@@ -7,7 +7,7 @@ Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, out
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
@@ -256,6 +256,7 @@ def _record_chat_quota_question_transaction(
     event_data: Dict[str, Any],
     doc_id: str,
     plan_key: str,
+    usage_update_for: Callable[[str, str], Dict[str, Any]] | None = None,
 ) -> bool:
     event_snapshot = event_ref.get(transaction=transaction)
     if getattr(event_snapshot, "exists", False):
@@ -269,7 +270,15 @@ def _record_chat_quota_question_transaction(
         'last_updated': now,
     }
     _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=1)
-    _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
+    if usage_update_for is not None:
+        # The caller's token/cost telemetry is built here, on this write's own
+        # day and plan key, and lands in the same transaction as the question:
+        # a retry that finds the event recorded also finds the telemetry
+        # recorded, never one without the other, and never on a different day
+        # or plan than the question.
+        update.update(usage_update_for(plan_key, doc_id))
+    else:
+        _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
     transaction.set(usage_ref, _nested(update), merge=True)
     return True
 
@@ -283,12 +292,19 @@ def record_chat_quota_question(
     platform: Optional[str] = None,
     *,
     firestore_client: Any | None = None,
+    usage_update_for: Callable[[str, str], Dict[str, Any]] | None = None,
 ) -> bool:
     """Record one accepted visible backend chat question exactly once.
 
     This is the product-boundary quota counter for mobile/backend chat. It is
     intentionally separate from ``chat.*.call_count``, which is LLM telemetry
     and can vary with implementation details.
+
+    ``usage_update_for(plan_key, day)`` returns token/cost telemetry (see
+    :func:`usage_bucket_update`) that must be recorded exactly when the question
+    is, in the same transaction and on the same day and plan — the realtime hub
+    uses it so a retried usage report records neither a second question nor a
+    second cost, and never one without the other.
     """
     if not idempotency_key:
         raise ValueError('idempotency_key is required')
@@ -316,7 +332,9 @@ def record_chat_quota_question(
     }
 
     transaction = client.transaction()
-    return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id, plan_key)
+    return _record_chat_quota_question_transaction(
+        transaction, usage_ref, event_ref, event_data, doc_id, plan_key, usage_update_for
+    )
 
 
 def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict[str, Any]:
@@ -504,11 +522,57 @@ def record_llm_usage_bucket(
     Dual-writes to both the primary bucket and a per-account alias
     (``{bucket}_{account}``) for per-account breakdown.
     """
-    if cost_status == 'complete' and cost_usd is None:
-        raise ValueError('complete cost attribution requires cost_usd')
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     ref = _usage_client(firestore_client).collection("users").document(uid).collection("llm_usage").document(today)
+    update = usage_bucket_update(
+        uid,
+        today=today,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        bucket=bucket,
+        account=account,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        quota_questions=quota_questions,
+        count_call=count_call,
+        firestore_client=firestore_client,
+    )
+    ref.set(_nested(update), merge=True)
 
+
+def usage_bucket_update(
+    uid: str,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    total_tokens: int = 0,
+    cost_usd: float | None = None,
+    bucket: str = 'desktop_chat',
+    account: str = 'omi',
+    cost_status: str = 'missing',
+    cost_exclusion: str | None = None,
+    quota_questions: int = 0,
+    count_call: bool = True,
+    firestore_client: Any | None = None,
+    plan_key: str | None = None,
+    today: str | None = None,
+) -> Dict[str, Any]:
+    """The dotted-path increments :func:`record_llm_usage_bucket` writes, without writing them.
+
+    Pure apart from the plan lookup, so a caller can fold the same telemetry
+    into its own transaction (see :func:`record_chat_quota_question`); that
+    caller passes the transaction's own ``plan_key`` and ``today`` so the
+    telemetry cannot land on a different day or plan than the question.
+    """
+    if cost_status == 'complete' and cost_usd is None:
+        raise ValueError('complete cost attribution requires cost_usd')
+    today = today or datetime.now(timezone.utc).strftime('%Y-%m-%d')
     acct_key = f'{bucket}_{account}'
     update: Dict[str, Any] = {
         f'{bucket}.input_tokens': firestore.Increment(input_tokens),
@@ -534,7 +598,7 @@ def record_llm_usage_bucket(
         update[f'{bucket}.quota_questions'] = firestore.Increment(quota_questions)
         update[f'{acct_key}.quota_questions'] = firestore.Increment(quota_questions)
 
-    plan_key = _plan_key(uid, firestore_client)
+    plan_key = plan_key or _plan_key(uid, firestore_client)
     _record_plan_bucket(
         update,
         plan_key,
@@ -549,7 +613,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
     )
     _record_plan_metadata(update, plan_key, cost_status=cost_status, cost_exclusion=cost_exclusion)
-    ref.set(_nested(update), merge=True)
+    return update
 
 
 def record_llm_cost_exclusion(

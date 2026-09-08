@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
+from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason
+
 # App display names are resolved by an injected callable, never by importing the database
 # layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
 # client into every import graph that touches a chat message.
@@ -43,6 +45,11 @@ class FileChat(BaseModel):
 
     def is_image(self):
         return self.mime_type.startswith("image")
+
+    def is_pdf(self) -> bool:
+        if (self.mime_type or '').lower() == 'application/pdf':
+            return True
+        return (self.name or '').lower().endswith('.pdf')
 
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
@@ -428,6 +435,10 @@ class GenerateReplyResponse(BaseModel):
 
 class RateMessageRequest(BaseModel):
     rating: Optional[int] = None
+    # Optional so existing clients keep working; a thumbs-down that arrives
+    # without a reason is recorded as "not captured", never as "no reason".
+    reason: Optional[FeedbackReason] = None
+    comment: Optional[str] = Field(None, max_length=MAX_COMMENT_LENGTH)
 
 
 class ShareChatMessagesRequest(BaseModel):
@@ -441,6 +452,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    # Legacy Assistants IDs remain readable on old session docs; nothing writes them.
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
 

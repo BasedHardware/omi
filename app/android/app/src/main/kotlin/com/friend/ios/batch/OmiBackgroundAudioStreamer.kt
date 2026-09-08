@@ -12,13 +12,27 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString.Companion.toByteString
-import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.ArrayDeque
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-class OmiBackgroundAudioStreamer(private val context: Context) {
+class OmiBackgroundAudioStreamer internal constructor(
+    private val preferences: NativeBlePreferences,
+    private val openSocket: (Request, WebSocketListener) -> WebSocket,
+    private val flutterAlive: () -> Boolean,
+    private val nowMs: () -> Long,
+    private val log: (Int, String) -> Unit,
+    private val lock: Any = Any(),
+) {
+    constructor(context: Context) : this(
+        SharedPreferencesValues(context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)),
+        OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).connectTimeout(15, TimeUnit.SECONDS)
+            .build().let { client -> { request, listener -> client.newWebSocket(request, listener) } },
+        { OmiBleManager.isFlutterAlive },
+        System::currentTimeMillis,
+        { priority, message -> Log.println(priority, TAG, message) },
+    )
     companion object {
         private const val TAG = "OmiBle.BgAudio"
         private const val FLUTTER_PREFS = "FlutterSharedPreferences"
@@ -28,6 +42,8 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         private const val MAX_CACHED_TRANSCRIPT_MESSAGES = 200
         private val transcriptCacheLock = Any()
         private val cachedTranscriptMessages = ArrayDeque<String>()
+        @Volatile
+        private var cachedTranscriptUid: String? = null
 
         fun drainCachedTranscriptMessages(): List<String> =
             synchronized(transcriptCacheLock) {
@@ -41,39 +57,26 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             }
     }
 
-    private data class Config(
-        val deviceId: String,
-        val codec: String,
-        val sampleRate: Int,
-        val source: String,
-        val apiBaseUrl: String,
-        val serviceUuid: String,
-        val characteristicUuid: String,
-        val deviceType: String
-    )
+    private val settingsReader = NativeBleStreamSettingsReader(preferences)
 
-    private val client = OkHttpClient.Builder()
-        .pingInterval(20, TimeUnit.SECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .build()
-    private val lock = Any()
+    @Volatile
+    private var hasNativeState = false
     private val pendingFrames = ArrayDeque<ByteArray>()
     private var socket: WebSocket? = null
     private var connecting = false
     private var connected = false
-    private var activeUrl: String? = null
-    private var activeConfig: Config? = null
+    private var activeSettings: NativeBleStreamSettings? = null
     private var sentFrames = 0
     @Volatile
     private var lastFailureAtMs = 0L
 
     fun isConfiguredFor(address: String): Boolean {
-        val config = loadConfig() ?: return false
+        val config = settingsReader.config() ?: return false
         return config.deviceId.equals(address, ignoreCase = true)
     }
 
     fun configuredAudioTargetFor(address: String): Pair<String, String>? {
-        val config = loadConfig() ?: return null
+        val config = settingsReader.config() ?: return null
         if (!config.deviceId.equals(address, ignoreCase = true)) return null
         return config.serviceUuid to config.characteristicUuid
     }
@@ -83,46 +86,85 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         synchronized(lock) {
             socketToClose = socket
             if (socketToClose != null) {
-                Log.i(TAG, "Stopping background transcription websocket ($reason)")
+                log(Log.INFO, "Stopping background transcription websocket ($reason)")
             }
             socket = null
             connecting = false
             connected = false
-            activeUrl = null
-            activeConfig = null
+            activeSettings = null
             pendingFrames.clear()
+            clearTranscriptsIfAccountChanged()
+            hasNativeState = false
         }
         socketToClose?.close(1000, reason)
     }
 
     fun handleCharacteristic(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray) {
-        val config = loadConfig()
-        if (config == null) {
-            if (socket != null) stop("disabled")
+        val inactiveReason = when {
+            flutterAlive() && preferences.boolean("nativeBleForegroundReady") -> "foreground_ready"
+            !preferences.boolean("nativeBleStreamingEnabled") -> "disabled"
+            else -> null
+        }
+        if (inactiveReason != null) {
+            clearTranscriptsIfAccountChanged()
+            if (hasNativeState) {
+                synchronized(lock) {
+                    // A stale gate read must not tear down a newly enabled session.
+                    if (flutterAlive() && preferences.boolean("nativeBleForegroundReady")) {
+                        stop("foreground_ready")
+                    } else if (!preferences.boolean("nativeBleStreamingEnabled")) {
+                        stop("disabled")
+                    }
+                }
+            }
             return
         }
-        if (OmiBleManager.isFlutterAlive && boolPref("nativeBleForegroundReady", false)) {
-            if (socket != null) stop("foreground_ready")
-            return
-        }
-        if (!config.deviceId.equals(address, ignoreCase = true)) return
-        if (!matches(config, serviceUuid, characteristicUuid)) return
+        synchronized(lock) {
+            // Publish activation before re-reading gates. A racing disabled callback either
+            // stops this state, or this callback observes the gate before opening a socket.
+            hasNativeState = true
+            if (flutterAlive() && preferences.boolean("nativeBleForegroundReady")) {
+                stop("foreground_ready")
+                return
+            }
+            val settings = settingsReader.settings()
+            if (settings == null) {
+                stop("disabled")
+                return
+            }
+            val config = settings.config
+            if (!config.deviceId.equals(address, ignoreCase = true) ||
+                !matches(config, serviceUuid, characteristicUuid)) {
+                hasNativeState = activeSettings != null
+                return
+            }
 
-        val frames = transformFrames(config, value)
-        if (frames.isEmpty()) return
-
-        ensureSocket(config)
-
-        for (frame in frames) {
-            sendOrQueue(frame)
+            val frames = transformFrames(config, value)
+            if (frames.isEmpty()) {
+                hasNativeState = activeSettings != null
+                return
+            }
+            ensureSocket(settings)
+            for (frame in frames) sendOrQueue(frame)
         }
     }
 
-    private fun matches(config: Config, serviceUuid: String, characteristicUuid: String): Boolean =
+    private fun clearTranscriptsIfAccountChanged() {
+        val uid = preferences.string("uid")
+        if (cachedTranscriptUid == uid) return
+        synchronized(transcriptCacheLock) {
+            if (cachedTranscriptUid != uid) {
+                cachedTranscriptMessages.clear()
+                cachedTranscriptUid = uid
+            }
+        }
+    }
+
+    private fun matches(config: NativeBleStreamConfig, serviceUuid: String, characteristicUuid: String): Boolean =
         config.serviceUuid.equals(serviceUuid, ignoreCase = true) &&
             config.characteristicUuid.equals(characteristicUuid, ignoreCase = true)
 
-    private fun transformFrames(config: Config, value: ByteArray): List<ByteArray> =
+    private fun transformFrames(config: NativeBleStreamConfig, value: ByteArray): List<ByteArray> =
         when (config.deviceType) {
             "omi", "openglass" -> {
                 if (value.size <= 3) emptyList() else listOf(value.copyOfRange(3, value.size))
@@ -142,56 +184,81 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                 }
             }
             else -> {
-                Log.w(TAG, "Unsupported background BLE audio device type: ${config.deviceType}")
+                log(Log.WARN, "Unsupported background BLE audio device type: ${config.deviceType}")
                 emptyList()
             }
         }
 
-    private fun ensureSocket(config: Config) {
-        val now = System.currentTimeMillis()
-        if (now - lastFailureAtMs < RECONNECT_BACKOFF_MS) return
-
-        val url = buildUrl(config) ?: return
-        val request = buildRequest(url) ?: return
-
-        synchronized(lock) {
-            if ((connecting || connected) && activeUrl == url && activeConfig == config && socket != null) {
-                return
+    // Caller holds lock, including forwarding, so reconfiguration cannot leak queued frames.
+    private fun ensureSocket(settings: NativeBleStreamSettings) {
+        if (activeSettings != settings) {
+            val previous = activeSettings
+            val incompatible = previous != null &&
+                (previous.uid != settings.uid ||
+                    previous.config.copy(geolocation = null) != settings.config.copy(geolocation = null))
+            synchronized(transcriptCacheLock) {
+                if (cachedTranscriptUid != settings.uid) cachedTranscriptMessages.clear()
+                cachedTranscriptUid = settings.uid
             }
-
             socket?.close(1000, "reconfigure")
             socket = null
-            connecting = true
+            connecting = false
             connected = false
-            activeUrl = url
-            activeConfig = config
-            sentFrames = 0
-
-            Log.i(TAG, "Opening background transcription websocket (codec=${config.codec}, source=${config.source})")
-            socket = client.newWebSocket(request, listener())
+            if (incompatible) pendingFrames.clear()
+            activeSettings = settings
         }
+        if ((connecting || connected) && socket != null) return
+        if (nowMs() - lastFailureAtMs < RECONNECT_BACKOFF_MS) return
+
+        val request = buildRequest(buildUrl(settings), settings)
+        connecting = true
+        connected = false
+        sentFrames = 0
+        log(Log.INFO, "Opening background transcription websocket (codec=${settings.config.codec}, source=${settings.config.source})")
+        socket = openSocket(request, listener())
     }
 
     private fun listener(): WebSocketListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            val queued = mutableListOf<ByteArray>()
             synchronized(lock) {
                 if (webSocket != socket) return
+                if (flutterAlive() && preferences.boolean("nativeBleForegroundReady")) {
+                    stop("foreground_ready")
+                    return
+                }
+                val settings = settingsReader.settings()
+                if (settings == null) {
+                    stop("disabled")
+                    return
+                }
+                if (settings != activeSettings) {
+                    ensureSocket(settings)
+                    return
+                }
                 connecting = false
                 connected = true
+                log(Log.INFO, "Background transcription socket connected")
                 while (pendingFrames.isNotEmpty()) {
-                    queued.add(pendingFrames.removeFirst())
+                    val frame = pendingFrames.removeFirst()
+                    if (!sendFrame(webSocket, frame)) {
+                        pendingFrames.addFirst(frame)
+                        break
+                    }
                 }
-            }
-            Log.i(TAG, "Background transcription socket connected")
-            for (frame in queued) {
-                sendFrame(webSocket, frame)
             }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            cacheTranscriptMessage(text)
-            Log.d(TAG, "Background transcription message received (${text.length} chars)")
+            synchronized(lock) {
+                if (webSocket != socket) return
+                val settings = settingsReader.settings()
+                if (settings == null || settings.uid != activeSettings?.uid) {
+                    stop("disabled")
+                    return
+                }
+                cacheTranscriptMessage(text)
+            }
+            log(Log.DEBUG, "Background transcription message received (${text.length} chars)")
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -205,7 +272,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                 connecting = false
                 connected = false
             }
-            Log.i(TAG, "Background transcription socket closed (code=$code)")
+            log(Log.INFO, "Background transcription socket closed (code=$code)")
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -214,9 +281,9 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                 socket = null
                 connecting = false
                 connected = false
-                lastFailureAtMs = System.currentTimeMillis()
+                lastFailureAtMs = nowMs()
             }
-            Log.w(TAG, "Background transcription socket failed: ${t.message}")
+            log(Log.WARN, "Background transcription socket failed: ${t.message}")
         }
     }
 
@@ -245,7 +312,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                 sentFrames
             }
             if (totalSent % 100 == 0) {
-                Log.i(TAG, "Sent $totalSent background BLE audio frames")
+                log(Log.INFO, "Sent $totalSent background BLE audio frames")
             }
         }
         return sent
@@ -270,88 +337,32 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         pendingFrames.addLast(frame.copyOf())
     }
 
-    private fun loadConfig(): Config? {
-        if (!boolPref("nativeBleStreamingEnabled", false)) return null
-        if (!CustomSttRawAudioPolicy.allowsForwarding(stringPref("customSttConfig"))) {
-            Log.i(TAG, "Raw Omi audio blocked by Custom STT forwarding policy")
-            return null
-        }
-        val raw = stringPref("nativeBleStreamConfig")
-        if (raw.isEmpty()) return null
-
-        return try {
-            val json = JSONObject(raw)
-            val deviceId = json.optString("deviceId")
-            val serviceUuid = json.optString("serviceUuid").lowercase(Locale.US)
-            val characteristicUuid = json.optString("characteristicUuid").lowercase(Locale.US)
-            if (deviceId.isEmpty() || serviceUuid.isEmpty() || characteristicUuid.isEmpty()) return null
-
-            Config(
-                deviceId = deviceId,
-                codec = json.optString("codec", "pcm8"),
-                sampleRate = json.optInt("sampleRate", 16000),
-                source = json.optString("source"),
-                apiBaseUrl = json.optString("apiBaseUrl"),
-                serviceUuid = serviceUuid,
-                characteristicUuid = characteristicUuid,
-                deviceType = json.optString("deviceType")
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Invalid native BLE stream config: ${e.message}")
-            null
-        }
-    }
-
-    private fun buildRequest(url: String): Request? {
-        val token = stringPref("nativeAuthToken").ifEmpty { stringPref("authToken") }
-        if (token.isEmpty()) {
-            Log.w(TAG, "Cannot open background transcription socket without auth token")
-            return null
-        }
-
-        return Request.Builder()
+    private fun buildRequest(url: String, settings: NativeBleStreamSettings): Request {
+        val builder = Request.Builder()
             .url(url)
-            .header("Authorization", "Bearer $token")
-            .header("X-Request-Start-Time", (System.currentTimeMillis().toDouble() / 1000.0).toString())
+            .header("Authorization", "Bearer ${settings.token}")
+            .header("X-Request-Start-Time", (nowMs().toDouble() / 1000.0).toString())
             .header("X-App-Platform", "android")
-            .header("X-Device-Id-Hash", stringPref("deviceIdHash"))
+            .header("X-Device-Id-Hash", settings.deviceIdHash)
             .header("X-App-Version", BuildConfig.VERSION_NAME)
-            .build()
+        return addConversationGeolocationHeader(builder, settings.config.geolocation).build()
     }
 
-    private fun buildUrl(config: Config): String? {
-        val uid = stringPref("uid")
-        if (uid.isEmpty()) {
-            Log.w(TAG, "Cannot open background transcription socket without uid")
-            return null
-        }
-
-        val language = if (boolPref("hasSetPrimaryLanguage", false)) {
-            stringPref("userPrimaryLanguage", "multi").ifEmpty { "multi" }
-        } else {
-            "multi"
-        }
-        val sttService = stringPref("transcriptionModel3", "soniox").ifEmpty { "soniox" }
-        val timeout = intPref("conversationSilenceDuration", 120).takeIf { it > 0 } ?: 120
+    private fun buildUrl(settings: NativeBleStreamSettings): String {
+        val config = settings.config
         val base = normalizeBaseUrl(config.apiBaseUrl.ifEmpty { DEFAULT_API_BASE_URL })
-
         val params = mutableListOf(
-            "language=${enc(language)}",
+            "language=${enc(settings.language)}",
             "sample_rate=${config.sampleRate}",
             "codec=${enc(config.codec)}",
-            "uid=${enc(uid)}",
+            "uid=${enc(settings.uid)}",
             "include_speech_profile=true",
-            "stt_service=${enc(sttService)}",
-            "conversation_timeout=$timeout"
+            "stt_service=${enc(settings.sttService)}",
+            "conversation_timeout=${settings.timeout}"
         )
-        if (config.source.isNotEmpty()) {
-            params.add("source=${enc(config.source)}")
-        }
+        if (config.source.isNotEmpty()) params.add("source=${enc(config.source)}")
         params.add("speaker_auto_assign=enabled")
-        if (boolPref("vadGateEnabled", false)) {
-            params.add("vad_gate=enabled")
-        }
-
+        if (settings.vadGate) params.add("vad_gate=enabled")
         return "${base}v4/listen?${params.joinToString("&")}"
     }
 
@@ -369,32 +380,6 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         }
         return if (base.endsWith("/")) base else "$base/"
     }
-
-    private fun prefs() = context.getSharedPreferences(FLUTTER_PREFS, Context.MODE_PRIVATE)
-
-    private fun prefValue(key: String): Any? = prefs().all["flutter.$key"]
-
-    private fun stringPref(key: String, defaultValue: String = ""): String =
-        when (val value = prefValue(key)) {
-            is String -> value
-            null -> defaultValue
-            else -> value.toString()
-        }
-
-    private fun boolPref(key: String, defaultValue: Boolean): Boolean =
-        when (val value = prefValue(key)) {
-            is Boolean -> value
-            is String -> value.toBooleanStrictOrNull() ?: defaultValue
-            else -> defaultValue
-        }
-
-    private fun intPref(key: String, defaultValue: Int): Int =
-        when (val value = prefValue(key)) {
-            is Int -> value
-            is Long -> value.toInt()
-            is String -> value.toIntOrNull() ?: defaultValue
-            else -> defaultValue
-        }
 
     private fun enc(value: String): String = URLEncoder.encode(value, "UTF-8")
 }

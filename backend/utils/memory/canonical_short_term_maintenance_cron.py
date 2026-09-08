@@ -8,7 +8,6 @@ inventory; this module never scans all users or consults a UID allowlist.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -36,11 +35,6 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
 )
-from utils.jit_rollout import JITDecisionStage, resolve_jit_ledger_migration_rollout
-from utils.memory.knowledge_ledger_migration import (
-    publish_ledger_migration_cutover,
-    run_ledger_migration_sweep,
-)
 from utils.memory.promotion_flex import (
     MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
     PromotionFlexDeferred,
@@ -66,8 +60,6 @@ DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
 GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
 DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 MAX_MAINTENANCE_UIDS_PER_RUN = 400
-MAX_LEDGER_MIGRATION_UIDS_PER_RUN = 20
-LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS = 15.0
 EXPIRY_ADJUDICATION_LOOKAHEAD = DEFAULT_SHORT_TERM_TTL / 2
 CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH = "canonical_memory_maintenance_control/seed_cursor"
 CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION = 1
@@ -286,6 +278,18 @@ def recently_dreamed(uid: str, *, db_client: Any, now: datetime) -> bool:
     if last_dreamed_at is None:
         return False
     return now - last_dreamed_at < DREAMING_MIN_INTERVAL
+
+
+def _is_ledger_writer(uid: str, *, db_client: Any) -> bool:
+    """Ledger-mode accounts own formation via the daily sweep, not dreaming."""
+    try:
+        from models.memory_apply import WriterMode
+        from utils.memory.memory_system import ensure_canonical_apply_control_state
+
+        control = ensure_canonical_apply_control_state(uid, db_client=db_client)
+        return getattr(control, "writer_mode", None) == WriterMode.ledger
+    except Exception:
+        return False
 
 
 def _read_seed_cursor(db_client: Any) -> str:
@@ -524,6 +528,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     skipped_users: int = 0
     skipped_no_short_term: int = 0
     skipped_recently_dreamed: int = 0
+    skipped_ledger_writer: int = 0
     dreamed_users: int = 0
     flex_deferred: bool = False
     recurrence_candidates_total: int = 0
@@ -533,8 +538,6 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_ack_failures_total: int = 0
     graph_enriched_total: int = 0
     graph_enrichment_blocked_total: int = 0
-    ledger_migration_users: int = 0
-    ledger_migration_rows: int = 0
     completed_uids: tuple[str, ...] = ()
     errors: list[str] = field(default_factory=_empty_errors)
 
@@ -591,7 +594,7 @@ def run_universal_short_term_maintenance(
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
     client = db_client if db_client is not None else default_db_client
-    promotion_flex = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
+    flex_run = PromotionFlexRunRouter(db_client=client, force_enabled=maintenance_flex_forced())
     expiry_inventory = ExpiryOrderedMaintenanceInventory(uids=())
     registry_uids: tuple[str, ...] = ()
     registry_cursor_generation = 0
@@ -671,10 +674,17 @@ def run_universal_short_term_maintenance(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d flex=%s",
         effective_run_id,
         len(uids),
-        promotion_flex.control.enabled,
+        flex_run.control.enabled,
     )
     completed_uids: set[str] = set()
     for uid in uids:
+        if flex_run.control.enabled and not flex_run.job_budget_fits():
+            summary.flex_deferred = True
+            logger.info(
+                "canonical_short_term_maintenance_cron: uid=%s flex_deferred=job_budget",
+                uid,
+            )
+            break
         stm_count = count_active_short_term(uid, db_client=client)
         if stm_count == 0:
             summary.skipped_no_short_term += 1
@@ -690,7 +700,13 @@ def run_universal_short_term_maintenance(
             completed_uids.add(uid)
             logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=recently_dreamed", uid)
             continue
-        promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
+        if _is_ledger_writer(uid, db_client=client):
+            summary.skipped_ledger_writer += 1
+            summary.skipped_users += 1
+            completed_uids.add(uid)
+            logger.info("canonical_short_term_maintenance_cron: uid=%s skipped_reason=writer_mode_ledger", uid)
+            continue
+        promotion_llm_invoke = flex_run.llm_invoke_for_uid(uid)
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
@@ -706,8 +722,9 @@ def run_universal_short_term_maintenance(
                     else CONSOLIDATION_ATTEMPT_LEASE_SECONDS
                 ),
                 consolidation_result_guard=(
-                    promotion_flex.assert_result_current if promotion_llm_invoke is not None else None
+                    flex_run.assert_result_current if promotion_llm_invoke is not None else None
                 ),
+                job_budget_guard=flex_run.require_job_budget if flex_run.control.enabled else None,
             )
         except PromotionFlexDeferred as exc:
             summary.flex_deferred = True
@@ -870,6 +887,7 @@ def run_universal_short_term_maintenance(
     logger.info(
         "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d routed_total=%d "
         "promoted_total=%d dreamed_users=%d skipped_no_short_term=%d skipped_recently_dreamed=%d "
+        "skipped_ledger_writer=%d "
         "flex_deferred=%s expiry_urgent_users=%d expiry_urgent_items=%d "
         "expired_active_candidates_total=%d "
         "expired_without_terminal_disposition_total=%d expired_with_recorded_disposition_total=%d "
@@ -882,6 +900,7 @@ def run_universal_short_term_maintenance(
         summary.dreamed_users,
         summary.skipped_no_short_term,
         summary.skipped_recently_dreamed,
+        summary.skipped_ledger_writer,
         summary.flex_deferred,
         summary.expiry_urgent_users,
         summary.expiry_urgent_items,
@@ -909,7 +928,7 @@ async def run_canonical_short_term_maintenance_cron(
     inventory_limit: int = MAX_MAINTENANCE_UIDS_PER_RUN,
 ) -> CanonicalShortTermMaintenanceCronSummary:
     """Async entrypoint: offload sync Firestore maintenance to ``db_executor``."""
-    summary = await run_blocking(
+    return await run_blocking(
         db_executor,
         run_universal_short_term_maintenance,
         db_client=db_client,
@@ -920,86 +939,3 @@ async def run_canonical_short_term_maintenance_cron(
         uid_inventory=uid_inventory,
         inventory_limit=inventory_limit,
     )
-    client = db_client if db_client is not None else default_db_client
-    candidate_uids = summary.completed_uids[:MAX_LEDGER_MIGRATION_UIDS_PER_RUN]
-    if not candidate_uids:
-        return summary
-
-    authority_loop = asyncio.get_running_loop()
-
-    def fresh_rollout_authorizer(uid: str) -> Callable[..., bool]:
-        def authorize(*_context: str) -> bool:
-            future = asyncio.run_coroutine_threadsafe(
-                resolve_jit_ledger_migration_rollout(
-                    uid,
-                    stage=JITDecisionStage.INGRESS,
-                    force_refresh=True,
-                ),
-                authority_loop,
-            )
-            try:
-                return future.result(timeout=LEDGER_ROW_AUTHORIZATION_TIMEOUT_SECONDS).permits_work
-            except Exception as exc:
-                future.cancel()
-                logger.warning(
-                    "canonical_short_term_maintenance_cron: uid=%s ledger_authorization_failed=%s",
-                    uid,
-                    type(exc).__name__,
-                )
-                return False
-
-        return authorize
-
-    # Re-authorize each account immediately before its bounded mutation pass.
-    # Resolving the whole page up front leaves later accounts holding stale
-    # permission while earlier accounts scan and mutate.
-    for uid in candidate_uids:
-        decision = await resolve_jit_ledger_migration_rollout(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-            force_refresh=True,
-        )
-        if not decision.permits_work:
-            continue
-        authorizer = fresh_rollout_authorizer(uid)
-        try:
-            result = await run_blocking(
-                db_executor,
-                run_ledger_migration_sweep,
-                uid,
-                db_client=client,
-                completed_at=now,
-                publish=False,
-                mutation_authorizer=authorizer,
-                publication_authorizer=authorizer,
-            )
-        except Exception as exc:
-            summary.errors.append(f"uid={uid}: ledger_migration:{type(exc).__name__}")
-            logger.warning(
-                "canonical_short_term_maintenance_cron: uid=%s ledger_migration_failed=%s",
-                uid,
-                type(exc).__name__,
-            )
-            continue
-        summary.ledger_migration_rows += result.migrated_long_term_count
-        if getattr(result, "authorization_revoked", False):
-            continue
-        if result.remaining_live_legacy_count:
-            continue
-        try:
-            await run_blocking(
-                db_executor,
-                publish_ledger_migration_cutover,
-                uid,
-                db_client=client,
-                publication_authorizer=authorizer,
-                mutation_authorizer=authorizer,
-                migrated_long_term_count=result.migrated_long_term_count,
-                adjudicated_short_term_count=result.adjudicated_short_term_count,
-                completed_at=now,
-            )
-        except Exception as exc:
-            summary.errors.append(f"uid={uid}: ledger_publication:{type(exc).__name__}")
-            continue
-        summary.ledger_migration_users += 1
-    return summary

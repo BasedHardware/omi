@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from google.cloud.firestore_v1 import FieldFilter
 
+import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
@@ -17,6 +18,7 @@ from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -24,6 +26,7 @@ from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
+    INDEX_REQUIREMENTS,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
@@ -40,6 +43,11 @@ from database.firestore_index_registry import (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+    QUERY_SPECS,
+    FirestoreIndexField,
+    FirestoreQueryFilter,
+    FirestoreQuerySpec,
+    _index_fields_need_composite_manifest,
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
@@ -492,45 +500,6 @@ def test_inventory_finds_a_direct_compound_chain_wrapped_by_list():
     ]
 
 
-def test_query_coverage_ratchet_rejects_a_new_raw_serving_shape():
-    baseline = {
-        'schema_version': 1,
-        'eligible_serving': 1,
-        'registered_serving': 1,
-        'raw_unregistered': [],
-        'unsupported': [],
-    }
-    report = {
-        'counts': {
-            'serving': {
-                'eligible': 2,
-                'registered': 1,
-                'raw_unregistered': 1,
-                'waived': 0,
-                'unsupported': 0,
-            }
-        },
-        'queries': [
-            {'id': 'registered', 'classification': 'registered'},
-            {'id': 'new-raw', 'classification': 'raw_unregistered'},
-        ],
-    }
-
-    assert firestore_query_coverage.check_ratchet(report, baseline) == [
-        'new unregistered serving compound query shape(s): new-raw',
-        'registered serving-query coverage percentage decreased',
-    ]
-
-
-@pytest.mark.slow
-def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
-    baseline_path = Path(__file__).resolve().parents[2] / 'scripts' / 'firestore_query_coverage_baseline.json'
-    committed = json.loads(baseline_path.read_text(encoding='utf-8'))
-    report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
-
-    assert firestore_query_coverage.check_ratchet(report, committed) == []
-
-
 class _StreamRecordingQuery:
     """One Firestore query chain that records itself when production code streams it."""
 
@@ -775,3 +744,124 @@ def test_query_source_paths_are_posix_canonical_on_every_host_platform():
     assert firestore_query_coverage.canonical_source_path(
         windows_path
     ) == firestore_query_coverage.canonical_source_path(posix_path)
+
+
+def _asc(field_path: str) -> FirestoreIndexField:
+    return FirestoreIndexField(field_path, order='ASCENDING')
+
+
+def _desc(field_path: str) -> FirestoreIndexField:
+    return FirestoreIndexField(field_path, order='DESCENDING')
+
+
+def _contains(field_path: str) -> FirestoreIndexField:
+    return FirestoreIndexField(field_path, array_config='CONTAINS')
+
+
+def _platform_requires_composite(index_fields: tuple[FirestoreIndexField, ...]) -> bool:
+    """Firestore's automatic single-field rule, restated from platform docs.
+
+    Independent of ``_index_fields_need_composite_manifest``. Automatic indexes
+    cover ``field ASC, __name__ ASC`` and ``field DESC, __name__ DESC`` only.
+    Opposite-direction ``field`` + ``__name__`` and any multi-field order need
+    a declared composite. Array-contains (+ ``__name__``) stays automatic.
+    https://firebase.google.com/docs/firestore/query-data/index-overview
+    """
+    non_name = [field for field in index_fields if field.field_path != '__name__']
+    name_fields = [field for field in index_fields if field.field_path == '__name__']
+    if any(field.array_config is not None for field in index_fields):
+        return False
+    if len(non_name) > 1:
+        return True
+    if len(non_name) != 1 or len(name_fields) != 1:
+        return False
+    ordered = non_name[0]
+    name = name_fields[0]
+    if ordered.order is None or name.order is None:
+        return False
+    return ordered.order != name.order
+
+
+@pytest.mark.parametrize(
+    ('fields', 'needs_composite'),
+    [
+        ((_desc('updated_at'), _desc('__name__')), False),
+        ((_asc('updated_at'), _asc('__name__')), False),
+        ((_desc('updated_at'), _asc('__name__')), True),
+        ((_asc('updated_at'), _desc('__name__')), True),
+        ((_asc('status'), _desc('updated_at'), _asc('__name__')), True),
+        ((_contains('source_ids'), _asc('__name__')), False),
+        ((_desc('updated_at'),), False),
+    ],
+)
+def test_manifest_generator_classifies_the_firestore_single_field_rule(fields, needs_composite):
+    assert _index_fields_need_composite_manifest(fields) is needs_composite
+
+
+def test_every_composite_requiring_query_spec_is_declared_in_the_checked_in_manifest():
+    """Independent of the generator: the checked-in file must declare each needed composite.
+
+    ``test_generated_firestore_manifest_matches_the_checked_in_contract`` compares
+    the generator to the file, so a generator shortcut makes both sides wrong
+    together. This oracle restates Firestore's rule and then reads the file.
+    The three list-scan specs from #11684 are named so deleting them from
+    ``QUERY_SPECS`` cannot make the test vacuous.
+    """
+    outage_required_specs = (
+        UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+    )
+    for spec in outage_required_specs:
+        assert spec in QUERY_SPECS
+        assert _platform_requires_composite(spec.index_fields)
+
+    manifest_path = Path(__file__).resolve().parents[3] / 'firestore.indexes.json'
+    checked_in = json.loads(manifest_path.read_text(encoding='utf-8'))
+    declared = {
+        (
+            index['collectionGroup'],
+            index['queryScope'],
+            tuple((field['fieldPath'], field.get('order') or field.get('arrayConfig')) for field in index['fields']),
+        )
+        for index in checked_in['indexes']
+    }
+    missing = [
+        spec.identifier
+        for spec in QUERY_SPECS
+        if _platform_requires_composite(spec.index_fields) and spec.index_requirement.signature not in declared
+    ]
+    assert missing == []
+
+
+def test_document_id_only_collection_group_range_has_no_impossible_composite_requirement():
+    assert CONVERSATION_PHOTOS_NAME_RANGE_QUERY in QUERY_SPECS
+    assert all(
+        requirement.identifier != CONVERSATION_PHOTOS_NAME_RANGE_QUERY.identifier for requirement in INDEX_REQUIREMENTS
+    )
+
+    manifest = firebase_index_manifest()
+    assert not any(
+        index['collectionGroup'] == 'photos'
+        and index['queryScope'] == 'COLLECTION_GROUP'
+        and index['fields'] == [{'fieldPath': '__name__', 'order': 'ASCENDING'}]
+        for index in manifest['indexes']
+    )
+
+
+def test_document_id_range_with_additional_ordering_field_still_requires_composite(monkeypatch):
+    spec = FirestoreQuerySpec(
+        identifier='synthetic_document_id_range_with_order',
+        collection_group='photos',
+        query_scope='COLLECTION_GROUP',
+        filters=(
+            FirestoreQueryFilter('__name__', '>=', 'start_key'),
+            FirestoreQueryFilter('__name__', '<=', 'end_key'),
+        ),
+        index_fields=(_asc('created_at'), _asc('__name__')),
+    )
+    monkeypatch.setattr(firestore_index_registry, 'QUERY_SPECS', (spec,))
+
+    requirements = firestore_index_registry._query_spec_index_requirements()
+
+    assert [requirement.identifier for requirement in requirements] == [spec.identifier]

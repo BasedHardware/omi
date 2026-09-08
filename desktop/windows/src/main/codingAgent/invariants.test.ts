@@ -9,7 +9,7 @@
 // no Windows analog and are deliberately not reproduced here.
 //
 // Each `describe` names the specific "MUST NOT" from
-// docs/product/invariants/agent-control-plane.md that it guards, so the linkage
+// product/invariants/agent-control-plane.md that it guards, so the linkage
 // stays greppable:
 //   (a) Conflate Omi ids with adapter-native session ids.
 //   (b) Authorize control operations from a tool-supplied owner alone.

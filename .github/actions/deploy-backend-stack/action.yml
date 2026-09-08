@@ -363,17 +363,104 @@ runs:
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
       shell: bash
       run: |
+        set -euo pipefail
         NAMESPACE="${{ inputs.runtime_env }}-omi-backend"
-        TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ inputs.runtime_env }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
-        METRICS_TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ inputs.runtime_env }}-omi-backend-secrets -o jsonpath='{.data.METRICS_SECRET}' | base64 -d)"
-        SMOKE_COMMAND="python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics"
-        kubectl -n "$NAMESPACE" run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
-          --rm -i --restart=Never \
-          --image "gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}" \
-          --env "SMOKE_URL=http://${{ inputs.runtime_env }}-omi-llm-gateway.${{ inputs.runtime_env }}-omi-backend.svc.cluster.local:8080" \
-          --env "SMOKE_TOKEN=$TOKEN" \
-          --env "METRICS_SECRET=$METRICS_TOKEN" \
-          --command -- sh -c "$SMOKE_COMMAND"
+        SMOKE_POD="llm-gateway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
+        # Image pulls are independent of the smoke client's HTTP request
+        # deadline. A cold 800 MB image exceeded kubectl run's implicit
+        # one-minute pod-running timeout before the smoke process started.
+        SMOKE_STARTUP_BUDGET_SECONDS=300
+        SMOKE_PROBE_BUDGET_SECONDS=180
+
+        show_smoke_diagnostics() {
+          echo "=== llm-gateway smoke pod ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" get pod "$SMOKE_POD" -o wide || true
+          kubectl --request-timeout=30s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.waiting.reason}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
+          kubectl --request-timeout=30s -n "$NAMESPACE" describe pod "$SMOKE_POD" || true
+          echo "=== llm-gateway smoke logs ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" logs "$SMOKE_POD" --all-containers=true || true
+          echo "=== llm-gateway smoke events ==="
+          kubectl --request-timeout=30s -n "$NAMESPACE" get events --field-selector "involvedObject.name=$SMOKE_POD" --sort-by=.lastTimestamp || true
+        }
+        cleanup_smoke_pod() {
+          kubectl --request-timeout=30s -n "$NAMESPACE" delete pod "$SMOKE_POD" --ignore-not-found=true --wait=false || true
+        }
+        trap cleanup_smoke_pod EXIT
+
+        if ! cat <<EOF | kubectl --request-timeout=30s -n "$NAMESPACE" apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: $SMOKE_POD
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: smoke
+              image: gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}
+              command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics"]
+              env:
+                - name: SMOKE_URL
+                  value: http://${{ inputs.runtime_env }}-omi-llm-gateway.${{ inputs.runtime_env }}-omi-backend.svc.cluster.local:8080
+                - name: SMOKE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${{ inputs.runtime_env }}-omi-backend-secrets
+                      key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+                - name: METRICS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${{ inputs.runtime_env }}-omi-backend-secrets
+                      key: METRICS_SECRET
+        EOF
+        then
+          echo "LLM gateway smoke pod could not be created" >&2
+          show_smoke_diagnostics
+          exit 1
+        fi
+
+        phase=""
+        startup_deadline=$((SECONDS + SMOKE_STARTUP_BUDGET_SECONDS))
+        while (( SECONDS < startup_deadline )); do
+          phase="$(kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+          case "$phase" in
+            Running)
+              break
+              ;;
+            Succeeded)
+              show_smoke_diagnostics
+              exit 0
+              ;;
+            Failed)
+              show_smoke_diagnostics
+              exit 1
+              ;;
+          esac
+          sleep 1
+        done
+        if [[ "$phase" != "Running" ]]; then
+          echo "LLM gateway smoke pod did not start within ${SMOKE_STARTUP_BUDGET_SECONDS}s" >&2
+          show_smoke_diagnostics
+          exit 1
+        fi
+
+        probe_deadline=$((SECONDS + SMOKE_PROBE_BUDGET_SECONDS))
+        while (( SECONDS < probe_deadline )); do
+          phase="$(kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+          case "$phase" in
+            Succeeded)
+              show_smoke_diagnostics
+              exit 0
+              ;;
+            Failed)
+              show_smoke_diagnostics
+              exit 1
+              ;;
+          esac
+          sleep 1
+        done
+        echo "LLM gateway smoke probe did not complete within ${SMOKE_PROBE_BUDGET_SECONDS}s after pod startup" >&2
+        show_smoke_diagnostics
+        exit 1
 
     - name: Probe LLM gateway from the Cloud Run VPC before promotion
       if: >-
@@ -639,6 +726,12 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          --cpu=2
+          --memory=2Gi
+          --concurrency=40
+          --min-instances=3
+          --max-instances=50
+          --no-cpu-throttling
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 

@@ -19,6 +19,7 @@ export interface ToolResultEnvelope {
   originalBytes: number;
   projectedBytes: number;
   fullOutputRef: string | null;
+  purpose?: string;
   provenance: ToolResultProvenance;
 }
 
@@ -46,6 +47,7 @@ export function assertToolResultEnvelope(value: unknown): asserts value is ToolR
     || typeof originalBytes !== "number" || !Number.isSafeInteger(originalBytes) || originalBytes < 0
     || typeof projectedBytes !== "number" || !Number.isSafeInteger(projectedBytes) || projectedBytes < 0
     || (envelope.fullOutputRef !== null && typeof envelope.fullOutputRef !== "string")
+    || (envelope.purpose !== undefined && typeof envelope.purpose !== "string")
     || !envelope.provenance
     || [envelope.provenance.invocationId, envelope.provenance.runId, envelope.provenance.attemptId, envelope.provenance.toolName]
       .some((value) => typeof value !== "string" || value.length === 0)) {

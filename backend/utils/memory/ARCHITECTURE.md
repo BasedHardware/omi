@@ -3,8 +3,8 @@
 This package owns the universal memory repository and canonical processing
 pipeline. Persistence contracts live in `backend/database/` and
 `backend/models/`; HTTP entry points live in `backend/routers/`. The normative
-data model is `docs/memory/domain_model.md`, and the convergence record is
-`docs/epics/universal_memory_task_convergence.md`.
+data model is `backend/docs/memory/domain_model.md`, and the convergence record is
+`backend/docs/epics/universal_memory_task_convergence.md`.
 
 ## One logical authority, two retained formats
 
@@ -135,8 +135,12 @@ with expiry-ordered accounts first. It skips accounts with no active Short-term
 row, and skips non-urgent accounts dreamed in the last 20 hours unless they
 already have more than 10 active Short-term rows (hourly overflow drain).
 Remaining users run until the 15-minute Flex
-reservation no longer fits in the one-hour job budget. A Flex deferral leaves
+reservation no longer fits in the one-hour job budget. In-UID TTL apply and
+outbox/vector drain use that same `job_budget_fits` predicate so one account
+cannot consume the remaining hour. A Flex deferral leaves
 the durable cursor on the unfinished UID so later accounts are not skipped.
+A successful Flex stop with residual non-outbox errors exits 0; outbox and
+cursor_persist failures still fail the job.
 The job does not run a separate required-processing LLM: explicit submissions
 enter the consolidation batch with `requires_normalization=true`, and apply
 stamps the L2 receipt then the route from that one decision. Promote
@@ -203,7 +207,7 @@ fences prevent an old lease or retry from resurrecting a recreated account.
 ## Operational controls and rollback
 
 The supported controls and rollback floor are documented in
-`docs/runbooks/universal-memory-operations.md`.
+`backend/docs/runbooks/universal-memory-operations.md`.
 
 - `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
   to off. `on` enables intake and list; it does not by itself enable ST→LT
@@ -214,10 +218,11 @@ The supported controls and rollback floor are documented in
   on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
   global cost/incident controls.
-- `GET /v3/memories` first page uses `read_page`, which 503s
-  `Memory cursor unavailable` when `MEMORY_V3_CURSOR_SECRET` is missing. That is
-  the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
-  falls back to offset `read()` for that 503.
+- `GET /v3/memories` first page uses `read_page`, which raises
+  `MemoryBackingStoreUnavailable` (503 `Memory cursor unavailable`) when
+  `MEMORY_V3_CURSOR_SECRET` is missing. That is the list fence, not
+  `MEMORY_V3_GET_ENABLED` (unused on the route). First page falls back to
+  offset `read()` for that typed failure — not by matching detail strings.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader

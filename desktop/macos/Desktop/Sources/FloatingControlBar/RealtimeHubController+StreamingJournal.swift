@@ -31,7 +31,9 @@ extension RealtimeHubController {
 
     let projection = RealtimeStreamingJournalProjection(
       ownerID: ownerID, continuityKey: turnIdempotencyKey,
-      admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference())
+      admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      modelsUsed: [sessionProvider?.modelID].compactMap { $0 },
+      screenContext: screenContextByContinuityKey[turnIdempotencyKey])
     guard
       streamingJournalWriteLedger.begin(
         projection: projection,
@@ -71,13 +73,16 @@ extension RealtimeHubController {
     ownerID: String,
     userText: String,
     assistantText: String,
-    continuityKey: String
+    continuityKey: String,
+    assistantStatus: KernelJournalTurnStatus = .completed,
+    terminalReason: String? = nil
   ) async -> RealtimeStreamingJournalWriteLedger.FinalizationResult {
     streamingJournalFlushTasks.removeValue(forKey: continuityKey)?.cancel()
     return await streamingJournalWriteLedger.finalize(continuityKey: continuityKey) { projection in
       guard projection.ownerID == ownerID else { return false }
       return await FloatingControlBarManager.shared.completeStreamingRealtimeExchange(
-        projection: projection, userText: userText, assistantText: assistantText)
+        projection: projection, userText: userText, assistantText: assistantText,
+        assistantStatus: assistantStatus, terminalReason: terminalReason)
     }
   }
 

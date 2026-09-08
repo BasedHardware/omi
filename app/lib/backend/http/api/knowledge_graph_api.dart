@@ -1,11 +1,29 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 class KnowledgeGraphApi {
   static final String _baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
+
+  /// Short user-facing copy for a knowledge-graph HTTP failure.
+  ///
+  /// [statusCode] and [body] are accepted so a regression that interpolates
+  /// them into the returned string is caught by tests. They belong in debug
+  /// logs only.
+  @visibleForTesting
+  static String knowledgeGraphHttpUserMessage({required String action, int? statusCode, String? body}) {
+    final _ = (statusCode, body);
+    return "Couldn't $action knowledge graph";
+  }
+
+  static Never _throwHttpFailure({required String action, int? statusCode, String? body}) {
+    Logger.debug('Failed to $action knowledge graph: status=$statusCode body=$body');
+    throw Exception(knowledgeGraphHttpUserMessage(action: action, statusCode: statusCode, body: body));
+  }
 
   static Future<Map<String, dynamic>> getKnowledgeGraph() async {
     final response = await makeApiCall(
@@ -19,9 +37,8 @@ class KnowledgeGraphApi {
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
-    } else {
-      throw Exception('Failed to load knowledge graph: ${response?.body}');
     }
+    _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
 
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
@@ -29,23 +46,8 @@ class KnowledgeGraphApi {
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
-    } else {
-      throw Exception('Failed to rebuild knowledge graph: ${response?.body}');
     }
-  }
-
-  static Future<void> deleteKnowledgeGraph() async {
-    final response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/knowledge-graph',
-      headers: {},
-      body: '{}',
-      method: 'DELETE',
-    );
-
-    if (response == null || response.statusCode != 200) {
-      throw Exception('Failed to delete knowledge graph: ${response?.body}');
-    }
-    wire.GeneratedDeleteKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    _throwHttpFailure(action: 'rebuild', statusCode: response?.statusCode, body: response?.body);
   }
 
   /// Polls the graph endpoint until the node count stabilizes or timeout is reached.

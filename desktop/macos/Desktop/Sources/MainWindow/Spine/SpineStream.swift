@@ -7,7 +7,7 @@
 //  (`queryShellMatchCount`), which is the whole of its contract with the shell.
 //
 //  **What it owns is the reading order.** One merged reverse-chronological stream grouped by day, with
-//  the conversation dominant and the memories and frames it produced indented beneath it — and an hour
+//  the conversation dominant and the memories and frames it produced attached beneath it — and an hour
 //  rail beside it running the same direction the list does.
 //
 //  A day can be **folded shut** from its own header. Folding is presentation and never a filter: the
@@ -91,6 +91,7 @@ struct SpineStream: View {
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject var tasksStore: TasksStore
+  var searchSurface: SearchSurface
 
   /// Hands a conversation to the page that owns conversations. The whole record, not its id: the
   /// row already holds it, and handing over an id forced the receiver to look it back up against a
@@ -106,6 +107,7 @@ struct SpineStream: View {
   @StateObject private var store = SpineStore()
   /// Pages the rest of the account in behind the first paint. See `SpineHydration`.
   @StateObject private var hydrator = SpineHydrator()
+  @ObservedObject private var dailySummaries = ChatDailySummaryCoordinator.shared.store
   @State private var viewport = SpineViewport()
   /// Which days are folded shut. Lives with the view rather than with the store because it is a
   /// reading position, not data: it is worth exactly as long as this list is on screen.
@@ -115,7 +117,8 @@ struct SpineStream: View {
     GeometryReader { proxy in
       HStack(spacing: 0) {
         if proxy.size.width >= SpineLayout.railBreakpoint {
-          SpineRailColumn(store: store, viewport: viewport, collapse: collapse)
+          SpineRailColumn(
+            store: store, viewport: viewport, collapse: collapse, request: request)
           Rectangle().fill(Ink.separator).frame(width: 1)
         }
         Group {
@@ -145,12 +148,16 @@ struct SpineStream: View {
       await tasksStore.loadTasksIfNeeded()
       ingest()
       hydrator.start(conversations: conversationPages, memories: memoryPages)
+      await ChatDailySummaryCoordinator.shared.activate()
     }
     .onDisappear { hydrator.stop() }
     .onReceive(appState.$conversations) { _ in ingest() }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onReceive(tasksStore.$incompleteTasks) { _ in ingest() }
-    .onChange(of: request) { _, newValue in store.apply(request: newValue) }
+    .onChange(of: request) { _, newValue in
+      store.apply(request: newValue)
+      commitSearchAnalytics(newValue)
+    }
   }
 
   private func ingest() {
@@ -160,9 +167,35 @@ struct SpineStream: View {
       tasks: tasksStore.incompleteTasks
     )
     store.apply(request: request)
+    commitSearchAnalytics(request)
     // A store that was hydrated and has since been truncated under us reopens its cursor; this is
     // where the spine notices and goes back for the rest.
     hydrator.resume()
+  }
+
+  private func commitSearchAnalytics(_ request: QueryShellRequest) {
+    SearchAnalytics.scheduleQueryEntered(surface: searchSurface, query: request.text) {
+      store.matchCount
+    }
+  }
+
+  private var searchIsActive: Bool {
+    DebouncedSearchCoordinator.isActive(request.text)
+  }
+
+  private func openConversationFromSearch(_ conversation: ServerConversation) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenConversation(conversation)
+  }
+
+  private func openMemoryFromSearch(_ memory: SpineMemory) {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenMemory(memory)
+  }
+
+  private func openRewindFromSearch() {
+    SearchAnalytics.resultOpened(surface: searchSurface, searchIsActive: searchIsActive)
+    onOpenRewind()
   }
 
   /// The two paged stores, as the hydrator sees them. Neither is owned here — the spine reads the
@@ -194,12 +227,13 @@ struct SpineStream: View {
             // Folding is presentation, never a filter: the rows are still composed, still counted by
             // `queryShellMatchCount`, and still in the same chronological place when they come back.
             if !collapse.contains(day.id) {
+              recapSlot(for: day)
               ForEach(day.rows) { row in
                 SpineRowView(
                   row: row,
                   showsIndent: store.kind == .everything,
-                  onOpenConversation: onOpenConversation,
-                  onOpenMemory: onOpenMemory,
+                  onOpenConversation: openConversationFromSearch,
+                  onOpenMemory: openMemoryFromSearch,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
                   // Clicking a moment used to discard the moment and navigate to the Rewind
@@ -211,7 +245,7 @@ struct SpineStream: View {
                       strip.map { QuickLookFrame(screenshot: $0.screenshot) },
                       startingAt: String(moment.id))
                   },
-                  onShowAllMoments: onOpenRewind,
+                  onShowAllMoments: openRewindFromSearch,
                   onOpenBrainMap: onOpenBrainMap
                 )
                 .background(anchor(for: row, in: day))
@@ -221,7 +255,13 @@ struct SpineStream: View {
             SpineDayHeader(
               day: day,
               isCollapsed: collapse.contains(day.id),
-              onToggle: { toggleCollapse(day) }
+              onToggle: { toggleCollapse(day) },
+              recapEmoji: recap(for: day)?.dayEmoji,
+              // The stored recap is the card's own body: when the day is open and
+              // a recap is attached, the header is the card's top half, not a
+              // second floating surface above it.
+              attachesRecapBody:
+                !collapse.contains(day.id) && recapContent(for: day).attachesToHeaderCard
             )
           }
         }
@@ -235,7 +275,7 @@ struct SpineStream: View {
       guard let anchor else { return }
       Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
     }
-    .glassScrollFade(top: 6, bottom: 18)
+    .glassScrollFade(bottom: 18)
   }
 
   /// A layout-neutral reporter behind each row. A `GeometryReader` in a `background` never affects
@@ -284,6 +324,42 @@ struct SpineStream: View {
       corpus: hydrator.state,
       canLoadMore: appState.canLoadMoreConversations || memoriesViewModel.hasMoreMemories
     )
+  }
+
+  /// Recap chrome for the day: not a `SpineRow`, so counts and the collapsed subtitle stay honest.
+  @ViewBuilder
+  private func recapSlot(for day: SpineDay) -> some View {
+    let dateKey = SpineDayDateKey.string(from: day.id, calendar: store.calendar) ?? ""
+    let content = recapContent(for: day)
+    if content != .hidden {
+      SpineDayRecapRow(
+        content: content,
+        dateKey: dateKey,
+        onOpenRecap: { record in
+          ChatFirstShellNavigation.shared.openDailyRecap(
+            DailyRecapRouteRef(recordID: record.id, date: record.date ?? ""))
+        }
+      )
+    }
+  }
+
+  /// What the day's recap slot shows, resolved once so the header's attached-card
+  /// shape and the slot's content can never disagree.
+  private func recapContent(for day: SpineDay) -> SpineDayRecapContent {
+    SpineDayRecapContent.resolve(
+      recap: recap(for: day),
+      conversationCount: day.conversationCount,
+      isFiltering: request.isFiltering,
+      dayID: day.id,
+      now: Date(),
+      calendar: store.calendar,
+      summaryHour: dailySummaries.summaryHour
+    )
+  }
+
+  private func recap(for day: SpineDay) -> DailySummaryRecord? {
+    guard let key = SpineDayDateKey.string(from: day.id, calendar: store.calendar) else { return nil }
+    return dailySummaries.byDate[key]
   }
 
   /// Folds one day shut, or opens it again.
@@ -392,6 +468,7 @@ private struct SpineRailColumn: View {
   @ObservedObject var store: SpineStore
   @ObservedObject var viewport: SpineViewport
   let collapse: SpineDayCollapse
+  let request: QueryShellRequest
 
   /// The day the rail describes.
   ///
@@ -414,13 +491,26 @@ private struct SpineRailColumn: View {
     return viewport.hour
   }
 
+  /// The rail remains a timeline navigator while the list narrows. Its capture histogram and
+  /// screen-moment total therefore describe the complete day, not just the matching rows. Say so in
+  /// the scope line; otherwise a search for a memory can make "1,204 screen moments" look like a
+  /// result count for the memory search.
+  private var railDayTitle: String {
+    guard request.isFiltering, let title = day?.title, !title.isEmpty else {
+      return day?.title ?? ""
+    }
+    return "\(title) · full day"
+  }
+
   var body: some View {
     SpineHourRail(
       density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
       currentHour: currentHour,
       momentCount: dayID.flatMap(store.momentCount(for:)),
-      dayTitle: day?.title ?? "",
-      conversationCount: day?.conversationCount ?? 0
+      dayTitle: railDayTitle,
+      // Filtered results no longer carry the complete day's conversation count. The footer is
+      // supplementary context, so omit it rather than pairing a full-day rail with a filtered noun.
+      conversationCount: request.isFiltering ? 0 : (day?.conversationCount ?? 0)
     )
   }
 }
@@ -439,6 +529,12 @@ struct SpineDayHeader: View {
   let day: SpineDay
   let isCollapsed: Bool
   let onToggle: () -> Void
+  var recapEmoji: String? = nil
+  /// True when the open day's recap body renders directly beneath this header.
+  /// The header is then the card's **top half**: rounded at the top, square at
+  /// the bottom, no gap — one continuous card with its body, never two floating
+  /// surfaces.
+  var attachesRecapBody: Bool = false
 
   @State private var isHovering = false
 
@@ -446,6 +542,12 @@ struct SpineDayHeader: View {
     Button(action: onToggle) {
       HStack(spacing: 10) {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
+          if let recapEmoji, !recapEmoji.isEmpty {
+            Text(recapEmoji)
+              .font(.system(size: 11))
+              .frame(height: 11, alignment: .center)
+              .accessibilityHidden(true)
+          }
           Text(day.title.uppercased())
             .font(.system(size: 11, weight: .semibold))
             .tracking(1.0)
@@ -470,6 +572,7 @@ struct SpineDayHeader: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("spine-day-header")
     .accessibilityLabel(Text(isCollapsed ? "Expand \(day.title)" : "Collapse \(day.title)"))
     .accessibilityValue(Text(day.subtitle))
     .help(isCollapsed ? "Show this day" : "Hide this day")
@@ -480,17 +583,49 @@ struct SpineDayHeader: View {
     // right against one ground.
     //
     // A material is the vocabulary for exactly this — it occludes by frosting what is behind it, so
-    // the header stays made of the same glass the panel is. Bounded by a continuous corner and
-    // `Ink.separator` rather than bled to the edges, so it reads as a band belonging to the lane
-    // instead of a slab laid across it.
+    // the header stays made of the same glass the panel is. The card silhouette follows the body:
+    // with an attached recap the header is rounded at the top and square at the bottom, and the
+    // hairline runs only around the outer edges that are actually outer — no line across the seam,
+    // because the header and its body are one card.
     .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.regularMaterial)
+      cardShape.fill(.regularMaterial)
     )
-    .overlay(
+    .overlay(cardEdges)
+    .padding(.bottom, attachesRecapBody ? 0 : 4)
+  }
+
+  private var cardShape: some Shape {
+    if attachesRecapBody {
+      return AnyShape(
+        UnevenRoundedRectangle(
+          topLeadingRadius: 10, topTrailingRadius: 10, style: .continuous))
+    }
+    return AnyShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+  }
+
+  /// The card's outer hairline. Attached, the bottom edge is the body's — only
+  /// the top and sides are this header's to draw.
+  @ViewBuilder
+  private var cardEdges: some View {
+    if attachesRecapBody {
+      ZStack(alignment: .top) {
+        VStack {
+          HStack {
+            Rectangle().fill(Ink.separator).frame(width: 1)
+            Spacer(minLength: 0)
+            Rectangle().fill(Ink.separator).frame(width: 1)
+          }
+          Spacer(minLength: 0)
+        }
+        Rectangle().fill(Ink.separator).frame(height: 1)
+      }
+      .clipShape(
+        UnevenRoundedRectangle(
+          topLeadingRadius: 10, topTrailingRadius: 10, style: .continuous))
+    } else {
       RoundedRectangle(cornerRadius: 10, style: .continuous)
         .strokeBorder(Ink.separator, lineWidth: 1)
-    )
-    .padding(.bottom, 4)
+    }
   }
 }
 

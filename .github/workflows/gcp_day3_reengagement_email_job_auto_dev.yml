@@ -1,0 +1,212 @@
+name: Auto Deploy Day 3 Re-engagement Email Job to Development
+
+# Mirrors gcp_daily_memory_sweep_job_auto_dev.yml, minus the LLM-gateway
+# serving gate and VPC lane probe: this job makes no model call.
+
+on:
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
+
+env:
+  SERVICE: day3-reengagement-email-job
+  SCHEDULER_JOB: day3-reengagement-email-daily
+  SCHEDULER_SERVICE_ACCOUNT: memory-maintenance-scheduler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+  REGION: us-central1
+
+# Share the lock with manual development deploys of this Cloud Run job.
+concurrency:
+  group: deploy-cloud-run-day3-reengagement-email-job-development
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: development
+    permissions:
+      actions: 'read'
+      contents: 'read'
+
+    runs-on: ubuntu-latest
+    steps:
+      # Retain this until the summary shows it no longer buys enough headroom.
+      - name: Measure runner disk cleanup
+        run: |
+          started_at=$SECONDS
+          free_before=$(df -h / | awk 'NR == 2 { print $4 }')
+          rm -rf /opt/hostedtoolcache
+          free_after=$(df -h / | awk 'NR == 2 { print $4 }')
+          {
+            echo "### Runner disk cleanup"
+            echo "- Duration: $((SECONDS - started_at))s"
+            echo "- Free space: ${free_before} → ${free_after}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require successful first-attempt Release Eligibility push
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]] || {
+            echo "ERROR: Release Eligibility did not succeed." >&2
+            exit 1
+          }
+          [[ "${{ github.event.workflow_run.run_attempt }}" == "1" ]] || {
+            echo "ERROR: only the first Release Eligibility attempt may admit deployment." >&2
+            exit 1
+          }
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "ERROR: Release Eligibility head SHA is not a full commit SHA." >&2
+            exit 1
+          }
+
+      - name: Checkout current main for source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify exact admitted main source
+        id: admitted_source
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "ERROR: push SHA must be one non-zero, lowercase, full commit SHA." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$DEPLOY_SHA" == "$main_sha" ]] || {
+            echo "ERROR: main advanced before source admission; refusing stale development deployment." >&2
+            exit 1
+          }
+          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+            > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py \
+            --sha "$DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-runs "$proof_path" \
+            --require-first-attempt
+          printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout admitted source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+          fetch-depth: 0
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute short SHA
+        id: image-tag
+        run: |
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Build runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./backend/modal/Dockerfile.day3_reengagement_email_job
+          push: false
+          load: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Verify built runtime image before publish
+        run: |
+          image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/modal/Dockerfile.day3_reengagement_email_job \
+            --image "$image"
+
+      - name: Recheck admitted main before image publication
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after source admission; refusing stale image publication." >&2
+            exit 1
+          }
+
+      - name: Push verified runtime image
+        run: |
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
+      - name: Render runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env dev --job day3-reengagement-email-job >> "$GITHUB_OUTPUT"
+
+      - name: Validate backend runtime env before deploy
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+
+      - name: Recheck admitted main before Cloud Run deployment
+        env:
+          ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
+            echo "ERROR: main advanced after image publication; refusing stale Cloud Run deployment." >&2
+            exit 1
+          }
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          job: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} ${{ steps.runtime-env.outputs.day3_reengagement_email_job_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_secrets }}
+
+      - name: Provision daily Scheduler trigger from admitted source
+        run: |
+          python3 backend/scripts/provision_day3_reengagement_scheduler.py \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --scheduler-job "$SCHEDULER_JOB" \
+            --cloud-run-job "$SERVICE" \
+            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
+
+      - name: Show Output
+        run: echo ${{ steps.deploy.outputs.url }}

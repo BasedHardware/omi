@@ -6,7 +6,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
 
   /// `allCases` is storage identity, not reading order: the raw values are persisted, so this list
   /// starts at `memories` — where the stored default lands — rather than where the user's row
-  /// starts. The order the four pages are *presented* in belongs to the control that presents them,
+  /// starts. The order the five pages are *presented* in belongs to the control that presents them,
   /// `ActivityDestinationChip`.
   case memories
   case conversations
@@ -14,11 +14,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   /// The chronological spine that used to be Home's landing surface — everything captured, in the
   /// order it happened. Home now lands in the chat; the timeline lives here.
   case activity
-
-  enum Presentation: Equatable {
-    case standaloneConversations
-    case memoryHub
-  }
+  /// The visual screen-history player. Appended to preserve every persisted raw value above.
+  case rewind
 
   var id: Int { rawValue }
 
@@ -27,7 +24,8 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
-    case .activity: return "Brain"
+    case .activity: return "Activity"
+    case .rewind: return "Rewind"
     }
   }
 
@@ -37,26 +35,30 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
     case .activity: return "clock.arrow.circlepath"
+    case .rewind: return "clock.arrow.circlepath"
     }
   }
 
-  /// Resolves navigation into the Memory rail item. Existing callers such as
-  /// Cmd+2 and desktop automation only know about the rail item, so they must
-  /// land on Conversations instead of whichever Memory destination was last
-  /// persisted.
-  static func destination(
-    for sidebarItem: SidebarNavItem,
-    requestedRawValue: Int? = nil
-  ) -> MemoryHubDestination? {
-    guard sidebarItem == .conversations else { return nil }
-    guard let requestedRawValue else { return .conversations }
-    return MemoryHubDestination(rawValue: requestedRawValue) ?? .conversations
+  /// Resolves legacy navigation names into the one Memory hub. The raw sidebar
+  /// index may differ, but Conversations, Memories, and Rewind must always
+  /// select the same hub-owned presentation used by the modern shell.
+  static func destination(for sidebarItem: SidebarNavItem) -> MemoryHubDestination? {
+    switch sidebarItem {
+    case .conversations:
+      return .conversations
+    case .memories:
+      return .memories
+    case .rewind:
+      return .rewind
+    default:
+      return nil
+    }
   }
 
-  static func applySidebarSelection(
+  static func apply(
     _ item: SidebarNavItem,
-    selectedIndex: inout Int,
-    memoryDestinationRawValue: inout Int
+    to selectedIndex: inout Int,
+    hub memoryDestinationRawValue: inout Int
   ) {
     if let destination = destination(for: item) {
       memoryDestinationRawValue = destination.rawValue
@@ -64,18 +66,6 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     selectedIndex = item.rawValue
   }
 
-  /// The legacy sidebar has separate Conversations and Memories destinations.
-  /// The modern top bar uses the same rail index as a Memory hub, so keep that
-  /// shared index from replacing the old standalone Conversations page.
-  static func presentation(
-    for sidebarItem: SidebarNavItem,
-    useLegacyHomeDesign: Bool
-  ) -> Presentation {
-    if useLegacyHomeDesign, sidebarItem == .conversations {
-      return .standaloneConversations
-    }
-    return .memoryHub
-  }
 }
 
 /// Shared readable-width contract for Memory surfaces.
@@ -108,9 +98,9 @@ enum MemoryHubLayoutPolicy {
 enum MemoryHubSelectionPolicy {
   /// The chat-first route that must be selected for a hub destination.
   ///
-  /// `Conversations` has its own route (it carries capture-archive focus); the other two are the
-  /// Memory route, which is where `MemoryHubPage` lives.
+  /// Every Brain section uses the Memory route so the persistent section navigation remains
+  /// mounted. Conversation deep links carry their record as focus state on that same route.
   static func chatFirstRoute(for destination: MemoryHubDestination) -> ChatFirstRoute {
-    destination == .conversations ? .conversations : .memories
+    .memories
   }
 }

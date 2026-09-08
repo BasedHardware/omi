@@ -23,6 +23,14 @@ actor RewindDatabase {
   /// Path to the running flag file (used to detect unclean shutdown)
   private var runningFlagPath: String?
 
+  /// Whether the *previous* session ended uncleanly, latched at the first
+  /// observation in this process. `.omi_running` is created at the end of
+  /// `performInitialization()`, so the answer stops being observable once the
+  /// database opens — and any of the lazily-initializing storage actors can get
+  /// there first. That race is why `App Startup Timing` reported
+  /// `had_unclean_shutdown = true` on ~every sample.
+  private var uncleanShutdownVerdict: Bool?
+
   /// The user ID this database is configured for (nil = not yet configured → "anonymous")
   private var configuredUserId: String?
 
@@ -332,6 +340,10 @@ actor RewindDatabase {
     initializationTask = nil
     runningFlagPath = nil
     openedForUserId = nil
+    // The database identity is being torn down, so the latched verdict no longer
+    // describes anything. The next performInitialization() makes a fresh
+    // authoritative observation for whichever user it opens.
+    uncleanShutdownVerdict = nil
     initGeneration += 1
     poolEpoch += 1
     log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
@@ -383,9 +395,17 @@ actor RewindDatabase {
   }
 
   /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+  ///
+  /// Order-independent: whoever observes first latches the verdict for the whole
+  /// process, and `performInitialization()` latches it before it writes this
+  /// session's own running flag. A later caller therefore reads the previous
+  /// session's state, not this one's.
   func hadUncleanShutdown() -> Bool {
+    if let uncleanShutdownVerdict { return uncleanShutdownVerdict }
     let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
-    return FileManager.default.fileExists(atPath: flagPath)
+    let verdict = FileManager.default.fileExists(atPath: flagPath)
+    uncleanShutdownVerdict = verdict
+    return verdict
   }
 
   /// Initialize the database with migrations.
@@ -471,6 +491,13 @@ actor RewindDatabase {
     // Detect unclean shutdown: if the running flag file exists, the previous launch
     // didn't exit cleanly (crash, force quit, power loss)
     let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
+    // This is the authoritative, user-scoped observation and it happens before
+    // this session's flag is written below. Latch it here so a startup-timing
+    // reader that arrives after the database opened still reports the previous
+    // session, whatever order the storage actors initialized in.
+    if uncleanShutdownVerdict == nil {
+      uncleanShutdownVerdict = previousCrashed
+    }
     if previousCrashed {
       log("RewindDatabase: Unclean shutdown detected (running flag exists)")
     }
@@ -2612,8 +2639,10 @@ actor RewindDatabase {
     }
 
     Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+    Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
+    Self.registerClientProcessingProjectionMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2643,6 +2672,67 @@ actor RewindDatabase {
     }
     migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
       try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceRevision", type: .datetime)
+    }
+  }
+
+  /// Clear the local tombstones the Removed lane manufactured over live tasks.
+  ///
+  /// `TasksStore.fetchDeletedPage` asked the backend for retired rows with a
+  /// `deleted=true` query item that `GET /v1/action-items` never had. FastAPI
+  /// drops an unknown query item, and that handler skips soft-deleted
+  /// documents outright, so the page it answered with was the user's live
+  /// tasks — which the lane then stamped retired and synced into this table.
+  /// Every visit to Removed tombstoned another page. Completing one of those
+  /// tasks from a chat card read the tombstone back and rendered "Task is no
+  /// longer available" over a task the reader had just ticked.
+  ///
+  /// A genuine retirement always leaves a witness the fabricated ones cannot:
+  /// a local deletion records `deletedBy`, and a server-side retirement
+  /// arrives as canonical status `cancelled` or `superseded`. A row carrying
+  /// neither was retired by nothing but the stamp, so only those are cleared —
+  /// a real deletion, local or remote, is left exactly as it is.
+  /// Durable `client_processing` blob for S10. Retry serialization (S11) sends
+  /// this stored JSON; it is never regenerated from the transcript.
+  static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addClientProcessingProjection") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  static func addTranscriptionSessionColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "transcription_sessions").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "transcription_sessions") { t in
+      t.add(column: name, type)
+    }
+  }
+
+  static func registerFabricatedActionItemTombstoneRepair(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("clearFabricatedActionItemTombstones") { db in
+      let repaired =
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COUNT(*) FROM action_items
+            WHERE deleted = 1
+              AND (deletedBy IS NULL OR deletedBy = '')
+              AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+            """) ?? 0
+      guard repaired > 0 else { return }
+      try db.execute(
+        sql: """
+          UPDATE action_items
+          SET deleted = 0
+          WHERE deleted = 1
+            AND (deletedBy IS NULL OR deletedBy = '')
+            AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+          """)
+      log("RewindDatabase: Cleared \(repaired) fabricated action-item tombstone(s)")
     }
   }
 

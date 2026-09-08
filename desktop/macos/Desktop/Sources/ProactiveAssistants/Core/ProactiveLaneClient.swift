@@ -3,6 +3,32 @@ import Foundation
 struct ProactiveLaneUsage: Equatable, Sendable {
   let cachedTokens: Int
   let cacheWriteTokens: Int
+  /// Provider-reported totals. These remain optional because the released
+  /// desktop envelope only guarantees cache fields; a missing value is not a
+  /// zero-cost assertion.
+  let inputTokens: Int?
+  let outputTokens: Int?
+  let totalTokens: Int?
+  let reportedCachedTokens: Int?
+  let reportedCacheWriteTokens: Int?
+
+  init(
+    cachedTokens: Int,
+    cacheWriteTokens: Int,
+    inputTokens: Int? = nil,
+    outputTokens: Int? = nil,
+    totalTokens: Int? = nil,
+    reportedCachedTokens: Int? = nil,
+    reportedCacheWriteTokens: Int? = nil
+  ) {
+    self.cachedTokens = cachedTokens
+    self.cacheWriteTokens = cacheWriteTokens
+    self.inputTokens = inputTokens
+    self.outputTokens = outputTokens
+    self.totalTokens = totalTokens
+    self.reportedCachedTokens = reportedCachedTokens
+    self.reportedCacheWriteTokens = reportedCacheWriteTokens
+  }
 }
 
 struct ProactiveLaneResult: Equatable, Sendable {
@@ -13,6 +39,98 @@ struct ProactiveLaneResult: Equatable, Sendable {
   let cacheWrite: Bool
   let fallbackClass: String
   let content: String
+  let requestID: String?
+  let provider: String?
+  let providerResponseID: String?
+
+  init(
+    operation: String,
+    lane: String,
+    providerModel: String,
+    usage: ProactiveLaneUsage,
+    cacheWrite: Bool,
+    fallbackClass: String,
+    content: String,
+    requestID: String? = nil,
+    provider: String? = nil,
+    providerResponseID: String? = nil
+  ) {
+    self.operation = operation
+    self.lane = lane
+    self.providerModel = providerModel
+    self.usage = usage
+    self.cacheWrite = cacheWrite
+    self.fallbackClass = fallbackClass
+    self.content = content
+    self.requestID = requestID
+    self.provider = provider
+    self.providerResponseID = providerResponseID
+  }
+}
+
+/// Metadata observed at the proactivity route boundary. It intentionally
+/// carries no request or response body; the JIT runtime turns it into a
+/// bounded billing observation only for the fixed QA owner/bundle.
+struct ProactiveLaneResponseObservation: Equatable, Sendable {
+  let statusCode: Int?
+  let requestID: String?
+  /// Response metadata only. The model response text never enters this
+  /// observer path or its short-lived capture store.
+  let operation: String?
+  let provider: String?
+  let providerModel: String?
+  let providerResponseID: String?
+  let usage: ProactiveLaneUsage?
+  let fallbackClass: String?
+  let failure: ProactiveLaneFailureClassification?
+
+  init(
+    statusCode: Int?,
+    requestID: String?,
+    operation: String? = nil,
+    provider: String? = nil,
+    providerModel: String? = nil,
+    providerResponseID: String? = nil,
+    usage: ProactiveLaneUsage? = nil,
+    fallbackClass: String? = nil,
+    failure: ProactiveLaneFailureClassification?
+  ) {
+    self.statusCode = statusCode
+    self.requestID = requestID
+    self.operation = operation
+    self.provider = provider
+    self.providerModel = providerModel
+    self.providerResponseID = providerResponseID
+    self.usage = usage
+    self.fallbackClass = fallbackClass
+    self.failure = failure
+  }
+
+  static func successful(statusCode: Int, result: ProactiveLaneResult) -> Self {
+    Self(
+      statusCode: statusCode,
+      requestID: result.requestID,
+      operation: result.operation,
+      provider: result.provider,
+      providerModel: result.providerModel,
+      providerResponseID: result.providerResponseID,
+      usage: result.usage,
+      fallbackClass: result.fallbackClass,
+      failure: nil)
+  }
+
+  func withFailure(_ failure: ProactiveLaneFailureClassification) -> Self {
+    Self(
+      statusCode: statusCode,
+      requestID: requestID,
+      operation: operation,
+      provider: provider,
+      providerModel: providerModel,
+      providerResponseID: providerResponseID,
+      usage: usage,
+      fallbackClass: fallbackClass,
+      failure: failure)
+  }
 }
 
 enum ProactiveLaneClientError: LocalizedError {
@@ -20,6 +138,9 @@ enum ProactiveLaneClientError: LocalizedError {
   case http(status: Int, retryAfterSeconds: Int?)
   case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
+  /// Identified basic + non-BYOK pixel call, or a typed 402 `plan_gated`.
+  /// Text-only JIT completions stay open (S14 / S24 narrowing).
+  case planGated
 
   var errorDescription: String? {
     switch self {
@@ -31,6 +152,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
+    case .planGated:
+      return "proactive_plan_gated"
     }
   }
 }
@@ -66,6 +189,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       return "invalid_structured_output status=\(status ?? 0)"
     case "quota_cooldown":
       return "quota_cooldown status=\(status ?? 0)"
+    case "plan_gated":
+      return "plan_gated status=\(status ?? 402)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -88,6 +213,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
         return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      case .planGated:
+        return ProactiveLaneFailureClassification(failure: "plan_gated", status: 402, errorType: nil)
       }
     }
     if error is DecodingError {
@@ -126,10 +253,26 @@ actor ProactiveLaneClient {
   static let defaultQuotaCooldownSeconds = 10 * 60
   static let minQuotaCooldownSeconds = 60
   static let maxQuotaCooldownSeconds = 60 * 60
+  /// Minimum completion budget accepted by the backend for the reasoning lane.
+  /// Reasoning models spend part of this cap on hidden tokens before producing
+  /// the strict JSON body. Keep every director call at this floor so a client
+  /// request cannot be truncated before the backend's compatible budget is
+  /// applied.
+  static let backendCompatibleReasoningMinimumCompletionTokens = 2400
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
+  /// Owner-bound header for the read-only JIT authority routes; stricter
+  /// than `authorization` because the decision must never be evaluated for
+  /// another owner's credentials.
+  private let jitAuthorization: @Sendable (_ ownerID: String) async throws -> String
+  /// Downstream ledger-mirror sync attempted after a complete trigger
+  /// snapshot; injectable so tests can prove its failure is non-blocking.
+  private let ledgerMirrorSync:
+    @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot) async throws
+      -> Void
   private let now: @Sendable () -> Date
+  private let managedPixelDecision: @Sendable () async -> SubscriptionEntitlementDecision
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
@@ -146,8 +289,7 @@ actor ProactiveLaneClient {
     guard let url = URL(string: root + "v1/jit/trigger-snapshot") else {
       throw ProactiveLaneClientError.invalidResponse
     }
-    let authService = await MainActor.run { AuthService.shared }
-    let header = try await authService.getAuthHeader(expectedUserId: authorizationSnapshot.ownerID)
+    let header = try await jitAuthorization(authorizationSnapshot.ownerID)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw ProactiveLaneClientError.ownerChanged
     }
@@ -168,12 +310,20 @@ actor ProactiveLaneClient {
       snapshot.ownerID == authorizationSnapshot.ownerID
     else { throw ProactiveLaneClientError.invalidResponse }
     guard snapshot.complete, snapshot.failureReason == nil else { return snapshot }
-    // The trigger snapshot is a cheap authoritative head read. A matching
-    // local mirror receipt takes the fast path; otherwise the coordinator
-    // resumes its durable cursor chain before exposing planned authority.
-    _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
-      authorizationSnapshot: authorizationSnapshot,
-      knownAuthority: snapshot)
+    // The trigger snapshot is a cheap authoritative head read and the receipt
+    // authority for this lane. A matching local mirror receipt takes the fast
+    // path; otherwise the coordinator resumes its durable cursor chain. The
+    // mirror is a downstream projection: when its sync fails, fail the mirror
+    // closed and still return the complete snapshot so the trigger receipt is
+    // never blocked by ledger catch-up. The mirror retries on its own schedule.
+    do {
+      try await ledgerMirrorSync(authorizationSnapshot, snapshot)
+    } catch {
+      // Bounded and content-free: classification only, never error text.
+      NSLog(
+        "JIT trigger snapshot: ledger mirror sync failed error_type=%@",
+        ProactiveLaneFailureClassification.boundedNetworkErrorType(error))
+    }
     return snapshot
   }
 
@@ -181,15 +331,41 @@ actor ProactiveLaneClient {
     session: URLSession = .shared,
     baseURL: @escaping () -> String = { ProactiveLaneClient.backendBaseURL },
     authorization: (() async throws -> String)? = nil,
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = { Date() },
+    jitAuthorization: (@Sendable (_ ownerID: String) async throws -> String)? = nil,
+    ledgerMirrorSync:
+      (
+        @Sendable (_ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot, _ snapshot: JITTriggerSnapshot)
+          async throws -> Void
+      )? = nil,
+    managedPixelDecision: (@Sendable () async -> SubscriptionEntitlementDecision)? = nil
   ) {
     self.session = session
     self.baseURL = baseURL
     self.now = now
     self.authorization =
-      authorization ?? {
+      authorization
+      ?? {
         let authService = await MainActor.run { AuthService.shared }
         return try await authService.getAuthHeader()
+      }
+    self.jitAuthorization =
+      jitAuthorization
+      ?? { ownerID in
+        let authService = await MainActor.run { AuthService.shared }
+        return try await authService.getAuthHeader(expectedUserId: ownerID)
+      }
+    self.ledgerMirrorSync =
+      ledgerMirrorSync
+      ?? { authorizationSnapshot, snapshot in
+        _ = try await KnowledgeLedgerMirrorCoordinator.shared.sync(
+          authorizationSnapshot: authorizationSnapshot,
+          knownAuthority: snapshot)
+      }
+    self.managedPixelDecision =
+      managedPixelDecision
+      ?? {
+        await ManagedProactivityDecisionSource.current()
       }
   }
 
@@ -215,8 +391,7 @@ actor ProactiveLaneClient {
       return JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
     }
     do {
-      let authService = await MainActor.run { AuthService.shared }
-      let header = try await authService.getAuthHeader(expectedUserId: authorizationSnapshot.ownerID)
+      let header = try await jitAuthorization(authorizationSnapshot.ownerID)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         return JITProactivityFlags(rollout: .unknown, killSwitch: .unknown)
       }
@@ -231,9 +406,15 @@ actor ProactiveLaneClient {
       else {
         return cacheUnknownJITFlags(ownerID: authorizationSnapshot.ownerID)
       }
+      // The server-computed `effective` verdict owns admission; the raw
+      // rollout + kill-switch pair stays as the older-server fallback. An
+      // absent `kill_switch` is compatibility, not an unknown-off veto.
       let flags = JITProactivityFlags(
         rollout: Self.jitState(object["rollout"]),
-        killSwitch: Self.jitState(object["kill_switch"]))
+        killSwitch: Self.jitState(object["kill_switch"]),
+        effective: Self.jitState(object["effective"]),
+        killSwitchPresent: object["kill_switch"] != nil,
+        budgetContractVersion: object["budget_contract_version"] as? String)
       let rawTTL = object["cache_ttl_seconds"] as? Int ?? 60
       let ttl = min(max(rawTTL, 15), 15 * 60)
       jitFlagsCache = (
@@ -269,11 +450,22 @@ actor ProactiveLaneClient {
     jsonSchema: [String: Any],
     cacheKey: String? = nil,
     maxCompletionTokens: Int = 1024,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    responseObserver: (@Sendable (ProactiveLaneResponseObservation) async -> Void)? = nil
   ) async throws -> ProactiveLaneResult {
     let currentOwner = authorizationSnapshot?.ownerID
     clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
+    if imageData != nil {
+      if await managedPixelDecision() == .planGated {
+        // S24 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route pixels to
+        // LocalInferenceRuntime. Text-only completions stay ungated here.
+        if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+          // Local lane not shipped — still fail closed to `.planGated`.
+        }
+        throw ProactiveLaneClientError.planGated
+      }
+    }
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -289,6 +481,8 @@ actor ProactiveLaneClient {
         "image_url": ["url": "data:image/jpeg;base64,\(imageData.base64EncodedString())"],
       ])
     }
+    let effectiveMaxCompletionTokens = Self.effectiveMaxCompletionTokens(
+      operation: operation, requested: maxCompletionTokens)
     var body: [String: Any] = [
       "operation": operation,
       "messages": [["role": "user", "content": content]],
@@ -296,7 +490,7 @@ actor ProactiveLaneClient {
         "type": "json_schema",
         "json_schema": ["name": "desktop_proactivity", "strict": true, "schema": jsonSchema],
       ],
-      "max_completion_tokens": maxCompletionTokens,
+      "max_completion_tokens": effectiveMaxCompletionTokens,
     ]
     if let cacheKey { body["cache_key"] = cacheKey }
     let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
@@ -329,8 +523,17 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
+    let requestID = http.value(forHTTPHeaderField: "X-Omi-Request-ID")
     Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
+      if ManagedPlanGateHTTP.isPlanGated(status: http.statusCode, data: data) {
+        await responseObserver?(
+          ProactiveLaneResponseObservation(
+            statusCode: http.statusCode,
+            requestID: requestID,
+            failure: ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)))
+        throw ProactiveLaneClientError.planGated
+      }
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)
@@ -338,9 +541,31 @@ actor ProactiveLaneClient {
       } else {
         retryAfter = nil
       }
+      await responseObserver?(
+        ProactiveLaneResponseObservation(
+          statusCode: http.statusCode,
+          requestID: requestID,
+          failure: ProactiveLaneFailureClassification.classify(
+            ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter))))
       throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter)
     }
-    return try Self.parseEnvelope(data)
+    do {
+      let result = try Self.parseEnvelope(data, requestID: requestID)
+      await responseObserver?(ProactiveLaneResponseObservation.successful(statusCode: http.statusCode, result: result))
+      return result
+    } catch {
+      await responseObserver?(
+        ProactiveLaneResponseObservation(
+          statusCode: http.statusCode,
+          requestID: requestID,
+          failure: ProactiveLaneFailureClassification.classify(error)))
+      throw error
+    }
+  }
+
+  static func effectiveMaxCompletionTokens(operation: String, requested: Int) -> Int {
+    guard operation == ModelQoS.Proactivity.reasoningOperation else { return requested }
+    return max(requested, backendCompatibleReasoningMinimumCompletionTokens)
   }
 
   private func clearCooldownsIfOwnerChanged(_ owner: String?) {
@@ -400,7 +625,7 @@ actor ProactiveLaneClient {
     log(ProactiveQuotaObservation.logLine(operation: operation, observation: observation))
   }
 
-  static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
+  static func parseEnvelope(_ data: Data, requestID: String? = nil) throws -> ProactiveLaneResult {
     let object: Any
     do {
       object = try JSONSerialization.jsonObject(with: data)
@@ -417,16 +642,63 @@ actor ProactiveLaneClient {
       let message = choices.first?["message"] as? [String: Any],
       let content = message["content"] as? String
     else { throw ProactiveLaneClientError.invalidResponse }
+    let responseUsage = response["usage"] as? [String: Any]
+    let accountingUsage = responseUsage ?? [:]
+    func nonNegativeInt(_ value: Any?) -> Int? {
+      guard let number = value as? NSNumber,
+        CFGetTypeID(number) != CFBooleanGetTypeID(),
+        let integer = Int(exactly: number),
+        integer >= 0
+      else { return nil }
+      // JSON numbers that arrive as floating point can round a value just
+      // above Int.max down to Int.max during NSNumber bridging. Keep the
+      // accounting unknown for that overflow edge rather than recording a
+      // fabricated token count.
+      let numberType = String(cString: number.objCType)
+      if numberType == "d" || numberType == "f", number.doubleValue >= Double(Int.max) {
+        return nil
+      }
+      return integer
+    }
+    let inputTokens = nonNegativeInt(
+      accountingUsage["prompt_tokens"] ?? accountingUsage["input_tokens"]
+        ?? usage["prompt_tokens"] ?? usage["input_tokens"])
+    let outputTokens = nonNegativeInt(
+      accountingUsage["completion_tokens"] ?? accountingUsage["output_tokens"]
+        ?? usage["completion_tokens"] ?? usage["output_tokens"])
+    let totalTokens = nonNegativeInt(accountingUsage["total_tokens"] ?? usage["total_tokens"])
+    let details =
+      (accountingUsage["prompt_tokens_details"] as? [String: Any])
+      ?? (accountingUsage["input_tokens_details"] as? [String: Any])
+      ?? (usage["prompt_tokens_details"] as? [String: Any])
+      ?? (usage["input_tokens_details"] as? [String: Any])
+    // Keep the released envelope's gateway accounting in the legacy fields.
+    // Provider usage is exposed separately below so a nested response cannot
+    // silently replace the accounting already used by existing telemetry.
+    let cachedTokens = nonNegativeInt(usage["cached_tokens"]) ?? 0
+    let cacheWriteTokens = nonNegativeInt(usage["cache_write_tokens"]) ?? 0
     return ProactiveLaneResult(
       operation: operation,
       lane: lane,
       providerModel: providerModel,
       usage: ProactiveLaneUsage(
-        cachedTokens: usage["cached_tokens"] as? Int ?? 0,
-        cacheWriteTokens: usage["cache_write_tokens"] as? Int ?? 0),
+        cachedTokens: cachedTokens,
+        cacheWriteTokens: cacheWriteTokens,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens,
+        totalTokens: totalTokens,
+        reportedCachedTokens: details?["cached_tokens"] != nil
+          ? nonNegativeInt(details?["cached_tokens"])
+          : nonNegativeInt(accountingUsage["cached_tokens"] ?? usage["cached_tokens"]),
+        reportedCacheWriteTokens: details?["cache_write_tokens"] != nil
+          ? nonNegativeInt(details?["cache_write_tokens"])
+          : nonNegativeInt(accountingUsage["cache_write_tokens"] ?? usage["cache_write_tokens"])),
       cacheWrite: root["cache_write"] as? Bool ?? false,
       fallbackClass: root["fallback_class"] as? String ?? "unknown",
-      content: content)
+      content: content,
+      requestID: requestID,
+      provider: root["provider"] as? String,
+      providerResponseID: response["id"] as? String)
   }
 }
 
@@ -494,17 +766,23 @@ enum ContextProactivityTelemetry {
   }
 
   static func recordJITAdmission(outcome: String, reason: String) async {
-    let allowedOutcomes = Set(["legacy_fallback", "suppressed", "contract_missing"])
+    let allowedOutcomes = Set([
+      "legacy_fallback", "suppressed", "contract_missing",
+      "delivered", "delivery_failed", "delivery_suppressed",
+    ])
     // Exact reason set produced by JITProactivityPolicy.decide,
-    // JITProactivityRuntime.admission/admitAmbient, and
-    // JITProactivityCoordinator.handle. Anything else stays "other".
+    // JITProactivityRuntime.admission/admitAmbient, JITProactivityCoordinator.handle,
+    // and JITProactivityDelivery.deliver. Anything else stays "other". The set is
+    // content-free by construction: reasons name a code path, never user data.
     let allowedReasons = Set([
       "kill_switch", "rollout_unknown", "rollout_disabled",
       "no_eligible_candidate",
       "planned_runtime_rejected", "planned_match_ambiguous", "planned_action_invalid",
       "planned_duplicate_or_budget", "authoritative_snapshot_unavailable", "jit_execution_missing",
+      "empty_watchlist",
       "ambient_local_gate", "ambient_nano_receipt_unavailable", "ambient_nano_budget",
       "ambient_nano_rejected", "ambient_duplicate_or_budget", "ambient_receipt_unavailable",
+      "ambient_paced", "ambient_reserved_for_intent", "ambient_server_denied",
     ])
     await MainActor.run {
       let boundedOutcome = allowedOutcomes.contains(outcome) ? outcome : "other"
@@ -515,6 +793,33 @@ enum ContextProactivityTelemetry {
         properties: [
           "outcome": boundedOutcome,
           "reason": boundedReason,
+        ])
+    }
+  }
+
+  /// One content-free event per admitted full turn's terminal outcome. Unlike
+  /// admission this is never deduped: delivered-per-kind-per-day is the
+  /// measurement that judges the JIT lane, so every delivery must count.
+  static func recordJITDelivery(outcome: String, reason: String, lane: String, decision: String) async {
+    let allowedOutcomes = Set(["delivered", "delivery_failed", "delivery_suppressed"])
+    let allowedReasons = Set([
+      "planned", "ambient",
+      "owner_changed", "stale_fence", "surface_unavailable", "delivery_gate",
+      "attempt_rejected", "jit_trigger_authority_changed", "jit_paid_boundary_invalid",
+      "jit_notification_budget", "jit_full_turn_budget", "jit_suppressed",
+      "candidate_graduation", "notification_dropped", "jit_execution",
+      "http_error", "invalid_structured_output", "invalid_response", "decode",
+      "network", "quota_cooldown", "plan_gated",
+    ])
+    let allowedDecisions = Set(["insight", "task_candidate", "focus_nudge", "silence"])
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "jit_proactivity_delivery",
+        properties: [
+          "outcome": allowedOutcomes.contains(outcome) ? outcome : "other",
+          "reason": allowedReasons.contains(reason) ? reason : "other",
+          "lane": lane == "planned" || lane == "ambient" ? lane : "other",
+          "decision": allowedDecisions.contains(decision) ? decision : "other",
         ])
     }
   }

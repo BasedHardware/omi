@@ -10,20 +10,17 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(
       Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
       "every destination is reachable from Activity's chip row")
-    XCTAssertEqual(
-      MemoryHubDestination.destination(
-        for: .conversations, requestedRawValue: MemoryHubDestination.activity.rawValue),
-      .activity)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .conversations), .conversations)
   }
 
   func testConversationsSidebarSelectionUpdatesRailAndDestination() {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
 
-    MemoryHubDestination.applySidebarSelection(
+    MemoryHubDestination.apply(
       .conversations,
-      selectedIndex: &selectedIndex,
-      memoryDestinationRawValue: &memoryDestinationRawValue
+      to: &selectedIndex,
+      hub: &memoryDestinationRawValue
     )
 
     XCTAssertEqual(selectedIndex, SidebarNavItem.conversations.rawValue)
@@ -34,10 +31,10 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
 
-    MemoryHubDestination.applySidebarSelection(
+    MemoryHubDestination.apply(
       .tasks,
-      selectedIndex: &selectedIndex,
-      memoryDestinationRawValue: &memoryDestinationRawValue
+      to: &selectedIndex,
+      hub: &memoryDestinationRawValue
     )
 
     XCTAssertEqual(selectedIndex, SidebarNavItem.tasks.rawValue)
@@ -45,7 +42,7 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
   }
 
   /// The menu/keyboard route (`⌘2`, posted as `.navigateToSidebarItem`) resolves the hub view
-  /// through this, not through `applySidebarSelection` — it has no `inout` pair to hand over.
+  /// through this, not through `apply` — it has no `inout` pair to hand over.
   ///
   /// Regression: the handler used to set only the rail index, so a menu item **labelled
   /// "Conversations"** opened the hub on whichever view was last persisted. The hub's stored default
@@ -60,27 +57,12 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
   /// disturb the hub's remembered view on its way past.
   func testAMenuCallerNamingAPageOutsideTheHubResolvesNoHubView() {
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
-    XCTAssertNil(MemoryHubDestination.destination(for: .rewind))
     XCTAssertNil(MemoryHubDestination.destination(for: .settings))
   }
 
-  func testLegacyHomeDesignKeepsConversationsAsAStandalonePage() {
-    XCTAssertEqual(
-      MemoryHubDestination.presentation(
-        for: .conversations,
-        useLegacyHomeDesign: true
-      ),
-      .standaloneConversations
-    )
-  }
-
-  func testModernHomeDesignUsesTheMemoryHubForTheSharedRailIndex() {
-    XCTAssertEqual(
-      MemoryHubDestination.presentation(
-        for: .conversations,
-        useLegacyHomeDesign: false
-      ),
-      .memoryHub
-    )
+  func testEveryLegacyMemoryAliasResolvesTheCanonicalHubDestination() {
+    XCTAssertEqual(MemoryHubDestination.destination(for: .conversations), .conversations)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .memories), .memories)
+    XCTAssertEqual(MemoryHubDestination.destination(for: .rewind), .rewind)
   }
 }

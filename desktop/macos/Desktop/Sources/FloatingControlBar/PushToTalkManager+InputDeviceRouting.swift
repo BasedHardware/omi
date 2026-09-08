@@ -50,7 +50,8 @@ enum PTTInputDeviceRouting {
     var defaultInputDeviceID: AudioDeviceID? = nil
     var defaultInputIsBluetooth: Bool = false
     /// True when this snapshot was probed while a capture was live, i.e. the
-    /// contention fields above are meaningful rather than skipped-for-cost.
+    /// built-in fallback needed by the contention branches was resolved rather
+    /// than skipped for cost.
     var contentionResolved: Bool = false
 
     var overrideDeviceID: AudioDeviceID? {
@@ -59,6 +60,36 @@ enum PTTInputDeviceRouting {
         outputIsBluetooth: outputIsBluetooth,
         builtInDeviceID: builtInDeviceID)
     }
+
+    /// The device an *unattended* warm capture may open — `.device(nil)` meaning
+    /// the system default — or `.refused` when this snapshot cannot prove the
+    /// route is safe to hold open with nothing the user did behind it.
+    ///
+    /// A press is consent; a warm-up is not, so this is strictly stricter than
+    /// `overrideDeviceID`:
+    ///
+    /// - **An explicit microphone choice is refused.** The picker exists for
+    ///   external and Bluetooth inputs (Ray-Ban Meta glasses), and opening the
+    ///   device somebody deliberately selected, unattended, for the whole
+    ///   keep-alive window is not a latency optimization anyone asked for.
+    /// - **A Bluetooth input is refused.** Opening one flips the headset out of
+    ///   A2DP into HFP, so an unattended warm capture would collapse the user's
+    ///   music or call audio to phone quality until the keep-alive expires. This
+    ///   is the same flap `applyMicContentionPolicy` routes around at press time.
+    /// - **An unresolved default input is refused**, because "we could not read
+    ///   the transport" and "the transport is fine" must not look the same here.
+    var unattendedWarmCaptureRoute: UnattendedWarmCaptureRoute {
+      guard selectedDeviceID == nil, selectedUID.isEmpty else { return .refused }
+      if let builtIn = builtInDeviceID, outputIsBluetooth { return .device(builtIn) }
+      guard defaultInputDeviceID != nil, !defaultInputIsBluetooth else { return .refused }
+      return .device(nil)
+    }
+  }
+
+  enum UnattendedWarmCaptureRoute: Equatable {
+    case refused
+    /// `nil` is the system default input, matching `overrideDeviceID`.
+    case device(AudioDeviceID?)
   }
 
   private static let store = SnapshotStore()
@@ -99,7 +130,11 @@ enum PTTInputDeviceRouting {
       // input — are gated on that registry state. With no live capture the
       // probe pattern is identical to the pre-contention behavior.
       let contentionPossible = AudioCaptureService.hasActiveCapture()
-      let defaultInputDeviceID = contentionPossible ? probe.defaultInputDeviceID() : nil
+      // The default input and its transport are two cheap property reads and are
+      // resolved unconditionally: the unattended warm-capture route needs them
+      // even with nothing else capturing, and "not probed" must never be
+      // mistaken for "not Bluetooth". Only the built-in walk stays gated.
+      let defaultInputDeviceID = probe.defaultInputDeviceID()
       store.finishRefresh(
         Snapshot(
           selectedUID: selectedUID,
@@ -182,14 +217,20 @@ extension PushToTalkManager {
   /// profile flap while any capture runs — both race the two captures'
   /// stream-format reconfiguration. The active-capture registry is lock-guarded
   /// process state, not a HAL read, so consulting it here is main-actor safe.
-  /// This manager's own parked warm capture is excluded: adopting it is reuse,
-  /// not contention. An explicit user mic choice is always respected.
+  /// This manager's own warm capture is excluded: adopting it is reuse, not
+  /// contention. That includes one whose CoreAudio start is still in flight —
+  /// it has already registered in the active-capture registry, so without the
+  /// exclusion a turn starting inside the warm-up window would route itself away
+  /// from the default input because of our own prewarm. An explicit user mic
+  /// choice is always respected.
   private func applyMicContentionPolicy(
     to snapshot: PTTInputDeviceRouting.Snapshot?
   ) -> AudioDeviceID? {
     guard let snapshot else { return nil }
     let overrideID = snapshot.overrideDeviceID
-    let parkedCapture = parkedMicCapture?.service
+    // At most one of these exists: admission refuses a warm-up while a capture is
+    // parked, and a warm-up parks only after its start resolves.
+    let parkedCapture = parkedMicCapture?.service ?? warmCaptureInFlight
     if snapshot.selectedDeviceID == nil, overrideID == nil,
       !snapshot.contentionResolved,
       AudioCaptureService.hasActiveCapture(excluding: parkedCapture)
@@ -235,6 +276,23 @@ extension PushToTalkManager {
       }
     }
     return overrideID
+  }
+
+  /// The device an unattended warm capture may open, or `.refused`. Non-blocking
+  /// like `preferredPTTInputOverrideDeviceID`, and it kicks the next HAL read the
+  /// same way — so a warm-up refused because routing has not resolved yet leaves
+  /// a snapshot behind for the trigger that follows, rather than refusing forever.
+  ///
+  /// Deliberately not `preferredPTTInputOverrideDeviceID`: that answers "where
+  /// should this press capture from", and a press is consent. This answers the
+  /// stricter "may we hold a microphone open with nothing the user did behind
+  /// it", and a missing snapshot is a refusal rather than the system default.
+  func unattendedWarmCaptureRoute() -> PTTInputDeviceRouting.UnattendedWarmCaptureRoute {
+    let selectedUID = ShortcutSettings.unifiedMicrophoneUID
+    let snapshot = PTTInputDeviceRouting.currentSnapshot(selectedUID: selectedUID)
+    PTTInputDeviceRouting.refresh(selectedUID: selectedUID)
+    guard let snapshot else { return .refused }
+    return snapshot.unattendedWarmCaptureRoute
   }
 
   /// Warms the routing snapshot at the start of a turn, before the turn's own setup

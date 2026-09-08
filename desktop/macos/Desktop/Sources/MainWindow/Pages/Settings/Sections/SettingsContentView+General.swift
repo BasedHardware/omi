@@ -20,7 +20,7 @@ import WebKit
 // tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
-    VStack(spacing: OmiSpacing.xl) {
+    VStack(spacing: OmiSpacing.sm) {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
@@ -69,7 +69,7 @@ extension SettingsContentView {
 
       // One recording policy; no independent enable switch or system-audio mode.
       settingsCard(settingId: "general.audiorecording") {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "mic.fill")
 
@@ -93,7 +93,7 @@ extension SettingsContentView {
 
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.xs) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "bell.fill")
 
@@ -177,7 +177,7 @@ extension SettingsContentView {
 
       // Font Size
       settingsCard(settingId: "general.fontsize") {
-        VStack(spacing: OmiSpacing.md) {
+        VStack(spacing: OmiSpacing.sm) {
           HStack(spacing: OmiSpacing.lg) {
             SettingsIconTile(symbol: "textformat.size")
 
@@ -255,6 +255,13 @@ extension SettingsContentView {
         AnalyticsManager.shared.settingToggled(
           setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
         AssistantSettings.shared.audioRecordingMode = mode
+        // The mode-change observer restores capture automatically, and automatic
+        // starts never raise the TCC sheet. Enabling listening here IS an explicit
+        // user action, so it owns the one-shot permission request itself (same
+        // contract as the Listen control's `cycleListening`).
+        if mode != .off, !appState.hasMicrophonePermission {
+          appState.requestMicrophonePermission()
+        }
       }
     )
   }
@@ -286,8 +293,8 @@ private struct AudioRecordingModeSwitcher: View {
   var body: some View {
     HStack(spacing: 2) {
       segment(.off, label: "Off")
-      segment(.always, label: "Always On")
-      segment(.onlyMeetings, label: "Only Meetings")
+      segment(.always, label: "Always")
+      segment(.onlyMeetings, label: "Meetings")
     }
     .padding(3)
     .background(
@@ -298,7 +305,7 @@ private struct AudioRecordingModeSwitcher: View {
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
         .strokeBorder(Ink.hairline, lineWidth: 1)
     )
-    .frame(width: 310)
+    .frame(width: 230)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Audio Recording")
   }

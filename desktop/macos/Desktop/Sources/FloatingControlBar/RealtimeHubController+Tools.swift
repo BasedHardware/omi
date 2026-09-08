@@ -7,44 +7,144 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - Tools
 
-  /// ask_higher_model — reuse the EXISTING prompt-cached /v2/chat/completions
-  /// (no new backend route). Returns the assistant text for the model to speak.
+  /// think_deeper — single-shot Luna escalation with explicit reasoning effort.
+  /// Forwards the kernel context snapshot, the untrusted tool context, and the
+  /// exact screenshots the PTT agent viewed this turn, then returns the final
+  /// text for the realtime provider to speak faithfully.
   func escalateToHigherModel(
     _ query: String,
-    kernelSemanticGuidance: String,
-    kernelContext: String,
-    stableCacheIdentity: String,
-    dynamicContextIdentity: String,
-    contextPlanID: String,
     toolContext: String,
+    thinkingLevel: RealtimeHubTools.EscalationThinkingLevel,
+    invocationTurnID: VoiceTurnID?,
+    invocationID _: String,
     ownerID: String
   ) async -> AuthorizedRealtimeToolExecutionResult {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
+    // The same kernel snapshot material the realtime session was instructed
+    // with, scoped to the current owner.
+    let context = voiceSessionContext(for: currentOwnerScope)
+    // Screen pixels are forwarded only for an explicitly visual request. This
+    // preserves the exact same-turn evidence while keeping unrelated research
+    // escalations from inheriting an ambient settings page.
+    let needsTurnImage = RealtimeHubTools.escalationNeedsTurnImage(query: query)
+    let screenJPEGs =
+      needsTurnImage
+      ? RealtimeHubTools.escalationScreenJPEGs(
+        expectedTurnID: invocationTurnID,
+        evidence: screenEvidence,
+        authorizedScreenshots: authorizedRealtimeScreenshotImages)
+      : []
+    var screenContext = needsTurnImage ? screenContextByContinuityKey[turnIdempotencyKey] : nil
+    if needsTurnImage, screenJPEGs.isEmpty, screenContext == nil,
+      let ocr = await PushToTalkManager.shared.visibleScreenText(timeout: 1.5)
+    {
+      screenContext = "OCR text of the screen at the moment they pressed the key:\n\(ocr)"
+    }
+    let publicWebEvidence = invocationTurnID.flatMap { turnPublicWebEvidence?.evidence(for: $0) }
     let body = RealtimeHubTools.escalationBody(
       query: query,
-      kernelSemanticGuidance: kernelSemanticGuidance,
-      kernelContext: kernelContext,
-      stableCacheIdentity: stableCacheIdentity,
-      dynamicContextIdentity: dynamicContextIdentity,
-      contextPlanID: contextPlanID,
-      toolContext: toolContext)
+      kernelSemanticGuidance: context.semanticGuidance,
+      kernelContext: context.rendered,
+      stableCacheIdentity: context.stableCacheIdentity,
+      dynamicContextIdentity: context.dynamicContextIdentity,
+      contextPlanID: context.planID,
+      toolContext: toolContext,
+      screenContext: screenContext,
+      publicWebEvidence: publicWebEvidence,
+      thinkingLevel: thinkingLevel,
+      screenJPEGs: screenJPEGs)
     let t0 = Date()
     do {
-      let answer = try await APIClient.shared.askHigherModel(
+      let answer = try await APIClient.shared.thinkDeeperForVoice(
         body: body,
+        thinkingLevel: thinkingLevel,
         expectedOwnerID: ownerID)
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
       log(
-        "RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) OK in \(ms)ms (\(answer.count) chars)"
-      )
+        "RealtimeHub: think_deeper ← \(RealtimeHubTools.escalationModel) "
+          + "effort=\(thinkingLevel.lunaReasoningEffort) images=\(screenJPEGs.count) "
+          + "OK in \(ms)ms (\(answer.count) chars)")
       return .succeeded(answer)
     } catch AuthError.userChangedDuringRequest {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     } catch {
-      log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      log("RealtimeHub: think_deeper failed — \(error.localizedDescription)")
       return .succeeded("I ran into an error reaching the model.")
+    }
+  }
+
+  /// web_search — execute a fresh public-only lookup and return its grounded
+  /// answer for the realtime provider to speak faithfully.
+  func searchPublicWeb(
+    _ query: String,
+    scope: RealtimePublicWebSearchScope,
+    toolContext _: String,
+    invocationID: String,
+    ownerID: String,
+    turnID: VoiceTurnID
+  ) async -> AuthorizedRealtimeToolExecutionResult {
+    guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+      return .failed(Self.authorizedRealtimeOwnerChangedError())
+    }
+    let t0 = Date()
+    do {
+      let prompts = RealtimeHubTools.publicWebSearchPrompts(query: query, scope: scope)
+      let answer: String
+      if prompts.count == 1 {
+        answer = try await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[0], expectedOwnerID: ownerID)
+      } else {
+        async let primary = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[0], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        async let corroborating = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[1], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        async let exactMatch = try? await APIClient.shared.searchPublicWebForVoice(
+          query: prompts[2], expectedOwnerID: ownerID, includeSourceEvidence: true)
+        let (primaryAnswer, corroboratingAnswer, exactMatchAnswer) = await (
+          primary, corroborating, exactMatch
+        )
+        guard
+          let combined = RealtimeHubTools.combinedHistoricalWebEvidence(
+            primary: primaryAnswer,
+            corroborating: corroboratingAnswer,
+            exactMatch: exactMatchAnswer)
+        else {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub", from: "primary_search", to: "corroborating_search",
+            reason: "other", outcome: .exhausted)
+          throw RealtimePublicWebSearchError.noEvidence
+        }
+        if primaryAnswer == nil || corroboratingAnswer == nil || exactMatchAnswer == nil {
+          DesktopDiagnosticsManager.shared.recordFallback(
+            area: "realtime_hub", from: "historical_dual_search", to: "single_search_evidence",
+            reason: "other", outcome: .degraded)
+        }
+        answer = combined
+      }
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      guard VoiceTurnCoordinator.shared.activeTurnID == turnID else {
+        return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
+      }
+      turnPublicWebEvidence = RealtimePublicWebEvidenceReceipt(turnID: turnID, evidence: answer)
+      let ms = Int(Date().timeIntervalSince(t0) * 1000)
+      log("RealtimeHub: web_search public lane OK in \(ms)ms (\(answer.count) chars)")
+      return .succeeded(answer)
+    } catch {
+      guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
+        return .failed(Self.authorizedRealtimeOwnerChangedError())
+      }
+      log("RealtimeHub: web_search failed — \(error.localizedDescription)")
+      return .succeeded("The web lookup failed. Please try again.")
     }
   }
 
@@ -105,4 +205,8 @@ extension RealtimeHubController {
     guard let coordinate, coordinate.isFinite else { return nil }
     return coordinate
   }
+}
+
+private enum RealtimePublicWebSearchError: Error {
+  case noEvidence
 }

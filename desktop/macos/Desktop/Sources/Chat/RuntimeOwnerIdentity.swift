@@ -10,11 +10,23 @@ private struct RuntimeOwnerDefaultsReference: @unchecked Sendable {
 struct RuntimeOwnerAuthorizationSnapshot: Equatable, Sendable {
   let ownerID: String
   fileprivate let generation: UInt64
+  fileprivate let authorityNonce: UUID
+
+  /// Session generation captured with the owner. A fresh snapshot after a
+  /// same-owner sign-out/sign-in must not authorize work carrying the prior
+  /// session's provenance.
+  var authorizationGeneration: UInt64 { generation }
+
+  /// Per-process authority identity. Generation counters restart at zero in a
+  /// new process, so durable native notification payloads must carry this
+  /// nonce before they can be compared with a fresh snapshot.
+  var authorizationNonce: UUID { authorityNonce }
 }
 
 final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
   static let shared = RuntimeOwnerAuthorizationAuthority()
 
+  private let authorityNonce = UUID()
   private let lock = NSLock()
   private var generation: UInt64 = 0
   private var ownerID: String?
@@ -54,7 +66,8 @@ final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
       }
       guard let normalized, !revoked else { return nil }
       if expectedOwnerID != nil, normalizedExpectedOwnerID != normalized { return nil }
-      return RuntimeOwnerAuthorizationSnapshot(ownerID: normalized, generation: generation)
+      return RuntimeOwnerAuthorizationSnapshot(
+        ownerID: normalized, generation: generation, authorityNonce: authorityNonce)
     }
   }
 
@@ -69,7 +82,10 @@ final class RuntimeOwnerAuthorizationAuthority: @unchecked Sendable {
         revokeUnexpectedOwnerMismatch()
         return false
       }
-      return !revoked && normalized == snapshot.ownerID && generation == snapshot.generation
+      return !revoked
+        && normalized == snapshot.ownerID
+        && generation == snapshot.generation
+        && authorityNonce == snapshot.authorityNonce
     }
   }
 
@@ -185,6 +201,18 @@ private final class EffectiveOwnerAuthorizationRevocation: @unchecked Sendable {
 extension Notification.Name {
   /// Effective owner changed (sign-in, sign-out, account switch, or an
   /// automation override). Carries no owner id or other user content.
+  ///
+  /// **Post it on the main thread.** `performEffectiveOwnerTransition` does
+  /// (`await MainActor.run`), and observers depend on both halves of that:
+  /// `NotificationCenter` delivers synchronously on the posting thread, which is
+  /// what lets a surface fence itself *during* the transition rather than a
+  /// runloop later — see `IntegrationNudgeCoordinator`. Most observers are
+  /// `@MainActor` types whose sink closure carries an isolation check on entry,
+  /// so a post from a background thread fails `dispatch_assert_queue` and traps,
+  /// taking the whole process rather than one observer. Nothing inside the
+  /// closure can guard against that: the check runs before its first statement,
+  /// and hopping upstream would trade the crash for losing the synchronous
+  /// fence. The poster is the only place that can be both correct and prompt.
   static let runtimeOwnerDidChange = Notification.Name("com.omi.desktop.runtimeOwnerDidChange")
 }
 
@@ -197,6 +225,42 @@ extension Notification.Name {
 enum RuntimeOwnerIdentity {
   static var effectiveOwnerTransitionInProgress: Bool {
     EffectiveOwnerAuthorizationRevocation.shared.isActive
+  }
+
+  /// Test-only seam over the process-global revocation behind
+  /// `effectiveOwnerTransitionInProgress`.
+  ///
+  /// Deliberately scoped rather than exposing `begin()`/`end()`: an active revocation makes
+  /// `currentOwnerId` return nil for *every* caller in the process, and the revocation lives
+  /// on a `private` singleton no suite can clear. A test that leaked it would strand every
+  /// later suite in the same binary with no way to recover — the #12039 failure shape. The
+  /// `defer` makes that leak unrepresentable.
+  /// `@MainActor` rather than isolation-generic: every caller is a `@MainActor` XCTestCase,
+  /// and `#isolation` appears nowhere else in this codebase — not a construct to introduce
+  /// for a test seam.
+  @MainActor
+  static func withEffectiveOwnerTransitionForTests<T>(
+    _ body: @MainActor () async throws -> T
+  ) async rethrows -> T {
+    // Restore the entry state rather than ending unconditionally. The revocation is a
+    // shared boolean, not a counter, so a bare `end()` in `defer` would clear a
+    // revocation this scope never started: an outer scope's, or — worse — a leak
+    // inherited from an earlier suite, which is the exact condition `setUp` exists to
+    // report. Swallowing that leak here would hide the bug this seam was built to find.
+    let wasRevokedOnEntry = EffectiveOwnerAuthorizationRevocation.shared.isActive
+    EffectiveOwnerAuthorizationRevocation.shared.begin()
+    defer {
+      if !wasRevokedOnEntry {
+        EffectiveOwnerAuthorizationRevocation.shared.end()
+      }
+    }
+    return try await body()
+  }
+
+  /// Clears a revocation that leaked from elsewhere in the test process, so one suite's
+  /// abandoned owner transition cannot silently fail every suite that runs after it.
+  static func resetEffectiveOwnerTransitionForTests() {
+    EffectiveOwnerAuthorizationRevocation.shared.end()
   }
 
   /// Returns the cleanup-only capability for an already-running physical or

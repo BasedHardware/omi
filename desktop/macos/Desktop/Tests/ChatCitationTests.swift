@@ -128,6 +128,31 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertTrue(ledger.responseInstruction?.contains("Never write [memory]") == true)
   }
 
+  func testExplicitComposerSourceKeepsACitationSlotAheadOfBoundedAmbientContext() {
+    let explicit = ChatPromptCitationSource(
+      kind: .conversation,
+      sourceID: "selected-conversation",
+      title: "Selected conversation",
+      preview: "The source the user explicitly attached",
+      createdAt: nil
+    )
+    let ambient = (0..<ChatPromptCitationLedger.maximumReferences).map { index in
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: "memory-\(index)",
+        title: "Memory \(index)",
+        preview: "Ambient context",
+        createdAt: nil
+      )
+    }
+
+    let ledger = ChatPromptCitationLedger(sources: [explicit] + ambient)
+
+    XCTAssertEqual(ledger.references.count, ChatPromptCitationLedger.maximumReferences)
+    XCTAssertEqual(ledger.marker(kind: .conversation, sourceID: explicit.sourceID), "[5001]")
+    XCTAssertNil(ledger.marker(kind: .memory, sourceID: "memory-127"))
+  }
+
   func testPromptAndToolReferencesCanCoexistInOneAnswer() {
     let promptReference = ChatCitationReference(
       ordinal: 5001,
@@ -277,6 +302,43 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertEqual(
       ChatCitationProvenanceRegistry.references(fromAnnotatedToolOutput: envelope),
       [original])
+  }
+
+  func testDesktopChatTypedToolResultRoundTripsCitationLedger() throws {
+    let typed = ChatToolExecutor.typedReadToolResult(
+      toolName: "search_conversations",
+      sections: [
+        [
+          "name": "conversations",
+          "total": 1,
+          "items": [
+            [
+              "title": "Planning call",
+              "summary": "The team agreed to ship",
+              "sourceId": "conversation-7",
+              "citationMarker": "[7]",
+              "momentTimestampMs": 1_786_648_000_000,
+              "createdAt": "2026-08-13T15:00:00-04:00",
+              "appName": "Omi",
+            ]
+          ],
+        ]
+      ],
+      totals: ["conversations": 1])
+
+    XCTAssertEqual(
+      ChatCitationProvenanceRegistry.references(fromAnnotatedToolOutput: typed),
+      [
+        ChatCitationReference(
+          ordinal: 7,
+          kind: .conversation,
+          sourceID: "conversation-7",
+          title: "Planning call",
+          preview: "The team agreed to ship",
+          momentTimestampMs: 1_786_648_000_000,
+          createdAt: "2026-08-13T15:00:00-04:00",
+          appName: "Omi")
+      ])
   }
 
   func testOpenabilityIsStrictlyTyped() {
@@ -622,6 +684,123 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertTrue(message.text.contains("Sources: [12]"))
   }
 
+  func testTerminalAnswerReplacesShorterPostToolStreamBeforePersistence() {
+    let partial = "The most recent discussion was about launching the Omi"
+    let complete =
+      "The most recent discussion was about launching the Omi Desktop App Beta, including backend fixes and QA work."
+    var message = ChatMessage(
+      id: "ai-terminal",
+      text: "Looking that up.\n\n" + partial,
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "commentary", text: "Looking that up."),
+        .toolCall(id: "tool", name: "search_conversations", status: .completed),
+        .text(id: "answer", text: partial),
+      ])
+
+    message.applyAuthoritativeTerminalAnswer(complete)
+
+    XCTAssertEqual(message.text, complete)
+    XCTAssertEqual(message.visibleAnswerText, complete)
+    XCTAssertEqual(message.contentBlocks.count, 3)
+    guard case .text(let id, let text) = message.contentBlocks[2] else {
+      return XCTFail("The post-tool answer must remain a text block")
+    }
+    XCTAssertEqual(id, "answer")
+    XCTAssertEqual(text, complete)
+  }
+
+  func testTerminalAnswerReplacesShorterStreamWithoutTools() {
+    let partial = "I should have either inspected the saved result or clearly said the"
+    let complete = partial + " search was incomplete."
+    var message = ChatMessage(
+      id: "ai-terminal",
+      text: partial,
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "answer-1", text: "I should have either inspected the saved result "),
+        .thinking(id: "thinking", text: "Conclude the explanation"),
+        .text(id: "answer-2", text: "or clearly said the"),
+      ])
+
+    message.applyAuthoritativeTerminalAnswer(complete)
+
+    XCTAssertEqual(message.text, complete)
+    XCTAssertEqual(message.visibleAnswerText, complete)
+    XCTAssertEqual(
+      message.contentBlocks.compactMap { block -> String? in
+        guard case .text(_, let text) = block else { return nil }
+        return text
+      },
+      [complete])
+    XCTAssertTrue(
+      message.contentBlocks.contains { block in
+        if case .thinking = block { return true }
+        return false
+      })
+  }
+
+  @MainActor
+  func testFinalizationPersistsCompleteTerminalAnswerWhenStreamEndsOnPrefix() async {
+    let partial = "The last recorded conversation was about launching the Omi"
+    let complete = partial + " Desktop App Beta, including backend fixes and QA work."
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(
+        id: "ai-terminal",
+        text: partial,
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [.text(id: "answer", text: partial)])
+    ]
+
+    let accepted = await provider.finalizeAssistantMessageCitations(
+      messageId: "ai-terminal",
+      queryText: complete,
+      selectedReferences: [],
+      requestedSources: false,
+      terminalCitationReferences: [])
+
+    XCTAssertEqual(accepted, complete)
+    XCTAssertEqual(provider.messages.first?.text, complete)
+    XCTAssertEqual(provider.messages.first?.visibleAnswerText, complete)
+    XCTAssertFalse(provider.messages.first?.isStreaming ?? true)
+  }
+
+  @MainActor
+  func testFinalizationAppliesSentenceSpacingToJoinedAgentHandoffTerminalAnswer() async {
+    // A think_deeper-style handoff: the provider's authoritative answer keeps
+    // the pre-tool sentence and the continuation joined with no space, which
+    // is exactly what the streamed projection was normalizing on every flush.
+    // The terminal overwrite must honor the same contract or the run-on join
+    // reappears the moment the turn settles — and is persisted that way.
+    let joined = "Let me think it through.Capture the context at the card."
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(
+        id: "ai-terminal",
+        text: joined,
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [.text(id: "answer", text: joined)])
+    ]
+
+    let accepted = await provider.finalizeAssistantMessageCitations(
+      messageId: "ai-terminal",
+      queryText: joined,
+      selectedReferences: [],
+      requestedSources: false,
+      terminalCitationReferences: [])
+
+    XCTAssertEqual(accepted, "Let me think it through. Capture the context at the card.")
+    XCTAssertEqual(
+      provider.messages.first?.text,
+      "Let me think it through. Capture the context at the card.")
+    XCTAssertFalse(provider.messages.first?.isStreaming ?? true)
+  }
+
   func testRequestedSourcesRailUsesTurnLedgerNotLookupCorpus() {
     var message = ChatMessage(
       id: "ai-1",
@@ -700,5 +879,142 @@ final class ChatCitationTests: XCTestCase {
 
     XCTAssertEqual(peeked.references.map(\.sourceID), ["conversation-20"])
     XCTAssertEqual(consumed.references.map(\.sourceID), ["conversation-20"])
+  }
+}
+
+/// A rendered component is already the citation of the thing it draws.
+final class ChatCitationRenderedEntityTests: XCTestCase {
+  private let task = ChatCitationReference(
+    ordinal: 1, kind: .task, sourceID: "task-1", title: "Do YC application")
+  private let memory = ChatCitationReference(
+    ordinal: 2, kind: .memory, sourceID: "memory-9", title: "Prefers mornings")
+
+  func testTheSourceRailDropsEntitiesTheTurnAlreadyDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.",
+      "a task card opens the same task the marker would, and says what it is")
+  }
+
+  func testTheSourceRailStillCarriesWhatNothingDraws() {
+    XCTAssertEqual(
+      ChatCitationMarkup.appendingSelectedSources(
+        to: "Here are your tasks.",
+        selectedReferences: [task, memory],
+        renderedEntityIDs: ["task-1"]),
+      "Here are your tasks.\n\nSources: [2]",
+      "the memory has no component, so it keeps its marker")
+  }
+
+  func testRenderedEntitiesAreReadFromEveryComponentKind() {
+    let identifiers = ChatCitationMarkup.renderedEntityIDs(in: [
+      .taskCard(id: "b1", taskId: "task-1"),
+      .goalLink(id: "b2", goalId: "goal-1", summary: "Ship"),
+      .captureLink(id: "b3", conversationId: "conv-1", momentTimestampMs: nil, summary: "Call"),
+      .memoryLink(id: "b4", memoryId: "memory-9", summary: "Mornings"),
+      .text(id: "b5", text: "prose"),
+    ])
+    XCTAssertEqual(identifiers, ["task-1", "goal-1", "conv-1", "memory-9"])
+  }
+}
+
+/// A follow-up that cites a number it never retrieved is pointing at the list
+/// the reader was shown a turn ago. "Pick one conversation from that day",
+/// answered without a tool call, wrote `[1]` for the first conversation of the
+/// previous answer — and drew it as plain text beside a title nobody could open.
+final class ChatCitationInheritanceTests: XCTestCase {
+  private func reference(_ ordinal: Int, id: String, title: String) -> ChatCitationReference {
+    ChatCitationReference(ordinal: ordinal, kind: .conversation, sourceID: id, title: title)
+  }
+
+  private func answer(_ id: String, text: String, references: [ChatCitationReference] = [])
+    -> ChatMessage
+  {
+    ChatMessage(
+      id: id,
+      text: text,
+      sender: .ai,
+      contentBlocks: references.map { .citation(id: "citation-\($0.ordinal)", reference: $0) })
+  }
+
+  func testAFollowUpWithoutItsOwnSourcesBorrowsTheOrdinalItCites() {
+    let chess = reference(1, id: "conv-chess", title: "Chess, Minecraft Testing")
+    let earlier = answer(
+      "list", text: "You spoke with Paul [5] and about chess [1].",
+      references: [chess, reference(5, id: "conv-paul", title: "Paul")])
+    let followUp = answer("pick", text: "The most interesting one was **Chess.** [1]")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: followUp, resolved: [], earlierTurns: [earlier])
+
+    XCTAssertEqual(inherited, [chess])
+  }
+
+  func testATurnsOwnProvenanceOutranksAnEarlierTurnsSameNumber() {
+    let stale = reference(1, id: "conv-stale", title: "Last week")
+    let fresh = reference(1, id: "conv-fresh", title: "Today")
+    let earlier = answer("list", text: "Earlier [1].", references: [stale, reference(2, id: "conv-two", title: "Two")])
+    let current = answer("now", text: "Fresh claim [1], and an older one [2].")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: current, resolved: [fresh], earlierTurns: [earlier])
+
+    XCTAssertEqual(inherited.map(\.sourceID), ["conv-two"], "only the number this turn cannot resolve is borrowed")
+  }
+
+  func testTheNearestTurnThatHasTheNumberWins() {
+    let older = answer("older", text: "[1]", references: [reference(1, id: "conv-older", title: "Older")])
+    let newer = answer("newer", text: "[1]", references: [reference(1, id: "conv-newer", title: "Newer")])
+    let followUp = answer("pick", text: "That one [1].")
+
+    let inherited = ChatCitationMarkup.inheritedReferences(
+      citedIn: followUp, resolved: [], earlierTurns: [older, newer])
+
+    XCTAssertEqual(inherited.map(\.sourceID), ["conv-newer"])
+  }
+
+  func testLookbackIsBounded() {
+    let distant = answer("distant", text: "[1]", references: [reference(1, id: "conv-distant", title: "Distant")])
+    let between = answer("between", text: "No sources here.")
+    let followUp = answer("pick", text: "That one [1].")
+
+    XCTAssertTrue(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [distant, between], lookback: 1
+      ).isEmpty)
+    XCTAssertEqual(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [distant, between], lookback: 2
+      ).map(\.sourceID),
+      ["conv-distant"])
+  }
+
+  func testUserTurnsAndTheMessageItselfAreNeverASource() {
+    let user = ChatMessage(
+      id: "user", text: "[1]", sender: .user,
+      contentBlocks: [.citation(id: "citation-1", reference: reference(1, id: "conv-user", title: "User"))])
+    let followUp = answer("pick", text: "That one [1].", references: [])
+
+    XCTAssertTrue(
+      ChatCitationMarkup.inheritedReferences(
+        citedIn: followUp, resolved: [], earlierTurns: [user, followUp]
+      ).isEmpty)
+  }
+
+  @MainActor
+  func testProjectionBindsTheBorrowedReferenceSoTheMarkerOpens() {
+    let chess = reference(1, id: "conv-chess", title: "Chess, Minecraft Testing")
+    var messages = [
+      answer("list", text: "About chess [1].", references: [chess]),
+      answer("pick", text: "The most interesting one was **Chess.** [1]"),
+    ]
+
+    ChatProvider.inheritCitationsAcrossTurns(&messages)
+
+    XCTAssertEqual(messages[1].inlineCitationReferences, [chess])
+    XCTAssertEqual(messages[0].inlineCitationReferences, [chess], "the source turn is untouched")
   }
 }

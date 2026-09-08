@@ -1,8 +1,65 @@
+@preconcurrency import GRDB
 import XCTest
 
 @testable import Omi_Computer
 
 final class ProactiveLaneClientTests: XCTestCase {
+  private var priorAuthUserID: String?
+
+  override func setUp() {
+    super.setUp()
+    priorAuthUserID = UserDefaults.standard.string(forKey: .authUserId)
+  }
+
+  override func tearDown() {
+    // The JIT authority routes re-validate the runtime owner against the
+    // shared authorization authority; restore the durable auth user and the
+    // authority owner the rest of the suite expects.
+    let authority = RuntimeOwnerAuthorizationAuthority.shared
+    authority.beginTransition()
+    if let priorAuthUserID {
+      UserDefaults.standard.set(priorAuthUserID, forKey: .authUserId)
+      authority.endTransition(ownerID: priorAuthUserID)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .authUserId)
+      authority.endTransition(ownerID: nil)
+    }
+    super.tearDown()
+  }
+
+  func testReasoningCompletionBudgetUsesBackendCompatibleMinimum() {
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.reasoningOperation, requested: 800),
+      ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens)
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.reasoningOperation, requested: 3000),
+      3000)
+    XCTAssertEqual(
+      ProactiveLaneClient.effectiveMaxCompletionTokens(
+        operation: ModelQoS.Proactivity.extractionOperation, requested: 800),
+      800)
+  }
+
+  func testReasoningCompleteForwardsBackendCompatibleMinimum() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(), baseURL: { "https://proactive.test" }, authorization: { "Bearer test" })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.reasoningOperation))
+
+    _ = try await client.complete(
+      operation: ModelQoS.Proactivity.reasoningOperation,
+      prompt: "reason",
+      jsonSchema: ["type": "object"],
+      maxCompletionTokens: 800)
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedMaxCompletionTokens,
+      [ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens])
+  }
+
   func testEnvelopeParsingPreservesGatewayAccounting() throws {
     let data = try JSONSerialization.data(withJSONObject: [
       "operation": "proactive_reasoning",
@@ -11,12 +68,183 @@ final class ProactiveLaneClientTests: XCTestCase {
       "usage": ["cached_tokens": 900, "cache_write_tokens": 0],
       "cache_write": false,
       "fallback_class": "unknown",
-      "response": ["choices": [["message": ["content": "{\"decision\":\"silence\"}"]]]],
+      "response": [
+        "id": "response-123",
+        "choices": [["message": ["content": "{\"decision\":\"silence\"}"]]],
+        "usage": [
+          "prompt_tokens": 80, "completion_tokens": 7, "total_tokens": 87,
+          "cached_tokens": 12, "cache_write_tokens": 4,
+        ],
+      ],
     ])
-    let parsed = try ProactiveLaneClient.parseEnvelope(data)
+    let parsed = try ProactiveLaneClient.parseEnvelope(data, requestID: "request-123")
     XCTAssertEqual(parsed.usage.cachedTokens, 900)
     XCTAssertEqual(parsed.lane, "omi:auto:desktop-proactive-reasoning")
     XCTAssertEqual(parsed.content, "{\"decision\":\"silence\"}")
+    XCTAssertEqual(parsed.requestID, "request-123")
+    XCTAssertEqual(parsed.providerResponseID, "response-123")
+    XCTAssertEqual(parsed.usage.inputTokens, 80)
+    XCTAssertEqual(parsed.usage.outputTokens, 7)
+    XCTAssertEqual(parsed.usage.totalTokens, 87)
+    XCTAssertEqual(parsed.usage.reportedCachedTokens, 12)
+    XCTAssertEqual(parsed.usage.reportedCacheWriteTokens, 4)
+  }
+
+  func testEnvelopeParsingKeepsMalformedProviderUsageUnknown() throws {
+    let data = try JSONSerialization.data(withJSONObject: [
+      "operation": "proactive_extraction",
+      "lane": "omi:auto:desktop-proactive-extraction",
+      "provider_model": "gpt-5-nano",
+      "usage": ["cached_tokens": 9],
+      "cache_write": false,
+      "fallback_class": "unknown",
+      "response": [
+        "choices": [["message": ["content": "{\"approved\":true}"]]],
+        "usage": [
+          "prompt_tokens": true,
+          "completion_tokens": 1.5,
+          "total_tokens": NSNumber(value: UInt64.max),
+          "cached_tokens": false,
+        ],
+      ],
+    ])
+
+    let parsed = try ProactiveLaneClient.parseEnvelope(data)
+    XCTAssertNil(parsed.usage.inputTokens)
+    XCTAssertNil(parsed.usage.outputTokens)
+    XCTAssertNil(parsed.usage.totalTokens)
+    XCTAssertNil(parsed.usage.reportedCachedTokens)
+    XCTAssertNil(parsed.usage.reportedCacheWriteTokens)
+    // The provider cache field is malformed, but the gateway's legacy
+    // envelope accounting remains independently valid.
+    XCTAssertEqual(parsed.usage.cachedTokens, 9)
+  }
+
+  func testNanoBillingObservationUsesProviderUsageAndNeverInfersCost() throws {
+    let result = ProactiveLaneResult(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      lane: "omi:auto:desktop-proactive-extraction",
+      providerModel: "gpt-5-nano",
+      usage: ProactiveLaneUsage(
+        cachedTokens: 12, cacheWriteTokens: 4, inputTokens: 80, outputTokens: 7, totalTokens: 87),
+      cacheWrite: true,
+      fallbackClass: "none",
+      content: "{\"approved\":true}",
+      requestID: "request-123",
+      provider: "openai",
+      providerResponseID: "response-123")
+    let transport = ProactiveLaneResponseObservation(
+      statusCode: 200,
+      requestID: "request-123",
+      operation: result.operation,
+      provider: result.provider,
+      providerModel: result.providerModel,
+      providerResponseID: result.providerResponseID,
+      usage: result.usage,
+      fallbackClass: result.fallbackClass,
+      failure: nil)
+    let observed = JITProactivityNanoBillingObservation.observed(
+      lane: .ambient,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "context-1",
+      candidateID: "candidate-1",
+      executionID: "execution-1",
+      triage: .approved,
+      transport: transport)
+    XCTAssertEqual(observed.dispatch, "observed")
+    XCTAssertEqual(observed.inputTokens, 80)
+    XCTAssertEqual(observed.outputTokens, 7)
+    XCTAssertEqual(observed.providerModel, "gpt-5-nano")
+    XCTAssertEqual(observed.providerResponseID, "response-123")
+    XCTAssertEqual(observed.requestID, "request-123")
+    XCTAssertEqual(observed.usageStatus, "reported")
+    XCTAssertEqual(observed.costStatus, "unknown")
+    XCTAssertNil(observed.estimatedCostMicroUSD)
+    XCTAssertNil(observed.providerAttempts)
+    let json = try JSONSerialization.data(withJSONObject: observed.wireDictionary)
+    let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: json) as? [String: Any])
+    XCTAssertNil(wire["content"])
+    XCTAssertNil(wire["prompt"])
+    XCTAssertEqual(wire["cost_status"] as? String, "unknown")
+  }
+
+  func testNanoBillingObservationClassifiesMalformedAndNoDispatchWithoutZeroUsage() {
+    let malformed = JITProactivityNanoBillingObservation.observed(
+      lane: .planned,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "context-1",
+      candidateID: "candidate-1",
+      executionID: nil,
+      triage: .unknown,
+      transport: ProactiveLaneResponseObservation(
+        statusCode: 422,
+        requestID: "request-422",
+        failure: ProactiveLaneFailureClassification(
+          failure: "invalid_structured_output", status: 422, errorType: nil)))
+    XCTAssertEqual(malformed.outcome, "malformed")
+    XCTAssertEqual(malformed.dispatch, "observed")
+    XCTAssertEqual(malformed.usageStatus, "unknown")
+    XCTAssertNil(malformed.inputTokens)
+    XCTAssertNil(malformed.outputTokens)
+    XCTAssertEqual(malformed.costStatus, "unknown")
+
+    let noDispatch = JITProactivityNanoBillingObservation.notDispatched(
+      lane: .planned,
+      ownerID: JITProactivitySourceProjection.qaOwnerID,
+      accountGeneration: 3,
+      snapshotRevision: "revision",
+      budgetDay: "2026-09-06",
+      contextID: "planned:trigger",
+      candidateID: "candidate-1",
+      executionID: "candidate-1")
+    XCTAssertEqual(noDispatch.outcome, "not_dispatched")
+    XCTAssertEqual(noDispatch.providerAttempts, 0)
+    XCTAssertEqual(noDispatch.usageStatus, "not_applicable")
+    XCTAssertEqual(noDispatch.costStatus, "not_applicable")
+  }
+
+  func testCompleteObserverCapturesRequestIdentityAndMalformedOutcomeMetadata() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(), baseURL: { "https://proactive.test" }, authorization: { "Bearer test" })
+    let probe = ResponseObservationProbe()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation),
+      headers: ["X-Omi-Request-ID": "request-observed"])
+    _ = try await client.complete(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      prompt: "nano",
+      jsonSchema: ["type": "object"],
+      responseObserver: { observation in await probe.set(observation) })
+    let successValue = await probe.value
+    let success = try XCTUnwrap(successValue)
+    XCTAssertEqual(success.statusCode, 200)
+    XCTAssertEqual(success.requestID, "request-observed")
+    XCTAssertNil(success.failure)
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: Data("malformed".utf8), headers: ["X-Omi-Request-ID": "request-malformed"])
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "nano",
+        jsonSchema: ["type": "object"],
+        responseObserver: { observation in await probe.set(observation) })
+      XCTFail("expected malformed response")
+    } catch ProactiveLaneClientError.invalidResponse {
+      // The bounded observer still receives the route request identity.
+    }
+    let malformedValue = await probe.value
+    let malformed = try XCTUnwrap(malformedValue)
+    XCTAssertEqual(malformed.requestID, "request-malformed")
+    XCTAssertEqual(malformed.failure?.failure, "invalid_response")
   }
 
   func testTelemetryProviderModelIsBounded() {
@@ -42,6 +270,73 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(
       ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12).localizedDescription,
       "proactive_quota_cooldown status=429")
+    XCTAssertEqual(ProactiveLaneClientError.planGated.localizedDescription, "proactive_plan_gated")
+  }
+
+  func testPlanGatedIsNotClassifiedAsNetworkOrRetryableHTTP() {
+    let classified = ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.planGated)
+    XCTAssertEqual(classified.failure, "plan_gated")
+    XCTAssertEqual(classified.status, 402)
+    XCTAssertNotEqual(classified.failure, "network")
+    XCTAssertNotEqual(classified.failure, "http_error")
+  }
+
+  func testPixelCompleteThrowsPlanGatedWithoutNetwork() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .planGated })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "extract",
+        imageData: Data("jpeg".utf8),
+        jsonSchema: ["type": "object"])
+      XCTFail("expected planGated")
+    } catch ProactiveLaneClientError.planGated {
+      XCTAssertTrue(ProactiveLaneURLStub.requestedPaths.isEmpty)
+    }
+  }
+
+  func testTextOnlyCompleteIsNotPreGatedByBasicPlan() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .planGated })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    let result = try await client.complete(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      prompt: "extract",
+      jsonSchema: ["type": "object"])
+    XCTAssertEqual(result.operation, ModelQoS.Proactivity.extractionOperation)
+    XCTAssertEqual(ProactiveLaneURLStub.requestedPaths, ["/v1/desktop/proactivity/completions"])
+  }
+
+  func testHTTP402PlanGatedBodyMapsToPlanGated() async throws {
+    ProactiveLaneURLStub.reset()
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      managedPixelDecision: { .allowManagedProactivity })
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 402,
+      body: Data(#"{"detail":{"error":"plan_gated","plan_type":"basic"}}"#.utf8))
+    do {
+      _ = try await client.complete(
+        operation: ModelQoS.Proactivity.extractionOperation,
+        prompt: "extract",
+        jsonSchema: ["type": "object"])
+      XCTFail("expected planGated")
+    } catch ProactiveLaneClientError.planGated {
+    }
   }
 
   func testUnprocessableEntityIsClassifiedAsInvalidStructuredOutputNotHttpError() throws {
@@ -353,6 +648,337 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(ProactiveLaneURLStub.requestCount, 3)
   }
 
+  // MARK: - JIT authority wire contract
+
+  func testRolloutDecisionEffectiveEnabledAdmitsEvenWhenRawFlagsAreNotAKnownGoodPair() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "disabled", effective: "enabled"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(flags.effective, .enabled)
+    XCTAssertTrue(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionToleratesMissingKillSwitchWhenEffectiveEnabled() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "enabled", killSwitch: nil, effective: "enabled"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(flags.killSwitchPresent)
+    XCTAssertEqual(flags.killSwitch, .unknown)
+    XCTAssertTrue(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionUnknownStatesStillFailClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "unknown", effective: "unknown"))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(flags.permitsNewLane)
+  }
+
+  func testRolloutDecisionPresentUnknownKillSwitchWithoutEffectiveFailsClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "enabled", killSwitch: "unknown", effective: nil))
+    let client = makeJITAuthorityClient()
+
+    let flags = await client.jitProactivityFlags(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertTrue(flags.killSwitchPresent)
+    XCTAssertFalse(flags.permitsNewLane)
+  }
+
+  /// The live gap: a complete, empty, snake_case watchlist had to decode, and a
+  /// failing ledger-mirror sync had to stop blocking the trigger snapshot the
+  /// client already holds.
+  func testTriggerSnapshotDecodesEmptyWatchlistAndReturnsDespiteMirrorSyncFailure() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "owner"))
+    let mirror = MirrorSyncProbe()
+    let client = makeJITAuthorityClient(
+      mirrorSync: { _, _ in
+        await mirror.record()
+        throw URLError(.notConnectedToInternet)
+      })
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertTrue(snapshot.complete)
+    XCTAssertEqual(snapshot.rows, [])
+    XCTAssertNil(snapshot.failureReason)
+    XCTAssertEqual(snapshot.ownerID, "owner")
+    let attempts = await mirror.attempts
+    XCTAssertEqual(attempts, 1, "the ledger mirror must still be attempted exactly once")
+  }
+
+  func testTriggerSnapshotDecodesServerBudgetAuthority() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    let client = makeJITAuthorityClient()
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(snapshot.budgetDay, "2026-08-23")
+    XCTAssertEqual(snapshot.budgetTimezone, "America/Los_Angeles")
+  }
+
+  func testTriggerSnapshotRefreshAdoptsTimezoneChangeWithUnchangedRevision() async throws {
+    ProactiveLaneURLStub.reset()
+    // A profile timezone update does not necessarily change the ledger head or
+    // snapshot revision. The mirror must still consume the new budget authority
+    // returned by the next refresh rather than treating the revision as a cache key.
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-23", budgetTimezone: "America/Los_Angeles"))
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(
+        ownerID: "owner", budgetDay: "2026-08-24", budgetTimezone: "America/New_York"))
+    let client = makeJITAuthorityClient()
+
+    let first = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+    let second = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(first.snapshotRevision, second.snapshotRevision)
+    XCTAssertEqual(first.budgetTimezone, "America/Los_Angeles")
+    XCTAssertEqual(second.budgetTimezone, "America/New_York")
+    XCTAssertEqual(first.budgetDay, "2026-08-23")
+    XCTAssertEqual(second.budgetDay, "2026-08-24")
+  }
+
+  func testDisabledTriggerSnapshotReturnsContentFreeReceiptWithoutTouchingTheMirror() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try triggerSnapshotBody(ownerID: "owner", complete: false, failureReason: "rollout_not_enabled"))
+    let mirror = MirrorSyncProbe()
+    let client = makeJITAuthorityClient(
+      mirrorSync: { _, _ in
+        await mirror.record()
+      })
+
+    let snapshot = try await client.fetchJITTriggerSnapshot(
+      authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertFalse(snapshot.complete)
+    XCTAssertEqual(snapshot.failureReason, "rollout_not_enabled")
+    let attempts = await mirror.attempts
+    XCTAssertEqual(attempts, 0, "a stub snapshot must not attempt the ledger mirror")
+  }
+
+  func testTriggerSnapshotForAnotherOwnerFailsClosed() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "other-owner"))
+    let client = makeJITAuthorityClient()
+
+    do {
+      _ = try await client.fetchJITTriggerSnapshot(
+        authorizationSnapshot: try jitAuthorizationSnapshot())
+      XCTFail("a snapshot for another owner must fail closed")
+    } catch let error as ProactiveLaneClientError {
+      guard case .invalidResponse = error else {
+        return XCTFail("expected invalidResponse, got \(error)")
+      }
+    } catch {
+      XCTFail("expected ProactiveLaneClientError, got \(error)")
+    }
+  }
+
+  func testGarbageTriggerSnapshotThrowsInvalidResponse() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200, body: try JSONSerialization.data(withJSONObject: ["unexpected": true]))
+    let client = makeJITAuthorityClient()
+
+    do {
+      _ = try await client.fetchJITTriggerSnapshot(
+        authorizationSnapshot: try jitAuthorizationSnapshot())
+      XCTFail("an undecodable snapshot body must fail closed")
+    } catch let error as ProactiveLaneClientError {
+      guard case .invalidResponse = error else {
+        return XCTFail("expected invalidResponse, got \(error)")
+      }
+    } catch {
+      XCTFail("expected ProactiveLaneClientError, got \(error)")
+    }
+  }
+
+  // MARK: - Signed-in startup snapshot sync (wire)
+
+  /// Signed-in startup must fetch the trigger snapshot without any context
+  /// visit: the runtime's startup sync drives the real client routes in
+  /// order — rollout-decision, then trigger-snapshot — and a complete empty
+  /// watchlist still persists the local receipt.
+  func testStartupSnapshotSyncIssuesRolloutThenSnapshotGETAndWritesReceipt() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "disabled", effective: "enabled"))
+    ProactiveLaneURLStub.enqueue(statusCode: 200, body: try triggerSnapshotBody(ownerID: "owner"))
+    let client = makeJITAuthorityClient()
+    let queue = try migratedMirrorQueue()
+    let runtime = JITProactivityRuntime(
+      flags: { await client.jitProactivityFlags(authorizationSnapshot: $0) },
+      snapshots: { try await client.fetchJITTriggerSnapshot(authorizationSnapshot: $0) },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedPaths, ["/v1/jit/rollout-decision", "/v1/jit/trigger-snapshot"])
+    let receipts = try await queue.read { db in
+      try Row.fetchAll(db, sql: "SELECT ownerID, rowCount FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertEqual(receipts.count, 1)
+    let receipt = try XCTUnwrap(receipts.first)
+    let ownerID: String = receipt["ownerID"]
+    let rowCount: Int = receipt["rowCount"]
+    XCTAssertEqual(ownerID, "owner")
+    XCTAssertEqual(rowCount, 0, "an empty watchlist still persists its receipt")
+  }
+
+  /// Fail-closed startup: an `effective=disabled` authority reads only the
+  /// rollout decision and never issues the trigger-snapshot GET.
+  func testStartupSnapshotSyncWithEffectiveDisabledNeverIssuesSnapshotGET() async throws {
+    ProactiveLaneURLStub.reset()
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try rolloutDecisionBody(rollout: "unknown", killSwitch: "unknown", effective: "disabled"))
+    let client = makeJITAuthorityClient()
+    let queue = try migratedMirrorQueue()
+    let runtime = JITProactivityRuntime(
+      flags: { await client.jitProactivityFlags(authorizationSnapshot: $0) },
+      snapshots: { try await client.fetchJITTriggerSnapshot(authorizationSnapshot: $0) },
+      reconcileSnapshot: { snapshot, _ in
+        try queue.write { db in try JITTriggerMirror.reconcile(snapshot, in: db, now: Date()) }
+      })
+
+    await runtime.syncTriggerSnapshot(authorizationSnapshot: try jitAuthorizationSnapshot())
+
+    XCTAssertEqual(ProactiveLaneURLStub.requestedPaths, ["/v1/jit/rollout-decision"])
+    let receipts = try await queue.read { db in
+      try String.fetchAll(db, sql: "SELECT ownerID FROM jit_trigger_snapshot_receipts")
+    }
+    XCTAssertTrue(receipts.isEmpty)
+  }
+
+  /// The JIT authority routes re-validate the runtime owner against
+  /// `RuntimeOwnerAuthorizationAuthority.shared` and the durable auth user, so
+  /// the shared authority has to hold this test owner at a known generation.
+  private func jitAuthorizationSnapshot(ownerID: String = "owner") throws
+    -> RuntimeOwnerAuthorizationSnapshot
+  {
+    UserDefaults.standard.set(ownerID, forKey: .authUserId)
+    let authority = RuntimeOwnerAuthorizationAuthority.shared
+    authority.beginTransition()
+    authority.endTransition(ownerID: ownerID)
+    return try XCTUnwrap(authority.capture(ownerID: ownerID, expectedOwnerID: ownerID))
+  }
+
+  private func makeJITAuthorityClient(
+    mirrorSync:
+      @escaping @Sendable (
+        RuntimeOwnerAuthorizationSnapshot, JITTriggerSnapshot
+      ) async throws -> Void = { _, _ in }
+  ) -> ProactiveLaneClient {
+    ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://jit-authority.test" },
+      jitAuthorization: { ownerID in "Bearer test-\(ownerID)" },
+      ledgerMirrorSync: mirrorSync)
+  }
+
+  private func migratedMirrorQueue() throws -> DatabaseQueue {
+    let queue = try DatabaseQueue()
+    var migrator = DatabaseMigrator()
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    try migrator.migrate(queue)
+    return queue
+  }
+
+  private func rolloutDecisionBody(
+    rollout: String?, killSwitch: String?, effective: String?
+  ) throws -> Data {
+    var object: [String: Any] = [
+      "reason": "rollout_enabled",
+      "error_class": "none",
+      "cache_hit": false,
+      "cache_ttl_seconds": 30,
+    ]
+    object["rollout"] = rollout
+    object["kill_switch"] = killSwitch
+    object["effective"] = effective
+    return try JSONSerialization.data(withJSONObject: object)
+  }
+
+  private func triggerSnapshotBody(
+    ownerID: String, complete: Bool = true, failureReason: String? = nil,
+    budgetDay: String? = nil, budgetTimezone: String? = nil
+  ) throws -> Data {
+    var object: [String: Any] = [
+      "owner_id": ownerID,
+      "snapshot_revision": "revision-4",
+      "account_generation": 3,
+      "head_commit_id": "head-4",
+      "commit_sequence": 4,
+      "complete": complete,
+      "rows": [] as [[String: Any]],
+      "policy": ratifiedPolicyWireJSON(),
+      "failure_reason": (failureReason as Any?) ?? NSNull(),
+    ]
+    if let budgetDay { object["budget_day"] = budgetDay }
+    if let budgetTimezone { object["budget_timezone"] = budgetTimezone }
+    return try JSONSerialization.data(withJSONObject: object)
+  }
+  private func ratifiedPolicyWireJSON() -> [String: Any] {
+    [
+      "schema_version": "jit_trigger_policy.v1",
+      "planned_notifications_per_trigger_per_day": 1,
+      "total_proactive_notifications_per_day": 3,
+      "ambiguous_nano_triages_per_day": 8,
+      "full_agent_turns_per_candidate": 1,
+      "max_calendar_events": 32,
+      "valid_for_seconds": 30,
+      "paid_boundary_refresh_required": true,
+      "embedding": [
+        "enabled": false,
+        "match_similarity": 0.82,
+        "triage_similarity": 0.74,
+        "model_id": NSNull(),
+        "model_version": NSNull(),
+        "language": NSNull(),
+      ] as [String: Any],
+    ]
+  }
+
   private func completeExtraction(on client: ProactiveLaneClient) async throws -> ProactiveLaneResult {
     try await complete(operation: ModelQoS.Proactivity.extractionOperation, prompt: "extract", on: client)
   }
@@ -467,6 +1093,22 @@ final class ProactiveLaneClientTests: XCTestCase {
   }
 }
 
+private actor MirrorSyncProbe {
+  private(set) var attempts = 0
+
+  func record() {
+    attempts += 1
+  }
+}
+
+private actor ResponseObservationProbe {
+  private(set) var value: ProactiveLaneResponseObservation?
+
+  func set(_ value: ProactiveLaneResponseObservation) {
+    self.value = value
+  }
+}
+
 private final class ManualDateClock: @unchecked Sendable {
   private let lock = NSLock()
   private var date: Date
@@ -499,6 +1141,8 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var responses: [StubResponse] = []
   private nonisolated(unsafe) static var served = 0
   private nonisolated(unsafe) static var operations: [String] = []
+  private nonisolated(unsafe) static var maxCompletionTokenBudgets: [Int] = []
+  private nonisolated(unsafe) static var paths: [String] = []
   /// How many requests must be in flight before any of them is answered, if the caller asked for
   /// that. Nil is the ordinary case: answer each request as it arrives.
   private nonisolated(unsafe) static var holdThreshold: Int?
@@ -517,11 +1161,27 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     return operations
   }
 
+  static var requestedMaxCompletionTokens: [Int] {
+    lock.lock()
+    defer { lock.unlock() }
+    return maxCompletionTokenBudgets
+  }
+
+  /// Request URL paths in issue order, for asserting which authority routes a
+  /// caller actually reached.
+  static var requestedPaths: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return paths
+  }
+
   static func reset() {
     lock.lock()
     responses = []
     served = 0
     operations = []
+    maxCompletionTokenBudgets = []
+    paths = []
     holdThreshold = nil
     holdReached = nil
     held = []
@@ -565,8 +1225,11 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       return
     }
     let operation = Self.operation(from: request)
+    let maxCompletionTokens = Self.maxCompletionTokens(from: request)
     Self.lock.lock()
     Self.operations.append(operation)
+    if let maxCompletionTokens { Self.maxCompletionTokenBudgets.append(maxCompletionTokens) }
+    Self.paths.append(url.path)
     let stub = Self.responses.isEmpty ? nil : Self.responses.removeFirst()
     Self.served += 1
     let deliver = { self.deliver(stub, for: url) }
@@ -606,6 +1269,13 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       let operation = object["operation"] as? String
     else { return "" }
     return operation
+  }
+
+  private static func maxCompletionTokens(from request: URLRequest) -> Int? {
+    guard let data = bodyData(from: request),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return object["max_completion_tokens"] as? Int
   }
 
   private static func bodyData(from request: URLRequest) -> Data? {

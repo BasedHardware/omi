@@ -17,6 +17,20 @@ enum DesktopHomeSignedInStartup {
       return
     }
 
+    // The JIT trigger snapshot is the receipt authority for the proactive
+    // lane and must not depend on screen capture ever having produced a
+    // context visit: reconcile it once per signed-in admitted startup. The
+    // `.task(id: productShellAdmissionToken)` restart re-runs this cheaply
+    // on owner change. Fire-and-forget so a slow authority route never gates
+    // product startup; the fetch is owner-bound and reconciliation is
+    // idempotent.
+    if let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() {
+      Task {
+        await JITProactivityRuntime.shared.syncTriggerSnapshot(
+          authorizationSnapshot: authorizationSnapshot)
+      }
+    }
+
     if !AppBuild.usesLazyDevPermissions
       && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
     {
@@ -49,6 +63,13 @@ enum DesktopHomeSignedInStartup {
     if let barState = FloatingControlBarManager.shared.barState {
       PushToTalkManager.shared.setup(barState: barState)
     }
+
+    DesktopUsageDailyReporter.shared.start(
+      isWatching: { ProactiveAssistantsPlugin.shared.isMonitoring },
+      isListening: { [weak appState] in
+        appState?.isLiveCapturing == true
+          || VoiceTurnCoordinator.shared.activeTurn?.phase.isRecording == true
+      })
   }
 
   static func loadDataIfAdmitted(

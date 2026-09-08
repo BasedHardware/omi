@@ -2414,6 +2414,7 @@ class TasksViewModel: ObservableObject {
     guard generation == searchRequestGeneration, normalizedSearchQuery == query else { return }
     isSearching = false
     recomputeDisplayCaches()
+    SearchAnalytics.queryEntered(surface: .tasks, query: query, resultsCount: searchResults.count)
   }
 
   /// Whether we're currently in search mode (the only filtered mode left —
@@ -2445,7 +2446,11 @@ class TasksViewModel: ObservableObject {
     let filterContext = TaskFilterTag.FilterContext()
     var filteredTasks: [TaskActionItem]
     if !normalizedSearchQuery.isEmpty {
-      filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
+      // Search returns every matching status from SQLite. Keep the visible
+      // Status control authoritative so a To Do search cannot surface Done
+      // rows (and vice versa).
+      filteredTasks = applyStatusFilters(sourceTasks)
+      filteredTasks = applyNonStatusTagFilters(filteredTasks, context: filterContext)
     } else if hasSQLiteFilters || hasDateFilters {
       // SQLite already filtered by category/source/priority/date when filteredFromDatabase is populated.
       // When using in-memory source (filteredFromDatabase empty — e.g. async query not yet complete),
@@ -2485,7 +2490,8 @@ class TasksViewModel: ObservableObject {
     for task in displayTasks {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
-      // shows completed. Search bypasses the gate like mobile's flat search.
+      // shows completed. Search has already applied the same status filter
+      // above, so this gate remains a defensive invariant for cached rows.
       if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
         continue
       }
@@ -2522,7 +2528,8 @@ class TasksViewModel: ObservableObject {
     for task in displayTasks {
       // Mobile-parity gate (Flutter _categorizeItems): the categorized list
       // shows only the active view's tasks — To Do shows incomplete, Done
-      // shows completed. Search bypasses the gate like mobile's flat search.
+      // shows completed. Search has already applied the same status filter
+      // above, so this gate remains a defensive invariant for cached rows.
       if normalizedSearchQuery.isEmpty && task.completed != showCompleted {
         continue
       }
@@ -3433,14 +3440,102 @@ struct TasksPage: View {
   }
 
   var body: some View {
-    let isChatVisible = showChatPanel
+    GeometryReader { proxy in
+      let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
 
+      VStack(spacing: QueryShellLayout.panelGap) {
+        QuerySearchBar(
+          text: $viewModel.searchText,
+          accessibilityID: "tasks-search-field",
+          placeholder: "Search tasks…", searchSurface: .tasks
+        )
+
+        taskWorkspace
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
+      }
+      .frame(width: lane)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .padding(.top, QueryShellLayout.surfaceTopInset)
+    }
+    .alert(
+      "Task action failed",
+      isPresented: Binding(
+        get: { viewModel.bulkTaskErrorMessage != nil },
+        set: { isPresented in
+          if !isPresented {
+            viewModel.bulkTaskErrorMessage = nil
+          }
+        }
+      )
+    ) {
+      Button("OK", role: .cancel) {
+        viewModel.bulkTaskErrorMessage = nil
+      }
+    } message: {
+      Text(viewModel.bulkTaskErrorMessage ?? "Please try again.")
+    }
+    .onEscapeKey(priority: .content) { handleEscapeKey() }
+    .onAppear {
+      Task { @MainActor in
+        await viewModel.loadTasksForFirstUse()
+        await suggestedStore.load()
+        hydratePendingDashboardNavigationTarget()
+        chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
+        if !viewModel.isLoading {
+          NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+        }
+      }
+      suggestedStore.registerAutomationActions()
+      if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
+        showChatPanel = true
+        adjustWindowWidth(expand: true)
+      }
+      Task { await TaskPrioritizationService.shared.start() }
+      if !showChatPanel {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+          shrinkWindowIfNeeded()
+        }
+      }
+    }
+    .onDisappear {
+      if showChatPanel {
+        adjustWindowWidth(expand: false)
+        showChatPanel = false
+      }
+    }
+    .onReceive(chatCoordinator.$activeTaskId) { taskId in
+      activeChatTaskId = taskId
+    }
+    .onReceive(viewModel.$displayTasks) { tasks in
+      chatCoordinator.ingestTaskMappings(tasks)
+    }
+    .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
+      guard isOpen != showChatPanel else { return }
+      if isOpen {
+        viewModel.detailPanelTaskID = nil
+        adjustWindowWidth(expand: true)
+        OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+          showChatPanel = true
+        }
+      } else {
+        OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+          showChatPanel = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+          adjustWindowWidth(expand: false)
+        }
+      }
+    }
+  }
+
+  private var taskWorkspace: some View {
     HStack(spacing: 0) {
       // Left panel: Tasks content (always full width)
       tasksContent
         .frame(maxWidth: .infinity)
 
-      if isChatVisible {
+      if showChatPanel {
         // Draggable divider with handle
         ZStack {
           Rectangle()
@@ -3532,86 +3627,6 @@ struct TasksPage: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .glassContent()
-    .alert(
-      "Task action failed",
-      isPresented: Binding(
-        get: { viewModel.bulkTaskErrorMessage != nil },
-        set: { isPresented in
-          if !isPresented {
-            viewModel.bulkTaskErrorMessage = nil
-          }
-        }
-      )
-    ) {
-      Button("OK", role: .cancel) {
-        viewModel.bulkTaskErrorMessage = nil
-      }
-    } message: {
-      Text(viewModel.bulkTaskErrorMessage ?? "Please try again.")
-    }
-    .onEscapeKey(priority: .content) { handleEscapeKey() }
-    // Modal creation sheet removed — Cmd+N now creates inline at top
-    .onAppear {
-      Task { @MainActor in
-        await viewModel.loadTasksForFirstUse()
-        await suggestedStore.load()
-        hydratePendingDashboardNavigationTarget()
-        chatCoordinator.ingestTaskMappings(viewModel.displayTasks)
-        // If tasks are already loaded, notify sidebar to clear loading indicator
-        if !viewModel.isLoading {
-          NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
-        }
-      }
-      suggestedStore.registerAutomationActions()
-      // Restore panel UI if coordinator was open when we navigated away
-      if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
-        showChatPanel = true
-        adjustWindowWidth(expand: true)
-      }
-      // Ensure prioritization service is running (no-op if already started)
-      Task { await TaskPrioritizationService.shared.start() }
-
-      // Shrink window if it was left expanded from a previous session with chat open.
-      // Delay slightly so the window is fully visible before resizing.
-      if !showChatPanel {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-          shrinkWindowIfNeeded()
-        }
-      }
-    }
-    .onDisappear {
-      // Shrink window when navigating away, but keep coordinator alive
-      // so streaming state and unread dots persist across tab switches.
-      if showChatPanel {
-        adjustWindowWidth(expand: false)
-        showChatPanel = false
-        // Do NOT call chatCoordinator.closeChat() — coordinator state persists at app level
-      }
-    }
-    .onReceive(chatCoordinator.$activeTaskId) { taskId in
-      activeChatTaskId = taskId
-    }
-    .onReceive(viewModel.$displayTasks) { tasks in
-      chatCoordinator.ingestTaskMappings(tasks)
-    }
-    .onReceive(chatCoordinator.$isPanelOpen.removeDuplicates()) { isOpen in
-      guard isOpen != showChatPanel else { return }
-      if isOpen {
-        viewModel.detailPanelTaskID = nil
-        adjustWindowWidth(expand: true)
-        OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-          showChatPanel = true
-        }
-      } else {
-        OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-          showChatPanel = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-          adjustWindowWidth(expand: false)
-        }
-      }
-    }
   }
 
   /// Start a background AI investigation for a task (no panel opens)
@@ -3736,7 +3751,7 @@ struct TasksPage: View {
 
   private var tasksContent: some View {
     VStack(spacing: 0) {
-      // Header with filter toggle and sort
+      // Compact query/actions row; the selected top navigation already names the page.
       headerView
 
       if let failure = viewModel.sortOrderSyncFailure {
@@ -3746,10 +3761,13 @@ struct TasksPage: View {
       // Content
       if viewModel.isActiveViewLoading && viewModel.activeTasks.isEmpty {
         loadingView
+      } else if viewModel.isSearching && viewModel.displayTasks.isEmpty {
+        loadingView
       } else if let error = viewModel.activeViewError, viewModel.activeTasks.isEmpty {
         errorView(error)
       } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating
-        && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading
+        && (!viewModel.normalizedSearchQuery.isEmpty
+          || (suggestedStore.candidates.isEmpty && !suggestedStore.isLoading))
       {
         emptyView
       } else {
@@ -3759,32 +3777,39 @@ struct TasksPage: View {
         tasksListView
       }
     }
-    .overlay(alignment: .bottom) {
-      VStack(spacing: OmiSpacing.sm) {
-        Spacer()
-        // Keyboard hint bar
-        if !viewModel.displayTasks.isEmpty {
-          KeyboardHintBar(
-            isAnyTaskEditing: viewModel.isAnyTaskEditing,
-            isInlineCreating: viewModel.isInlineCreating,
-            hasSelection: viewModel.keyboardSelectedTaskId != nil
-          )
-          .transition(.opacity)
-          .omiAnimation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
-          .omiAnimation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
-        }
-        // Undo toast
-        if viewModel.showUndoToast, let lastAction = viewModel.undoStack.last {
-          UndoToastView(
-            taskDescription: lastAction.task.description,
-            undoCount: viewModel.undoStack.count,
-            onUndo: { Task { await viewModel.undoLastDelete() } }
-          )
-          .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+    // Reserve space for the keyboard hints instead of floating them over the
+    // last row. The list already keeps a small bottom inset for the bar; the
+    // safe-area inset makes that clearance part of the scrollable viewport.
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      if !viewModel.displayTasks.isEmpty
+        && (viewModel.isAnyTaskEditing
+          || viewModel.isInlineCreating
+          || viewModel.keyboardSelectedTaskId != nil)
+      {
+        KeyboardHintBar(
+          isAnyTaskEditing: viewModel.isAnyTaskEditing,
+          isInlineCreating: viewModel.isInlineCreating,
+          hasSelection: viewModel.keyboardSelectedTaskId != nil
+        )
+        .padding(.bottom, OmiSpacing.sm)
+        .transition(.opacity)
+        .omiAnimation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
+        .omiAnimation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
       }
-      .padding(.bottom, OmiSpacing.lg)
-      .omiAnimation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
+    }
+    .overlay(alignment: .bottom) {
+      // Undo is transient feedback, not navigation. It remains over the panel
+      // while the keyboard hint bar has its own reserved space above it.
+      if viewModel.showUndoToast, let lastAction = viewModel.undoStack.last {
+        UndoToastView(
+          taskDescription: lastAction.task.description,
+          undoCount: viewModel.undoStack.count,
+          onUndo: { Task { await viewModel.undoLastDelete() } }
+        )
+        .padding(.bottom, OmiSpacing.lg)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .omiAnimation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
+      }
     }
     .onAppear {
       installKeyboardMonitor()
@@ -3832,7 +3857,7 @@ struct TasksPage: View {
       viewModel.editingTaskId = nil
       NSApp.keyWindow?.makeFirstResponder(nil)
     }
-    viewModel.keyboardSelectedTaskId = task.id
+    viewModel.selectTaskFromSearch(task)
   }
 
   private func cancelInlineCreate() {
@@ -3859,65 +3884,27 @@ struct TasksPage: View {
   // MARK: - Header View
 
   private var headerView: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Text("Tasks")
-        .inkStyle(InkType.firstTitle, color: Ink.primary)
-        .fixedSize()
-
-      // Search field
-      HStack(spacing: OmiSpacing.sm) {
-        if viewModel.isSearching || viewModel.isLoadingFiltered {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 14, height: 14)
+    PageQueryToolbar(
+      refinement: {
+        if viewModel.isMultiSelectMode {
+          multiSelectControls
         } else {
-          Image(systemName: "magnifyingglass")
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
+          taskStatusMenu
         }
-
-        TextField("Search tasks...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(Ink.primary)
-
-        if !viewModel.normalizedSearchQuery.isEmpty {
-          Button {
-            viewModel.searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(Ink.secondary)
+      },
+      actions: {
+        if viewModel.isMultiSelectMode {
+          if viewModel.multiSelection.selectionCount > 0 {
+            deleteSelectedButton
           }
-          .buttonStyle(.plain)
+          cancelMultiSelectButton
+        } else {
+          tasksMoreMenu
+          addTaskButton
         }
       }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .glassField()
-
-      if !viewModel.isMultiSelectMode {
-        completedToggleButton
-      } else {
-        multiSelectControls
-      }
-
-      selectModeButton
-
-      if viewModel.isMultiSelectMode {
-        if viewModel.multiSelection.selectionCount > 0 {
-          deleteSelectedButton
-        }
-        cancelMultiSelectButton
-      } else {
-        if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
-          chatToggleButton
-        }
-        addTaskButton
-        taskSettingsButton
-      }
-    }
-    .padding(.horizontal, OmiSpacing.lg)
-    .padding(.top, OmiSpacing.lg)
-    .padding(.bottom, OmiSpacing.md)
+    )
+    .pagePanelFirstRowInsets()
   }
 
   // MARK: - Board / List view toggle
@@ -4012,37 +3999,40 @@ struct TasksPage: View {
       viewModel.inlineCreateAfterTaskId = nil
       viewModel.isInlineCreating = true
     } label: {
-      Image(systemName: "plus")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.surface)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Capsule(style: .continuous).fill(Ink.primary))
+      PageQueryActionLabel(icon: "plus", title: "New Task", isPrimary: true)
     }
     .buttonStyle(.plain)
-    .help("Add task (⌘N)")
+    .help("New task (⌘N)")
+    .accessibilityIdentifier("tasks-new-task")
   }
 
-  // MARK: - Completed Toggle (mobile parity)
+  // MARK: - Status refinement (mobile parity)
 
-  private var completedToggleButton: some View {
-    Button {
-      viewModel.toggleShowCompletedView()
+  private var taskStatusMenu: some View {
+    Menu {
+      Button {
+        viewModel.selectedTags = [.todo]
+      } label: {
+        Label("To Do", systemImage: "circle")
+      }
+
+      Button {
+        viewModel.selectedTags = [.done]
+      } label: {
+        Label("Completed", systemImage: "checkmark.circle.fill")
+      }
     } label: {
-      Image(systemName: viewModel.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(viewModel.showCompleted ? Ink.primary : Ink.secondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.elementRadius)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(viewModel.showCompleted ? Ink.separator : Color.clear, lineWidth: 1)
-        )
+      PageQueryControlLabel(
+        icon: "checkmark.circle",
+        dimension: nil,
+        value: viewModel.showCompleted ? "Completed" : "To Do",
+        isActive: viewModel.showCompleted
+      )
     }
+    .menuStyle(.button)
     .buttonStyle(.plain)
-    .help(viewModel.showCompleted ? "Hide completed tasks" : "Show completed tasks")
+    .accessibilityIdentifier("tasks-status-filter")
+    .help("Filter tasks by status")
   }
 
   private var selectModeButton: some View {
@@ -4147,24 +4137,45 @@ struct TasksPage: View {
     .buttonStyle(.plain)
   }
 
-  private var taskSettingsButton: some View {
-    Button {
-      NotificationCenter.default.post(
-        name: .navigateToTaskSettings,
-        object: nil
-      )
+  private var tasksMoreMenu: some View {
+    Menu {
+      if !viewModel.displayTasks.isEmpty {
+        Button {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            viewModel.toggleMultiSelectMode()
+          }
+        } label: {
+          Label("Select tasks…", systemImage: "checkmark.circle")
+        }
+      }
+
+      if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
+        Button {
+          if showChatPanel {
+            closeChatPanel()
+          } else if let selectedId = viewModel.keyboardSelectedTaskId,
+            let task = viewModel.displayTasks.first(where: { $0.id == selectedId })
+          {
+            openChatForTask(task)
+          } else {
+            adjustWindowWidth(expand: true)
+            OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+              showChatPanel = true
+            }
+          }
+        } label: {
+          Label(showChatPanel ? "Close task assistant" : "Open task assistant", systemImage: "bubble.left")
+        }
+      }
     } label: {
-      Image(systemName: "gearshape")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
-        .padding(OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(Ink.rowFill)
-        )
+      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .buttonStyle(.plain)
-    .help("Task Settings")
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help("More task actions")
+    .accessibilityLabel("More task actions")
+    .accessibilityIdentifier("tasks-more-actions")
   }
 
   private var chatToggleButton: some View {
@@ -4195,6 +4206,7 @@ struct TasksPage: View {
     }
     .buttonStyle(.plain)
     .help(showChatPanel ? "Close chat panel" : "Open task chat")
+    .accessibilityLabel(showChatPanel ? "Close task chat" : "Open task chat")
   }
 
   // MARK: - Loading View
@@ -4288,18 +4300,26 @@ struct TasksPage: View {
         .scaledFont(size: 48)
         .foregroundColor(Ink.secondary)
 
-      Text(isSearchEmpty ? "No Results Found" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
+      Text(isSearchEmpty ? "No Matching Tasks" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
         .scaledFont(size: 24, weight: .semibold)
         .foregroundColor(Ink.primary)
 
       Text(
         isSearchEmpty
-          ? "Try a different search"
+          ? "No \(viewModel.showCompleted ? "completed" : "to-do") tasks match “\(viewModel.normalizedSearchQuery)”"
           : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
       )
       .scaledFont(size: OmiType.body)
       .foregroundColor(Ink.secondary)
       .multilineTextAlignment(.center)
+
+      if isSearchEmpty {
+        Button("Clear Search") {
+          viewModel.searchText = ""
+        }
+        .buttonStyle(.bordered)
+        .tint(Ink.secondary)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -4314,7 +4334,7 @@ struct TasksPage: View {
           // Multi-select keeps this grouping: selecting tasks must not reshuffle the
           // list out from under the user. Only the row's selection control changes.
           if !viewModel.showCompleted {
-            if !viewModel.isMultiSelectMode {
+            if viewModel.normalizedSearchQuery.isEmpty && !viewModel.isMultiSelectMode {
               SuggestedTasksSection(
                 store: suggestedStore,
                 isExpanded: $suggestionsSectionExpanded,
@@ -4341,87 +4361,29 @@ struct TasksPage: View {
               .id("inline-create-top")
             }
 
-            ForEach(TaskCategory.allCases, id: \.self) { category in
-              let orderedTasks = viewModel.getOrderedTasks(for: category)
-              if !orderedTasks.isEmpty {
-                TaskCategorySection(
+            // One lazy level: every non-empty category contributes a header
+            // item followed by one item per task row, all direct children of
+            // this LazyVStack (see TasksListItem). The former per-category
+            // section was a single lazy item with an eager stack of ALL its
+            // rows, so it could not virtualize: leaving the page tore down
+            // every task row in the profile (~330 trees here), which alone
+            // cost ~600 ms of main-thread layout per navigate.
+            ForEach(tasksListItems) { item in
+              switch item {
+              case .sectionHeader(let category, let sectionTasks):
+                TaskCategorySectionHeader(
                   category: category,
-                  orderedTasks: orderedTasks,
+                  sectionTasks: sectionTasks,
                   isMultiSelectMode: viewModel.isMultiSelectMode,
-                  indentLevelFor: { viewModel.getIndentLevel(for: $0) },
-                  isSelectedFor: { viewModel.multiSelection.selectedIDs.contains($0) },
-                  isKeyboardSelectedFor: { viewModel.keyboardSelectedTaskId == $0 },
-                  onToggle: { await viewModel.toggleTask($0) },
-                  onDelete: { await viewModel.deleteTaskWithUndo($0) },
-                  onToggleSelection: { viewModel.toggleTaskSelection($0) },
-                  onUpdateDetails: { task, desc, date, priority, recurrenceRule in
-                    await viewModel.updateTaskDetails(
-                      task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
-                  },
-                  onUpdateTags: { task, tags in
-                    await viewModel.updateTaskTags(task, tags: tags)
-                  },
-                  onIncrementIndent: { viewModel.incrementIndent(for: $0) },
-                  onDecrementIndent: { viewModel.decrementIndent(for: $0) },
-                  onMoveTask: { task, index, category in
-                    viewModel.moveTaskToCategory(task, toIndex: index, inCategory: category)
-                  },
-                  onMoveTaskBeforeTarget: { task, targetTaskID, cat in
-                    viewModel.moveTask(task, before: targetTaskID, inCategory: cat)
-                  },
-                  onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
-                  onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
-                    ? { task in openChatForTask(task) } : nil,
-                  onSelect: { task in selectTask(task) },
-                  onOpenDetails: { task in openTaskDetailPanel(for: task) },
-                  onHover: { viewModel.hoveredTaskId = $0 },
-                  isTaskDetailPanelActive: taskDetailTask != nil,
-                  isChatActive: showChatPanel,
-                  activeChatTaskId: activeChatTaskId,
-                  chatCoordinator: chatCoordinator,
-                  dropTargetTaskId: viewModel.dropTargetTaskId,
-                  dropAbove: viewModel.dropAbove,
-                  draggedTaskId: viewModel.draggedTaskId,
                   findTaskGlobal: { viewModel.findTask($0) },
-                  onDragStarted: { viewModel.draggedTaskId = $0 },
-                  onDragEnded: { endedId in
-                    // Drag-end is task-scoped. Both the drop handler and
-                    // TaskDragItemProvider.deinit route here; deinit hops one
-                    // main.async and can land *after* the user has already
-                    // started a new drag. A late deinit from a prior drag
-                    // carries that prior task's id, so guarding on
-                    // draggedTaskId == endedId stops it clobbering the new
-                    // drag's dim state (BL-030). Same-id re-fires are idempotent
-                    // (second call sees a nil/other draggedTaskId and no-ops).
-                    MainActor.assumeIsolated {
-                      guard viewModel.draggedTaskId == endedId else { return }
-                      viewModel.draggedTaskId = nil
-                      viewModel.dropTargetTaskId = nil
-                    }
+                  onMoveTask: { task, index, cat in
+                    viewModel.moveTaskToCategory(task, toIndex: index, inCategory: cat)
                   },
-                  onDragHoverChanged: { taskId, isHovered in
-                    if isHovered {
-                      viewModel.dropTargetTaskId = taskId
-                      viewModel.dropAbove = true
-                    } else if viewModel.dropTargetTaskId == taskId {
-                      viewModel.dropTargetTaskId = nil
-                    }
-                  },
-                  editingTaskId: viewModel.editingTaskId,
-                  onEditingChanged: { editing in
-                    viewModel.isAnyTaskEditing = editing
-                    if !editing { viewModel.editingTaskId = nil }
-                  },
-                  onStartEditing: { task in viewModel.editingTaskId = task.id },
-                  animateToggleTaskId: viewModel.animateToggleTaskId,
-                  isInlineCreating: viewModel.isInlineCreating,
-                  inlineCreateAfterTaskId: viewModel.inlineCreateAfterTaskId,
-                  inlineCreateText: $inlineCreateText,
-                  inlineCreateFocused: $inlineCreateFocused,
-                  onInlineCommit: { commitInlineCreate() },
-                  onInlineCancel: { cancelInlineCreate() },
-                  onInlineCommitToday: { commitInlineCreate(forToday: true) }
+                  onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() }
                 )
+              case .taskRow(let task, let category, let sectionTasks):
+                taskCategoryRow(task, category: category, sectionTasks: sectionTasks)
+                  .padding(.top, TasksListItem.rowSpacingAdjustment)
               }
             }
           } else {
@@ -4550,6 +4512,133 @@ struct TasksPage: View {
     }
   }
 
+  /// The flat item stream of the tasks list: for each non-empty category, a
+  /// section header followed by that category's task rows. Rows are direct
+  /// items of the list's single `LazyVStack` — the only lazy level on the
+  /// page — so each row virtualizes individually and navigating away tears
+  /// down just the materialized viewport instead of every task row.
+  private var tasksListItems: [TasksListItem] {
+    var items: [TasksListItem] = []
+    for category in TaskCategory.allCases {
+      let sectionTasks = viewModel.getOrderedTasks(for: category)
+      guard !sectionTasks.isEmpty else { continue }
+      items.append(.sectionHeader(category, sectionTasks: sectionTasks))
+      items.append(
+        contentsOf: sectionTasks.map { .taskRow($0, category: category, sectionTasks: sectionTasks) })
+    }
+    return items
+  }
+
+  /// One task row as a direct item of the page's lazy stack. This is the exact
+  /// composition the former `TaskCategorySection` rendered per row: the
+  /// `VStack(spacing: 0)` wrapper carries the row's identity (`.id(task.id)`
+  /// on the row's `HStack`, which keyboard navigation's
+  /// `scrollProxy.scrollTo(task.id)` targets), the conditional drag-drop
+  /// modifier, and the inline-create row after the task keyboard inline
+  /// creation is anchored to.
+  private func taskCategoryRow(
+    _ task: TaskActionItem,
+    category: TaskCategory,
+    sectionTasks: [TaskActionItem]
+  ) -> some View {
+    // Drag-end is task-scoped. Both the drop handler and
+    // TaskDragItemProvider.deinit route here; deinit hops one
+    // main.async and can land *after* the user has already
+    // started a new drag. A late deinit from a prior drag
+    // carries that prior task's id, so guarding on
+    // draggedTaskId == endedId stops it clobbering the new
+    // drag's dim state (BL-030). Same-id re-fires are idempotent
+    // (second call sees a nil/other draggedTaskId and no-ops).
+    let handleDragEnded: @Sendable (String) -> Void = { endedId in
+      MainActor.assumeIsolated {
+        guard viewModel.draggedTaskId == endedId else { return }
+        viewModel.draggedTaskId = nil
+        viewModel.dropTargetTaskId = nil
+      }
+    }
+    return VStack(spacing: 0) {
+      HStack(spacing: OmiSpacing.sm) {
+        TaskRow(
+          task: task,
+          category: category,
+          indentLevel: viewModel.getIndentLevel(for: task.id),
+          isMultiSelectMode: viewModel.isMultiSelectMode,
+          isSelected: viewModel.multiSelection.selectedIDs.contains(task.id),
+          isKeyboardSelected: viewModel.keyboardSelectedTaskId == task.id,
+          onToggle: { await viewModel.toggleTask($0) },
+          onDelete: { await viewModel.deleteTaskWithUndo($0) },
+          onToggleSelection: { viewModel.toggleTaskSelection($0) },
+          onUpdateDetails: { task, desc, date, priority, recurrenceRule in
+            await viewModel.updateTaskDetails(
+              task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
+          },
+          onUpdateTags: { task, tags in
+            await viewModel.updateTaskTags(task, tags: tags)
+          },
+          onIncrementIndent: { viewModel.incrementIndent(for: $0) },
+          onDecrementIndent: { viewModel.decrementIndent(for: $0) },
+          onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
+            ? { task in openChatForTask(task) } : nil,
+          onSelect: { task in selectTask(task) },
+          onOpenDetails: { task in openTaskDetailPanel(for: task) },
+          onHover: { viewModel.hoveredTaskId = $0 },
+          isTaskDetailPanelActive: taskDetailTask != nil,
+          onDragStarted: { viewModel.draggedTaskId = $0 },
+          onDragEnded: handleDragEnded,
+          isBeingDragged: viewModel.draggedTaskId == task.id,
+          isChatActive: showChatPanel,
+          activeChatTaskId: activeChatTaskId,
+          chatCoordinator: chatCoordinator,
+          editingTaskId: viewModel.editingTaskId,
+          onEditingChanged: { editing in
+            viewModel.isAnyTaskEditing = editing
+            if !editing { viewModel.editingTaskId = nil }
+          },
+          onStartEditing: { task in viewModel.editingTaskId = task.id },
+          animateToggleTaskId: viewModel.animateToggleTaskId
+        )
+      }
+      .id(task.id)
+      .modifier(
+        TaskDragDropModifier(
+          isEnabled: !viewModel.isMultiSelectMode,
+          taskId: task.id,
+          taskDescription: task.description,
+          isDropTarget: viewModel.dropTargetTaskId == task.id,
+          dropAbove: viewModel.dropAbove,
+          findTask: { id in
+            viewModel.findTask(id) ?? sectionTasks.first(where: { $0.id == id })
+          },
+          onMoveTaskBeforeTarget: { droppedTask in
+            viewModel.moveTask(droppedTask, before: task.id, inCategory: category)
+          },
+          onDragEnded: handleDragEnded,
+          onHoverChanged: { taskId, isHovered in
+            if isHovered {
+              viewModel.dropTargetTaskId = taskId
+              viewModel.dropAbove = true
+            } else if viewModel.dropTargetTaskId == taskId {
+              viewModel.dropTargetTaskId = nil
+            }
+          }
+        ))
+
+      // Inline creation row after this task
+      if !viewModel.isMultiSelectMode && viewModel.isInlineCreating
+        && viewModel.inlineCreateAfterTaskId == task.id
+      {
+        InlineTaskCreationRow(
+          text: $inlineCreateText,
+          isFocused: $inlineCreateFocused,
+          onCommit: { _ in commitInlineCreate() },
+          onCancel: { cancelInlineCreate() },
+          onCommitToday: { _ in commitInlineCreate(forToday: true) }
+        )
+        .padding(.top, OmiSpacing.xxs)
+      }
+    }
+  }
+
   private var dashboardNavigationRenderKey: String {
     let taskIDs = viewModel.displayTasks.map(\.id).joined(separator: ",")
     let candidateIDs = suggestedStore.candidates.map(\.id).joined(separator: ",")
@@ -4629,76 +4718,62 @@ private struct TaskChatSidePanelView: View {
   }
 }
 
-// MARK: - Task Category Section
+// MARK: - Task List Item + Category Section Header
 
-struct TaskCategorySection: View {
+/// One virtualized item of the tasks list. `tasksListView` flattens every
+/// category into this single item stream so the rows are direct children of
+/// the page's one `LazyVStack`: rows virtualize individually, and no lazy
+/// container ever nests inside a lazy item. The former per-category
+/// `TaskCategorySection` was one lazy item holding an eager stack of ALL its
+/// rows, so nothing below the header could virtualize — leaving the page
+/// materialized and tore down every task row in the profile.
+enum TasksListItem: Identifiable {
+  /// Category header: icon, name, count, Today menu, top drop zone.
+  case sectionHeader(TaskCategory, sectionTasks: [TaskActionItem])
+  /// One task row. `sectionTasks` is the row's own category section — the
+  /// fallback source for drag-drop target lookup.
+  case taskRow(TaskActionItem, category: TaskCategory, sectionTasks: [TaskActionItem])
+
+  /// Rows keep the task's own id so `scrollTo(task.id)` keyboard navigation
+  /// and per-row view state survive the flattening.
+  var id: String {
+    switch self {
+    case .sectionHeader(let category, _):
+      return "tasks-section-header-\(category.rawValue)"
+    case .taskRow(let task, _, _):
+      return task.id
+    }
+  }
+
+  /// The lazy stack spaces items by `.lg`, but inside the old eager section
+  /// stack a category's rows (and its header-to-first-row step) were spaced
+  /// `.sm`. Inset each row item by the difference so the flattened list keeps
+  /// the exact vertical rhythm the sectioned list had. Applied to rows only —
+  /// category boundaries keep the full `.lg` step, exactly as before.
+  static let rowSpacingAdjustment: CGFloat = OmiSpacing.sm - OmiSpacing.lg
+}
+
+/// Header for one task category in the flattened tasks list — the header row
+/// and top drop zone of the former `TaskCategorySection`. The category's rows
+/// are separate items of the page's lazy stack (see `TasksListItem`).
+///
+/// Collapse is not wired: no call site passes `onToggleCollapse`, so the
+/// chevron, the button trait, and the `task-section-toggle-*` identifier never
+/// activate. If collapse is ever implemented it must filter the flat items
+/// where they are built (`tasksListItems`), not inside this header.
+private struct TaskCategorySectionHeader: View {
   let category: TaskCategory
-  let orderedTasks: [TaskActionItem]
+  let sectionTasks: [TaskActionItem]
   /// Collapsed sections render only their header row.
   var isCollapsed: Bool = false
   /// Present only on collapsible sections; makes the header a disclosure toggle.
   var onToggleCollapse: (() -> Void)?
   var isMultiSelectMode: Bool = false
-
-  // Callbacks for row data and actions (passed through to TaskRow)
-  var indentLevelFor: ((String) -> Int)?
-  var isSelectedFor: ((String) -> Bool)?
-  var isKeyboardSelectedFor: ((String) -> Bool)?
-  var onToggle: ((TaskActionItem) async -> Void)?
-  var onDelete: ((TaskActionItem) async -> Void)?
-  var onToggleSelection: ((TaskActionItem) -> Void)?
-  var onUpdateDetails: ((TaskActionItem, String?, Date?, String?, String?) async -> Void)?
-  var onUpdateTags: ((TaskActionItem, [String]) async -> Void)?
-  var onIncrementIndent: ((String) -> Void)?
-  var onDecrementIndent: ((String) -> Void)?
-  var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
-  var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
-  var onClearTodayDeadlines: (() async -> Void)?
-  var onOpenChat: ((TaskActionItem) -> Void)?
-  var onSelect: ((TaskActionItem) -> Void)?
-  var onOpenDetails: ((TaskActionItem) -> Void)?
-  var onHover: ((String?) -> Void)?
-  var isTaskDetailPanelActive: Bool = false
-  var isChatActive: Bool = false
-  var activeChatTaskId: String?
-  var chatCoordinator: TaskChatCoordinator?
-
-  // Drag-and-drop visual feedback
-  var dropTargetTaskId: String?
-  var dropAbove: Bool = true
-  var draggedTaskId: String?
   var findTaskGlobal: ((String) -> TaskActionItem?)?
-  // Non-optional with no-op defaults: this callback is load-bearing for the
-  // dim-while-dragging effect, and a silent nil here was the original bug.
-  var onDragStarted: (String) -> Void = { _ in }
-  // Carries the id of the task whose drag ended, so the receiver can scope the
-  // dim/drag-state reset to that exact task and ignore a stale late end from a
-  // prior drag (BL-030).
-  var onDragEnded: @Sendable (String) -> Void = { _ in }
-  var onDragHoverChanged: ((String, Bool) -> Void)?
-
-  // Edit mode support
-  var editingTaskId: String?
-  var onEditingChanged: ((Bool) -> Void)?
-  var onStartEditing: ((TaskActionItem) -> Void)?
-
-  // Space-key animated toggle
-  var animateToggleTaskId: String?
-
-  // Inline creation support
-  var isInlineCreating: Bool = false
-  var inlineCreateAfterTaskId: String?
-  @Binding var inlineCreateText: String
-  @FocusState.Binding var inlineCreateFocused: Bool
-  var onInlineCommit: (() -> Void)?
-  var onInlineCancel: (() -> Void)?
-  var onInlineCommitToday: (() -> Void)?
+  var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
+  var onClearTodayDeadlines: (() async -> Void)?
 
   @State private var isTopDropTargeted = false
-
-  private var visibleTasks: [TaskActionItem] {
-    orderedTasks
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -4712,7 +4787,7 @@ struct TaskCategorySection: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("\(orderedTasks.count)")
+        Text("\(sectionTasks.count)")
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.sm)
@@ -4730,18 +4805,26 @@ struct TaskCategorySection: View {
 
         Spacer()
 
-        if category == .today {
-          Button {
-            confirmClearTodayDeadlines()
+        if category == .today, onClearTodayDeadlines != nil {
+          Menu {
+            Button(role: .destructive) {
+              confirmClearTodayDeadlines()
+            } label: {
+              Label("Remove today from all…", systemImage: "calendar.badge.minus")
+            }
           } label: {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.micro, weight: .semibold)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 18, height: 18)
+            Image(systemName: "ellipsis")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundStyle(Ink.secondary)
+              .frame(width: 28, height: 28)
+              .contentShape(Rectangle())
           }
-          .buttonStyle(.plain)
-          .contentShape(Rectangle())
-          .help("Clean today's tasks")
+          .menuStyle(.borderlessButton)
+          .menuIndicator(.hidden)
+          .fixedSize()
+          .help("More Today actions")
+          .accessibilityLabel("More Today actions")
+          .accessibilityIdentifier("tasks-today-actions")
         }
 
       }
@@ -4750,7 +4833,7 @@ struct TaskCategorySection: View {
       .onTapGesture {
         onToggleCollapse?()
       }
-      .accessibilityElement(children: .combine)
+      .accessibilityElement(children: .contain)
       .accessibilityAddTraits(onToggleCollapse != nil ? .isButton : [])
       .accessibilityAction {
         onToggleCollapse?()
@@ -4788,7 +4871,7 @@ struct TaskCategorySection: View {
                 let droppedId = String(data: data, encoding: .utf8)
               else { return }
               DispatchQueue.main.async {
-                if let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) {
+                if let droppedTask = findTaskGlobal?(droppedId) ?? sectionTasks.first(where: { $0.id == droppedId }) {
                   onMoveTask?(droppedTask, 0, category)
                 }
               }
@@ -4797,77 +4880,6 @@ struct TaskCategorySection: View {
           }
       }
 
-      // Tasks in category with drag-and-drop reordering.
-      // Rendered in multi-select too, so selection keeps the category grouping;
-      // TaskDragDropModifier below is disabled while selecting.
-      if !isCollapsed {
-        LazyVStack(spacing: OmiSpacing.sm) {
-          ForEach(visibleTasks) { task in
-            VStack(spacing: 0) {
-              HStack(spacing: OmiSpacing.sm) {
-                TaskRow(
-                  task: task,
-                  category: category,
-                  indentLevel: indentLevelFor?(task.id) ?? 0,
-                  isMultiSelectMode: isMultiSelectMode,
-                  isSelected: isSelectedFor?(task.id) ?? false,
-                  isKeyboardSelected: isKeyboardSelectedFor?(task.id) ?? false,
-                  onToggle: onToggle,
-                  onDelete: onDelete,
-                  onToggleSelection: onToggleSelection,
-                  onUpdateDetails: onUpdateDetails,
-                  onUpdateTags: onUpdateTags,
-                  onIncrementIndent: onIncrementIndent,
-                  onDecrementIndent: onDecrementIndent,
-                  onOpenChat: onOpenChat,
-                  onSelect: onSelect,
-                  onOpenDetails: onOpenDetails,
-                  onHover: onHover,
-                  isTaskDetailPanelActive: isTaskDetailPanelActive,
-                  onDragStarted: onDragStarted,
-                  onDragEnded: onDragEnded,
-                  isBeingDragged: draggedTaskId == task.id,
-                  isChatActive: isChatActive,
-                  activeChatTaskId: activeChatTaskId,
-                  chatCoordinator: chatCoordinator,
-                  editingTaskId: editingTaskId,
-                  onEditingChanged: onEditingChanged,
-                  onStartEditing: onStartEditing,
-                  animateToggleTaskId: animateToggleTaskId
-                )
-              }
-              .id(task.id)
-              .modifier(
-                TaskDragDropModifier(
-                  isEnabled: !isMultiSelectMode,
-                  taskId: task.id,
-                  taskDescription: task.description,
-                  isDropTarget: dropTargetTaskId == task.id,
-                  dropAbove: dropAbove,
-                  findTask: { id in findTaskGlobal?(id) ?? orderedTasks.first(where: { $0.id == id }) },
-                  onMoveTaskBeforeTarget: { droppedTask in
-                    onMoveTaskBeforeTarget?(droppedTask, task.id, category)
-                  },
-                  onDragEnded: onDragEnded,
-                  onHoverChanged: onDragHoverChanged
-                ))
-
-              // Inline creation row after this task
-              if !isMultiSelectMode && isInlineCreating && inlineCreateAfterTaskId == task.id {
-                InlineTaskCreationRow(
-                  text: $inlineCreateText,
-                  isFocused: $inlineCreateFocused,
-                  onCommit: { _ in onInlineCommit?() },
-                  onCancel: { onInlineCancel?() },
-                  onCommitToday: { _ in onInlineCommitToday?() }
-                )
-                .padding(.top, OmiSpacing.xxs)
-              }
-            }
-          }
-
-        }
-      }
     }
   }
 
@@ -5756,83 +5768,71 @@ struct TaskRow: View {
       // Hover actions overlaid on trailing edge (no layout shift)
       if TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: isHovering,
+        isKeyboardSelected: isKeyboardSelected,
         isMultiSelectMode: isMultiSelectMode,
         isDeletedTask: isDeletedTask,
         isTextFieldFocused: isTextFieldFocused,
         isDetailPanelPresented: isTaskDetailPanelActive
       ) {
-        HStack(spacing: OmiSpacing.xxs) {
-          // Add date button (shown on hover when no due date)
+        Menu {
           if task.dueAt == nil && !task.completed {
             Button {
               editDueDate = Date()
               showDatePicker = true
             } label: {
-              Image(systemName: "calendar.badge.plus")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .frame(width: 24, height: 24)
+              Label("Add due date…", systemImage: "calendar.badge.plus")
             }
-            .buttonStyle(.plain)
-            .help("Add due date")
           }
 
-          // Outdent button (decrease indent)
           if indentLevel > 0 {
             Button {
               OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 onDecrementIndent?(task.id)
               }
             } label: {
-              Image(systemName: "arrow.left.to.line")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .frame(width: 24, height: 24)
+              Label("Decrease indent", systemImage: "arrow.left.to.line")
             }
-            .buttonStyle(.plain)
-            .help("Decrease indent")
           }
 
-          // Indent button (increase indent)
           if indentLevel < 3 {
             Button {
               OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 onIncrementIndent?(task.id)
               }
             } label: {
-              Image(systemName: "arrow.right.to.line")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-                .frame(width: 24, height: 24)
+              Label("Increase indent", systemImage: "arrow.right.to.line")
             }
-            .buttonStyle(.plain)
-            .help("Increase indent")
           }
 
-          // Share link button
           Button {
             Task { await copyShareLink() }
           } label: {
-            Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "arrowshape.turn.up.right.fill")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 24, height: 24)
+            Label(
+              isCopyingLink ? "Copying share link…" : "Copy share link",
+              systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
           }
-          .buttonStyle(.plain)
           .disabled(isCopyingLink)
-          .help("Copy share link")
 
-          // Delete button
-          Button {
+          Divider()
+
+          Button(role: .destructive) {
             Task { await onDelete?(task) }
           } label: {
-            Image(systemName: "trash")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 24, height: 24)
+            Label("Delete task", systemImage: "trash")
           }
-          .buttonStyle(.plain)
+        } label: {
+          Image(systemName: "ellipsis")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More actions for this task")
+        .accessibilityLabel("More actions for \(task.description)")
+        .accessibilityIdentifier("task-row-actions-\(task.id)")
         .padding(.trailing, OmiSpacing.xxs)
         .padding(.leading, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)

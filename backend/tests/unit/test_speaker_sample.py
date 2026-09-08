@@ -453,3 +453,23 @@ def test_the_dominant_ratio_weighs_segments_by_their_words(monkeypatch):
     _transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
 
     assert (is_valid, reason) == (True, "ok")
+
+
+def test_verify_and_transcribe_sample_passes_language_to_transcriber(monkeypatch):
+    """A non-English sample must be transcribed in its own language, not silently as English.
+
+    Regression for #12899: the transcriber previously received no language argument at all, so it
+    always fell back to English, and the resulting mistranscription failed containment against the
+    original non-English segment text on every sample.
+    """
+    received_kwargs = {}
+
+    def fake_deepgram(*_args, **kwargs):
+        received_kwargs.update(kwargs)
+        return _make_words(["danke", "für", "das", "treffen", "heute"], speakers=["SPEAKER_00"] * 5)
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
+
+    asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="de"))
+
+    assert received_kwargs.get("language") == "de"

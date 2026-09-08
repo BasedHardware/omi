@@ -68,6 +68,8 @@ class TestCacheHit:
         assert isinstance(result, Geolocation)
         assert result.google_place_id == "ChIJIQBpAG2ahYAR_6128GcTUEo"
         assert result.address == "San Francisco, CA"
+        assert result.latitude == 37.78512
+        assert result.longitude == -122.40932
 
     def test_cache_hit_no_api_key_needed(self):
         """Cache hit works even without GOOGLE_MAPS_API_KEY set."""

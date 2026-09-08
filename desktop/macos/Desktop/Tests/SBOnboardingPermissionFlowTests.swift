@@ -26,6 +26,29 @@ private final class ProbeRecorder: @unchecked Sendable {
   }
 }
 
+/// Replays a scripted sequence of `AEDeterminePermissionToAutomateTarget` answers
+/// across the actor hops a probe makes, and counts how many were consumed.
+private final class StatusSequence: @unchecked Sendable {
+  private let lock = NSLock()
+  private var remaining: [OSStatus]
+  private var consumed = 0
+
+  init(_ statuses: [OSStatus]) { remaining = statuses }
+
+  func next() -> OSStatus {
+    lock.lock()
+    defer { lock.unlock() }
+    consumed += 1
+    return remaining.isEmpty ? -600 : remaining.removeFirst()
+  }
+
+  var callCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return consumed
+  }
+}
+
 /// Holds a detached probe open while the main-actor state changes. This makes
 /// the Automation -600 merge test deterministic without a wall-clock sleep.
 private final class BlockingProbeGate: @unchecked Sendable {
@@ -240,6 +263,49 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
     XCTAssertEqual(model.step, .promise)
   }
 
+  // MARK: - A stopped System Events is not an answer about the grant
+
+  func testStatusReadStartsSystemEventsWhenTheTargetIsStopped() {
+    var probes: [Bool] = []
+    var launches = 0
+
+    let status = SBAutomationConsent.currentSystemEventsPermission(
+      determine: { askUserIfNeeded in
+        probes.append(askUserIfNeeded)
+        return probes.count == 1 ? -600 : noErr
+      },
+      launch: { launches += 1 })
+
+    XCTAssertEqual(
+      status, noErr,
+      "a granted permission must not read as missing just because the target was idle")
+    XCTAssertEqual(launches, 1)
+    XCTAssertEqual(probes, [false, false], "a status read must never be allowed to prompt")
+  }
+
+  func testStatusReadDoesNotStartSystemEventsWhenTheAnswerIsAlreadyDeterminate() {
+    for determinate in [noErr, OSStatus(-1743), OSStatus(-1744)] {
+      var launches = 0
+
+      let status = SBAutomationConsent.currentSystemEventsPermission(
+        determine: { _ in determinate },
+        launch: { launches += 1 })
+
+      XCTAssertEqual(status, determinate)
+      XCTAssertEqual(launches, 0, "TCC already answered; starting the target buys nothing")
+    }
+  }
+
+  func testStatusReadStillReportsProcNotFoundWhenTheTargetWillNotStart() {
+    let status = SBAutomationConsent.currentSystemEventsPermission(
+      determine: { _ in -600 },
+      launch: {})
+
+    XCTAssertEqual(
+      status, -600,
+      "an unlaunchable target stays unknown, so the caller can preserve what it knows")
+  }
+
   // MARK: - Defect 1/5: the automation request
 
   func testAutomationConsentRunsOffTheMainThreadAndAdoptsItsOwnAnswer() async {
@@ -353,7 +419,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 /// The permission probes `AppState` owns, exercised through their injected seams.
 @MainActor
 final class AppStatePermissionProbeTests: XCTestCase {
-  func testAccessibilitySettingsOpenPresentsDragGuidance() {
+  func testAccessibilitySettingsOpenPresentsConditionalDragGuidance() {
     var openedURL: URL?
     var presentedDragGuidance = false
 
@@ -372,7 +438,7 @@ final class AppStatePermissionProbeTests: XCTestCase {
     XCTAssertTrue(presentedDragGuidance)
   }
 
-  func testAccessibilityDragGuidanceIsNotPresentedWhenSettingsFailsToOpen() {
+  func testAccessibilitySettingsFailureDoesNotPresentDragGuidance() {
     var presentedDragGuidance = false
 
     let opened = PermissionDragGuidance.openAccessibilitySettings(
@@ -418,6 +484,60 @@ final class AppStatePermissionProbeTests: XCTestCase {
     })
 
     XCTAssertFalse(recorder.ranOnMainThread)
+  }
+
+  /// The passive probe is launch-capable since it learned to start System
+  /// Events: it can wait on LaunchServices for up to ~5s. `ChatToolExecutor`
+  /// is `@MainActor`, so a synchronous call there freezes the chat window.
+  /// The check-status tool must route the probe through `Task.detached`, the
+  /// same rule `AppState.refreshAutomationPermission` already follows.
+  func testChatPermissionStatusProbeNeverRunsOnTheMainActor() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/ChatToolExecutor.swift")
+    // omi-test-quality: source-inspection -- static contract: the isolation boundary is not hermetically observable
+    let src = try String(contentsOf: url, encoding: .utf8)
+
+    guard
+      let fn = src.range(of: "private static func currentPermissionStatuses("),
+      let end = src.range(of: "\n  }", range: fn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("currentPermissionStatuses must exist") }
+    let body = String(src[fn.upperBound..<end])
+    guard
+      let detached = body.range(of: "await Task.detached(priority: .userInitiated) {")?
+        .upperBound
+    else {
+      return XCTFail(
+        "currentPermissionStatuses is @MainActor-isolated; the launch-capable probe must run via Task.detached")
+    }
+    XCTAssertNil(
+      body.range(of: "AppState.queryAutomationPermissionStatus()", range: body.startIndex..<detached),
+      "the launch-capable probe must not be called synchronously inside the @MainActor tool")
+    let windowEnd = body.index(detached, offsetBy: 200, limitedBy: body.endIndex) ?? body.endIndex
+    XCTAssertNotNil(
+      body.range(of: "AppState.queryAutomationPermissionStatus()", range: detached..<windowEnd),
+      "the automation probe must run inside the detached task")
+  }
+
+  /// The reported bug: Automation on in System Settings, "Not Granted" on the
+  /// Permissions page, on every refresh, for the whole session. System Events
+  /// had exited, so every probe answered `-600`, which preserves the previous
+  /// value — and from a cold launch that value is the `false` default.
+  func testStoppedSystemEventsThatCanBeStartedResolvesTheColdLaunchDefault() async {
+    let appState = AppState()
+    appState.hasAutomationPermission = false
+    let statuses = StatusSequence([-600, noErr])
+
+    let granted = await appState.refreshAutomationPermission(query: {
+      SBAutomationConsent.currentSystemEventsPermission(
+        determine: { _ in statuses.next() },
+        launch: {})
+    })
+
+    XCTAssertTrue(granted, "a grant the user holds must not read as missing on an idle Mac")
+    XCTAssertTrue(appState.hasAutomationPermission)
+    XCTAssertEqual(appState.automationPermissionError, 0)
+    XCTAssertEqual(statuses.callCount, 2, "the second read is the one that can answer")
   }
 
   func testAutomationProcNotFoundPreservesTheLatestMainActorGrantAfterAwait() async {
@@ -553,11 +673,19 @@ final class AppStatePermissionProbeTests: XCTestCase {
     let target = await model.firstUnaskedStepAwaitingCurrentProbes(from: .automation) { key in
       probedKeys.append(key)
       await Task.yield()
-      model.appState.hasAutomationPermission = true
+      // Each probe answers only its own permission, so a step is skipped only
+      // after its own probe is awaited — the automation grant must not leak a
+      // skip past the notifications step.
+      switch key {
+      case "automation": model.appState.hasAutomationPermission = true
+      case "notifications": model.appState.hasNotificationPermission = true
+      default: break
+      }
     }
 
-    XCTAssertEqual(probedKeys, ["automation"])
+    XCTAssertEqual(probedKeys, ["automation", "notifications"])
     XCTAssertEqual(target, .shortcutOpen)
     XCTAssertEqual(model.autoState, .on)
+    XCTAssertEqual(model.notifState, .on)
   }
 }

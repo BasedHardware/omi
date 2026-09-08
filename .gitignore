@@ -20,6 +20,7 @@ dump/
 *.zip
 *.wav
 !backend/testing/release_fixtures/transcription-release-probe.wav
+!desktop/macos/Desktop/Sources/Resources/VoicePhrases/*.wav
 node_modules
 yarn.lock
 

@@ -48,6 +48,54 @@ export interface QueryMessage extends ProtocolEnvelope {
    * x-omi-reasoning-effort header; never interpreted by the runtime.
    */
   reasoningEffort?: string;
+  /**
+   * Per-turn client-computed capability flag: true when the desktop's JIT
+   * knowledge-ledger rollout is enabled for the current user. This is a UX
+   * gate only — the backend independently re-checks entitlement on every
+   * `/v1/agent/execute-tool` call, so an absent or stale value only affects
+   * which tools the model is offered, never authorization.
+   */
+  jitKnowledgeToolsEnabled?: boolean;
+  /** QA-only source-owned prompt projection; persisted beside the admitted
+   * snapshot and hashed by the runtime before the run is inserted. */
+  jitCostEvidenceProjection?: JitCostEvidenceProjection;
+  /** Qualification-only JIT budget; absent for all normal chat. */
+  jitBudget?: {
+    contractVersion: string;
+    executionID: string;
+    maxProviderAttempts: number;
+    maxOutputTokensPerAttempt: number;
+    maxNormalizedInputTokensPerAttempt: number;
+    maxEstimatedSpendMicroUSD: number;
+  };
+}
+
+export interface JitCostEvidenceProjection {
+  schema_version: string;
+  owner_id: string;
+  execution_id: string;
+  producer_lane: "planned" | "ambient";
+  matched_input: {
+    evaluation_time: string;
+    timezone: string;
+    context_id: string;
+    evidence_sha256?: string;
+  };
+  legacy: {
+    prompt: string;
+    uncached_prompt: string;
+    [key: string]: unknown;
+  };
+  nano: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  full: {
+    prompt: string;
+    [key: string]: unknown;
+  };
+  evidence_sha256?: string;
+  [key: string]: unknown;
 }
 
 export interface QueryAttachment {
@@ -95,6 +143,9 @@ export interface ExternalSurfaceRunBeginMessage extends ProtocolEnvelope {
   sessionId: string;
   turnId: string;
   prompt: string;
+  /** The prompt is an internal instruction, not user speech: it drives the run
+   *  but must never be journaled as the user's turn. */
+  promptIsSynthetic?: boolean;
   mode: "ask" | "act";
 }
 
@@ -116,6 +167,21 @@ export interface ExternalSurfaceRunCompleteMessage extends ProtocolEnvelope {
   runId: string;
   attemptId: string;
   terminalStatus: "completed" | "failed" | "cancelled";
+  /**
+   * The answer text the external surface reports for this run.
+   *
+   * An external surface owns its own streaming, so the kernel never observes this
+   * run's output — it has to be handed back at terminalization or it is lost.
+   * Without it `runs.final_text` stays null and every consumer that reads a run's
+   * answer is content-free: the completion lane can only report that an agent
+   * finished, and a spawn-agent child's receipt, which builds its journal block
+   * from the child's final text, has nothing to write (#12731).
+   *
+   * What a surface can actually report is its own problem: for a realtime voice
+   * deferral the text must be accumulated over the turn stream, because the
+   * turn-end hub property is already cleared by the time terminalization runs.
+   */
+  finalText?: string;
   errorCode?: string;
 }
 
@@ -742,6 +808,14 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  /**
+   * Whether the kernel stored `finalText` for this run. Absent from an older
+   * kernel, which lets a surface keep its own journal fallback instead of
+   * trusting a silent no-op (#12731).
+   */
+  finalTextPersisted?: boolean;
+  /** Whether completion left a canonical assistant row for this voice turn. */
+  journalMaterialized?: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -780,6 +854,13 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Qualification-only gateway attribution; null is explicit unknown. */
+  jitCostStatus?: "estimated" | "unknown";
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
+  /// Served model identities observed on this run's completions, deduplicated.
+  modelsUsed?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -817,6 +898,19 @@ export interface RuntimeFailurePayload {
   retryDisposition?: "next_send";
 }
 
+/// One concrete model identity observed serving this turn's completions.
+/// `model` is ONLY the SERVED model from the provider's response stream (e.g.
+/// the gateway lane's resolved upstream, pi-ai's `responseModel`). A response
+/// that names no model produces NO event — the requested id is an alias and
+/// must never be presented as the served model (#11521). Deduplicated per
+/// turn by the adapter; `requestedModel` is context, not attribution.
+export interface ModelUsedMessage extends QueryScopedOutbound {
+  type: "model_used";
+  model: string;
+  requestedModel?: string;
+  provider?: string;
+}
+
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
@@ -851,6 +945,9 @@ export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
   failure?: RuntimeFailurePayload;
+  /** Qualification-only gateway attribution; failures are always unknown. */
+  jitCostStatus?: "unknown";
+  jitEstimatedCostUsd?: null;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */
@@ -972,6 +1069,8 @@ export interface ContextSnapshotProjection {
     status: string;
     origin: string;
     createdAtMs: number;
+    /** Text of what the user's screen showed when this turn was asked (historical). */
+    screenContext?: string;
   }>;
   sourceOutcomes: ContextSourceOutcomeProjection[];
   activeRuns: Array<{
@@ -1100,6 +1199,8 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   suppressedByStreamingTail?: boolean;
   materializationStoppedByTail?: boolean;
   materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  materializationRejections?: Array<{ intentId: string; code: string; message: string }>;
+  materializationDeferrals?: Array<{ intentId: string; code: "tail_question" | "streaming_tail" }>;
   coldStartSequenceTerminalReceipts?: Array<{
     sequenceId: string;
     receiptId: string;
@@ -1188,6 +1289,7 @@ export type OutboundMessage =
   | TextDeltaMessage
   | ToolUseMessage
   | ToolActivityMessage
+  | ModelUsedMessage
   | TurnActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage
@@ -1229,6 +1331,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<TextDeltaMessage>
   | DraftEnvelope<ToolUseMessage>
   | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ModelUsedMessage>
   | DraftEnvelope<TurnActivityMessage>
   | DraftEnvelope<ToolResultDisplayMessage>
   | DraftEnvelope<ThinkingDeltaMessage>

@@ -1864,9 +1864,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openSettings => 'Ayarları Aç';
 
   @override
-  String get wantDifferentName => 'Farklı bir isimle mi anılmak istiyorsunuz?';
-
-  @override
   String get whatsYourName => 'Adın ne?';
 
   @override
@@ -2047,7 +2044,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryDeleted => 'Anı Silindi.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
 
   @override
   String get undo => 'Geri Al';
@@ -9856,12 +9854,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Mağazayı aç';
 
   @override
-  String get chatScopeToday => 'Bugün';
-
-  @override
-  String get chatScopeThisWeek => 'Bu hafta';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Hakkında: $title';
   }
@@ -9925,4 +9917,78 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant\'ın depolama alanı dolu ve hâlâ kayıt modunda olduğu için kayıtlı ses aktarılamıyor. Kaydı durdurmak için Pendant\'ın düğmesine basın, ardından yeniden senkronize edin.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Kaydedilmedi ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name adlı kişinin ses profili';
+  }
+
+  @override
+  String get play => 'Oynat';
+
+  @override
+  String get redo => 'Yeniden kaydet';
+
+  @override
+  String get answerWithYourVoice => 'Sesinizle yanıtlayın:';
+
+  @override
+  String get speechProfileTopicLocation => 'Nerede yaşıyorsunuz?';
+
+  @override
+  String get speechProfileTopicWork => 'Ne iş yapıyorsunuz?';
+
+  @override
+  String get speechProfileTopicGoal => 'Uzun vadeli hedefiniz nedir?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
+
+  @override
+  String get tapPlusToStartRecording => 'Kaydı başlatmak için + simgesine dokunun';
+
+  @override
+  String get chatBlockTask => 'Görev';
+
+  @override
+  String get chatBlockGoal => 'Hedef';
+
+  @override
+  String get chatBlockConversation => 'Konuşma';
+
+  @override
+  String get chatBlockMemory => 'Anı';
+
+  @override
+  String get chatBlockQuestion => 'Soru';
+
+  @override
+  String get chatBlockOpenInGoals => 'Hedefler’de aç';
+
+  @override
+  String get chatBlockOpenConversation => 'Konuşmayı aç';
+
+  @override
+  String get chatBlockOpenInMemories => 'Anılar’da aç';
+
+  @override
+  String get chatBlockUnavailable => 'Artık kullanılamıyor';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Önerilen sonraki adımlar';
+
+  @override
+  String get couldNotLoadMemories => 'Anılar yüklenemedi';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Bilgi grafiği yüklenemedi';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
 }

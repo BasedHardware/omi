@@ -49,6 +49,7 @@ enum ShellClickThroughPolicy {
 @MainActor
 final class ShellMouseInterceptionSync {
   private nonisolated(unsafe) var monitors: [Any] = []
+  private var visibilityObservation: NSKeyValueObservation?
   private var pollingCancellable: AnyCancellable?
   private weak var window: NSWindow?
 
@@ -72,6 +73,9 @@ final class ShellMouseInterceptionSync {
     {
       monitors.append(local)
     }
+    visibilityObservation = window.observe(\.isVisible, options: [.new]) { [weak self] _, _ in
+      MainActor.assumeIsolated { self?.sync() }
+    }
     sync()
   }
 
@@ -86,6 +90,7 @@ final class ShellMouseInterceptionSync {
     window?.ignoresMouseEvents = false
     window = nil
     pollingCancellable = nil
+    visibilityObservation = nil
   }
 
   func sync() {

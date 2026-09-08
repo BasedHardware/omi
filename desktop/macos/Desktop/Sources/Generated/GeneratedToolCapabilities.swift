@@ -88,7 +88,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Search the user's on-screen history by meaning.",
       bullets: [
-      "Use for what the user saw, read, or worked on. Speak a short summary of the result."
+      "Use for what the user saw, read, or worked on, including text they read on a page earlier (a riddle, a message, a document). Speak a short summary of the result.",
+      "Prefer this over conversation tools for anything that was displayed rather than spoken."
     ]
     ),
     Capability(
@@ -376,9 +377,10 @@ enum GeneratedToolCapabilities {
       title: "Load Skill",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Load the full instructions for a named skill listed in available_skills.",
+      summary: "Load a skill progressively: the first call returns metadata, a section table of contents, and the first section; further sections load by part.",
       bullets: [
-      "Use the exact skill name from available_skills."
+      "Use the exact skill name from available_skills.",
+      "Read additional sections with part only when the first section is relevant."
     ]
     ),
     Capability(
@@ -416,7 +418,10 @@ enum GeneratedToolCapabilities {
       summary: "Retrieve conversations by recency or date range.",
       bullets: [
       "Use for latest/recent conversations and time-based conversation retrieval.",
-      "For voice, this returns summaries only and should be spoken briefly."
+      "For voice, this returns summaries only and should be spoken briefly.",
+      "If the user asked to see, find, open, pick or choose a conversation — 'show me the call with Paul', 'which one was most interesting', 'find the meeting about pricing' — the conversation is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks, and keep the prose to one lead-in line. Do not answer with a bold title and a citation number in place of the component.",
+      "A follow-up that narrows an earlier result — 'pick one', 'the second one', 'tell me more about that one' — still renders the component for what it picks.",
+      "A recap of a day, a summary, a comparison, a count, or a list longer than three is prose that cites the conversations inline instead."
     ]
     ),
     Capability(
@@ -427,7 +432,9 @@ enum GeneratedToolCapabilities {
       summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
       "Use for specific topics, decisions, or events discussed in conversations.",
-      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
+      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      "If the user asked to find, see, open or pick a conversation, the match is the answer: render it as a captureLink block ({type:'captureLink', conversationId:'<canonical id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line. Up to three matches render; say how many more there are.",
+      "When the conversation is only evidence for something you are answering in prose — what was decided, whether it happened, what someone said — cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -437,7 +444,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve stored facts, preferences, habits, people, and background about the user.",
       bullets: [
-      "Use for broad 'what do you know about me' questions or personal facts."
+      "Use for broad 'what do you know about me' questions or personal facts.",
+      "If the user asked to see, review, find or pick specific memories, the memories are the answer: render the ones that matter as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks — a count in prose, never a bulleted copy of the cards.",
+      "'What do you know about me' and other summaries, comparisons or long lists answer in prose and cite the memories inline instead."
     ]
     ),
     Capability(
@@ -447,7 +456,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Semantic search across user memories.",
       bullets: [
-      "Use for a specific personal fact that is not already in the visible user context."
+      "Use for a specific personal fact that is not already in the visible user context.",
+      "If the user asked to find, see or pick a memory, the match is the answer: render up to three as memoryLink blocks ({type:'memoryLink', memoryId:'<id from this result>', summary:'...'}) with render_chat_blocks and keep the prose to one lead-in line.",
+      "When a memory is only evidence for an answer in prose, cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -461,12 +472,102 @@ enum GeneratedToolCapabilities {
       "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
       "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
       "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      "For a durable fact correction, a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools instead.",
       "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
       "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
       "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
       "Confirm the save in one line. Never tell the user about validators or internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
-      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
+      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
+      "For a durable fact correction ('that's no longer true'), a reusable multi-step playbook, or a standing watch request, use the knowledge-ledger tools (close_fact / save_playbook / create_standing_trigger) instead of create_memory."
+    ]
+    ),
+    Capability(
+      toolName: "search_knowledge",
+      title: "Search Knowledge",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Search current facts, playbook handles, and trigger descriptions in the knowledge ledger.",
+      bullets: [
+      "Use for durable user facts, saved playbooks, and standing triggers — not short-term memory or filesystem documents.",
+      "For a document result, call read_playbook with its memory id to load the full body.",
+      "For a durable user fact, correction, saved playbook, or standing watch, use the knowledge-ledger tools (this one, read_playbook, save_playbook, create_standing_trigger, close_fact) rather than create_memory or a filesystem document.",
+      "Use a comma-separated kinds filter (fact, document, trigger) to narrow to one ledger kind."
+    ]
+    ),
+    Capability(
+      toolName: "read_playbook",
+      title: "Read Playbook",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Load the full body of one current playbook found via search_knowledge.",
+      bullets: [
+      "Only active, non-rejected, non-locked playbooks are readable.",
+      "Call only after search_knowledge returns a document handle; never guess a memory id."
+    ]
+    ),
+    Capability(
+      toolName: "search_historical_facts",
+      title: "Search Historical Facts",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Search closed, superseded, or historical canonical facts when current knowledge is insufficient.",
+      bullets: [
+      "Rejected facts are audit-only negative evidence and must never be treated as true user knowledge.",
+      "Call only after search_knowledge shows current knowledge is insufficient; do not call from historical keywords alone.",
+      "Facts marked rejected are audit-only negative evidence; request include_rejected only for an explicit audit and never treat those rows as true."
+    ]
+    ),
+    Capability(
+      toolName: "get_entity_timeline_tool",
+      title: "Get Entity Timeline",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Read a bounded multi-source timeline for one canonical entity.",
+      bullets: [
+      "Never exposes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions.",
+      "Set include_history only when current knowledge is insufficient and closed/superseded/rejected ledger facts are actually needed.",
+      "The response never includes transcripts, OCR text, alias emails, playbook bodies, or trigger conditions."
+    ]
+    ),
+    Capability(
+      toolName: "save_playbook",
+      title: "Save Playbook",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Save a reusable step-by-step playbook for a recurring, multi-step workflow.",
+      bullets: [
+      "Use when the user asks to save a playbook, checklist, or repeatable procedure — never write it to the filesystem instead.",
+      "Call only after the multi-step workflow has actually been reconstructed end to end.",
+      "Call this — not a filesystem document and not create_memory — whenever the user asks to save a playbook, checklist, or repeatable procedure.",
+      "Call only after you have actually reconstructed the multi-step workflow end to end; do not call for a one-off task or a simple fact or preference."
+    ]
+    ),
+    Capability(
+      toolName: "create_standing_trigger",
+      title: "Create Standing Trigger",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Create a standing watch that notifies the user when a described condition recurs.",
+      bullets: [
+      "Only from explicit standing intent the user stated in this conversation, never an inferred habit.",
+      "Call this for an explicit standing-intent request such as 'watch for X and tell me' or 'let me know whenever Y happens'.",
+      "Never call it from a pattern you merely noticed in passive behavior; an inferred habit is not standing intent.",
+      "Embedding/semantic selectors are not supported; use keywords, regex, apps, windows, time, or calendar selectors instead.",
+      "Use match_mode 'all' or 'any' (never 'exact'); regex must be an array of safe patterns; entity_aliases must be an object; time requires start and end; calendar requires event_keywords or event_types.",
+      "For an exact phrase, use a keyword selector such as condition={keywords:[\"incident marker\"]} and describe the notification in description."
+    ]
+    ),
+    Capability(
+      toolName: "close_fact",
+      title: "Close Fact",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Close a current ledger fact that is no longer true, with no replacement.",
+      bullets: [
+      "If a new fact replaces it, save the new fact instead so the ledger supersedes the old one.",
+      "Call this for 'that's no longer true' when nothing should replace the closed fact.",
+      "If something replaces it, that is an update: save the new fact instead so the ledger supersedes the old one, and do not call close_fact."
     ]
     ),
     Capability(
@@ -476,8 +577,10 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Retrieve the user's tasks with optional completion and due-date filters.",
       bullets: [
-      "Use for completed tasks, date ranges, or the full task list.",
-      "For voice, prefer get_tasks for plain overdue/due-today questions."
+      "Use for completed tasks or an explicit date range.",
+      "For voice, prefer get_tasks for any plain question about the open list.",
+      "If the user asked to see, review, pick from or work through their tasks, the tasks are the answer: render the few that matter as taskCard blocks with render_chat_blocks. Say how many there are in total — a count, never their names. Naming them in the message, as a list or as bullets, prints every card twice: once as words that cannot be ticked off and once as the card itself.",
+      "If a task is only evidence for something you are answering in prose — how many are open, whether one exists, what a day contained — cite it inline and render nothing."
     ]
     ),
     Capability(
@@ -488,7 +591,23 @@ enum GeneratedToolCapabilities {
       summary: "Create a new task, to-do, or reminder.",
       bullets: [
       "Use when the user explicitly asks to add something to their list.",
-      "Pass a concise description and due_at only when the user gave a time."
+      "Pass a concise description and due_at only when the user gave a time.",
+      "For 'next time I'm here' or 'when I open this', use create_context_reminder."
+    ]
+    ),
+    Capability(
+      toolName: "create_context_reminder",
+      title: "Create Context Reminder",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Bind a reminder to the user's current app or document, not to a time.",
+      bullets: [
+      "Use when the user says 'remind me next time I'm here', 'next time I open this', or 'when I'm back in this'.",
+      "The place is captured from the frontmost window automatically; pass only the reminder text.",
+      "Do not use for timed reminders ('tomorrow', 'at 3pm') — those are create_action_item.",
+      "Call when the user asks to be reminded the next time they are in the current app, document, or page.",
+      "Pass only the reminder text. The current frontmost window is captured automatically.",
+      "Do not use for timed reminders; those are create_action_item."
     ]
     ),
     Capability(
@@ -601,10 +720,10 @@ enum GeneratedToolCapabilities {
       title: "Get Tasks",
       latency: .fastLocal,
       surfaces: Set([.realtimeHub]),
-      summary: "Read the user's overdue and due-today tasks locally.",
+      summary: "Read the user's open tasks locally: overdue, due today, and undated.",
       bullets: [
       "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
-      "Prefer get_action_items for completed tasks, date ranges, or the full list."
+      "Prefer get_action_items for completed tasks or an explicit date range."
     ]
     ),
     Capability(
@@ -620,13 +739,31 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "ask_higher_model",
-      title: "Ask Higher Model",
-      latency: .fastNetwork,
+      toolName: "think_deeper",
+      title: "Think Deeper",
+      latency: .asyncBackground,
       surfaces: Set([.realtimeHub]),
-      summary: "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
+      summary: "Take more time and use Omi's full answer capabilities whenever a quick realtime answer would be shallow.",
       bullets: [
-      "Use sparingly; answer simple or creative requests yourself."
+      "Always call before answering explicit think-hard requests, including 'think carefully', 'go deep', 'don't just guess', and 'what should I do', plus advice, tradeoffs, multi-step plans, or pushback on a weak prior answer.",
+      "A short, vague, or first-turn request still counts: call with the question as given instead of answering or asking a clarifying question first.",
+      "Also call proactively on the first turn for complicated reasoning, consequential judgment, personalized synthesis across the user's data, or any answer that would be shallow in one or two realtime sentences. When unsure, escalate.",
+      "Always use the web_search -> think_deeper sequence for historical public research about how, when, or why a company, product, or person did something, and for any public question that may require finding or corroborating multiple sources. First call web_search; after its result arrives, call think_deeper with the original question and that result as context.",
+      "Skip only chit-chat, short confirmations, obvious stable facts, or one narrow current fact that a fast realtime tool fully answers, such as weather, a current price, or a score.",
+      "For historical research or public synthesis, never call think_deeper without fresh public evidence. If no web_search result is present in this turn, call web_search first; then call think_deeper and include the result in context."
+    ]
+    ),
+    Capability(
+      toolName: "web_search",
+      title: "Web Search",
+      latency: .asyncBackground,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Search the live public web through Omi's typed-chat retrieval lane, then speak a grounded answer.",
+      bullets: [
+      "You MUST use this for current public information such as weather, news, prices, scores, schedules, releases, and officeholders.",
+      "You MUST also use it for an explicitly requested narrow lookup, verification, or citation of one current public fact.",
+      "Use scope=narrow_current only for a narrow current fact. For historical company or product research, comparisons, or any question likely to need multiple sources or synthesis, use scope=historical_research, then call think_deeper with the original question and the complete search result in context.",
+      "Never claim that web search, internet access, or real-time data is unavailable. If this tool fails, say that the lookup failed."
     ]
     ),
     Capability(
@@ -648,6 +785,18 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Only call after screenshot returns the current image.",
       "Submit a concise visual observation, then answer the user's original request naturally."
+    ]
+    ),
+    Capability(
+      toolName: "record_interject_feedback",
+      title: "Record Interject Feedback",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Silently record how the user's utterance relates to the proactive card.",
+      bullets: [
+      "Call silently when the latest utterance is a reply to the quoted card, then speak only the user-facing answer.",
+      "For a question or continuation, use riff or omit this tool; the first audio must be the answer.",
+      "Never speak the verb, a heads-up, or the tool result."
     ]
     ),
     Capability(
@@ -702,6 +851,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

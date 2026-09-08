@@ -144,6 +144,10 @@ client_stub.db = mock_db
 client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
 client_stub.get_firestore_client = MagicMock(return_value=mock_db)
+# database.screen_activity imports the data-plane seam's lazy proxy at its own
+# import site (see database/_client.py's get_data_plane_firestore_client()).
+client_stub.data_plane_db = mock_db
+client_stub.get_data_plane_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
@@ -165,8 +169,15 @@ models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
 _stub_package("utils")
 _stub_package("utils.other")
+_stub_package("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
 utils_sub_stub = _stub_module("utils.subscription")
 utils_sub_stub.get_default_basic_subscription = MagicMock()
+feedback_stub = _stub_module("utils.feedback")
+feedback_stub.record_chat_message_feedback = MagicMock()
+feedback_stub.record_conversation_summary_feedback = MagicMock()
+feedback_stub.record_memory_feedback = MagicMock()
 utils_enc_stub = _stub_module("utils.encryption")
 utils_enc_stub.encrypt = MagicMock(return_value="encrypted")
 utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
@@ -221,15 +232,17 @@ import database.staged_tasks as staged_tasks_db  # noqa: E402
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 
+# routers.chat_sessions imports utils.chat_rating_triage and utils.other.endpoints
+# at module scope, so the real utils package must be resolvable before it loads.
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+
 from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa: E402
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
 import routers.staged_tasks as staged_router  # noqa: E402
-
-_ensure_package_path("models", BACKEND_DIR / "models")
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.

@@ -100,13 +100,16 @@ let package = Package(
         "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
         "FloatingControlBar/ARCHITECTURE.md",
+        "MainWindow/Pages/MemoryGraph/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks,
-        // signin_bg.png, Resources/Fonts/*.ttf — Geist / Geist Mono — and
+        // signin_bg.png, provider-native VoicePhrases/*.wav, Resources/Fonts/*.ttf —
+        // Geist / Geist Mono — and
         // Resources/Fonts/*.otf — Open Runde, the glass display face — and
-        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio).
+        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio, and
+        // Resources/three-doors.html, the onboarding ask-demo page).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.

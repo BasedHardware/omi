@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-path-filter-masks-default-branch-health",
+  "violated_contract": "A path-filtered workflow answers whether one diff requires a component check; it does not establish that the component still compiles at the current default-branch SHA. Treating a later unrelated commit's skipped component jobs or overall green workflow as refreshed health evidence lets an older compiler failure remain on main behind a newer green run (#12275).",
+  "canonical_prevention": "Keep ordinary push and pull-request path filtering for cost control, but give the component an authoritative recurring health event and an operator recovery event that force its real compile/test phases against the current SHA regardless of changed paths. Guard both sides: authoritative events must select the full phases, while unrelated ordinary pushes must remain filtered.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_pre_push_ci_prediction.py",
+    ".github/scripts/test_desktop_swift_ci_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/",
+    "scripts/pre_push_ci_prediction.py"
+  ],
+  "status": "open"
+}

@@ -43,18 +43,76 @@ def _decode_redis_value(raw: Union[bytes, str]) -> str:
     return raw.decode('utf-8') if isinstance(raw, bytes) else raw
 
 
+_MAX_LEGACY_LITERAL_CHARS = 64 * 1024
+
+
+def _fail_open_raw_text(text: str, reason: str) -> str:
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='redis_cache',
+            from_mode='json',
+            to_mode='raw_text',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        logger.warning('redis cache deserialize fail-open reason=%s', reason)
+    return text
+
+
 def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
-    """Deserialize a Redis cache value using JSON, with legacy literal_eval fallback."""
+    """Deserialize a Redis cache value using JSON, with safe fallback for legacy Python literals."""
     if raw is None:
         return None
     text = _decode_redis_value(raw)
     try:
         return json.loads(text)
     except (TypeError, ValueError, json.JSONDecodeError):
+        if len(text) > _MAX_LEGACY_LITERAL_CHARS:
+            return _fail_open_raw_text(text, 'oversized')
         try:
-            return ast.literal_eval(text)
-        except (ValueError, SyntaxError):
-            return text
+
+            class _SafeLiteralVisitor(ast.NodeVisitor):
+                def generic_visit(self, node: ast.AST) -> Any:
+                    raise ValueError('unsupported ast node')
+
+                def visit_Expression(self, node: ast.Expression) -> Any:
+                    return self.visit(node.body)
+
+                def visit_Dict(self, node: ast.Dict) -> dict[Any, Any]:
+                    out: dict[Any, Any] = {}
+                    for key_node, value_node in zip(node.keys, node.values):
+                        if key_node is None:
+                            raise ValueError('dict unpacking is not a literal')
+                        out[self.visit(key_node)] = self.visit(value_node)
+                    return out
+
+                def visit_List(self, node: ast.List) -> list[Any]:
+                    return [self.visit(elt) for elt in node.elts]
+
+                def visit_Tuple(self, node: ast.Tuple) -> tuple[Any, ...]:
+                    return tuple(self.visit(elt) for elt in node.elts)
+
+                def visit_Set(self, node: ast.Set) -> set[Any]:
+                    return {self.visit(elt) for elt in node.elts}
+
+                def visit_Constant(self, node: ast.Constant) -> Any:
+                    return node.value
+
+                def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
+                    if type(node.op) not in (ast.UAdd, ast.USub):
+                        raise ValueError('unsupported unary op')
+                    operand = self.visit(node.operand)
+                    if type(operand) not in (int, float):
+                        raise ValueError('unsupported unary operand')
+                    return operand if type(node.op) is ast.UAdd else -operand
+
+            return _SafeLiteralVisitor().visit(ast.parse(text, mode='eval'))
+        except Exception:
+            return _fail_open_raw_text(text, 'parse_error')
 
 
 def _serialize_cache_value(value: Any) -> str:
@@ -1388,6 +1446,21 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def release_daily_summary_lock(uid: str, date: str) -> None:
+    """Release a day lock this process took but did not spend on generation.
+
+    The 2h TTL exists to stop two workers doing the same LLM work, not to bar the day.
+    A holder that declines before the LLM call (no conversations yet, nothing transcribed)
+    has done nothing worth protecting, and keeping the key would block every later attempt
+    — including the on-demand button and the cron tick that would have caught the day once
+    it had content.
+    """
+    try:
+        r.delete(f'users:{uid}:daily_summary_lock:{date}')
+    except Exception as error:
+        logger.warning('Failed to release daily summary lock uid=%s date=%s: %s', uid, date, error)
 
 
 @try_catch_decorator

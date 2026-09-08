@@ -821,3 +821,90 @@ def test_ledger_migration_adapter_retry_is_a_noop(monkeypatch):
     )
 
     assert result == adapted
+
+
+def test_write_playbook_and_create_trigger_persist_their_own_kind(monkeypatch):
+    """The two dormant write verbs land the exact kind their JIT tools rely on."""
+    captured: dict = {}
+
+    def fake_write(uid, data, **kwargs):
+        captured["uid"] = uid
+        captured["data"] = data
+        return data["id"]
+
+    monkeypatch.setattr(knowledge_ledger, "write_canonical_knowledge_ledger_memory", fake_write)
+
+    playbook_provenance = LedgerProvenance(
+        source_id="turn-playbook", source_type="agent_chat", action_id="action-playbook"
+    )
+    playbook_id = knowledge_ledger.write_playbook(
+        "u1",
+        "Cut a release candidate",
+        "1. Run checks\n2. Publish",
+        provenance=playbook_provenance,
+    )
+    assert captured["uid"] == "u1"
+    assert captured["data"]["id"] == playbook_id
+    assert captured["data"]["kind"] == MemoryKind.document.value
+    assert captured["data"]["body"] == "1. Run checks\n2. Publish"
+    assert captured["data"]["write_reason"] == LedgerWriteReason.recurring_workflow.value
+    assert captured["data"]["subject_scope"] == MemorySubjectScope.primary_user.value
+
+    trigger_provenance = LedgerProvenance(
+        source_id="turn-trigger", source_type="agent_chat", action_id="action-trigger"
+    )
+    trigger_condition = {
+        "keywords": ["jane"],
+        "action": {"type": "agent_prompt", "prompt": "Tell the user Jane emailed."},
+    }
+    trigger_id = knowledge_ledger.create_trigger(
+        "u1",
+        "Watch for Jane",
+        trigger_condition,
+        provenance=trigger_provenance,
+        arguments={"wakeup_budget_per_day": 1},
+    )
+    assert captured["data"]["id"] == trigger_id
+    assert captured["data"]["kind"] == MemoryKind.trigger.value
+    assert captured["data"]["trigger_condition"] == trigger_condition
+    assert captured["data"]["arguments"] == {"wakeup_budget_per_day": 1}
+    assert captured["data"]["write_reason"] == LedgerWriteReason.standing_trigger.value
+
+    # The pre-existing verb signature omitted ``arguments`` entirely, which
+    # made it impossible for any caller to ever populate
+    # ``wakeup_budget_per_day`` — the one field the paid-work trigger snapshot
+    # (utils.memory.jit_trigger_snapshot) requires before it will admit a row.
+    # Confirm the additive default still behaves for a caller that omits it.
+    trigger_id_no_arguments = knowledge_ledger.create_trigger(
+        "u1",
+        "Watch for Jane again",
+        trigger_condition,
+        provenance=LedgerProvenance(source_id="turn-trigger-2", source_type="agent_chat", action_id="action-trigger-2"),
+    )
+    assert captured["data"]["id"] == trigger_id_no_arguments
+    assert captured["data"]["arguments"] == {}
+
+
+def test_close_fact_sets_valid_to_via_canonical_mutation(monkeypatch):
+    """A fresh (not already-closed) fact close commits a ``valid_to`` patch."""
+    open_fact = _item("open-fact", status=MemoryItemStatus.active, valid_to=None)
+    captured: dict = {}
+
+    def fake_apply_mutation(uid, memory_id, *, mutation_kind, build_patch, operation_type, db_client):
+        captured["memory_id"] = memory_id
+        captured["mutation_kind"] = mutation_kind
+        _logical, patch = build_patch(open_fact, NOW)
+        captured["patch"] = patch
+        closed = open_fact.model_copy(update={"status": MemoryItemStatus.superseded, **patch})
+        return open_fact, closed
+
+    monkeypatch.setattr(canonical_memory_adapter, "_read_canonical_memory_item_for_lineage", lambda *_a, **_k: None)
+    monkeypatch.setattr(canonical_memory_adapter, "_apply_canonical_user_mutation", fake_apply_mutation)
+
+    result = close_fact("u1", "open-fact", valid_to=NOW, db_client=object())
+
+    assert captured["memory_id"] == "open-fact"
+    assert captured["mutation_kind"] == "ledger_close"
+    assert captured["patch"] == {"valid_to": NOW}
+    assert result.status == MemoryItemStatus.superseded
+    assert result.valid_to == NOW

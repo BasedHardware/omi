@@ -118,7 +118,7 @@ describe("cross-surface contract smoke", () => {
       "what's the weather in NYC right now?",
       "what AI models were released this week?",
     ]) {
-      expect(routePromptForPublicWeb(query)).toContain("<omi_retrieval_policy>");
+      expect(routePromptForPublicWeb(query)).toBe(query);
     }
     expect(routePromptForPublicWeb("search my calendar for weather in NYC")).toBe(
       "search my calendar for weather in NYC",

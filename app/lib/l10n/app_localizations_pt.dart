@@ -1841,9 +1841,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openSettings => 'Abrir configurações';
 
   @override
-  String get wantDifferentName => 'Quer usar um nome diferente?';
-
-  @override
   String get whatsYourName => 'Qual é o seu nome?';
 
   @override
@@ -2018,7 +2015,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryDeleted => 'Memória apagada.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.';
 
   @override
   String get undo => 'Desfazer';
@@ -9853,12 +9851,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Abrir loja';
 
   @override
-  String get chatScopeToday => 'Hoje';
-
-  @override
-  String get chatScopeThisWeek => 'Esta semana';
-
-  @override
   String chatScopeAbout(String title) {
     return 'Sobre: $title';
   }
@@ -9922,4 +9914,78 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'O armazenamento do Pendant está cheio e ele ainda está no modo de gravação, então o áudio armazenado não pode ser transferido. Pressione o botão do Pendant para parar a gravação e sincronize novamente.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Não capturado ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Perfil de voz de $name';
+  }
+
+  @override
+  String get play => 'Reproduzir';
+
+  @override
+  String get redo => 'Gravar novamente';
+
+  @override
+  String get answerWithYourVoice => 'Responda com sua voz:';
+
+  @override
+  String get speechProfileTopicLocation => 'Onde você mora?';
+
+  @override
+  String get speechProfileTopicWork => 'Com o que você trabalha?';
+
+  @override
+  String get speechProfileTopicGoal => 'Qual é seu objetivo de longo prazo?';
+
+  @override
+  String get transcriptionNoAudio => 'A transcrição não está recebendo áudio';
+
+  @override
+  String get tapPlusToStartRecording => 'Toque em + para começar a gravar';
+
+  @override
+  String get chatBlockTask => 'Tarefa';
+
+  @override
+  String get chatBlockGoal => 'Meta';
+
+  @override
+  String get chatBlockConversation => 'Conversa';
+
+  @override
+  String get chatBlockMemory => 'Memória';
+
+  @override
+  String get chatBlockQuestion => 'Pergunta';
+
+  @override
+  String get chatBlockOpenInGoals => 'Abrir em Metas';
+
+  @override
+  String get chatBlockOpenConversation => 'Abrir conversa';
+
+  @override
+  String get chatBlockOpenInMemories => 'Abrir em Memórias';
+
+  @override
+  String get chatBlockUnavailable => 'Já não está disponível';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Próximos passos recomendados';
+
+  @override
+  String get couldNotLoadMemories => 'Não foi possível carregar as memórias';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Não foi possível carregar o grafo de conhecimento';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.';
 }

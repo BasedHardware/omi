@@ -100,6 +100,10 @@ final class VoiceTurnCoordinator {
   private var timelineSequence: UInt64 = 0
   private var turnStartedAt: [VoiceTurnID: ContinuousClock.Instant] = [:]
   private var turnFullAnswerDurationMs: [VoiceTurnID: Int] = [:]
+  /// Delivery state of the most recent terminal, alongside `model.lastTerminal`.
+  /// The journal funnel reads this so a reply whose audio fully drained before a
+  /// barge-in is sealed as the delivered answer it was, not as a cut-off failure.
+  private(set) var lastTerminalAnswerDelivered = false
   private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
@@ -278,8 +282,8 @@ final class VoiceTurnCoordinator {
     return true
   }
 
-  /// Refresh the native-output inactivity watchdog after a successfully
-  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// Refresh the native-output inactivity watchdog after a PCM buffer is
+  /// physically played. A matching lease is required so delayed audio from a
   /// replaced turn cannot prolong the current response.
   @discardableResult
   func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {
@@ -290,6 +294,13 @@ final class VoiceTurnCoordinator {
         identity: lease.identity,
         leaseID: lease.id))
     return activeTurn?.activeLease == lease
+  }
+
+  /// True when the turn's full-answer playback has drained. Captured before a
+  /// barge-in terminalizes the turn, because terminal processing consumes the
+  /// per-turn duration this is derived from.
+  func fullAnswerDrained(turnID: VoiceTurnID) -> Bool {
+    turnFullAnswerDurationMs[turnID] != nil
   }
 
   func configure(
@@ -479,6 +490,7 @@ final class VoiceTurnCoordinator {
       case .terminal(let terminal):
         let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
         let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
+        lastTerminalAnswerDelivered = fullAnswerDurationMs != nil
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
           turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,
@@ -617,6 +629,7 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
+    case .onDeviceASR: return "on_device_asr"
     }
   }
 

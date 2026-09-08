@@ -6,8 +6,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import json
 import os
-import re
 import time
+import logging
 from typing import Any, Protocol, cast
 
 import google.auth
@@ -26,9 +26,34 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, ProviderRejection
+from llm_gateway.gateway.provider_types import (  # noqa: F401 — re-exported provider contract
+    GENERIC_PROVIDER_FAILURE_MESSAGE,
+    ProviderFailure,
+    ProviderResponse,
+    _VertexHttpError,  # pyright: ignore[reportPrivateUsage]
+    _openai_usage_payload,  # pyright: ignore[reportPrivateUsage]
+)
+from llm_gateway.gateway.vertex_pt_policy import (  # noqa: F401 — re-exported vertex policy
+    VertexPTPolicyMixin,
+)
+from llm_gateway.gateway.vertex_wire import (  # noqa: F401 — re-exported wire contract
+    _nonnegative_int_or_zero,  # pyright: ignore[reportPrivateUsage]
+    _openai_sse_done,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+    _text_content,  # pyright: ignore[reportPrivateUsage, reportUnusedImport]
+    _validate_embeddings_response_shape,  # pyright: ignore[reportPrivateUsage]
+    _vertex_embedding_predict_request,  # pyright: ignore[reportPrivateUsage]
+    _vertex_headers,  # pyright: ignore[reportPrivateUsage]
+    _vertex_predict_to_openai_embeddings,  # pyright: ignore[reportPrivateUsage]
+    _vertex_request,  # pyright: ignore[reportPrivateUsage]
+    _vertex_to_openai_response,  # pyright: ignore[reportPrivateUsage]
+    _vertex_to_openai_stream_chunk,  # pyright: ignore[reportPrivateUsage]
+)
 from llm_gateway.gateway.sse import SSEEventDecoder
 from utils.executors import critical_executor, run_blocking
+from utils.llm import vertex_pt_routing as ptr
 from utils.log_sanitizer import sanitize
+
+logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY'
 OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL'
@@ -37,12 +62,8 @@ DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES_ENV_VAR = 'OPENAI_MAX_RESPONSE_BYTES'
 PROVIDER_ERROR_DETAIL_BYTES = 1000
 EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
-GENERIC_PROVIDER_FAILURE_MESSAGE = 'provider request failed'
 GOOGLE_CLOUD_PROJECT_ENV_VAR = 'GOOGLE_CLOUD_PROJECT'
-GCP_LOCATION_ENV_VAR = 'GCP_LOCATION'
-DEFAULT_GCP_LOCATION = 'us-central1'
 GOOGLE_CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
-VERTEX_API_VERSION = 'v1'
 
 
 class ChatCompletionProvider(Protocol):
@@ -56,31 +77,15 @@ class ChatCompletionProvider(Protocol):
     ) -> 'ProviderResponse': ...
 
 
-@dataclass
-class ProviderFailure(Exception):
-    failure_class: FailureClass
-    safe_message: str = GENERIC_PROVIDER_FAILURE_MESSAGE
-    provider_rejection: ProviderRejection = ProviderRejection.NONE
-
-    def __str__(self) -> str:
-        return self.safe_message
-
-
-@dataclass(frozen=True)
-class ProviderResponse(Mapping[str, Any]):
-    """OpenAI-compatible response plus provider-native accounting metadata."""
-
-    response: Mapping[str, Any]
-    accounting: ProviderResponseMetadata = ProviderResponseMetadata()
-
-    def __getitem__(self, key: str) -> Any:
-        return self.response[key]
-
-    def __iter__(self):
-        return iter(self.response)
-
-    def __len__(self) -> int:
-        return len(self.response)
+class EmbeddingProvider(Protocol):
+    async def create_embedding(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> 'ProviderResponse': ...
 
 
 class OpenAICompatibleChatCompletionProvider:
@@ -183,6 +188,61 @@ class OpenAICompatibleChatCompletionProvider:
         except httpx.HTTPError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
+    async def create_embedding(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> ProviderResponse:
+        api_key = _resolve_provider_api_key(
+            credentials=credentials,
+            provider_ref=provider_ref,
+            api_key_env=self._api_key_env,
+        )
+        payload = {'model': provider_ref.model, 'input': list(request['input'])}
+        try:
+            async with self._http_client.stream(
+                'POST',
+                f'{self._base_url}/embeddings',
+                json=payload,
+                headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': 'application/json',
+                    **self._default_headers,
+                },
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                parsed = _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+        _validate_embeddings_response_shape(parsed)
+        raw_usage = parsed.get('usage')
+        usage_raw = raw_usage if isinstance(raw_usage, Mapping) else {}
+        prompt_tokens = _nonnegative_int_or_zero(usage_raw.get('prompt_tokens'))
+        total_tokens = _nonnegative_int_or_zero(usage_raw.get('total_tokens'))
+        return ProviderResponse(
+            response=parsed,
+            accounting=ProviderResponseMetadata(
+                usage=ProviderUsage(
+                    prompt_tokens=prompt_tokens,
+                    uncached_input_tokens=prompt_tokens,
+                    total_tokens=total_tokens,
+                )
+            ),
+        )
+
     async def aclose(self) -> None:
         if self._owns_http_client:
             await self._http_client.aclose()
@@ -234,8 +294,14 @@ class VertexAccessTokenSupplier:
         return token, expires_at
 
 
-class VertexGeminiProvider:
-    """Native Gemini-on-Vertex adapter behind the gateway's OpenAI contract."""
+class VertexGeminiProvider(VertexPTPolicyMixin):
+    """Native Gemini-on-Vertex adapter behind the gateway's OpenAI contract.
+
+    Also owns the company-paid desktop PT policy — pin, overflow ladder,
+    reachability, regional vs multi-region host, and the capacity header —
+    through ``utils.llm.vertex_pt_routing``, the single policy module the
+    desktop BFF mirrors on its kill-switch (direct) path.
+    """
 
     def __init__(
         self,
@@ -243,14 +309,36 @@ class VertexGeminiProvider:
         http_client: httpx.AsyncClient | None = None,
         access_token_supplier: Callable[[], Awaitable[str]] | None = None,
         project_env: str = GOOGLE_CLOUD_PROJECT_ENV_VAR,
-        location_env: str = GCP_LOCATION_ENV_VAR,
+        location_env: str = ptr.REGIONAL_LOCATION_ENV,
+        multi_region_location_env: str = ptr.MULTI_REGION_LOCATION_ENV,
+        pt_model_override_env: str = ptr.PT_MODEL_OVERRIDE_ENV,
+        overflow_model_override_env: str = ptr.OVERFLOW_MODEL_OVERRIDE_ENV,
+        overflow_enabled_env: str = ptr.OVERFLOW_ENABLED_ENV,
+        probe_ttl_seconds: float = 600.0,
+        now: Callable[[], float] = time.monotonic,
     ) -> None:
         self._http_client = http_client or httpx.AsyncClient()
         self._owns_http_client = http_client is None
         self._project_env = project_env
         self._location_env = location_env
+        self._multi_region_location_env = multi_region_location_env
+        self._pt_model_override_env = pt_model_override_env
+        self._overflow_model_override_env = overflow_model_override_env
+        self._overflow_enabled_env = overflow_enabled_env
+        self._probe_ttl_seconds = probe_ttl_seconds
+        self._now = now
+        # PT probe TTL is monotonic; ADC expiry is wall-clock. Do not share
+        # the PT clock with the token supplier or tokens never refresh
+        # (`monotonic() < expiry.timestamp()` stays true forever).
         token_supplier = VertexAccessTokenSupplier()
         self._access_token_supplier = access_token_supplier or token_supplier.get_access_token
+        # PT promotion latch and learned reachability, moved from the desktop
+        # proxy: positive observations latch for the process, negative ones
+        # expire on the probe TTL, and nothing is probed at startup — traffic
+        # teaches both tables (see backend/docs/vertex-pt-flash.md).
+        self._pt_target_ready = False
+        self._pt_target_probed_at: float | None = None
+        self._model_unavailable_at: dict[str, float] = {}
 
     async def create_chat_completion(
         self,
@@ -261,30 +349,13 @@ class VertexGeminiProvider:
         timeout_ms: int,
     ) -> ProviderResponse:
         self._reject_byok(credentials)
-        endpoint = self._endpoint(provider_ref.model, method='generateContent')
         payload = _vertex_request(request)
-        try:
-            access_token = await self._vertex_access_token()
-            async with self._http_client.stream(
-                'POST',
-                endpoint,
-                json=payload,
-                headers=_vertex_headers(access_token),
-                timeout=timeout_ms / 1000.0,
-            ) as response:
-                if response.status_code >= 400:
-                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview)
-                parsed = _parse_limited_json_response(
-                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
-                )
-        except ProviderFailure:
-            raise
-        except httpx.TimeoutException as exc:
-            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
-        except httpx.HTTPError as exc:
-            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
-
+        parsed = await self._generate_content(
+            payload,
+            anchor=provider_ref.model,
+            credentials=credentials,
+            timeout_ms=timeout_ms,
+        )
         accounting = vertex_usage_from_response(parsed)
         normalized = _vertex_to_openai_response(
             parsed,
@@ -303,36 +374,84 @@ class VertexGeminiProvider:
         timeout_ms: int,
     ):
         self._reject_byok(credentials)
-        endpoint = self._endpoint(provider_ref.model, method='streamGenerateContent')
         payload = _vertex_request(request)
+        deadline = self._now() + max(timeout_ms, 0) / 1000.0
+        attempts = self._attempt_plan(provider_ref.model)
         decoder = SSEEventDecoder()
+        while attempts:
+            model, capacity = attempts.pop(0)
+            remaining_ms = int((deadline - self._now()) * 1000)
+            if remaining_ms <= 0:
+                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+            try:
+                endpoint = self._endpoint(model, method='streamGenerateContent')
+                headers = _vertex_headers(await self._vertex_access_token(), capacity)
+                async with self._http_client.stream(
+                    'POST',
+                    endpoint,
+                    params={'alt': 'sse'},
+                    json=payload,
+                    headers=headers,
+                    timeout=remaining_ms / 1000.0,
+                ) as response:
+                    if response.status_code >= 400:
+                        error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                        self._observe_attempt(model, capacity, response.status_code, error_preview)
+                        recovery = self._recovery_attempts(model, response.status_code, error_preview)
+                        if recovery:
+                            attempts = recovery
+                            continue
+                        _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                    self._record_model_available(model)
+                    async for chunk in response.aiter_bytes():
+                        for event in decoder.feed(chunk):
+                            event_data = event.data.strip()
+                            if not event_data or event_data == '[DONE]':
+                                continue
+                            event_parsed = _parse_limited_json_response(event_data.encode('utf-8'))
+                            translated, _ = _vertex_to_openai_stream_chunk(
+                                event_parsed,
+                                requested_model=provider_ref.model,
+                                usage=vertex_usage_from_response(event_parsed).usage,
+                            )
+                            if translated is not None:
+                                yield translated
+                    yield _openai_sse_done()
+                    return
+            except ProviderFailure:
+                raise
+            except httpx.TimeoutException as exc:
+                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+            except httpx.HTTPError as exc:
+                raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def create_embedding(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> ProviderResponse:
+        self._reject_byok(credentials)
+        endpoint = self._endpoint(provider_ref.model, method='predict')
+        payload = _vertex_embedding_predict_request(request)
+        parsed: Mapping[str, Any] | None = None
         try:
-            access_token = await self._vertex_access_token()
+            headers = _vertex_headers(await self._vertex_access_token(), self._capacity_for(provider_ref.model))
             async with self._http_client.stream(
                 'POST',
                 endpoint,
-                params={'alt': 'sse'},
                 json=payload,
-                headers=_vertex_headers(access_token),
+                headers=headers,
                 timeout=timeout_ms / 1000.0,
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview)
-                async for chunk in response.aiter_bytes():
-                    for event in decoder.feed(chunk):
-                        event_data = event.data.strip()
-                        if not event_data or event_data == '[DONE]':
-                            continue
-                        parsed = _parse_limited_json_response(event_data.encode('utf-8'))
-                        translated, _ = _vertex_to_openai_stream_chunk(
-                            parsed,
-                            requested_model=provider_ref.model,
-                            usage=vertex_usage_from_response(parsed).usage,
-                        )
-                        if translated is not None:
-                            yield translated
-                yield _openai_sse_done()
+                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
+                parsed = _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
         except ProviderFailure:
             raise
         except httpx.TimeoutException as exc:
@@ -340,19 +459,91 @@ class VertexGeminiProvider:
         except httpx.HTTPError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
+        normalized = _vertex_predict_to_openai_embeddings(parsed or {}, model=provider_ref.model)
+        _validate_embeddings_response_shape(normalized)
+        # Vertex :predict reports billable characters, not tokens; the ledger
+        # row records the request while usage stays NOT_REPORTED rather than
+        # fabricating token counts.
+        return ProviderResponse(response=normalized, accounting=ProviderResponseMetadata(usage=None))
+
     async def aclose(self) -> None:
         if self._owns_http_client:
             await self._http_client.aclose()
 
-    def _endpoint(self, model: str, *, method: str) -> str:
-        project = os.getenv(self._project_env, '').strip()
-        location = os.getenv(self._location_env, DEFAULT_GCP_LOCATION).strip()
-        if not project or not location:
-            raise ProviderFailure(FailureClass.INVALID_CONFIG)
-        return (
-            f'https://{location}-aiplatform.googleapis.com/{VERTEX_API_VERSION}/projects/{project}'
-            f'/locations/{location}/publishers/google/models/{model}:{method}'
-        )
+    async def _generate_content(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        anchor: str,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> Mapping[str, Any]:
+        """Run generateContent through the PT ladder: pin, overflow, fallback."""
+        deadline = self._now() + max(timeout_ms, 0) / 1000.0
+        attempts = self._attempt_plan(anchor)
+        last_error: _VertexHttpError | None = None
+        parsed: Mapping[str, Any] | None = None
+        while attempts:
+            model, capacity = attempts.pop(0)
+            remaining_ms = int((deadline - self._now()) * 1000)
+            if remaining_ms <= 0:
+                raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+            try:
+                parsed = await self._generate_content_once(
+                    model=model,
+                    capacity=capacity,
+                    payload=payload,
+                    credentials=credentials,
+                    timeout_ms=remaining_ms,
+                )
+            except _VertexHttpError as error:
+                last_error = error
+                self._observe_attempt(model, capacity, error.status_code, error.preview)
+                recovery = self._recovery_attempts(model, error.status_code, error.preview)
+                if recovery:
+                    attempts = recovery
+                    continue
+                _raise_for_status(error.status_code, error.preview, credential_mode=credentials.mode)
+            self._record_model_available(model)
+            assert parsed is not None
+            return parsed
+        assert last_error is not None
+        _raise_for_status(last_error.status_code, last_error.preview, credential_mode=credentials.mode)
+        raise AssertionError('unreachable: _raise_for_status always raises')
+
+    async def _generate_content_once(
+        self,
+        *,
+        model: str,
+        capacity: str,
+        payload: Mapping[str, Any],
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> Mapping[str, Any]:
+        endpoint = self._endpoint(model, method='generateContent')
+        try:
+            headers = _vertex_headers(await self._vertex_access_token(), capacity)
+            async with self._http_client.stream(
+                'POST',
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    raise _VertexHttpError(response.status_code, error_preview)
+                return _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
+        except _VertexHttpError:
+            raise
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
     async def _vertex_access_token(self) -> str:
         try:
@@ -366,222 +557,6 @@ class VertexGeminiProvider:
     def _reject_byok(credentials: CredentialContext) -> None:
         if credentials.mode == CredentialMode.BYOK:
             raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
-
-
-def _vertex_headers(access_token: str) -> dict[str, str]:
-    if not access_token.strip():
-        raise ProviderFailure(FailureClass.INVALID_CONFIG)
-    return {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json',
-    }
-
-
-def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
-    unsupported_params = sorted(
-        key
-        for key in (
-            'frequency_penalty',
-            'logit_bias',
-            'logprobs',
-            'n',
-            'presence_penalty',
-            'prompt_cache_key',
-            'seed',
-            'top_logprobs',
-            'user',
-        )
-        if key in request
-    )
-    if unsupported_params:
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-
-    system_parts: list[dict[str, str]] = []
-    contents: list[dict[str, Any]] = []
-    raw_messages = request.get('messages')
-    if not isinstance(raw_messages, list):
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    for message in raw_messages:
-        if not isinstance(message, Mapping):
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        role = message.get('role')
-        if role == 'system':
-            # Vertex systemInstruction takes text parts only. _vertex_parts raises rather
-            # than silently flattening an image here, same as everywhere else below.
-            system_parts.extend(_system_text_parts(message.get('content')))
-            continue
-        if role not in {'user', 'assistant'}:
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        contents.append(
-            {
-                'role': 'model' if role == 'assistant' else 'user',
-                'parts': _vertex_parts(message.get('content')),
-            }
-        )
-
-    generation_config: dict[str, Any] = {}
-    for request_key, vertex_key in (('temperature', 'temperature'), ('top_p', 'topP')):
-        if request_key in request:
-            generation_config[vertex_key] = request[request_key]
-    if 'stop' in request:
-        stop = request['stop']
-        if isinstance(stop, str):
-            generation_config['stopSequences'] = [stop]
-        elif isinstance(stop, list) and all(isinstance(item, str) for item in stop):
-            generation_config['stopSequences'] = stop
-        else:
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    output_limit = _output_limit(request)
-    if output_limit is not None:
-        generation_config['maxOutputTokens'] = output_limit
-    thinking_budget = _thinking_budget(request)
-    if thinking_budget is not None:
-        generation_config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
-    response_format = request.get('response_format')
-    if isinstance(response_format, Mapping):
-        json_schema = response_format.get('json_schema')
-        if not isinstance(json_schema, Mapping) or not isinstance(json_schema.get('schema'), Mapping):
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        generation_config['responseMimeType'] = 'application/json'
-        generation_config['responseSchema'] = dict(cast(Mapping[str, Any], json_schema['schema']))
-
-    payload: dict[str, Any] = {'contents': contents}
-    if system_parts:
-        payload['systemInstruction'] = {'parts': system_parts}
-    if generation_config:
-        payload['generationConfig'] = generation_config
-    return payload
-
-
-def _output_limit(request: Mapping[str, Any]) -> int | None:
-    max_completion_tokens = request.get('max_completion_tokens')
-    max_tokens = request.get('max_tokens')
-    value = max_completion_tokens if max_completion_tokens is not None else max_tokens
-    if value is None:
-        return None
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    return value
-
-
-def _thinking_budget(request: Mapping[str, Any]) -> int | None:
-    if request.get('reasoning_effort') == 'none':
-        return 0
-    extra_body = request.get('extra_body')
-    if not isinstance(extra_body, Mapping):
-        return None
-    google_options = extra_body.get('google')
-    if not isinstance(google_options, Mapping):
-        return None
-    thinking_config = google_options.get('thinking_config')
-    if not isinstance(thinking_config, Mapping):
-        return None
-    thinking_budget = thinking_config.get('thinking_budget')
-    if not isinstance(thinking_budget, int) or isinstance(thinking_budget, bool) or thinking_budget < 0:
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    return thinking_budget
-
-
-def _vertex_to_openai_response(
-    response: Mapping[str, Any],
-    *,
-    requested_model: str,
-    usage: ProviderUsage | None = None,
-) -> dict[str, Any]:
-    candidates = response.get('candidates')
-    candidate = (
-        candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
-    )
-    content = _vertex_candidate_text(candidate)
-    finish_reason = _vertex_finish_reason(candidate.get('finishReason') if candidate is not None else 'SAFETY')
-    normalized: dict[str, Any] = {
-        'id': str(response.get('responseId') or 'vertex_gateway'),
-        'object': 'chat.completion',
-        'created': int(time.time()),
-        'model': requested_model,
-        'choices': [
-            {
-                'index': 0,
-                'message': {'role': 'assistant', 'content': content},
-                'finish_reason': finish_reason,
-            }
-        ],
-    }
-    if usage is not None:
-        normalized['usage'] = _openai_usage_payload(usage)
-    return normalized
-
-
-def _vertex_to_openai_stream_chunk(
-    response: Mapping[str, Any],
-    *,
-    requested_model: str,
-    usage: ProviderUsage | None = None,
-) -> tuple[bytes | None, bool]:
-    candidates = response.get('candidates')
-    candidate = (
-        candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
-    )
-    if candidate is None and usage is None:
-        return None, False
-    text = _vertex_candidate_text(candidate)
-    raw_finish_reason = candidate.get('finishReason') if candidate is not None else None
-    finish_reason = _vertex_finish_reason(raw_finish_reason) if raw_finish_reason else None
-    if not text and finish_reason is None and usage is None:
-        return None, False
-    body: dict[str, Any] = {
-        'id': str(response.get('responseId') or 'vertex_gateway'),
-        'object': 'chat.completion.chunk',
-        'created': int(time.time()),
-        'model': requested_model,
-        'choices': (
-            [
-                {
-                    'index': 0,
-                    'delta': {'content': text} if text else {},
-                    'finish_reason': finish_reason,
-                }
-            ]
-            if candidate is not None
-            else []
-        ),
-    }
-    if usage is not None:
-        body['usage'] = _openai_usage_payload(usage)
-    return _openai_sse(body), finish_reason is not None
-
-
-def _vertex_candidate_text(candidate: Mapping[str, Any] | None) -> str:
-    if candidate is None:
-        return ''
-    content = candidate.get('content')
-    if not isinstance(content, Mapping):
-        return ''
-    parts = content.get('parts')
-    if not isinstance(parts, list):
-        return ''
-    text_parts: list[str] = []
-    for part in parts:
-        if isinstance(part, Mapping) and isinstance(part.get('text'), str):
-            text_parts.append(part['text'])
-    return ''.join(text_parts)
-
-
-def _vertex_finish_reason(value: object) -> str:
-    normalized = str(value or '').upper()
-    if normalized in {'MAX_TOKENS', 'LENGTH'}:
-        return 'length'
-    if normalized in {'SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION'}:
-        return 'content_filter'
-    return 'stop'
-
-
-def _openai_sse(body: Mapping[str, Any]) -> bytes:
-    return f'data: {json.dumps(dict(body), separators=(",", ":"))}\n\n'.encode('utf-8')
-
-
-def _openai_sse_done() -> bytes:
-    return b'data: [DONE]\n\n'
 
 
 class AnthropicMessagesProvider:
@@ -735,107 +710,6 @@ def _anthropic_to_openai_response(
     if usage is not None:
         normalized['usage'] = _openai_usage_payload(usage)
     return normalized
-
-
-def _openai_usage_payload(usage: ProviderUsage) -> dict[str, Any]:
-    return {
-        'prompt_tokens': usage.prompt_tokens,
-        'completion_tokens': usage.output_tokens + usage.reasoning_tokens,
-        'total_tokens': usage.total_tokens,
-        'prompt_tokens_details': {'cached_tokens': usage.cached_input_tokens},
-        'completion_tokens_details': {'reasoning_tokens': usage.reasoning_tokens},
-    }
-
-
-# RFC 2397 permits parameters between the media type and the base64 token
-# (`data:image/jpeg;charset=utf-8;base64,...`), and browser- or canvas-produced
-# data URLs do emit them. Rejecting those would be the mirror of the bug this
-# module just fixed: refusing an image we can in fact represent.
-_VERTEX_DATA_URL_RE = re.compile(
-    r'^data:(?P<mime>[\w.+-]+/[\w.+-]+)(?:;[\w.+-]+=[^;,]*)*;(?i:base64),(?P<data>.+)$',
-    re.DOTALL,
-)
-
-
-def _vertex_parts(content: Any) -> list[dict[str, Any]]:
-    """Translate OpenAI-shaped message content into Vertex parts.
-
-    Anything this cannot represent raises CAPABILITY_MISMATCH rather than being
-    dropped. That distinction is the whole point of this function: the previous
-    implementation ran every message through _text_content(), which keeps only
-    `type == "text"` parts, so an image attached to a Gemini request vanished
-    silently and the model answered about content it never received. For a
-    caller like utils/screen_frames/judge.py — a privacy gate that decides
-    whether a screenshot may be stored — a confident answer from a model that
-    was sent no image is worse than an error, because the caller's fail-closed
-    handling never triggers.
-    """
-    if content is None:
-        # See the empty-parts note at the end of this function: None is what an
-        # assistant tool-call turn carries, and Vertex rejects a Content with no parts.
-        return [{'text': ''}]
-    if isinstance(content, str):
-        return [{'text': content}]
-    if not isinstance(content, list):
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-
-    parts: list[dict[str, Any]] = []
-    for part in cast(list[object], content):
-        if not isinstance(part, Mapping):
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-        typed_part = cast(Mapping[str, Any], part)
-        part_type = typed_part.get('type')
-        if part_type == 'text':
-            text = typed_part.get('text')
-            if not isinstance(text, str):
-                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-            parts.append({'text': text})
-            continue
-        if part_type == 'image_url':
-            image_url = typed_part.get('image_url')
-            if not isinstance(image_url, Mapping):
-                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-            url = cast(Mapping[str, Any], image_url).get('url')
-            if not isinstance(url, str):
-                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-            match = _VERTEX_DATA_URL_RE.match(url)
-            if match is None:
-                # A remote https:// image is not fetchable by Vertex the way it is by
-                # OpenAI; only inline bytes and gs:// URIs are. Refuse rather than send
-                # a request the model will answer without the image.
-                raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-            parts.append({'inlineData': {'mimeType': match.group('mime'), 'data': match.group('data')}})
-            continue
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    # A message with no representable content still needs one part: Vertex rejects a
-    # Content with an empty parts array, and the previous implementation always
-    # produced [{'text': ''}] here (via _text_content(None) == ''). An assistant
-    # tool-call turn carries content=None, so this path is reachable the moment a
-    # multi-turn Gemini feature exists.
-    return parts or [{'text': ''}]
-
-
-def _system_text_parts(content: Any) -> list[dict[str, str]]:
-    parts = _vertex_parts(content)
-    for part in parts:
-        if 'text' not in part:
-            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
-    return [{'text': cast(str, part['text'])} for part in parts] or [{'text': ''}]
-
-
-def _text_content(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for part in cast(list[object], content):
-            if not isinstance(part, Mapping):
-                continue
-            typed_part = cast(Mapping[str, Any], part)
-            if typed_part.get('type') == 'text' and isinstance(typed_part.get('text'), str):
-                parts.append(typed_part['text'])
-        return '\n'.join(parts)
-    return ''
 
 
 def _openai_finish_reason(stop_reason: Any) -> str:

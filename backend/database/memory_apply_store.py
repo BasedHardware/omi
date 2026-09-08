@@ -20,7 +20,7 @@ try:
 except ImportError:  # pragma: no cover - local unit tests mock Firestore.
     _firestore_transactional = None
 
-from database._client import db
+from database._client import data_plane_db as db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.legal_holds import (
     assert_destructive_operation_transaction,
@@ -764,6 +764,8 @@ def _privacy_tombstoned_memory_item(
             "primary_capture_device": None,
             "corroboration_count": 0,
             "last_corroborated_at": None,
+            "half_life_days": None,
+            "belief_class": None,
             "confidence": None,
             "subject_entity_id": None,
             "predicate": None,

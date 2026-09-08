@@ -184,7 +184,7 @@ final class InkAccentTests: XCTestCase {
             "Ink.accent is NSColor.controlAccentColor — the accent the user picked in System "
                 + "Settings, which macOS lets them set to Purple. Every token spending the accent "
                 + "then renders purple on that machine and no call site can correct it. Pick a "
-                + "named system colour instead (INV-UI-1, docs/product/invariants/brand-ui.md).")
+                + "named system colour instead (INV-UI-1, product/invariants/brand-ui.md).")
     }
 
     /// Is this colour the machine's own accent, rather than a hue this app chose?

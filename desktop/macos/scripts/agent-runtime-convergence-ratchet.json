@@ -1,10 +1,12 @@
 {
   "limits": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 7372,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4404
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4404,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 7398
   },
   "raise_justifications": {
     "INV-CHAT-1": "Chat-first rich-block handling, answer submission, and task completion stay in the existing provider while its shared lifecycle extraction remains bounded.",
-    "INV-CHAT-1-runtime-payload": "+8 for the bundled-runtime start refusal. A build shipped without Contents/Resources/pi-mono-extension accepted every chat turn and died four seconds later with \"pi-mono process exited (code 1)\"; the refusal has to sit beside the other start-refusal preconditions this file already owns, because a second observer would give one failure two owners. The reason and its wording were moved out to AgentRuntimePayload.StartRefusal, which is why this is +8 rather than +13 — the coordinator keeps only the decision to stop, not the explanation."
+    "INV-CHAT-1-attachment-only-send": "+10 for the attachment-only send. A file or referenced conversation staged with no words is a message in its own right, and the admission, the caption the row carries, and the model prompt that names the attachments as the subject all sit on the one send path this file owns; the helpers that build them live in ChatAttachmentOnlySend.swift, so the provider keeps only the decisions.",
+    "INV-CHAT-1-runtime-payload": "+8 for the bundled-runtime start refusal. A build shipped without Contents/Resources/pi-mono-extension accepted every chat turn and died four seconds later with \"pi-mono process exited (code 1)\"; the refusal has to sit beside the other start-refusal preconditions this file already owns, because a second observer would give one failure two owners. The reason and its wording were moved out to AgentRuntimePayload.StartRefusal, which is why this is +8 rather than +13 \u2014 the coordinator keeps only the decision to stop, not the explanation.",
+    "INV-CHAT-1-recent-frame-staging": "+16 for the recent-frame staging lifecycle. A staged screen frame is a real file the user chose to send, so the send path must wait (bounded) for an in-flight staging before it snapshots what the message carries, a failed turn must put the staged pixels back in the composer so retry re-sends them, and attachment removal, chat reset, and turn end must delete the app-owned temp file \u2014 otherwise the file outlives the conversation, a send drops a frame the user picked, or a retry asks about files that are gone. The staging helpers live in ChatProvider+RecentFrameStaging.swift and the fallback policy in ScreenContextFallbackPolicy.swift; the provider keeps only hooks on decisions it already owns, which is also why the explicit screen-evidence branch (ScreenContextTelemetry.swift) nets \u22121 here."
   }
 }

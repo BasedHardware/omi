@@ -28,6 +28,7 @@ import SwiftUI
 /// the results. The bar's furniture is the same either way; only the ground under it changes.
 struct RewindSearchBar: View {
   @Binding var query: String
+  var placeholder: String = RewindSearchMetrics.placeholder
   /// Whether a search is in flight, so the bar can say so where the count would otherwise sit.
   var isSearching: Bool = false
   /// What the search found, already phrased. `nil` when nothing has been asked and there is no
@@ -110,12 +111,17 @@ struct RewindSearchBar: View {
             .foregroundStyle(RewindSearchInk.queryChipGlyph)
             .accessibilityHidden(true)
         }
-        TextField(RewindSearchMetrics.placeholder, text: $query)
+        TextField(placeholder, text: $query)
           .textFieldStyle(.plain)
           .font(.system(size: RewindSearchMetrics.queryFontSize, weight: .semibold))
           .foregroundStyle(Ink.primary)
           .focused(focus)
+          .straysTypingHere(focus)
           .accessibilityLabel(Text(Self.searchActionName))
+          .onChange(of: focus.wrappedValue) { _, focused in
+            guard focused else { return }
+            SearchAnalytics.barFocused(surface: .rewind)
+          }
       }
       .padding(.leading, isTyped ? RewindSearchMetrics.chipPaddingHorizontal : 0)
     }

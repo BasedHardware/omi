@@ -58,6 +58,63 @@ private final class CancellablePermissionContinuation<Value: Sendable>: @uncheck
 @MainActor
 class ChatToolExecutor {
 
+  struct DailyRecapItem: Codable, Sendable {
+    var title: String
+    var summary: String? = nil
+    var minutes: Double? = nil
+    var captures: Int? = nil
+    var firstSeenAt: String? = nil
+    var lastSeenAt: String? = nil
+    var emoji: String? = nil
+    var sourceId: String? = nil
+    var citationMarker: String? = nil
+    var createdAt: String? = nil
+    var completed: Bool? = nil
+    var priority: String? = nil
+    var status: String? = nil
+    var durationSeconds: Int? = nil
+    var category: String? = nil
+    var context: String? = nil
+  }
+
+  struct DailyRecapSection: Codable, Sendable {
+    let name: String
+    let total: Int
+    let items: [DailyRecapItem]
+  }
+
+  private struct DailyRecapSource: Sendable {
+    let kind: String
+    let sourceID: String
+    let title: String
+    let preview: String
+
+    var toolSource: APIClient.ToolSource {
+      APIClient.ToolSource(
+        kind: kind,
+        sourceID: sourceID,
+        title: title,
+        preview: preview,
+        createdAt: nil,
+        momentTimestampMs: nil,
+        appName: nil,
+        url: nil)
+    }
+  }
+
+  private struct DailyRecapReadResult: Sendable {
+    let sources: [DailyRecapSource]
+    let totals: [String: Int]
+    let sections: [DailyRecapSection]
+  }
+
+  private struct DailyRecapPayload: Codable, Sendable {
+    let ok: Bool
+    let tool: String
+    let totals: [String: Int]
+    let sections: [DailyRecapSection]
+  }
+
   struct CanonicalGoalCreationInput: Equatable {
     let title: String
     let desiredOutcome: String
@@ -71,7 +128,7 @@ class ChatToolExecutor {
 
   // MARK: - Onboarding State
 
-  /// Set by OnboardingChatView before starting the chat
+  /// Set by the live onboarding flow before starting the chat
   static var onboardingAppState: AppState?
   /// Called when AI invokes complete_onboarding
   static var onCompleteOnboarding: (() -> Void)?
@@ -86,7 +143,7 @@ class ChatToolExecutor {
   /// Called when request_permission returns "pending" — used to trigger the permission help timer
   static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
-  /// Email/calendar insights from background reading (set by OnboardingChatView)
+  /// Email/calendar insights from background reading (set by the live onboarding flow)
   static var emailInsightsText: String?
   static var calendarInsightsText: String?
 
@@ -304,6 +361,13 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
         toolCall.arguments,
@@ -469,6 +533,18 @@ class ChatToolExecutor {
         toolCall,
         runID: originatingRunId,
         attemptID: originatingAttemptId,
+        surfaceKind: originatingSurfaceRef?.surfaceKind,
+        expectedOwnerID: expectedOwnerID,
+        api: backendAPIClient)
+
+    // JIT knowledge-ledger tools — generic passthrough to the Python backend's
+    // /v1/agent/execute-tool endpoint. These have no bespoke typed REST route:
+    // the backend re-validates the JIT rollout server-side on every call, so
+    // this client dispatch is UX-only, not an authorization boundary.
+    case .searchKnowledge, .readPlaybook, .searchHistoricalFacts, .getEntityTimelineTool,
+      .savePlaybook, .createStandingTrigger, .closeFact:
+      return await executeAgentLedgerTool(
+        toolCall,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -476,7 +552,34 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "web_search" {
+        return await executeWebSearch(
+          toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      }
       return "Unknown tool: \(toolCall.name)"
+    }
+  }
+
+  private static func executeWebSearch(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?
+  ) async -> String {
+    guard NegativeFeedbackRemediationFeature.isEnabled else {
+      return "Unknown tool: web_search"
+    }
+    guard !AppState.isPaywalledEffective else {
+      return "Web search is only available on paid Omi plans."
+    }
+    guard let query = arguments["query"] as? String, !query.isEmpty else {
+      return "Error: query is required"
+    }
+    guard let expectedOwnerID else { return authorizedOwnerChangedResult() }
+    do {
+      return try await APIClient.shared.searchPublicWebForVoice(
+        query: query,
+        expectedOwnerID: expectedOwnerID)
+    } catch {
+      return "The web lookup failed. Please try again."
     }
   }
 
@@ -1023,7 +1126,8 @@ class ChatToolExecutor {
   static func executeSQL(
     _ args: [String: Any],
     dbQueue: DatabasePool?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone = .current
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1090,7 +1194,8 @@ class ChatToolExecutor {
           upper: upper,
           parameters: parameters,
           dbQueue: databaseQueue,
-          expectedOwnerID: expectedOwnerID)
+          expectedOwnerID: expectedOwnerID,
+          timeZone: timeZone)
       } else if isInsert || isUpdate || isDelete {
         return try await executeWriteQuery(
           trimmed,
@@ -1196,7 +1301,8 @@ class ChatToolExecutor {
     upper: String,
     parameters: [String],
     dbQueue: DatabasePool,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    timeZone: TimeZone
   )
     async throws -> String
   {
@@ -1214,7 +1320,7 @@ class ChatToolExecutor {
     let query = finalQuery
     let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
       let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
-      return SQLQueryResultProjection.format(rows: rows, query: query)
+      return SQLQueryResultProjection.format(rows: rows, query: query, timeZone: timeZone)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
@@ -1420,11 +1526,9 @@ class ChatToolExecutor {
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-    // For today (daysAgo=0), upper bound is now; for past days, upper bound is start of today
-    let upperBound =
-      daysAgo == 0
-      ? "datetime('now', 'localtime')"
-      : "datetime('now', 'start of day', 'localtime')"
+    // UTC-vs-UTC: local midnight converted back to UTC so "today" does not shift by offset.
+    let lowerBound = DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: daysAgo)
+    let upperBound = DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: daysAgo)
 
     do {
       let result = try await dbQueue.read { db in
@@ -1433,9 +1537,9 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-                MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+                MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt
             FROM screenshots
-            WHERE timestamp >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE timestamp >= \(lowerBound)
                 AND timestamp < \(upperBound)
                 AND appName IS NOT NULL AND appName != ''
             GROUP BY appName ORDER BY screenshots DESC
@@ -1448,7 +1552,7 @@ class ChatToolExecutor {
             SELECT backendId, title, overview, emoji, category, startedAt, finishedAt,
                 ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
             FROM transcription_sessions
-            WHERE startedAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE startedAt >= \(lowerBound)
                 AND startedAt < \(upperBound)
                 AND deleted = 0 AND discarded = 0
             ORDER BY startedAt DESC
@@ -1459,7 +1563,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, description, completed, priority, createdAt FROM action_items
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1470,7 +1574,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT status, appOrSite, description, durationSeconds FROM focus_sessions
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             """)
@@ -1480,7 +1584,7 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT backendId, content, category, source FROM memories
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
                 AND deleted = 0
             ORDER BY createdAt DESC
@@ -1491,15 +1595,19 @@ class ChatToolExecutor {
           db,
           sql: """
             SELECT appName, currentActivity, contextSummary FROM observations
-            WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+            WHERE createdAt >= \(lowerBound)
                 AND createdAt < \(upperBound)
             ORDER BY createdAt DESC
             LIMIT 20
             """)
 
-        // Format compact markdown
-        var out = "# \(dateLabel) Recap\n\n"
-        var sources = [APIClient.ToolSource]()
+        var sources = [DailyRecapSource]()
+        var typedSections = [
+          DailyRecapSection(
+            name: "summary",
+            total: 1,
+            items: [DailyRecapItem(title: "\(dateLabel) recap")])
+        ]
         func note(
           kind: ChatCitationReference.Kind,
           sourceID: String?,
@@ -1509,143 +1617,152 @@ class ChatToolExecutor {
           let trimmed = sourceID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
           guard !trimmed.isEmpty else { return "" }
           sources.append(
-            APIClient.ToolSource(
+            DailyRecapSource(
               kind: kind.rawValue,
               sourceID: trimmed,
               title: title,
-              preview: preview,
-              createdAt: nil,
-              momentTimestampMs: nil,
-              appName: nil,
-              url: nil))
+              preview: preview))
           return " {{cite:\(sources.count)}}"
         }
 
-        out += "## Apps (\(apps.count) apps)\n"
-        if apps.isEmpty {
-          out += "No screen activity recorded.\n"
-        } else {
-          for app in apps.prefix(20) {
+        var appItems = [DailyRecapItem]()
+        if !apps.isEmpty {
+          for app in apps {
             let name = app["appName"] as? String ?? "Unknown"
             let minutes = app["minutes"] as? Double ?? 0
             let screenshots = Self.rowInt(app["screenshots"]) ?? 0
-            let firstSeen = app["first_seen"] as? String ?? ""
-            let lastSeen = app["last_seen"] as? String ?? ""
-            out +=
-              "- **\(name)**: \(minutes) min (\(screenshots) captures, \(firstSeen)–\(lastSeen))\n"
+            let timeZone = TimeZone.current
+            let firstSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "firstSeenAt", value: app["firstSeenAt"], timeZone: timeZone) ?? ""
+            let lastSeen =
+              DesktopChatTimestampFormat.formatSQLCell(
+                column: "lastSeenAt", value: app["lastSeenAt"], timeZone: timeZone) ?? ""
+            appItems.append(
+              DailyRecapItem(
+                title: name,
+                minutes: minutes,
+                captures: screenshots,
+                firstSeenAt: firstSeen,
+                lastSeenAt: lastSeen))
           }
-          if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
         }
+        typedSections.append(DailyRecapSection(name: "apps", total: apps.count, items: appItems))
 
-        out += "\n## Conversations (\(convos.count))\n"
-        if convos.isEmpty {
-          out += "No conversations recorded.\n"
-        } else {
+        var conversationItems = [DailyRecapItem]()
+        if !convos.isEmpty {
           for convo in convos {
             let title = convo["title"] as? String ?? "Untitled"
             let overview = convo["overview"] as? String ?? "No summary"
             let emoji = convo["emoji"] as? String ?? ""
             let durMin = convo["duration_min"] as? Double ?? 0
-            let dur = durMin > 0 ? " (\(durMin) min)" : ""
             let marker = note(
               kind: .conversation,
               sourceID: convo["backendId"] as? String,
               title: title,
               preview: overview)
-            out += "- \(emoji) **\(title)**\(dur): \(overview)\(marker)\n"
+            conversationItems.append(
+              DailyRecapItem(
+                title: title,
+                summary: overview,
+                minutes: durMin,
+                emoji: emoji,
+                sourceId: convo["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                createdAt: convo["startedAt"] as? String ?? ""))
           }
         }
+        typedSections.append(
+          DailyRecapSection(name: "conversations", total: convos.count, items: conversationItems))
 
-        out += "\n## Tasks (\(tasks.count))\n"
-        if tasks.isEmpty {
-          out += "No tasks created.\n"
-        } else {
+        var taskItems = [DailyRecapItem]()
+        if !tasks.isEmpty {
           for task in tasks {
             let desc = task["description"] as? String ?? ""
             let completed = (Self.rowInt(task["completed"]) ?? 0) == 1
             let priority = task["priority"] as? String ?? ""
-            let check = completed ? "[x]" : "[ ]"
-            let pri = priority.isEmpty ? "" : " (\(priority))"
             let marker = note(
               kind: .task,
               sourceID: task["backendId"] as? String,
               title: desc,
               preview: desc)
-            out += "- \(check) \(desc)\(pri)\(marker)\n"
+            taskItems.append(
+              DailyRecapItem(
+                title: desc,
+                sourceId: task["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                createdAt: task["createdAt"] as? String ?? "",
+                completed: completed,
+                priority: priority))
           }
         }
+        typedSections.append(DailyRecapSection(name: "tasks", total: tasks.count, items: taskItems))
 
         // Focus sessions
-        let focused = focusSessions.filter { ($0["status"] as? String) == "focused" }
-        let distracted = focusSessions.filter { ($0["status"] as? String) == "distracted" }
-        if !focusSessions.isEmpty {
-          out += "\n## Focus (\(focused.count) focused, \(distracted.count) distracted)\n"
-          for session in focusSessions.prefix(10) {
-            let status = session["status"] as? String ?? ""
-            let app = session["appOrSite"] as? String ?? ""
-            let desc = session["description"] as? String ?? ""
-            let dur = Self.rowInt(session["durationSeconds"]) ?? 0
-            let durStr = dur > 0 ? " (\(dur / 60)m)" : ""
-            let icon = status == "focused" ? "+" : "-"
-            out += "- \(icon) \(app)\(durStr): \(desc)\n"
-          }
-          if focusSessions.count > 10 {
-            out += "- ...and \(focusSessions.count - 10) more sessions\n"
-          }
+        let focusItems = focusSessions.map { session in
+          DailyRecapItem(
+            title: session["appOrSite"] as? String ?? "",
+            summary: session["description"] as? String ?? "",
+            status: session["status"] as? String ?? "",
+            durationSeconds: Self.rowInt(session["durationSeconds"]) ?? 0)
         }
+        typedSections.append(
+          DailyRecapSection(name: "focus", total: focusSessions.count, items: focusItems))
 
         // Memories
+        var memoryItems = [DailyRecapItem]()
         if !memories.isEmpty {
-          out += "\n## Memories Learned (\(memories.count))\n"
-          for memory in memories.prefix(10) {
+          for memory in memories {
             let content = memory["content"] as? String ?? ""
             let category = memory["category"] as? String ?? ""
-            let catStr = category.isEmpty ? "" : " (\(category))"
             let marker = note(
               kind: .memory,
               sourceID: memory["backendId"] as? String,
               title: content,
               preview: content)
-            out += "- \(content)\(catStr)\(marker)\n"
+            memoryItems.append(
+              DailyRecapItem(
+                title: content,
+                summary: content,
+                sourceId: memory["backendId"] as? String ?? "",
+                citationMarker: marker.trimmingCharacters(in: .whitespaces),
+                category: category))
           }
-          if memories.count > 10 { out += "- ...and \(memories.count - 10) more\n" }
         }
+        typedSections.append(
+          DailyRecapSection(name: "memories", total: memories.count, items: memoryItems))
 
         // Observations (context summaries)
-        if !observations.isEmpty {
-          out += "\n## Screen Context (\(observations.count) observations)\n"
-          for obs in observations.prefix(10) {
-            let app = obs["appName"] as? String ?? ""
-            let activity = obs["currentActivity"] as? String ?? ""
-            out += "- \(app): \(activity)\n"
-          }
-          if observations.count > 10 {
-            out += "- ...and \(observations.count - 10) more observations\n"
-          }
+        let observationItems = observations.map { observation in
+          DailyRecapItem(
+            title: observation["appName"] as? String ?? "",
+            summary: observation["currentActivity"] as? String ?? "",
+            context: observation["contextSummary"] as? String ?? "")
         }
+        typedSections.append(
+          DailyRecapSection(name: "observations", total: observations.count, items: observationItems))
 
         log(
           "Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks, \(focusSessions.count) focus, \(memories.count) memories, \(observations.count) observations"
         )
-        return (out, sources)
+        return DailyRecapReadResult(
+          sources: sources,
+          totals: [
+            "summary": 1,
+            "apps": apps.count,
+            "conversations": convos.count,
+            "tasks": tasks.count,
+            "focus": focusSessions.count,
+            "memories": memories.count,
+            "observations": observations.count,
+          ],
+          sections: typedSections)
       }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
       let references = await ChatCitationProvenanceRegistry.shared.register(
-        result.1, runID: runID, attemptID: attemptID)
-      var recap = result.0
-      if references.isEmpty {
-        recap = recap.replacingOccurrences(
-          of: #" \{\{cite:\d+\}\}"#,
-          with: "",
-          options: .regularExpression)
-      } else {
-        for (index, reference) in references.enumerated() {
-          recap = recap.replacingOccurrences(
-            of: " {{cite:\(index + 1)}}",
-            with: " [\(reference.ordinal)]")
-        }
-      }
-      return ChatCitationProvenanceRegistry.annotatedToolResult(recap, references: references)
+        result.sources.map(\.toolSource), runID: runID, attemptID: attemptID)
+      let typedResult = typedDailyRecapToolResult(result)
+      return resolvingCitationMarkers(in: typedResult, references: references)
     } catch {
       logError("Tool get_daily_recap failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -1687,9 +1804,7 @@ class ChatToolExecutor {
       log("Tool semantic_search: vector returned \(vectorResults.count) results")
 
       // Filter by similarity threshold and fetch screenshot details
-      let dateFormatter = DateFormatter()
-      dateFormatter.dateStyle = .medium
-      dateFormatter.timeStyle = .short
+      let displayTimeZone = TimeZone.current
 
       var lines: [String] = []
       var sources = [APIClient.ToolSource]()
@@ -1709,7 +1824,8 @@ class ChatToolExecutor {
         }
 
         count += 1
-        let dateStr = dateFormatter.string(from: screenshot.timestamp)
+        let dateStr = DesktopChatTimestampFormat.userFacing(
+          screenshot.timestamp, timeZone: displayTimeZone)
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
@@ -1737,6 +1853,14 @@ class ChatToolExecutor {
         if count >= limit { break }
       }
 
+      var matchedByText = false
+      if lines.isEmpty {
+        let fallback = await Self.screenTextFallback(
+          query: query, appFilter: appFilter, startDate: startDate, endDate: endDate, limit: limit)
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+        (lines, sources, count, matchedByText) = (fallback.lines, fallback.sources, fallback.count, fallback.count > 0)
+      }
+
       if lines.isEmpty {
         return await emptySemanticSearchMessage(
           query: query,
@@ -1745,14 +1869,14 @@ class ChatToolExecutor {
           expectedOwnerID: expectedOwnerID)
       }
 
-      lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
+      let matchNote = matchedByText ? " (exact text match; newest frames may not be embedded yet)" : ""
+      lines.insert("Found \(count) screenshot(s) matching \"\(query)\"\(matchNote):", at: 0)
 
       log("Tool semantic_search returned \(count) results")
       let references = await ChatCitationProvenanceRegistry.shared.register(
         sources, runID: runID, attemptID: attemptID)
       return ChatCitationProvenanceRegistry.annotatedToolResult(
         lines.joined(separator: "\n"), references: references)
-
     } catch {
       logError("Tool semantic_search failed", error: error)
       return "Failed to search: \(error.localizedDescription). "
@@ -1911,7 +2035,6 @@ class ChatToolExecutor {
       lines.insert("Found \(count) task(s) matching \"\(query)\":", at: 0)
       log("Tool search_tasks returned \(count) results")
       return lines.joined(separator: "\n")
-
     } catch {
       logError("Tool search_tasks failed", error: error)
       return "Error: \(error.localizedDescription)"
@@ -2081,7 +2204,7 @@ class ChatToolExecutor {
         // Same drag-to-grant mechanic as Full Disk Access. macOS pre-registers
         // the row here, but the card still walks the user to the right toggle —
         // and re-adds the app if the row was removed via tccutil or a reset.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .screenRecording) }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -2104,6 +2227,18 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
+      // System Settings from a chat turn repeats the auto-reprompt class. Report it.
+      if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
+        == .surfacePermissionAlert
+      {
+        appState?.hasMicrophonePermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Microphone permission is denied at the system level; tell the user to re-enable it in System Settings › Privacy & Security › Microphone.",
+          requiresRestart: false)
+      }
       NSApp.activate()
       guard let granted = await requestMicrophonePermissionDirectly(),
         isPermissionAuthorizationCurrent(
@@ -2132,13 +2267,29 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // Same rule as microphone: a denied authorization is spent — no re-request,
+      // no forced System Settings jump from a chat turn.
+      let preStatus = await withCheckedContinuation {
+        (continuation: CheckedContinuation<UNAuthorizationStatus, Never>) in
+        UserNotificationCallbackBridge.authorizationStatus { status in
+          continuation.resume(returning: status)
+        }
+      }
+      if preStatus == .denied {
+        appState?.hasNotificationPermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Notifications are denied at the system level; tell the user to re-enable Omi in System Settings › Notifications.",
+          requiresRestart: false)
+      }
       guard let granted = await requestNotificationPermissionDirectly(),
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
-      if !granted {
+      if !granted, preStatus == .notDetermined {
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
@@ -2213,7 +2364,7 @@ class ChatToolExecutor {
           authorizationSnapshot: authorizationSnapshot)
         // Same drag-to-grant mechanic as Screen Recording: drop the app into the
         // Full Disk Access list to add and enable it in one gesture.
-        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
@@ -2339,7 +2490,12 @@ class ChatToolExecutor {
       targets: AppState.accessibilityProbeTargets())
     let accessibilityProjection = AppState.accessibilityProjection(accessibilitySignals)
     let accessibilityGranted = accessibilityProjection.hasPermission
-    let automationStatus = AppState.queryAutomationPermissionStatus()
+    // The automation probe may start System Events and wait for LaunchServices
+    // (up to ~5s on a cold target), so it must never run on the main actor —
+    // same rule as `AppState.refreshAutomationPermission`.
+    let automationStatus = await Task.detached(priority: .userInitiated) {
+      AppState.queryAutomationPermissionStatus()
+    }.value
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
     guard
       isPermissionAuthorizationCurrent(
@@ -2353,8 +2509,8 @@ class ChatToolExecutor {
     appState?.hasNotificationPermission = notificationsGranted
     appState?.hasAccessibilityPermission = accessibilityGranted
     appState?.isAccessibilityBroken = accessibilityProjection.isBroken
-    appState?.hasAutomationPermission = automationStatus == noErr
-    appState?.automationPermissionError = automationPermissionError(for: automationStatus)
+    // `-600` is "System Events unreachable", not an answer about the grant (see accessibility above).
+    let automationGranted = appState?.applyAutomationPermissionStatus(automationStatus) ?? (automationStatus == noErr)
     appState?.hasFullDiskAccess = fullDiskAccessGranted
 
     return onboardingPermissionStatusPayload(
@@ -2362,7 +2518,7 @@ class ChatToolExecutor {
       microphone: microphoneGranted,
       notifications: notificationsGranted,
       accessibility: accessibilityGranted,
-      automation: automationStatus == noErr,
+      automation: automationGranted,
       fullDiskAccess: fullDiskAccessGranted
     )
   }
@@ -2456,7 +2612,24 @@ class ChatToolExecutor {
           completion(OSStatus(errAEEventNotPermitted))
           return
         }
-        completion(AppState.queryAutomationPermissionStatus())
+        // The passive probe may start System Events and wait for LaunchServices
+        // (up to ~5s), so it cannot run inside this `Task { @MainActor … }` —
+        // hop off, then route the answer back through `completion` (the
+        // once-resume adapter already tolerates a late completion).
+        Task.detached(priority: .userInitiated) {
+          let status = AppState.queryAutomationPermissionStatus()
+          await MainActor.run {
+            guard
+              isPermissionAuthorizationCurrent(
+                expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot)
+            else {
+              completion(OSStatus(errAEEventNotPermitted))
+              return
+            }
+            completion(status)
+          }
+        }
       }
     }
   }
@@ -3122,16 +3295,211 @@ class ChatToolExecutor {
 
   // MARK: - Backend RAG Tools
 
+  /// The model-visible failure envelope for a tool that did not succeed.
+  ///
+  /// `relay-tool-result.ts` treats `ok:false` (or an `error` key) as canonical and
+  /// flips the invocation outcome to `failed`. Returning prose instead left a failed
+  /// write indistinguishable from a successful one, which is how "I've added that"
+  /// was spoken over a write that never landed.
+  nonisolated static func toolFailureEnvelope(code: String, message: String) -> String {
+    let payload: [String: Any] = ["ok": false, "error": ["code": code, "message": message]]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"ok\":false,\"error\":{\"code\":\"\(code)\"}}"
+    }
+    return json
+  }
+
+  /// Production constructor for already-typed per-record sections. This is the
+  /// executor boundary used by recap and backend read tools; it deliberately
+  /// does not parse rendered Markdown back into records.
+  nonisolated static func typedReadToolResult(
+    toolName: String,
+    sections: [[String: Any]],
+    totals: [String: Int]
+  ) -> String {
+    let payload: [String: Any] = [
+      "ok": true,
+      "tool": toolName,
+      "totals": totals,
+      "sections": sections,
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return toolFailureEnvelope(
+        code: "typed_tool_result_encoding_failed", message: "The typed tool result could not be encoded.")
+    }
+    return json
+  }
+
+  /// Encodes the value-typed recap only after the GRDB read has crossed back
+  /// to the executor actor. No `[String: Any]` value escapes the database
+  /// closure under strict concurrency checking.
+  private nonisolated static func typedDailyRecapToolResult(
+    _ result: DailyRecapReadResult
+  ) -> String {
+    let payload = DailyRecapPayload(
+      ok: true,
+      tool: "get_daily_recap",
+      totals: result.totals,
+      sections: result.sections)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let data = try? encoder.encode(payload),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return toolFailureEnvelope(
+        code: "typed_tool_result_encoding_failed", message: "The typed tool result could not be encoded.")
+    }
+    return json
+  }
+
+  /// Builds the typed read-tool boundary without discarding the backend's rendered detail.
+  /// Older servers may omit `sources`; in that case the rendered result remains the canonical
+  /// model-visible content instead of becoming a successful empty section.
+  nonisolated static func typedBackendReadToolResult(
+    toolName: String,
+    resultText: String,
+    sources: [APIClient.ToolSource]?,
+    references: [ChatCitationReference]
+  ) -> String {
+    let sources = sources ?? []
+    guard !sources.isEmpty else {
+      let content = resultText.isEmpty ? "No result text returned." : resultText
+      return typedReadToolResult(
+        toolName: toolName,
+        sections: [["name": "text", "total": 1, "items": [content]]],
+        totals: ["text": 1])
+    }
+
+    let sectionName =
+      toolName == "get_action_items"
+      ? "action_items"
+      : toolName.contains("conversation") ? "conversations" : "memories"
+    let segments = renderedRecordSegments(
+      resultText, toolName: toolName, expectedCount: sources.count)
+    let items: [[String: Any]] = sources.enumerated().map { index, source in
+      var item: [String: Any] = [
+        "title": source.title,
+        "summary": source.preview,
+        "sourceId": source.sourceID,
+      ]
+      if let createdAt = source.createdAt { item["createdAt"] = createdAt }
+      if let momentTimestampMs = source.momentTimestampMs {
+        item["momentTimestampMs"] = momentTimestampMs
+      }
+      if let appName = source.appName { item["appName"] = appName }
+      if let url = source.url { item["url"] = url }
+      if let segments { item["content"] = utf8Prefix(segments[index], maximumBytes: 2 * 1024) }
+      if references.indices.contains(index) { item["citationMarker"] = "[\(references[index].ordinal)]" }
+      return item
+    }
+    var sections: [[String: Any]] = [
+      ["name": sectionName, "total": items.count, "items": items]
+    ]
+    var totals = [sectionName: items.count]
+    if segments == nil, !resultText.isEmpty {
+      sections.append(["name": "text", "total": 1, "items": [resultText]])
+      totals["text"] = 1
+    }
+    return typedReadToolResult(toolName: toolName, sections: sections, totals: totals)
+  }
+
+  private nonisolated static func renderedRecordSegments(
+    _ resultText: String,
+    toolName: String,
+    expectedCount: Int
+  ) -> [String]? {
+    guard expectedCount > 0 else { return nil }
+    let pattern: String
+    if toolName.contains("conversation") {
+      pattern = #"(?m)^Conversation #\d+\s*$"#
+    } else if toolName == "get_action_items" {
+      pattern = #"(?m)^\d+\.\s+"#
+    } else {
+      pattern = #"(?m)^-\s+"#
+    }
+    guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let range = NSRange(resultText.startIndex..., in: resultText)
+    let matches = expression.matches(in: resultText, range: range)
+    guard matches.count == expectedCount else { return nil }
+    return renderedRecordSegmentsForTesting(
+      resultText, matchRanges: matches.map(\.range), expectedCount: expectedCount)
+  }
+
+  nonisolated static func renderedRecordSegmentsForTesting(
+    _ resultText: String,
+    matchRanges: [NSRange],
+    expectedCount: Int
+  ) -> [String]? {
+    guard matchRanges.count == expectedCount else { return nil }
+    let fullRange = NSRange(resultText.startIndex..., in: resultText)
+    let segments: [String] = matchRanges.enumerated().compactMap { index, matchRange in
+      let start = matchRange.location
+      let end = index + 1 < matchRanges.count ? matchRanges[index + 1].location : fullRange.length
+      guard let segmentRange = Range(NSRange(location: start, length: end - start), in: resultText)
+      else { return nil }
+      return resultText[segmentRange].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return segments.count == expectedCount ? segments : nil
+  }
+
+  private nonisolated static func utf8Prefix(_ value: String, maximumBytes: Int) -> String {
+    guard value.utf8.count > maximumBytes else { return value }
+    let suffix = "…"
+    let contentLimit = max(0, maximumBytes - suffix.utf8.count)
+    var bytes = 0
+    var result = ""
+    for character in value {
+      let size = String(character).utf8.count
+      guard bytes + size <= contentLimit else { break }
+      result.append(character)
+      bytes += size
+    }
+    return result + suffix
+  }
+
+  nonisolated static func resolvingCitationMarkers(
+    in result: String,
+    references: [ChatCitationReference]
+  ) -> String {
+    var resolved = result
+    for (index, reference) in references.enumerated() {
+      resolved = resolved.replacingOccurrences(
+        of: "{{cite:\(index + 1)}}", with: "[\(reference.ordinal)]")
+    }
+    return resolved.replacingOccurrences(
+      of: #"\s*\{\{cite:\d+\}\}"#,
+      with: "",
+      options: .regularExpression)
+  }
+
+  nonisolated static func backendConversationDefaults(
+    surfaceKind: String?
+  ) -> (limit: Int, includeTranscript: Bool) {
+    let realtime = surfaceKind == "realtime" || surfaceKind == "realtime_voice"
+    return realtime ? (5, false) : (20, true)
+  }
+
   private static func executeBackendTool(
     _ toolCall: ToolCall,
     runID: String?,
     attemptID: String?,
+    surfaceKind: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
     let args = toolCall.arguments
+    let conversationDefaults = backendConversationDefaults(surfaceKind: surfaceKind)
+
+    func backendFailureEnvelope(_ response: APIClient.ToolResponse) -> String {
+      toolFailureEnvelope(code: "backend_tool_failed", message: response.resultText)
+    }
 
     func annotated(_ response: APIClient.ToolResponse) async -> String {
+      if response.isError { return backendFailureEnvelope(response) }
       let sources: [APIClient.ToolSource]
       if let typedSources = response.sources {
         sources = typedSources
@@ -3144,8 +3512,11 @@ class ChatToolExecutor {
       }
       let references = await ChatCitationProvenanceRegistry.shared.register(
         sources, runID: runID, attemptID: attemptID)
-      return ChatCitationProvenanceRegistry.annotatedToolResult(
-        response.resultText, references: references)
+      return typedBackendReadToolResult(
+        toolName: toolCall.name,
+        resultText: response.resultText,
+        sources: sources,
+        references: references)
     }
 
     do {
@@ -3168,9 +3539,9 @@ class ChatToolExecutor {
         let resp = try await api.toolGetConversations(
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          limit: args["limit"] as? Int ?? 20,
+          limit: args["limit"] as? Int ?? conversationDefaults.limit,
           offset: args["offset"] as? Int ?? 0,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: args["include_transcript"] as? Bool ?? conversationDefaults.includeTranscript,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
@@ -3185,7 +3556,7 @@ class ChatToolExecutor {
           startDate: validatedStartDate,
           endDate: validatedEndDate,
           limit: args["limit"] as? Int ?? 5,
-          includeTranscript: args["include_transcript"] as? Bool ?? true,
+          includeTranscript: args["include_transcript"] as? Bool ?? conversationDefaults.includeTranscript,
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
@@ -3239,7 +3610,6 @@ class ChatToolExecutor {
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
         return await annotated(resp)
-
       case "create_action_item":
         guard let desc = args["description"] as? String, !desc.isEmpty else {
           return "Error: description is required"
@@ -3267,8 +3637,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
-
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
       case "update_action_item":
         guard let itemId = resolveActionItemID(args) else {
           return "Error: action_item_id is required"
@@ -3297,8 +3666,7 @@ class ChatToolExecutor {
                 authorizationSnapshot: currentOwnerAuthorizationSnapshot)
             })
         else { return authorizedOwnerChangedResult() }
-        return resp.resultText
-
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
       case "create_calendar_event":
         guard let rawTitle = args["title"] as? String else {
           return "Error: title is required"
@@ -3327,13 +3695,43 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
-
+        return resp.isError ? backendFailureEnvelope(resp) : resp.resultText
       default:
         return "Unknown backend tool: \(toolCall.name)"
       }
     } catch {
       log("Backend tool error (\(toolCall.name)): \(error)")
+      return toolFailureEnvelope(
+        code: "backend_tool_unreachable",
+        message: "Error calling backend: \(error.localizedDescription)")
+    }
+  }
+
+  /// Generic passthrough for the JIT-gated knowledge-ledger tools (search_knowledge,
+  /// read_playbook, search_historical_facts, get_entity_timeline_tool, save_playbook,
+  /// create_standing_trigger, close_fact). Unlike the typed `/v1/tools/*` routes above,
+  /// these share one backend contract — `POST /v1/agent/execute-tool` with
+  /// `{tool_name, params}` — so there is no bespoke per-tool Swift wrapper. The backend
+  /// re-validates the JIT rollout for `tool_name` on every call regardless of whether the
+  /// manifest advertised it, so this dispatch is a UX convenience, not an authorization
+  /// decision.
+  private static func executeAgentLedgerTool(
+    _ toolCall: ToolCall,
+    expectedOwnerID: String?,
+    api: APIClient
+  ) async -> String {
+    do {
+      let resp = try await api.executeAgentTool(
+        toolName: toolCall.name,
+        params: toolCall.arguments,
+        expectedOwnerId: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+      if let error = resp.error, !error.isEmpty {
+        return "Error: \(error)"
+      }
+      return resp.result ?? ""
+    } catch {
+      log("Agent ledger tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
     }
   }
@@ -3383,7 +3781,6 @@ class ChatToolExecutor {
             appName: nil,
             url: nil)
         }
-
       case "get_memories":
         // The v3 list has no date-range filter. Refuse a potentially different result set rather
         // than attach plausible-but-wrong memories when the legacy tool call was date-scoped.
@@ -3404,7 +3801,6 @@ class ChatToolExecutor {
             appName: $0.sourceApp,
             url: nil)
         }
-
       case "get_action_items":
         let response = try await api.getActionItems(
           limit: limit,
@@ -3428,7 +3824,6 @@ class ChatToolExecutor {
             appName: nil,
             url: nil)
         }
-
       default:
         return []
       }

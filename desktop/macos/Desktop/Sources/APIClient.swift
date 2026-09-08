@@ -1,6 +1,59 @@
 import Foundation
 import OmiWAL
 
+private struct DesktopPublicWebSearchRequest: Encodable {
+  struct Message: Encodable {
+    let role: String
+    let content: String
+  }
+
+  let model = "omi-sonnet"
+  let messages: [Message]
+  let stream = false
+  let maxTokens = 512
+  let omiWebSearch = true
+
+  enum CodingKeys: String, CodingKey {
+    case model, messages, stream
+    case maxTokens = "max_tokens"
+    case omiWebSearch = "omi_web_search"
+  }
+}
+
+private struct DesktopPublicWebSearchResponse: Decodable {
+  struct Choice: Decodable {
+    struct Message: Decodable { let content: String }
+    let message: Message
+  }
+
+  struct SearchResult: Decodable {
+    let title: String?
+    let url: String?
+    let snippet: String?
+  }
+
+  let choices: [Choice]
+  let searchResults: [SearchResult]?
+
+  enum CodingKeys: String, CodingKey {
+    case choices
+    case searchResults = "search_results"
+  }
+
+  func evidenceText(answer: String) -> String {
+    let sources = (searchResults ?? []).prefix(8).compactMap { result -> String? in
+      let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let snippet = result.snippet?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !title.isEmpty || !snippet.isEmpty else { return nil }
+      let boundedSnippet = String(snippet.prefix(700))
+      let source = title.isEmpty ? (result.url ?? "Public web source") : title
+      return "Source result — \(source): \(boundedSnippet)"
+    }
+    guard !sources.isEmpty else { return answer }
+    return ([answer, "Search-result evidence:"] + sources).joined(separator: "\n")
+  }
+}
+
 actor APIClient {
   static let shared = APIClient()
   // Primary data backend URL — Python backend is the single source of truth for all data CRUD.
@@ -66,6 +119,39 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: expectedAuthOwnerId
     )
+  }
+
+  /// Executes a fresh public-only lookup through the desktop chat endpoint.
+  ///
+  /// This intentionally does not reuse the canonical typed-chat session. That
+  /// session may contain private memories or prior tool results, and the backend
+  /// correctly withholds provider-hosted web search from a tainted transcript.
+  /// A single isolated user message both preserves that privacy boundary and
+  /// lets realtime voice use the same managed public-web lane as typed chat.
+  func searchPublicWebForVoice(
+    query: String,
+    expectedOwnerID: String,
+    customBaseURL: String? = nil,
+    includeSourceEvidence: Bool = false
+  ) async throws -> String {
+    let base = customBaseURL ?? rustBackendURL
+    guard !base.isEmpty else { throw APIError.invalidResponse }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    let body = DesktopPublicWebSearchRequest(
+      messages: [.init(role: "user", content: query)])
+    let response: DesktopPublicWebSearchResponse = try await post(
+      "v2/chat/completions",
+      body: body,
+      customBaseURL: normalized,
+      includeBYOK: false,
+      expectedOwnerId: expectedOwnerID,
+      requestTimeout: 45)
+    guard
+      let answer = response.choices.first?.message.content
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !answer.isEmpty
+    else { throw APIError.invalidResponse }
+    return includeSourceEvidence ? response.evidenceText(answer: answer) : answer
   }
 
   // MARK: - HTTP Methods
@@ -306,7 +392,8 @@ actor APIClient {
     contextPlanID: String = "",
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
-    contextCacheReplaced: Bool = false
+    contextCacheReplaced: Bool = false,
+    turnId: String = ""
   ) async {
     let base = rustBackendURL
     guard !base.isEmpty else { return }
@@ -319,25 +406,60 @@ actor APIClient {
     do {
       let headers = try await buildHeaders(requireAuth: true)
       for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-      let body: [String: Any] = [
-        "provider": provider,
-        "model": model,
-        "input_text_tokens": inputText,
-        "input_audio_tokens": inputAudio,
-        "input_cached_tokens": inputCached,
-        "output_text_tokens": outputText,
-        "output_audio_tokens": outputAudio,
-        // Opaque hashes/plan identifiers only; no rendered context or user text.
-        "context_plan_id": contextPlanID,
-        "stable_cache_identity": stableCacheIdentity,
-        "dynamic_context_identity": dynamicContextIdentity,
-        "context_cache_replaced": contextCacheReplaced,
-      ]
+      let body = Self.realtimeUsageReportBody(
+        provider: provider,
+        model: model,
+        inputText: inputText,
+        inputAudio: inputAudio,
+        inputCached: inputCached,
+        outputText: outputText,
+        outputAudio: outputAudio,
+        contextPlanID: contextPlanID,
+        stableCacheIdentity: stableCacheIdentity,
+        dynamicContextIdentity: dynamicContextIdentity,
+        contextCacheReplaced: contextCacheReplaced,
+        turnId: turnId)
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
       _ = try await session.data(for: request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
     }
+  }
+
+  /// Opaque turn identity only. Empty `turnId` is omitted so retries without a
+  /// turn stay on the backend's empty-string default.
+  static func realtimeUsageReportBody(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int,
+    contextPlanID: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextCacheReplaced: Bool,
+    turnId: String
+  ) -> [String: Any] {
+    var body: [String: Any] = [
+      "provider": provider,
+      "model": model,
+      "input_text_tokens": inputText,
+      "input_audio_tokens": inputAudio,
+      "input_cached_tokens": inputCached,
+      "output_text_tokens": outputText,
+      "output_audio_tokens": outputAudio,
+      // Opaque hashes/plan identifiers only; no rendered context or user text.
+      "context_plan_id": contextPlanID,
+      "stable_cache_identity": stableCacheIdentity,
+      "dynamic_context_identity": dynamicContextIdentity,
+      "context_cache_replaced": contextCacheReplaced,
+    ]
+    if !turnId.isEmpty {
+      body["turn_id"] = turnId
+    }
+    return body
   }
 
   func performVoidRequest(

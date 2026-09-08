@@ -10,7 +10,7 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     )
     XCTAssertEqual(
       ChatFirstMemoryRoutePolicy.destination(afterSelecting: .memories, current: .conversations),
-      .memories
+      .conversations
     )
     XCTAssertEqual(
       ChatFirstMemoryRoutePolicy.destination(afterSelecting: .conversations, current: .brainMap),
@@ -42,31 +42,35 @@ final class ChatFirstDestinationParityTests: XCTestCase {
   }
 
   /// Selecting a hub view in the chat-first shell has to move its typed route as well as the
-  /// persisted destination. Conversations has its own route (it carries capture-archive focus);
-  /// Memories and Brain Map are both the Memory route, which is where `MemoryHubPage` is mounted.
+  /// persisted destination. Every peer and deep link enters through the Memory route, which owns
+  /// Brain's persistent section navigation.
   ///
   /// Without this, picking Brain Map from the Conversations route left the shell on a host that has
   /// no Brain Map in it — the state that made the map unreachable once the menu was gone.
   func testChatFirstAppliesAHubSelectionToItsOwnRoute() {
-    XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .conversations), .conversations)
+    XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .conversations), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .memories), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .brainMap), .memories)
     XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .activity), .memories)
+    XCTAssertEqual(MemoryHubSelectionPolicy.chatFirstRoute(for: .rewind), .memories)
+  }
+
+  func testEveryConversationEntryNormalizesToTheCanonicalMemoryRoute() {
+    XCTAssertEqual(ChatFirstPendingFocus.capture(id: "conversation-1", momentTs: 12).route, .memories)
+    XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "conversations"), .memories)
   }
 
   /// **The chip row is the door, so its contents are a contract.**
   ///
   /// The hub's switcher was deleted and this row replaced it. `ShellDestination.Reach.activityChipRow`
-  /// claims the row reaches Conversations, Memories and Brain Map; that claim is only true while the
-  /// row actually offers every hub page. Tasks and Rewind were removed from the row deliberately —
-  /// each already has its own pill in the bar directly above it — and neither is a hub page, so
-  /// neither may come back here without the reachability model being revisited. That every chip
+  /// claims the row reaches Conversations, Memories, Rewind and Brain Map; that claim is only true
+  /// while the row actually offers every hub page. That every chip
   /// opens *some* hub page is held by the type — `hubDestination` is not optional — rather than by
   /// an assertion here.
   func testTheActivityChipRowOffersEveryHubPageAndNothingElse() {
     XCTAssertEqual(
       ActivityDestinationChip.allCases.map(\.title),
-      ["Brain", "Conversations", "Memories", "Brain Map"])
+      ["Activity", "Conversations", "Memories", "Rewind", "Brain Map"])
 
     XCTAssertEqual(
       Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
@@ -80,6 +84,8 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     XCTAssertEqual(
       QueryPanelChipBehavior.openDestinations(selected: .activity, open: { _ in }).disclosureLabel,
       "View")
+    XCTAssertEqual(QueryPanelChipBehavior.none.disclosureLabel, "Time range")
+    XCTAssertFalse(QueryPanelChipBehavior.none.showsChipRow)
   }
 
   /// Every flat pill the bar now shows must resolve to a chat-first route, both ways. `Focus` did

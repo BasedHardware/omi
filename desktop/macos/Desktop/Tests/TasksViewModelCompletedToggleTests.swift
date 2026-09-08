@@ -58,6 +58,24 @@ final class TasksViewModelCompletedToggleTests: XCTestCase {
     XCTAssertEqual(vm.displayTasks.map(\.id), ["done-1"])
   }
 
+  func testSearchResultsRespectSelectedStatusView() async {
+    let todo = task(id: "todo-match", completed: false)
+    let done = task(id: "done-match", completed: true)
+    let vm = TasksViewModel(searchLoader: { _, _ in [todo, done] })
+
+    vm.searchText = "match"
+    for _ in 0..<100 {
+      await Task.yield()
+      if vm.searchResults.count == 2, !vm.isSearching { break }
+    }
+
+    XCTAssertEqual(Set(vm.displayTasks.map(\.id)), Set([todo.id]))
+
+    vm.toggleShowCompletedView()
+
+    XCTAssertEqual(Set(vm.displayTasks.map(\.id)), Set([done.id]))
+  }
+
   func testTodoPresentationDoesNotUseDoneRowsAsItsLoadingState() {
     let store = TasksStore.shared
     store.resetSessionState()

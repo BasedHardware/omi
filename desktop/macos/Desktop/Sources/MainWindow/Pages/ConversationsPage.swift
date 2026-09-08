@@ -1,11 +1,51 @@
 import OmiTheme
 import SwiftUI
 
+/// Applies the list query's refinements to remote text-search results.
+///
+/// The search endpoint only accepts text, so search results must pass through
+/// this same local predicate as the list's cached/server rows. Keeping the
+/// predicate pure also means a filter change immediately updates an already
+/// visible search without starting a second request.
+enum ConversationSearchResultFilter {
+  static func apply(
+    _ conversations: [ServerConversation],
+    starredOnly: Bool,
+    date: Date?,
+    folderId: String?,
+    calendar: Calendar = .current
+  ) -> [ServerConversation] {
+    let dateRange: (start: Date, end: Date)? = date.flatMap { selectedDate in
+      let start = calendar.startOfDay(for: selectedDate)
+      guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
+      return (start: start, end: end)
+    }
+
+    return conversations.filter { conversation in
+      if starredOnly && !conversation.starred { return false }
+      if let folderId, conversation.folderId != folderId { return false }
+      if let dateRange {
+        let conversationDate = conversation.startedAt ?? conversation.createdAt
+        guard conversationDate >= dateRange.start && conversationDate < dateRange.end else {
+          return false
+        }
+      }
+      return true
+    }
+  }
+}
+
 // MARK: - Conversations Page
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
   @Binding var selectedConversation: ServerConversation?
+  var brainDestination: MemoryHubDestination? = nil
+  var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
   @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
@@ -15,7 +55,7 @@ struct ConversationsPage: View {
   @AppStorage("conversationsCompactView") private var isCompactView = true
 
   // Listening mode — used only to decide whether the manual "Start Recording"
-  // affordance is meaningful (see startRecordingButton gating).
+  // action is meaningful in the page's overflow menu.
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
     AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
   private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
@@ -52,119 +92,143 @@ struct ConversationsPage: View {
   @State private var isLiveTranscriptExpanded: Bool = false
 
   var body: some View {
-    Group {
-      if let selected = selectedConversation {
-        // Detail view for selected conversation
-        ConversationDetailView(
-          conversation: selected,
-          onBack: { selectedConversation = nil },
-          folders: appState.folders,
-          onMoveToFolder: { conversationId, folderId in
-            await appState.moveConversationToFolder(conversationId, folderId: folderId)
-          },
-          onDelete: {
-            // Cascade is owned by ConversationDetailView; refresh list after dismiss.
+    pageSurface
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .glassContent()
+      .onAppear {
+        // Load conversations when view appears
+        if appState.conversations.isEmpty {
+          Task {
+            await appState.loadConversations()
+          }
+        } else {
+          // Already loaded, notify sidebar to clear loading indicator
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
+        }
+        // Load folders
+        if appState.folders.isEmpty {
+          Task {
+            await appState.loadFolders()
+          }
+        }
+        consumePendingAutomationOpenConversation()
+      }
+      .onReceive(automation.$pendingOpenRequest.compactMap { $0 }) { _ in
+        consumePendingAutomationOpenConversation()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) {
+        _ in
+        consumePendingAutomationOpenConversation()
+      }
+      .onReceive(
+        NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
+      ) { notification in
+        searchQuery = (notification.userInfo?["query"] as? String) ?? ""
+      }
+      // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
+      // this page's local state (active search results, multi-select/merge state,
+      // folder sheets) otherwise keeps rendering the previous account's rows even
+      // after AppState and the repository reset.
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        selectedConversation = nil
+        searchQuery = ""
+        searchResults = []
+        isSearching = false
+        searchError = nil
+        showDatePicker = false
+        showCreateFolderSheet = false
+        editingFolder = nil
+        deletingFolder = nil
+        isFilteringStarred = false
+        isFilteringDate = false
+        isMultiSelectMode = false
+        selectedConversationIds = []
+        showMergeConfirmation = false
+        isMerging = false
+        mergeError = nil
+        isLiveTranscriptExpanded = false
+      }
+      .onReceive(appState.$conversations) { conversations in
+        guard let selectedConversation,
+          let refreshed = conversations.first(where: { $0.id == selectedConversation.id })
+        else { return }
+        self.selectedConversation = refreshed
+      }
+      .dismissableSheet(isPresented: $showCreateFolderSheet) {
+        FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
+          .environmentObject(appState)
+          .frame(width: 380)
+      }
+      .dismissableSheet(item: $editingFolder) { folder in
+        FolderFormSheet(folder: folder, onDismiss: { editingFolder = nil })
+          .environmentObject(appState)
+          .frame(width: 380)
+      }
+      .dismissableSheet(item: $deletingFolder) { folder in
+        DeleteFolderSheet(folder: folder, onDismiss: { deletingFolder = nil })
+          .environmentObject(appState)
+          .frame(width: 380)
+      }
+  }
+
+  @ViewBuilder
+  private var pageSurface: some View {
+    if let brainDestination, let onSelectBrainDestination {
+      BrainSectionPageLayout(
+        selected: brainDestination,
+        onSelect: onSelectBrainDestination,
+        search: {
+          QuerySearchBar(
+            text: $searchQuery,
+            accessibilityID: "conversations-search-field",
+            placeholder: "Search conversations…",
+            searchSurface: .conversations
+          )
+          .onChange(of: searchQuery) { _, newValue in
+            if !newValue.isEmpty { selectedConversation = nil }
+            submitSearch(newValue)
+          }
+        },
+        content: { pageContent }
+      )
+    } else {
+      pageContent
+    }
+  }
+
+  @ViewBuilder
+  private var pageContent: some View {
+    if let selected = selectedConversation {
+      // Detail view for selected conversation
+      ConversationDetailView(
+        conversation: selected,
+        onBack: { selectedConversation = nil },
+        folders: appState.folders,
+        onMoveToFolder: { conversationId, folderId in
+          await appState.moveConversationToFolder(conversationId, folderId: folderId)
+        },
+        onDelete: {
+          // Cascade is owned by ConversationDetailView; refresh list after dismiss.
+          Task {
+            await appState.refreshConversations()
+          }
+        },
+        onTitleUpdated: { _ in
+          // Refresh to get updated data if conversation still exists
+          if appState.conversations.contains(where: { $0.id == selected.id }) {
             Task {
               await appState.refreshConversations()
             }
-          },
-          onTitleUpdated: { _ in
-            // Refresh to get updated data if conversation still exists
-            if appState.conversations.contains(where: { $0.id == selected.id }) {
-              Task {
-                await appState.refreshConversations()
-              }
-            }
-          },
-          people: appState.people,
-          onFetchPeople: {
-            await appState.fetchPeople()
-          },
-          onCreatePerson: { name in
-            await appState.createPerson(name: name)
-          },
-          onAssignSpeaker: { conversationId, segmentIds, personId, isUser in
-            await appState.assignSpeakerToSegments(
-              conversationId: conversationId,
-              segmentIds: segmentIds,
-              personId: personId,
-              isUser: isUser
-            )
           }
-        )
-      } else {
-        // Main view with recording header and conversation list
-        mainConversationsView
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .glassContent()
-    .onAppear {
-      // Load conversations when view appears
-      if appState.conversations.isEmpty {
-        Task {
-          await appState.loadConversations()
-        }
-      } else {
-        // Already loaded, notify sidebar to clear loading indicator
-        NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-      }
-      // Load folders
-      if appState.folders.isEmpty {
-        Task {
-          await appState.loadFolders()
-        }
-      }
-      consumePendingAutomationOpenConversation()
-    }
-    .onReceive(automation.$pendingOpenRequest.compactMap { $0 }) { _ in
-      consumePendingAutomationOpenConversation()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) {
-      _ in
-      consumePendingAutomationOpenConversation()
-    }
-    .onReceive(
-      NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
-    ) { notification in
-      searchQuery = (notification.userInfo?["query"] as? String) ?? ""
-    }
-    // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
-    // this page's local state (active search results, multi-select/merge state,
-    // folder sheets) otherwise keeps rendering the previous account's rows even
-    // after AppState and the repository reset.
-    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
-      searchQuery = ""
-      searchResults = []
-      isSearching = false
-      searchError = nil
-      showDatePicker = false
-      showCreateFolderSheet = false
-      editingFolder = nil
-      deletingFolder = nil
-      isFilteringStarred = false
-      isFilteringDate = false
-      isMultiSelectMode = false
-      selectedConversationIds = []
-      showMergeConfirmation = false
-      isMerging = false
-      mergeError = nil
-      isLiveTranscriptExpanded = false
-    }
-    .dismissableSheet(isPresented: $showCreateFolderSheet) {
-      FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
-        .environmentObject(appState)
-        .frame(width: 380)
-    }
-    .dismissableSheet(item: $editingFolder) { folder in
-      FolderFormSheet(folder: folder, onDismiss: { editingFolder = nil })
-        .environmentObject(appState)
-        .frame(width: 380)
-    }
-    .dismissableSheet(item: $deletingFolder) { folder in
-      DeleteFolderSheet(folder: folder, onDismiss: { deletingFolder = nil })
-        .environmentObject(appState)
-        .frame(width: 380)
+        },
+        initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+        onCaptureFocusResolved: onCaptureFocusResolved,
+        onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
+        onOpenLinkedTask: onOpenLinkedTask
+      )
+    } else {
+      // Main view with recording header and conversation list
+      mainConversationsView
     }
   }
 
@@ -225,42 +289,18 @@ struct ConversationsPage: View {
     }
   }
 
-  /// The Conversations list chrome: pinned title row, then the scrolling live card + list.
+  /// Compact workspace chrome followed by the scrolling live card + list.
+  ///
+  /// Brain navigation already names this destination, so repeating a large
+  /// Conversations title and subtitle only pushes the first useful row down.
+  /// Keep the page's refinements and actions pinned in one Activity-density
+  /// command row instead.
   private var conversationsListLayout: some View {
     VStack(spacing: 0) {
-      // Fixed page header — title + actions stay pinned; everything below it
-      // (live transcript, search, filters, list) scrolls together as one.
-      HStack {
-        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text("Conversations")
-            .inkStyle(InkType.firstTitle, color: Ink.primary)
-          Text("Recordings, notes, and transcripts from your day")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-        }
+      conversationQueryToolbar
+        .pagePanelToolbarInsets(isBelowNavigation: brainDestination != nil)
 
-        Spacer()
-
-        if !appState.conversations.isEmpty {
-          selectModeButton
-        }
-
-        quickNoteButton
-
-        // Only offer the manual "Start Recording" affordance when listening is
-        // set to Always. In Meetings-only (the default) or Off, showing it while
-        // nothing is transcribing misleads the user into thinking capture is
-        // active — during an actual meeting isTranscribing is already true and
-        // the live transcript replaces this button.
-        if !appState.isTranscribing && audioRecordingMode == .always {
-          startRecordingButton
-        }
-      }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.top, OmiSpacing.lg)
-      .padding(.bottom, OmiSpacing.md)
-      .background(Color.clear)
-
-      // The whole page below the header scrolls together. Floating action bars
+      // The whole page below the command row scrolls together. Floating action bars
       // (load-more, merge) stay pinned to the bottom via the ZStack overlay.
       ZStack(alignment: .bottom) {
         scrollingBody
@@ -287,10 +327,22 @@ struct ConversationsPage: View {
         .padding(.horizontal, OmiSpacing.xxl)
         .padding(.top, OmiSpacing.md)
         .padding(.bottom, OmiSpacing.md)
+        .transition(.opacity)
+      } else if appState.isFinalizingCapture {
+        // The Live card's slot stays occupied while the capture becomes a
+        // row, so the meeting lands in place instead of vanishing and
+        // reappearing further down.
+        ConversationsSavingCaptureCard()
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.top, OmiSpacing.md)
+          .padding(.bottom, OmiSpacing.md)
+          .transition(.opacity)
       }
 
       conversationListSection
     }
+    .omiAnimation(.easeInOut(duration: 0.25), value: appState.isLiveCapturing)
+    .omiAnimation(.easeInOut(duration: 0.25), value: appState.isFinalizingCapture)
 
     if embedded {
       content
@@ -346,7 +398,19 @@ struct ConversationsPage: View {
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    searchQuery.isEmpty ? appState.conversations.map { $0.id } : searchResults.map { $0.id }
+    searchQuery.isEmpty ? appState.conversations.map { $0.id } : visibleSearchResults.map { $0.id }
+  }
+
+  /// Search is text-only at the API boundary. Apply the same local refinements
+  /// to the returned rows so search and list queries have identical AND
+  /// semantics without inventing a second backend endpoint.
+  private var visibleSearchResults: [ServerConversation] {
+    ConversationSearchResultFilter.apply(
+      searchResults,
+      starredOnly: appState.showStarredOnly,
+      date: appState.selectedDateFilter,
+      folderId: appState.selectedFolderId
+    )
   }
 
   /// Entry point for the multi-select / merge feature. Without this the whole
@@ -378,56 +442,23 @@ struct ConversationsPage: View {
     .accessibilityIdentifier("conversations-select-toggle")
   }
 
-  private var quickNoteButton: some View {
-    Button {
-      NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "note.text")
-          .scaledFont(size: OmiType.caption)
-        Text("Quick Note")
-          .scaledFont(size: OmiType.body, weight: .medium)
-      }
-      .foregroundColor(Ink.secondary)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .glassChip()
-    }
-    .buttonStyle(.plain)
-  }
-
   // MARK: - Conversation List Section
 
   private var conversationListSection: some View {
     VStack(spacing: 0) {
-      // Section header with search bar and filters
-      HStack(spacing: OmiSpacing.sm) {
+      // Search stays in the shared top search surface on Brain pages. The
+      // local search is retained for the standalone conversations surface.
+      if brainDestination == nil {
         OmiSearchField(
           placeholder: "Search conversations",
           text: $searchQuery,
-          isLoading: isSearching
+          isLoading: isSearching,
+          searchSurface: .conversations
         )
-        .onChange(of: searchQuery) { _, newValue in
-          searchCoordinator.submit(newValue) { query in
-            performSearch(query: query)
-          }
-        }
-
-        // Filter buttons
-        filterButtonsRow
+        .onChange(of: searchQuery) { _, newValue in submitSearch(newValue) }
+        .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+        .padding(.bottom, OmiSpacing.sm)
       }
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.vertical, OmiSpacing.md)
-
-      // Folder tabs strip
-      FolderTabsStrip(
-        appState: appState,
-        onCreateFolder: { showCreateFolderSheet = true },
-        onEditFolder: { folder in editingFolder = folder },
-        onDeleteFolder: { folder in deletingFolder = folder }
-      )
-      .padding(.horizontal, OmiSpacing.xxl)
-      .padding(.bottom, OmiSpacing.md)
 
       // List - show search results or regular conversations. Both render
       // embedded (no inner ScrollView); the page's outer ScrollView (see
@@ -437,37 +468,45 @@ struct ConversationsPage: View {
         // Search results view
         searchResultsView
       } else {
-        // Regular conversation list
-        ConversationListView(
-          conversations: appState.conversations,
-          isLoading: appState.isLoadingConversations,
-          error: appState.conversationsError,
-          folders: appState.folders,
-          isCompactView: isCompactView,
-          onSelect: { conversation in
-            AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
-            selectedConversation = conversation
-          },
-          onRefresh: {
-            Task {
-              await appState.refreshConversations()
-            }
-          },
-          onMoveToFolder: { conversationId, folderId in
-            await appState.moveConversationToFolder(conversationId, folderId: folderId)
-          },
-          isMultiSelectMode: isMultiSelectMode,
-          selectedIds: selectedConversationIds,
-          onToggleSelection: { conversationId in
-            if selectedConversationIds.contains(conversationId) {
-              selectedConversationIds.remove(conversationId)
-            } else {
-              selectedConversationIds.insert(conversationId)
-            }
-          },
-          embedded: true,
-          appState: appState
-        )
+        // A successful filtered request with no rows is different from an
+        // account with no conversations. Keep the recovery action beside the
+        // state that caused the empty result instead of suggesting recording.
+        if appState.hasActiveConversationFilters && !appState.isLoadingConversations
+          && appState.conversationsError == nil && appState.conversations.isEmpty
+        {
+          filteredConversationsEmptyView
+        } else {
+          ConversationListView(
+            conversations: appState.conversations,
+            isLoading: appState.isLoadingConversations,
+            error: appState.conversationsError,
+            folders: appState.folders,
+            isCompactView: isCompactView,
+            onSelect: { conversation in
+              AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
+              selectedConversation = conversation
+            },
+            onRefresh: {
+              Task {
+                await appState.refreshConversations()
+              }
+            },
+            onMoveToFolder: { conversationId, folderId in
+              await appState.moveConversationToFolder(conversationId, folderId: folderId)
+            },
+            isMultiSelectMode: isMultiSelectMode,
+            selectedIds: selectedConversationIds,
+            onToggleSelection: { conversationId in
+              if selectedConversationIds.contains(conversationId) {
+                selectedConversationIds.remove(conversationId)
+              } else {
+                selectedConversationIds.insert(conversationId)
+              }
+            },
+            embedded: true,
+            appState: appState
+          )
+        }
       }
     }
   }
@@ -496,17 +535,22 @@ struct ConversationsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
-      } else if searchResults.isEmpty {
+      } else if visibleSearchResults.isEmpty {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
             .foregroundColor(Ink.secondary)
-          Text("No conversations found")
-            .scaledFont(size: OmiType.body)
+          Text("No search results")
+            .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(Ink.secondary)
-          Text("Try a different search term")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+          Text(
+            appState.hasActiveConversationFilters
+              ? "Nothing matches \(quotedSearchQuery) with your active filters."
+              : "Nothing matches \(quotedSearchQuery). Try a different term."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+          .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -520,11 +564,16 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     LazyVStack(spacing: OmiSpacing.sm) {
-      ForEach(searchResults) { conversation in
+      ForEach(visibleSearchResults) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
             AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
+            SearchAnalytics.resultOpened(
+              surface: .conversations,
+              resultIndex: visibleSearchResults.firstIndex(where: { $0.id == conversation.id }),
+              searchIsActive: true
+            )
             selectedConversation = conversation
           },
           folders: appState.folders,
@@ -545,11 +594,18 @@ struct ConversationsPage: View {
         )
       }
     }
-    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.horizontal, PagePanelVerticalRhythm.horizontalPadding)
+    .padding(.top, PagePanelVerticalRhythm.contentGap)
     .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : OmiSpacing.lg)
   }
 
   // MARK: - Search
+
+  private func submitSearch(_ query: String) {
+    searchCoordinator.submit(query) { submittedQuery in
+      performSearch(query: submittedQuery)
+    }
+  }
 
   private func performSearch(query: String) {
     guard !query.isEmpty else {
@@ -563,7 +619,6 @@ struct ConversationsPage: View {
     isSearching = true
     searchError = nil
     log("Search: Starting search for '\(query)'")
-    AnalyticsManager.shared.searchQueryEntered(query: query)
 
     Task {
       do {
@@ -571,6 +626,7 @@ struct ConversationsPage: View {
         log("Search: Found \(result.count) results")
         searchResults = result
         isSearching = false
+        SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: result.count)
       } catch is CancellationError {
         // A newer query owns the search UI now.
       } catch {
@@ -578,102 +634,239 @@ struct ConversationsPage: View {
         searchError = UserFacingErrorPresentation.message(for: error, while: .conversationSearch)
         searchResults = []
         isSearching = false
+        SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: 0)
       }
     }
   }
 
-  // MARK: - Filter Buttons
+  // MARK: - Query Toolbar
 
-  private var filterButtonsRow: some View {
-    HStack(spacing: OmiSpacing.sm) {
-      // Starred filter button
-      Button(action: {
-        Task {
-          isFilteringStarred = true
-          await appState.toggleStarredFilter()
-          isFilteringStarred = false
+  /// The toolbar makes collection scope and refinements explicit. A folder is
+  /// a single Collection dimension; Starred is only a refinement, so it cannot
+  /// appear as a second, competing tab.
+  private var conversationQueryToolbar: some View {
+    PageQueryToolbar(
+      refinement: {
+        conversationFiltersMenu
+      },
+      activeFilters: {
+        ActivePageFilterStrip(
+          filters: activeConversationFilters,
+          onClearAll: { Task { await appState.clearFilters() } }
+        )
+      },
+      actions: {
+        if isMultiSelectMode {
+          selectModeButton
+        } else if !appState.conversations.isEmpty
+          || (!appState.isTranscribing && audioRecordingMode == .always)
+        {
+          conversationMoreMenu
         }
-      }) {
-        HStack(spacing: OmiSpacing.xs) {
-          if isFilteringStarred {
-            ProgressView()
-              .scaleEffect(0.5)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: appState.showStarredOnly ? "star.fill" : "star")
-              .scaledFont(size: OmiType.caption)
-          }
-          Text("Starred")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-        }
-        .foregroundColor(appState.showStarredOnly ? PageGlass.starred : Ink.secondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .glassChip(isActive: appState.showStarredOnly)
       }
-      .buttonStyle(.plain)
-      .disabled(isFilteringStarred)
+    )
+  }
 
-      // Date filter button
-      Button(action: {
-        showDatePicker.toggle()
-      }) {
-        HStack(spacing: OmiSpacing.xs) {
-          if isFilteringDate {
-            ProgressView()
-              .scaleEffect(0.5)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: "calendar")
-              .scaledFont(size: OmiType.caption)
-          }
-          if let date = appState.selectedDateFilter {
-            Text(formatFilterDate(date))
-              .scaledFont(size: OmiType.caption, weight: .medium)
-            // Clear button
-            Button(action: {
-              Task {
-                isFilteringDate = true
-                await appState.setDateFilter(nil)
-                isFilteringDate = false
-              }
-            }) {
-              Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: OmiType.micro)
+  private var conversationFiltersMenu: some View {
+    Menu {
+      Section("Collection") {
+        Button {
+          Task { await appState.setFolderFilter(nil) }
+        } label: {
+          HStack {
+            Label("All collections", systemImage: "tray.2")
+            Spacer()
+            if appState.selectedFolderId == nil {
+              Image(systemName: "checkmark")
             }
-            .buttonStyle(.plain)
-          } else {
-            Text("Date")
-              .scaledFont(size: OmiType.caption, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? Ink.primary : Ink.secondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .glassChip(isActive: appState.selectedDateFilter != nil)
-      }
-      .buttonStyle(.plain)
-      .disabled(isFilteringDate)
-      .popover(isPresented: $showDatePicker) {
-        datePickerPopover
+
+        ForEach(appState.folders) { folder in
+          Button {
+            Task {
+              await appState.setFolderFilter(
+                appState.selectedFolderId == folder.id ? nil : folder.id
+              )
+            }
+          } label: {
+            HStack {
+              Text(folder.name)
+              Spacer()
+              if appState.selectedFolderId == folder.id {
+                Image(systemName: "checkmark")
+              }
+            }
+          }
+        }
       }
 
-      // Clear all filters button (only show if any filter is active)
-      if appState.showStarredOnly || appState.selectedDateFilter != nil
-        || appState.selectedFolderId != nil
-      {
-        Button(action: {
+      Section("Refine") {
+        Button {
           Task {
-            await appState.clearFilters()
+            isFilteringStarred = true
+            await appState.toggleStarredFilter()
+            isFilteringStarred = false
           }
-        }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+        } label: {
+          Label(
+            appState.showStarredOnly ? "Remove Starred filter" : "Starred",
+            systemImage: appState.showStarredOnly ? "star.fill" : "star")
         }
-        .buttonStyle(.plain)
+        .disabled(isFilteringStarred)
+
+        Button {
+          showDatePicker = true
+        } label: {
+          Label(appState.selectedDateFilter == nil ? "Date…" : "Change date…", systemImage: "calendar")
+        }
       }
+
+      Section("Collections") {
+        Button {
+          showCreateFolderSheet = true
+        } label: {
+          Label("New collection…", systemImage: "plus")
+        }
+
+        if !appState.folders.isEmpty {
+          Menu("Manage collections") {
+            ForEach(appState.folders) { folder in
+              Menu(folder.name) {
+                Button("Edit…") { editingFolder = folder }
+                Button("Delete…", role: .destructive) { deletingFolder = folder }
+              }
+            }
+          }
+        }
+      }
+    } label: {
+      PageQueryControlLabel(
+        icon: "line.3.horizontal.decrease",
+        dimension: activeConversationFilterCount == 0 ? nil : "Filter",
+        value: activeConversationFilterCount == 0
+          ? "Filter" : "\(activeConversationFilterCount)",
+        isActive: activeConversationFilterCount > 0,
+        dimensionSeparator: " ·"
+      )
     }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .popover(isPresented: $showDatePicker) {
+      datePickerPopover
+    }
+    .help("Filter conversations by collection, starred status, or date")
+    .accessibilityIdentifier("conversations-filter-menu")
+  }
+
+  private var conversationMoreMenu: some View {
+    Menu {
+      if !appState.conversations.isEmpty {
+        Button {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            isMultiSelectMode = true
+          }
+        } label: {
+          Label("Select conversations…", systemImage: "checkmark.circle")
+        }
+      }
+
+      if !appState.isTranscribing && audioRecordingMode == .always {
+        Button {
+          appState.startTranscription()
+        } label: {
+          Label("Start recording", systemImage: "mic.fill")
+        }
+      }
+    } label: {
+      PageQueryActionLabel(icon: "ellipsis", title: "More")
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help("More conversation actions")
+    .accessibilityLabel("More conversation actions")
+    .accessibilityIdentifier("conversations-more-actions")
+  }
+
+  private var activeConversationFilters: [PageActiveFilter] {
+    var filters: [PageActiveFilter] = []
+
+    if appState.showStarredOnly {
+      filters.append(
+        PageActiveFilter(id: "starred", title: "Starred") {
+          Task { await appState.toggleStarredFilter() }
+        })
+    }
+
+    if let date = appState.selectedDateFilter {
+      filters.append(
+        PageActiveFilter(id: "date", title: formatFilterDate(date)) {
+          Task { await appState.setDateFilter(nil) }
+        })
+    }
+
+    if appState.selectedFolderId != nil {
+      filters.append(
+        PageActiveFilter(id: "collection", title: selectedCollectionName) {
+          Task { await appState.setFolderFilter(nil) }
+        })
+    }
+
+    return filters
+  }
+
+  private var activeConversationFilterCount: Int {
+    (appState.showStarredOnly ? 1 : 0)
+      + (appState.selectedDateFilter == nil ? 0 : 1)
+      + (appState.selectedFolderId == nil ? 0 : 1)
+  }
+
+  private var selectedCollectionName: String {
+    guard let selectedFolderId = appState.selectedFolderId else { return "All" }
+    return appState.folders.first(where: { $0.id == selectedFolderId })?.name ?? "Selected"
+  }
+
+  private var filteredConversationsEmptyView: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "line.3.horizontal.decrease.circle")
+        .scaledFont(size: 42)
+        .foregroundColor(Ink.secondary)
+
+      Text("No matching conversations")
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(Ink.primary)
+
+      Text("Nothing matches \(activeConversationFilterDescription).")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
+        .multilineTextAlignment(.center)
+
+      Button {
+        Task { await appState.clearFilters() }
+      } label: {
+        PageQueryActionLabel(icon: "xmark.circle", title: "Clear filters", isPrimary: true)
+      }
+      .buttonStyle(.plain)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(.horizontal, OmiSpacing.section)
+    .padding(.top, PagePanelVerticalRhythm.contentGap)
+    .padding(.bottom, PagePanelVerticalRhythm.contentBottomPadding)
+    .accessibilityIdentifier("conversations-filtered-empty")
+  }
+
+  private var activeConversationFilterDescription: String {
+    var filters: [String] = []
+    if appState.showStarredOnly { filters.append("Starred") }
+    if let date = appState.selectedDateFilter { filters.append("Date: \(formatFilterDate(date))") }
+    if appState.selectedFolderId != nil { filters.append("Collection: \(selectedCollectionName)") }
+    return filters.joined(separator: " and ")
+  }
+
+  private var quotedSearchQuery: String {
+    let query = DebouncedSearchCoordinator.normalized(searchQuery)
+    return "\u{201c}\(query)\u{201d}"
   }
 
   private var datePickerPopover: some View {
@@ -835,26 +1028,6 @@ struct ConversationsPage: View {
     }
 
     isMerging = false
-  }
-
-  // MARK: - Buttons
-
-  private var startRecordingButton: some View {
-    Button(action: {
-      appState.startTranscription()
-    }) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "mic.fill")
-          .scaledFont(size: OmiType.caption)
-        Text("Start Recording")
-          .scaledFont(size: OmiType.body, weight: .medium)
-      }
-      .foregroundColor(Ink.surface)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(Capsule(style: .continuous).fill(Ink.primary))
-    }
-    .buttonStyle(.plain)
   }
 
 }

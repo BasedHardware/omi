@@ -7,6 +7,7 @@ import XCTest
 /// frame — the reserved title-bar band, lane margins, and gaps between panels swallowed clicks
 /// aimed at other apps, which never activated (the shell-window dead zone). The policy passes the
 /// pointer through everywhere except visible content, the modal barrier's host, and the resize rim.
+@MainActor
 final class ShellClickThroughPolicyTests: XCTestCase {
   private let windowSize = NSSize(width: 960, height: 712)
 
@@ -59,5 +60,34 @@ final class ShellClickThroughPolicyTests: XCTestCase {
         isResizable: false,
         contentContains: { _ in false }),
       "a fixed-size window has no resize affordance to preserve")
+  }
+
+  /// The shell reuses one window across dismiss/summon. Reconciliation while that window is ordered
+  /// out must not leave it ignoring mouse events when AppKit puts it back on screen: while ignored,
+  /// neither its visible controls nor its local mouse monitor can recover the window.
+  func testOrderingShellBackOnScreenRestoresMouseInterception() {
+    let mouse = NSEvent.mouseLocation
+    let window = NSWindow(
+      contentRect: NSRect(x: mouse.x + 5_000, y: mouse.y + 5_000, width: 320, height: 240),
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false)
+    window.orderFront(nil)
+    let sync = ShellMouseInterceptionSync(window: window)
+    defer {
+      sync.detach()
+      window.orderOut(nil)
+    }
+
+    XCTAssertFalse(window.ignoresMouseEvents)
+    window.orderOut(nil)
+    sync.sync()
+    XCTAssertTrue(window.ignoresMouseEvents, "the hidden shell previously entered pass-through mode")
+
+    window.orderFront(nil)
+
+    XCTAssertFalse(
+      window.ignoresMouseEvents,
+      "a visible shell must recover before the first click, without waiting for pointer movement")
   }
 }

@@ -140,9 +140,14 @@ actor FileIndexerService {
 
   // MARK: - Background Re-scan
 
-  /// Incremental background re-scan of all standard folders.
+  /// Incremental background re-scan of the standard folders.
   /// Updates metadata for existing files and adds new ones.
-  func backgroundRescan() async {
+  ///
+  /// - Parameter fullDiskAccessGranted: Automatic callers probe and pass the real
+  ///   answer; without it the TCC-protected roots (Documents/Desktop/Downloads) are
+  ///   skipped so a background scan never raises a per-folder consent sheet. Pass
+  ///   `true` for explicit user-initiated rescans, which may scan everything.
+  func backgroundRescan(fullDiskAccessGranted: Bool = true) async {
     guard !isScanning else {
       log("FileIndexer: Scan already in progress, skipping background rescan")
       return
@@ -154,7 +159,9 @@ actor FileIndexerService {
     log("FileIndexer: Starting background rescan")
 
     let home = FileManager.default.homeDirectoryForCurrentUser
-    let folders = scanPolicy.standardScanRoots(homeURL: home)
+    let folders = scanPolicy.automaticScanRoots(
+      homeURL: home,
+      fullDiskAccessGranted: fullDiskAccessGranted)
 
     let count = await scanFolders(folders, incremental: true)
     log("FileIndexer: Background rescan complete, \(count) files indexed")

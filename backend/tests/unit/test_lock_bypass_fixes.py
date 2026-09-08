@@ -863,22 +863,30 @@ class TestMcpSseLockRedaction:
     """M5: MCP SSE get_conversations must redact locked conversation structured data."""
 
     def test_mcp_sse_redacts_locked(self):
-        """MCP SSE execute_tool('get_conversations') must clear action_items/events for locked."""
-        import database.conversations as conversations_db
+        """MCP SSE conversation cards must expose no action items or events for locked rows."""
+        from routers import mcp_sse
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
-
-        from routers.mcp_sse import execute_tool
-
-        result = execute_tool('test-uid', 'get_conversations', {})
+        conversations = [
+            _make_conversation(locked=True),
+            _make_conversation(locked=False, conversation_id='conv-2'),
+        ]
+        with patch.object(mcp_sse.conversations_db, 'get_mcp_conversation_cards', return_value=conversations) as fetch:
+            result = mcp_sse.execute_tool('test-uid', 'get_conversations', {})
         convs = result['conversations']
 
-        assert convs[0]['structured']['action_items'] == []
-        assert convs[0]['structured']['events'] == []
+        fetch.assert_called_once_with(
+            'test-uid',
+            20,
+            0,
+            start_date=None,
+            end_date=None,
+            categories=[],
+        )
+        assert 'action_items' not in convs[0]['structured']
+        assert 'events' not in convs[0]['structured']
         assert convs[0]['structured']['title'] == 'Test Conversation'
-        assert len(convs[1]['structured']['action_items']) == 1
+        assert 'action_items' not in convs[1]['structured']
+        assert 'events' not in convs[1]['structured']
 
     def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
         """MCP SSE search delegates filtering and limiting to universal authority."""
@@ -1083,15 +1091,20 @@ class TestScheduledDailySummaryLockFilter:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
                 with patch('utils.other.notifications.send_notification'):
+                    import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 
                     _send_summary_notification(('test-uid', 'token', 'UTC'))
 
-        # generate_comprehensive_daily_summary must be called only with unlocked conversations
-        mock_gen.assert_called_once()
-        conversations_passed = mock_gen.call_args[0][1]
-        assert len(conversations_passed) == 1
-        assert conversations_passed[0].id == 'conv-2'
+        # generate_comprehensive_daily_summary must be called only with unlocked conversations.
+        # The tick now also backfills behind the current day, so the exact expected count is the
+        # current day plus the backfill cap — pinned, not `>= 1`, because a loose bound here would
+        # hide the one regression that matters: backfill spending unbounded LLM calls.
+        assert mock_gen.call_count == 1 + notifications_module._DAILY_SUMMARY_BACKFILL_GENERATE_CAP
+        for call in mock_gen.call_args_list:
+            conversations_passed = call[0][1]
+            assert len(conversations_passed) == 1
+            assert conversations_passed[0].id == 'conv-2'
 
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""

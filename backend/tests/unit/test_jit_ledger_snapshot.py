@@ -147,7 +147,7 @@ async def test_flag_or_kill_flip_during_receipt_read_revokes_enabled_snapshot(
         return function(*args, **kwargs)
 
     monkeypatch.setattr(snapshot, "resolve_jit_rollout", resolve)
-    monkeypatch.setattr(snapshot, "get_firestore_client", lambda: object())
+    monkeypatch.setattr(snapshot, "get_data_plane_firestore_client", lambda: object())
     monkeypatch.setattr(snapshot, "run_blocking", run_in_executor)
     monkeypatch.setattr(
         snapshot,
@@ -181,7 +181,7 @@ async def test_sync_firestore_client_is_acquired_inside_blocking_boundary(monkey
 
     monkeypatch.setattr(snapshot, "resolve_jit_rollout", resolve)
     monkeypatch.setattr(snapshot, "run_blocking", run_in_executor)
-    monkeypatch.setattr(snapshot, "get_firestore_client", firestore_client)
+    monkeypatch.setattr(snapshot, "get_data_plane_firestore_client", firestore_client)
     monkeypatch.setattr(
         snapshot,
         "_build_enabled_snapshot",

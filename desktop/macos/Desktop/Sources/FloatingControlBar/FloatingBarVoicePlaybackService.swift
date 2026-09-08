@@ -11,6 +11,41 @@ private final class UtteranceBox: @unchecked Sendable {
   init(_ value: AVSpeechUtterance) { self.value = value }
 }
 
+/// User-facing acknowledgement is selected from the admitted slow tool, never
+/// from transcript text. This keeps the kernel as the only routing authority
+/// while ensuring the user hears something immediately after admission.
+enum RealtimeSlowToolAcknowledgementKind: String, CaseIterable, Sendable {
+  case deeperThinking = "deeper-thinking"
+  case publicWebSearch = "public-web-search"
+
+  init?(toolName: String) {
+    switch HubTool(rawValue: toolName) {
+    case .thinkDeeper: self = .deeperThinking
+    case .webSearch: self = .publicWebSearch
+    default: return nil
+    }
+  }
+
+  var phrases: [String] {
+    switch self {
+    case .deeperThinking:
+      return [
+        "Let me think that through.",
+        "Give me a moment to think that through.",
+        "Let me dig into that.",
+        "I'll take a closer look.",
+      ]
+    case .publicWebSearch:
+      return [
+        "Let me look that up.",
+        "I'll check the latest on that.",
+        "Let me verify that.",
+        "Checking the latest now.",
+      ]
+    }
+  }
+}
+
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
@@ -79,6 +114,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   // replacement turn.
   private var activeSystemSpeechToken: SystemSpeechToken?
   private var activePTTLease: VoiceOutputLease?
+  private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
+  private var activeRealtimeSlowToolAcknowledgementTransport: String?
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -386,7 +423,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
   func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmed = InterjectVoiceFeedbackRouting.spokenText(from: text)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     if let lease {
       guard VoiceTurnCoordinator.shared.outputSnapshot.activeLease == lease else {
@@ -483,6 +521,68 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
+  /// Speak the accepted slow-tool acknowledgement without waiting on realtime
+  /// provider audio. A shipped clip for the session's exact provider voice is
+  /// preferred; the selected batch-TTS cache and system voice remain fallbacks.
+  ///
+  /// The provider is required so a Gemini/Charon turn cannot accidentally play
+  /// an OpenAI/cedar clip (or the unrelated selected voice-picker profile).
+  func speakRealtimeSlowToolAcknowledgement(
+    _ kind: RealtimeSlowToolAcknowledgementKind,
+    provider: RealtimeHubProvider
+  ) {
+    if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
+    {
+      return
+    }
+    guard let phrase = kind.phrases.randomElement() else { return }
+    activeRealtimeSlowToolAcknowledgement = kind
+    log(
+      "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement queued kind=\(kind.rawValue)"
+    )
+    setFloatingPillResponseGlow(true)
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+
+    // Bundled clips are the only acknowledgement path that is both immediate
+    // and independent of auth/network/cache state. The locator tolerates the
+    // flattened and nested forms emitted by SwiftPM processed resources.
+    if case .bundled(let data) = RealtimeVoicePhraseAudioSelection.select(
+      provider: provider, kind: kind, phrase: phrase)
+    {
+      activeRealtimeSlowToolAcknowledgementTransport = "pre_recorded"
+      startPlayback(data, fallbackText: phrase)
+      return
+    }
+
+    switch mode {
+    case .openAI(let voiceID, let instructions):
+      if let cached = Self.cachedRealtimeSlowToolAcknowledgementAudio(
+        kind: kind,
+        text: phrase,
+        voiceID: voiceID,
+        instructions: instructions)
+      {
+        activeRealtimeSlowToolAcknowledgementTransport = "selected_voice"
+        startPlayback(cached, fallbackText: phrase)
+      } else {
+        activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
+        enqueueSystemSpeech(phrase)
+        Task {
+          _ = try? await Self.cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+            kind: kind,
+            text: phrase,
+            voiceID: voiceID,
+            instructions: instructions)
+        }
+      }
+    case .systemVoice:
+      activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
+      enqueueSystemSpeech(phrase)
+    }
+  }
+
   func prewarmBackgroundAgentKickoffPhrases() {
     // Synthesis needs an authenticated backend call; signed out it can only fail — and at launch
     // it walked the main thread into the auth fence while a restore held it (#11374).
@@ -506,14 +606,49 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
+  func prewarmRealtimeSlowToolAcknowledgementPhrases() {
+    guard AuthService.shared.isSignedIn else { return }
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+    guard case .openAI(let voiceID, let instructions) = mode else { return }
+
+    Task {
+      for kind in RealtimeSlowToolAcknowledgementKind.allCases {
+        for phrase in kind.phrases {
+          do {
+            _ = try await Self.cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+              kind: kind,
+              text: phrase,
+              voiceID: voiceID,
+              instructions: instructions)
+          } catch {
+            log(
+              "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement cache prewarm failed: \(error.localizedDescription)"
+            )
+            return
+          }
+        }
+      }
+    }
+  }
+
   @discardableResult
   func interruptCurrentResponse(
     leaseID expectedLeaseID: VoiceLeaseID? = nil,
     armNextResponse: Bool = false
   ) -> Bool {
-    if let expectedLeaseID, activePTTLease?.id != expectedLeaseID {
-      log("FloatingBarVoicePlaybackService: ignored stale playback stop lease=\(expectedLeaseID)")
+    switch VoiceOutputHandoffPolicy.playbackStopAdmission(
+      activeLease: activePTTLease,
+      requestedLeaseID: expectedLeaseID,
+      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID
+    ) {
+    case .stale:
+      log("FloatingBarVoicePlaybackService: ignored stale playback stop lease=\(expectedLeaseID?.description ?? "nil")")
       return false
+    case .alreadyComplete:
+      return true
+    case .apply:
+      break
     }
     if let currentResponseID {
       interruptedResponseID = currentResponseID
@@ -554,6 +689,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      if let lease = activePTTLease {
+        _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+      }
+      if let acknowledgement = activeRealtimeSlowToolAcknowledgement,
+        activePTTLease?.lane == .deterministicAgentAck
+      {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement started kind=\(acknowledgement.rawValue) transport=\(activeRealtimeSlowToolAcknowledgementTransport ?? "unknown")"
+        )
+      }
       tracer?.end("tts_start")
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
@@ -566,6 +711,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         reason: "enqueue_failed",
         outcome: fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           ? .exhausted : .degraded)
+      if activeRealtimeSlowToolAcknowledgement != nil {
+        activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
+      }
       enqueueSystemSpeech(fallbackText)
     }
   }
@@ -682,6 +830,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self] in
       guard let self else { return }
       guard self.audioPlayer === player else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "unknown") success=\(flag)"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+        self.activeRealtimeSlowToolAcknowledgementTransport = nil
+      }
       let fallbackText = self.activePlayerFallbackText
       self.audioPlayer = nil
       self.activePlayerFallbackText = ""
@@ -697,11 +852,37 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
+  nonisolated func speechSynthesizer(
+    _ synthesizer: AVSpeechSynthesizer,
+    didStart utterance: AVSpeechUtterance
+  ) {
+    let utteranceBox = UtteranceBox(utterance)
+    Task { @MainActor [weak self, utteranceBox] in
+      guard let self,
+        SystemSpeechCallbackPolicy.matchesCurrentUtterance(
+          callbackUtterance: utteranceBox.value,
+          currentToken: self.activeSystemSpeechToken,
+          playbackGeneration: self.playbackGeneration),
+        let acknowledgement = self.activeRealtimeSlowToolAcknowledgement
+      else { return }
+      log(
+        "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement started kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice")"
+      )
+    }
+  }
+
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     let utteranceBox = UtteranceBox(utterance)
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=true"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+        self.activeRealtimeSlowToolAcknowledgementTransport = nil
+      }
       self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
@@ -712,6 +893,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
+        log(
+          "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=false"
+        )
+        self.activeRealtimeSlowToolAcknowledgement = nil
+        self.activeRealtimeSlowToolAcknowledgementTransport = nil
+      }
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -744,6 +932,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     activePlayerFallbackText = ""
     speechSynthesizer.stopSpeaking(at: .immediate)
     activeSystemSpeechToken = nil
+    activeRealtimeSlowToolAcknowledgement = nil
+    activeRealtimeSlowToolAcknowledgementTransport = nil
     activePTTLease = nil
     if let lease = leaseToRelease, notifyPTTDrain {
       _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
@@ -910,7 +1100,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
-  private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
+  nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
     guard let message else { return "" }
 
     let baseText: String
@@ -930,20 +1120,29 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
           .citation:
           return nil
+        // The chip is a control, not narration. Speaking it would turn a
+        // tappable next step into an answer that ends by asking out loud.
+        case .followUp:
+          return nil
+        // Nor is the review card: reading three stored memories aloud would narrate the card's
+        // controls instead of the answer.
+        case .memoryReviewCard:
+          return nil
         case .toolCall, .thinking:
           return nil
         }
       }.joined(separator: "\n\n")
     }
 
-    let collapsedWhitespace = baseText.replacingOccurrences(
+    let spoken = InterjectVoiceFeedbackRouting.spokenText(from: baseText)
+    let collapsedWhitespace = spoken.replacingOccurrences(
       of: "\\s+", with: " ", options: .regularExpression)
     return collapsedWhitespace.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private nonisolated static func shouldSpeak(_ text: String) -> Bool {
+  nonisolated static func shouldSpeak(_ text: String) -> Bool {
     let lowercased = text.lowercased()
-    if lowercased == "failed to get a response. please try again." {
+    if FloatingBarAnswerFailureCopy.isFailureCopy(lowercased) {
       return false
     }
     if lowercased.hasPrefix("⚠️") || lowercased.hasPrefix("warning:") {
@@ -998,6 +1197,64 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return DesktopLocalProfile.applicationSupportURL()
       .appendingPathComponent("VoicePhraseCache", isDirectory: true)
       .appendingPathComponent("background-agent-kickoff-v1", isDirectory: true)
+      .appendingPathComponent("\(fingerprint).mp3")
+  }
+
+  private nonisolated static func cachedOrSynthesizedRealtimeSlowToolAcknowledgementAudio(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) async throws -> Data {
+    let cacheURL = realtimeSlowToolAcknowledgementCacheURL(
+      kind: kind,
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    if let cached = try? Data(contentsOf: cacheURL), !cached.isEmpty {
+      return cached
+    }
+
+    let audio = try await synthesizeOpenAISpeech(
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    try FileManager.default.createDirectory(
+      at: cacheURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try audio.write(to: cacheURL, options: [.atomic])
+    return audio
+  }
+
+  private nonisolated static func cachedRealtimeSlowToolAcknowledgementAudio(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) -> Data? {
+    let url = realtimeSlowToolAcknowledgementCacheURL(
+      kind: kind,
+      text: text,
+      voiceID: voiceID,
+      instructions: instructions)
+    guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+    return data
+  }
+
+  private nonisolated static func realtimeSlowToolAcknowledgementCacheURL(
+    kind: RealtimeSlowToolAcknowledgementKind,
+    text: String,
+    voiceID: String,
+    instructions: String
+  ) -> URL {
+    let fingerprint = SHA256.hash(
+      data: Data("\(kind.rawValue)\n\(voiceID)\n\(instructions)\n\(text)".utf8)
+    )
+    .map { String(format: "%02x", $0) }
+    .joined()
+    return DesktopLocalProfile.applicationSupportURL()
+      .appendingPathComponent("VoicePhraseCache", isDirectory: true)
+      .appendingPathComponent("realtime-slow-tool-v1", isDirectory: true)
       .appendingPathComponent("\(fingerprint).mp3")
   }
 
@@ -1148,4 +1405,29 @@ enum VoiceSynthesisFallbackPolicy {
 private enum PlaybackMode: Sendable {
   case openAI(voiceID: String, instructions: String)
   case systemVoice(ShortcutSettings.VoiceOption)
+}
+
+/// The copy the floating bar shows in place of an answer it could not get.
+///
+/// One home for those strings, because the voice lane must never read them
+/// aloud and the two halves have already drifted once: the empty-response copy
+/// was rewritten while `shouldSpeak` went on matching the retired sentence, so
+/// a voice query that produced nothing had its failure notice spoken. Adding a
+/// line here suppresses it by construction; a copy edit that forgets this type
+/// no longer has a silent failure mode, because the copy *is* this type.
+enum FloatingBarAnswerFailureCopy {
+  /// The turn finished with no answer content at all — no text, no blocks.
+  static let emptyResponse = "Omi couldn't get an answer for that one."
+
+  /// Retired wording. Kept because a transcript written by an older build can
+  /// still hold it, and because staying silent on it costs one string.
+  static let retired = ["Failed to get a response. Please try again."]
+
+  private static let unspoken: Set<String> = Set(
+    ([emptyResponse] + retired).map { $0.lowercased() })
+
+  /// Whether already-lowercased spoken text is one of those notices.
+  static func isFailureCopy(_ lowercasedText: String) -> Bool {
+    unspoken.contains(lowercasedText)
+  }
 }

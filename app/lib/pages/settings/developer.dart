@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -964,95 +963,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             )
                           else
                             FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Knowledge Graph Section
-                  GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: const Color(0xFF1C1C1E),
-                          title: Text(
-                            context.l10n.deleteKnowledgeGraphQuestion,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          content: Text(
-                            context.l10n.knowledgeGraphDeleteDescription,
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-                            ),
-                            TextButton(
-                              onPressed: () async {
-                                Navigator.of(ctx).pop();
-                                try {
-                                  // Call delete endpoint
-                                  await KnowledgeGraphApi.deleteKnowledgeGraph();
-                                  if (context.mounted) {
-                                    AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeletedSuccessfully);
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    AppSnackbar.showSnackbarError(context.l10n.failedToDeleteGraph(e.toString()));
-                                  }
-                                }
-                              },
-                              child: Text(context.l10n.delete, style: const TextStyle(color: Colors.redAccent)),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent.shade100, size: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  context.l10n.deleteKnowledgeGraph,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.clearAllNodesAndConnections,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
                         ],
                       ),
                     ),

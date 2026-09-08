@@ -231,6 +231,7 @@ jobs:
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             USE_VERTEX_AI=true
             GCP_LOCATION=us-central1
+            OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
@@ -239,6 +240,7 @@ jobs:
             OMI_LLM_GATEWAY_FEATURE_MODE=gateway
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
+            LLM_GATEWAY_ACCOUNTING_ENABLED=true
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest

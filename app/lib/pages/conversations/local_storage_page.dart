@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LocalStoragePage extends StatefulWidget {
@@ -43,7 +44,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToUpdateSettings(e.toString())), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.l10n.failedToUpdateSettings(readableError(e))), backgroundColor: Colors.red),
         );
       }
     }

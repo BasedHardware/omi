@@ -14,7 +14,11 @@
 # The captured Firebase idToken expires (~1h); re-run this after signing in again.
 #
 # Usage: omi-auth-dump.sh [source-bundle-id] [out-file]
-#   source-bundle-id  default: com.omi.desktop-dev   (the "Omi Dev" build)
+#   source-bundle-id  default: com.omi.desktop-dev   (the "Omi Dev" build).
+#                     run.sh resolves this from OMI_AUTH_DUMP_SOURCE and falls
+#                     back to the production app com.omi.computer-macos when
+#                     the default source has no usable session; any installed
+#                     Omi bundle works when invoked directly.
 #   out-file          default: desktop/tmp/desktop-auth.json (gitignored)
 set -euo pipefail
 

@@ -4,6 +4,13 @@ import XCTest
 
 @MainActor
 final class AppsPageCategoryFilterTests: XCTestCase {
+  func testCatalogKindNamesMakeTheCatalogScopeExplicit() {
+    XCTAssertEqual(
+      AppsCatalogKind.allCases.map(\.rawValue),
+      ["All", "Apps", "Imports", "Exports"]
+    )
+  }
+
   private func sampleCategories(count: Int) -> [OmiAppCategory] {
     (1...count).map { index in
       OmiAppCategory(id: "category-\(index)", title: "Category \(index)")

@@ -104,6 +104,67 @@ final class JITProactivityPolicyTests: XCTestCase {
     }
   }
 
+  /// The backend computes admission itself (`effective`); the client must not
+  /// re-derive a stricter verdict from the raw flags it also happens to carry.
+  func testEffectiveEnabledAdmitsEvenWhenRawFlagsAreNotAKnownGoodPair() {
+    let candidates = [ambient(id: "ambient", key: "ambient")]
+    for flags in [
+      JITProactivityFlags(
+        rollout: .unknown, killSwitch: .unknown, effective: .enabled),
+      JITProactivityFlags(
+        rollout: .enabled, killSwitch: .unknown, effective: .enabled),
+      // Older servers omit `kill_switch` entirely; absence is not unknown-off.
+      JITProactivityFlags(
+        rollout: .unknown, killSwitch: .unknown, effective: .enabled, killSwitchPresent: false),
+      JITProactivityFlags(
+        rollout: .enabled, killSwitch: .unknown, effective: .enabled, killSwitchPresent: false),
+      // The legacy pair still admits when `effective` is absent.
+      JITProactivityFlags(
+        rollout: .enabled, killSwitch: .disabled, effective: .unknown, killSwitchPresent: false),
+    ] {
+      XCTAssertEqual(
+        JITProactivityPolicy.decide(flags: flags, planned: [], ambient: candidates),
+        .deliver(lane: .ambient, id: "ambient", continuityKey: "ambient"),
+        "effective authority must admit: \(flags)")
+    }
+  }
+
+  func testEffectiveDisabledBlocksEvenWhenTheRawPairWouldAdmit() {
+    let flags = JITProactivityFlags(
+      rollout: .enabled, killSwitch: .disabled, effective: .disabled)
+
+    guard
+      case .legacyContextBucketFallback(let reason) = JITProactivityPolicy.decide(
+        flags: flags, planned: [], ambient: [ambient(id: "ambient", key: "ambient")])
+    else {
+      return XCTFail("server-disabled effective must fail closed")
+    }
+    XCTAssertEqual(reason, "rollout_disabled")
+  }
+
+  /// A `kill_switch` the server actually sent as `unknown` still fails closed;
+  /// only a missing field stops being an unknown-off veto.
+  func testPresentUnknownKillSwitchStillFailsClosedWithoutEffective() {
+    let flags = JITProactivityFlags(
+      rollout: .enabled, killSwitch: .unknown, effective: .unknown, killSwitchPresent: true)
+
+    XCTAssertFalse(flags.permitsNewLane)
+    guard
+      case .legacyContextBucketFallback(let reason) = JITProactivityPolicy.decide(
+        flags: flags, planned: [], ambient: [])
+    else {
+      return XCTFail("present unknown must fail closed")
+    }
+    XCTAssertEqual(reason, "rollout_unknown")
+  }
+
+  func testAbsentKillSwitchWithEnabledRolloutAdmitsViaLegacyFallback() {
+    let flags = JITProactivityFlags(
+      rollout: .enabled, killSwitch: .unknown, effective: .unknown, killSwitchPresent: false)
+
+    XCTAssertTrue(flags.permitsNewLane)
+  }
+
   func testPlannedAndAmbientContinuityKeysShareDeliveryDedup() {
     let decision = JITProactivityPolicy.decide(
       flags: enabledFlags,

@@ -7,6 +7,36 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 
 class DeviceUtils {
+  /// Closed, analysis-safe hardware family used by product telemetry.
+  static String analyticsHardwareFamily(BtDevice device) {
+    switch (device.type) {
+      case DeviceType.omi:
+        final identity = '${device.modelNumber} ${device.name}'.toUpperCase();
+        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
+        if (identity.contains('FRIEND')) return 'friend_devkit';
+        if (isOmiDevKit(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_devkit';
+        if (identity.contains('GLASS')) return 'omi_glass';
+        if (identity.contains('NEO')) return 'omi_neo';
+        return 'omi_unknown';
+      case DeviceType.openglass:
+        return 'omi_glass';
+      case DeviceType.appleWatch:
+        return 'apple_watch';
+      case DeviceType.plaud:
+        return 'plaud';
+      case DeviceType.bee:
+        return 'bee';
+      case DeviceType.fieldy:
+        return 'fieldy';
+      case DeviceType.friendPendant:
+        return 'friend_pendant';
+      case DeviceType.limitless:
+        return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'rayban_meta';
+    }
+  }
+
   static Future<(String, bool, String)> shouldUpdateFirmware({
     required String currentFirmware,
     required Map latestFirmwareDetails,

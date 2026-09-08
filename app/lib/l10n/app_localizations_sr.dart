@@ -1859,9 +1859,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get openSettings => 'Отвори подешавања';
 
   @override
-  String get wantDifferentName => 'Желиш да идеш под неким другим именом?';
-
-  @override
   String get whatsYourName => 'Како се зовеш?';
 
   @override
@@ -2041,7 +2038,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryDeleted => 'Сећање је избрисано.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => 'Део историје сећања није доступан. Приказује се до сада примљена историја.';
 
   @override
   String get undo => 'Врати';
@@ -9860,12 +9857,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get accountCutoverOpenStore => 'Otevřít obchod';
 
   @override
-  String get chatScopeToday => 'Данас';
-
-  @override
-  String get chatScopeThisWeek => 'Ове недеље';
-
-  @override
   String chatScopeAbout(String title) {
     return 'О: $title';
   }
@@ -9929,4 +9920,78 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Меморија Pendant-а је пуна и он је и даље у режиму снимања, па сачувани звук не може да се пренесе. Притисните дугме на Pendant-у да зауставите снимање, а затим поново синхронизујте.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Није снимљено ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Гласовни профил: $name';
+  }
+
+  @override
+  String get play => 'Пусти';
+
+  @override
+  String get redo => 'Сними поново';
+
+  @override
+  String get answerWithYourVoice => 'Одговорите гласом:';
+
+  @override
+  String get speechProfileTopicLocation => 'Где живите?';
+
+  @override
+  String get speechProfileTopicWork => 'Чиме се бавите?';
+
+  @override
+  String get speechProfileTopicGoal => 'Који је ваш дугорочни циљ?';
+
+  @override
+  String get transcriptionNoAudio => 'Транскрипција не прима аудио';
+
+  @override
+  String get tapPlusToStartRecording => 'Додирните + да започнете снимање';
+
+  @override
+  String get chatBlockTask => 'Задатак';
+
+  @override
+  String get chatBlockGoal => 'Циљ';
+
+  @override
+  String get chatBlockConversation => 'Разговор';
+
+  @override
+  String get chatBlockMemory => 'Сећање';
+
+  @override
+  String get chatBlockQuestion => 'Питање';
+
+  @override
+  String get chatBlockOpenInGoals => 'Отвори у Циљевима';
+
+  @override
+  String get chatBlockOpenConversation => 'Отвори разговор';
+
+  @override
+  String get chatBlockOpenInMemories => 'Отвори у Сећањима';
+
+  @override
+  String get chatBlockUnavailable => 'Више није доступно';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Препоручени следећи кораци';
+
+  @override
+  String get couldNotLoadMemories => 'Није могуће учитати успомене';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Није могуће учитати граф знања';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
 }

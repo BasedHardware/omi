@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ApiKeysWidget extends StatefulWidget {
@@ -65,7 +66,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(e.toString()));
+        AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(readableError(e)));
       }
     } finally {
       setState(() {
@@ -117,7 +118,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(e.toString()));
+        AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(readableError(e)));
       }
     } finally {
       setState(() {

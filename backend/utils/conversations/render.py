@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone, tzinfo
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, cast
+from typing import Any, Dict, List, Optional, Sequence, Set, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
 from models.other import Person
 
-if TYPE_CHECKING:
-    from models.conversation import Conversation
+from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.conversation import Conversation
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +120,12 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # ---------------------------------------------------------------------------
 
 
+# Untrusted client-authored display siblings of ``structured``. Denylist sinks
+# iterate this set: classifying a field here is what strips it from the
+# integration payload, rather than only satisfying a test pin. Other denylist
+# sinks (persist strip, transcript-edit clear, in-memory drop) still hardcode
+# a single name today; the trust-boundary suite requires they actually clear
+# every member of this set.
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
@@ -140,7 +146,26 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
-    """Integration-view redaction: strip everything including title/overview."""
+    """Integration-view redaction: strip private metadata and every projection.
+
+    This sink is a denylist plus a pinned ``Conversation`` field set, not an
+    explicit projection-free shape. The integration payload is a full
+    ``Conversation.model_dump()`` (via ``conversation_to_dict``) with every
+    name in ``PROJECTION_FAMILY_FIELDS`` then removed. Installed third-party
+    apps consume this public contract; converting it to an allowlist would
+    drop fields they already read. Removal (``pop``), not null assignment:
+    setting the key to ``None`` would add a field that was never part of the
+    contract. Classifying a sibling on ``Conversation`` into
+    ``PROJECTION_FAMILY_FIELDS`` is what strips it here; the trust-boundary
+    suite then requires every other denylist sink to clear it too. Locked
+    conversations also blank title/overview and drop evidence.
+    """
+    # Geolocation is private capture metadata and is not part of the public
+    # integration contract. Strip it before either locked or unlocked data is
+    # serialized into an integration response.
+    conv.pop('geolocation', None)
+    for field in PROJECTION_FAMILY_FIELDS:
+        conv.pop(field, None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:
@@ -273,3 +298,41 @@ def serialize_datetimes(obj: Any) -> Any:
 def conversation_to_dict(conversation: Conversation) -> Dict[str, Any]:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
     return serialize_datetimes(conversation.model_dump())
+
+
+# Allowlisted citation-card fields. A denylist cannot protect a field added
+# after it was written; this set is the only shape that may back RAG cards.
+_CITATION_STRUCTURED_FIELDS: tuple[str, ...] = ('title', 'emoji', 'overview', 'category')
+
+
+def conversation_to_citation_card(conversation: Any) -> Dict[str, Any]:
+    """Projection-free citation shape for chat RAG cards.
+
+    Explicit allowlist: never ``model_dump()`` of the Conversation. The
+    untrusted client projection is a sibling of ``structured`` and cannot
+    appear here. ``structured`` values are the server-authored canonical
+    fields, not the projection.
+    """
+    structured = getattr(conversation, 'structured', None)
+    structured_card: Dict[str, Any] = {}
+    for field in _CITATION_STRUCTURED_FIELDS:
+        if isinstance(structured, dict):
+            value: Any = structured.get(field, '')
+        elif structured is None:
+            value = ''
+        else:
+            value = getattr(structured, field, '')
+        if value is None:
+            value = ''
+        elif field == 'category':
+            enum_value = getattr(value, 'value', None)
+            if enum_value is not None:
+                value = enum_value
+        structured_card[field] = value
+    return {
+        'id': getattr(conversation, 'id', ''),
+        'created_at': getattr(conversation, 'created_at', None),
+        'started_at': getattr(conversation, 'started_at', None),
+        'finished_at': getattr(conversation, 'finished_at', None),
+        'structured': structured_card,
+    }

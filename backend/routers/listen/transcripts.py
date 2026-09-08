@@ -162,6 +162,11 @@ class TranscriptProcessor:
                             if conversation_id == self.host.state.current_conversation_id
                             else None
                         ),
+                        # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
+                        # write loop stays cheap when no projection is present. The segment
+                        # transaction still clears a projection that is actually on the
+                        # document (a finalize overlapping capture).
+                        invalidate_client_processing=False,
                     )
                     if conversation_id == self.host.state.current_conversation_id:
                         self.cache.update_segments(conversation['transcript_segments'])
@@ -203,6 +208,11 @@ class TranscriptProcessor:
                 serialised,
                 started_at=started_at,
                 data_protection_level=self.cache.protection_level,
+                # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
+                # write loop stays cheap when no projection is present. The segment
+                # transaction still clears a projection that is actually on the
+                # document (a finalize overlapping capture).
+                invalidate_client_processing=False,
             )
             if not written:
                 return None
@@ -248,6 +258,11 @@ class TranscriptProcessor:
             conversation.id,
             serialised,
             data_protection_level=self.cache.protection_level,
+            # Opt out of the unconditional DELETE_FIELD sentinel so this ~0.6s
+            # write loop stays cheap when no projection is present. The segment
+            # transaction still clears a projection that is actually on the
+            # document (a finalize overlapping capture).
+            invalidate_client_processing=False,
         )
         self.cache.update_segments(serialised)
         self.host.state.speaker_map_dirty = False

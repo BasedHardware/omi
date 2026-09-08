@@ -7,15 +7,12 @@
 //  did not ask and cancels when you did. Replacing hover with a click only changes *when* the wrong
 //  thing happens; the destinations were still hidden behind a disclosure the rest of the time.
 //
-//  So the disclosure is gone and the seven destinations were re-sorted by what they actually are:
+//  So the disclosure is gone and the destinations were re-sorted by what they actually are:
 //
-//  - **Three of them are one page.** Conversations, Memories and Brain Map are three of the Memory
-//    hub's four views (`MemoryHubDestination`). The bar was carrying a page's internal tabs, which is
-//    why it needed a menu to hold them. The bar keeps one pill, `Brain`, which opens the hub's
-//    fourth view — the chronological spine — and the other three are chips in that page's own
-//    navigating row (`ActivityDestinationChip`), with a `‹ Brain` control on each of them for the
-//    way back (`ActivityBackButton`).
-//  - **The rest are genuinely separate views**, so they are flat pills: `Tasks`, `Rewind`, `Apps`.
+//  - **Five of them are one section.** Activity, Conversations, Memories, Rewind and Brain Map are
+//    peer views in Brain (`MemoryHubDestination`). The bar keeps one `Brain` pill; a persistent row
+//    inside the section keeps every peer visible, instead of pretending peer navigation is Back.
+//  - **The rest are genuinely separate views**, so they are flat pills: `Tasks` and `Apps`.
 //    Always visible, one click, no disclosure, no hover.
 //
 //  `Home` is a peer of those, with a magnifying glass for a glyph. It used to be the eight-dot Omi
@@ -24,7 +21,7 @@
 //  mark means "this is Omi answering", and a nav button that spends it on "you are on Home" dilutes
 //  that to decoration. The bar's row is uniform now — every item is a glyph and a word.
 //
-//  What is left is a row of five words. That fits the lane at the narrowest window
+//  What is left is a row of four words. That fits the lane at the narrowest window
 //  the shell allows without falling back to the compact menu —
 //  `TopNavigationBarLayoutTests.testTheFlatDestinationRowFitsTheNarrowestWindow…` measures the real
 //  pills with both badges at their widest and asserts it.
@@ -102,7 +99,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .activity: return "Brain"
+    case .activity: return "Memories"
     }
   }
 
@@ -110,22 +107,22 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var navItem: SidebarNavItem {
     switch self {
     case .home: return .dashboard
-    case .conversations, .memories, .brainMap, .activity: return .conversations
+    case .conversations, .memories, .brainMap, .rewind, .activity: return .conversations
     case .tasks: return .tasks
-    case .rewind: return .rewind
     case .apps: return .apps
     case .permissions: return .permissions
     }
   }
 
-  /// The Memory hub sub-destination this selects, for the three that share the hub's page.
+  /// The Brain sub-destination this selects.
   var memoryDestination: MemoryHubDestination? {
     switch self {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
     case .activity: return .activity
-    case .home, .tasks, .rewind, .apps, .permissions: return nil
+    case .rewind: return .rewind
+    case .home, .tasks, .apps, .permissions: return nil
     }
   }
 
@@ -139,11 +136,11 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
 
   var reach: Reach {
     switch self {
-    /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other three
+    /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other four
     /// hub views are reached from Activity's chip row once you are there.
-    case .conversations, .memories, .brainMap: return .activityChipRow
+    case .conversations, .memories, .brainMap, .rewind: return .activityChipRow
     case .permissions: return .settingsSidebar
-    case .home, .tasks, .rewind, .apps, .activity: return .topBar
+    case .home, .tasks, .apps, .activity: return .topBar
     }
   }
 
@@ -212,9 +209,8 @@ struct TopNavigationItem: Identifiable, Equatable {
 }
 
 enum TopNavigationRoutes {
-  /// **The whole navigation, flat.** `Activity` is the Memory hub — the one destination that owns
-  /// more than one view, and it offers the other three from a chip row on its own page. The other
-  /// four are single pages, so they are single pills. Nothing here opens a menu.
+  /// **The whole primary navigation, flat.** `Brain` owns five peer views and exposes them from a
+  /// persistent section row. Chat, Tasks and Apps are single pages, so they are single pills.
   static let primaryItems = [
     TopNavigationItem(
       index: SidebarNavItem.dashboard.rawValue, title: "Chat", icon: "bubble.left.and.text.bubble.right",
@@ -222,18 +218,15 @@ enum TopNavigationRoutes {
     // The hub's pill names the view it opens. It used to say `Memories` while opening whichever hub
     // view was last persisted, so the word on the bar and the page you landed on were only
     // sometimes the same thing. It opens `Brain` — the chronological spine over everything
-    // captured — and says so; Conversations, Memories and Brain Map stay one click away in that
+    // captured — and says so; Conversations, Memories, Rewind and Brain Map stay one click away in that
     // page's own chip row, which is the mechanism `ShellDestination.reach` records for them.
-    // The glyph is deliberately not `clock.arrow.circlepath`: that is Rewind's, two pills away.
+    // The glyph is deliberately not `clock.arrow.circlepath`: that belongs to Rewind inside Brain.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "brain",
-      tooltip: "Brain — everything Omi captured, newest first"),
+      index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "brain",
+      tooltip: "Memories — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),
-    TopNavigationItem(
-      index: SidebarNavItem.rewind.rawValue, title: "Rewind", icon: "clock.arrow.circlepath",
-      tooltip: "Rewind — replay what was on your screen"),
     TopNavigationItem(
       index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill",
       tooltip: "Apps — connectors, imports and exports"),

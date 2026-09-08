@@ -34,6 +34,7 @@ from database._client import db
 from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from models.memory_contracts import MemoryExtractionError
+from utils.free_tier_memory_policy import managed_memory_formation_suppressed
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -338,6 +339,15 @@ def _extract_and_index(
     """Run memory extraction over the given posts (grouped into chunks) and
     vector-index the resulting memories. Returns memories created."""
     if not posts:
+        return 0
+    # §1.8 (flip-review F-3): the X connector is one of the managed
+    # memory-formation doors that ran ungated for basic. The shared producer
+    # gate sits above every chunk's extractor spend, exactly like the
+    # coordinator's extraction boundary. Skipped posts stay pending —
+    # unformed memories are never backfilled (the eager-extraction
+    # asymmetry), so a later upgrade forms them on the next sync instead of
+    # a suppression window mass-forming a backlog.
+    if managed_memory_formation_suppressed(uid, 'x_connector'):
         return 0
 
     chunks: List[Tuple[str, List[str]]] = []

@@ -40,6 +40,7 @@
 
 import AppKit
 import Foundation
+import OmiTheme
 
 /// The geometry half, with no window and no defaults in it, so every placement decision is a claim a
 /// hermetic test can hold. Multi-display placement is the part that breaks in the field and the part
@@ -53,8 +54,7 @@ enum ShellSummonPlacement {
   /// hugged glass (readable lane + page margins), so a 5K display still gets a panel, not a sheet.
   /// It stays above `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the
   /// destinations lay out to.
-  static let defaultSize = NSSize(
-    width: ChatComposerLayout.contentLaneMaxWidth, height: 700)
+  static let defaultSize = WindowSizeResetPolicy.defaultSize
 
   /// Where the shell lands on a given display.
   ///

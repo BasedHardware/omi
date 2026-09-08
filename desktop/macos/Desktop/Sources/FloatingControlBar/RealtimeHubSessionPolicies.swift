@@ -392,9 +392,14 @@ struct RealtimeProviderToolResult: Equatable {
   let output: String
   let originalByteCount: Int
   let wasOversized: Bool
+  let wasTruncated: Bool
+  /// Whether the kernel already delivered a canonical envelope. An oversized
+  /// result that still carries one was projected, not left unprojected.
+  let hasCanonicalEnvelope: Bool
 }
 
 enum RealtimeProviderToolResultPolicy {
+  /// Transport invariant only. Projection policy belongs to the Node kernel manifest.
   static let maximumByteCount = 48 * 1024
 
   /// The sole model-visible result boundary for both realtime providers.
@@ -405,7 +410,6 @@ enum RealtimeProviderToolResultPolicy {
     name: String,
     output: String
   ) -> RealtimeProviderToolResult {
-    let originalByteCount = output.utf8.count
     var providerOutput = output
     if name == HubTool.spawnAgent.rawValue,
       let payload = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
@@ -416,25 +420,75 @@ enum RealtimeProviderToolResultPolicy {
     {
       providerOutput = compact
     }
-    guard providerOutput.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
+    // Presence must be measured before `finalize`, which wraps unprojected
+    // payloads in a synthetic envelope of its own.
+    let hasCanonicalEnvelope = parsedCanonicalToolResultEnvelope(from: providerOutput) != nil
     let finalized = finalize(provider: provider, name: name, output: providerOutput)
-    guard finalized.utf8.count <= maximumByteCount else {
-      return oversizedFailure(
-        provider: provider,
-        name: name,
-        originalOutput: output,
-        originalByteCount: originalByteCount)
-    }
+    let wasOversized = finalized.utf8.count > maximumByteCount
+    let bounded =
+      wasOversized
+      ? clampOversizedResult(provider: provider, name: name, output: finalized)
+      : finalized
+    let envelope = parsedCanonicalToolResultEnvelope(from: bounded)
+    let originalByteCount = envelope?["originalBytes"] as? Int ?? output.utf8.count
+    let wasTruncated = envelope?["truncated"] as? Bool ?? false
     return RealtimeProviderToolResult(
-      output: finalized,
+      output: bounded,
       originalByteCount: originalByteCount,
-      wasOversized: false)
+      wasOversized: wasOversized,
+      wasTruncated: wasTruncated,
+      hasCanonicalEnvelope: hasCanonicalEnvelope)
+  }
+
+  /// Defence in depth for a kernel invariant breach. The provider still receives a successful,
+  /// bounded envelope; Swift records the breach but never crashes a dogfood build or forwards an
+  /// unbounded payload. The Node-owned artifact reference is preserved when one exists.
+  private static func clampOversizedResult(
+    provider: RealtimeHubProvider,
+    name: String,
+    output: String
+  ) -> String {
+    let sourceEnvelope = parsedCanonicalToolResultEnvelope(from: output)
+    let status = sourceEnvelope?["status"] as? String ?? "succeeded"
+    let message =
+      "Tool result was truncated at the realtime transport invariant; use fullOutputRef for complete output."
+    let projectedPayload: [String: Any] = ["ok": status == "succeeded", "text": message]
+    let projectedBytes =
+      (try? JSONSerialization.data(withJSONObject: projectedPayload, options: [.sortedKeys]))?.count
+      ?? message.utf8.count
+    let originalBytes = max(
+      sourceEnvelope?["originalBytes"] as? Int ?? output.utf8.count,
+      output.utf8.count,
+      projectedBytes + 1)
+    let provenance =
+      sourceEnvelope?["provenance"] as? [String: Any] ?? [
+        "invocationId": "realtime-\(provider.rawValue)-transport-clamp-\(String(name.prefix(64)))",
+        "runId": "unknown",
+        "attemptId": "unknown",
+        "toolName": String(name.prefix(128)),
+      ]
+    let fullOutputRef = sourceEnvelope?["fullOutputRef"] as? String ?? "artifact:unavailable"
+    let payload: [String: Any] = [
+      "ok": status == "succeeded",
+      "text": message,
+      "toolResultEnvelope": [
+        "version": 1,
+        "status": status,
+        "truncated": true,
+        "originalBytes": originalBytes,
+        "projectedBytes": projectedBytes,
+        "fullOutputRef": fullOutputRef,
+        "provenance": provenance,
+      ],
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      data.count <= maximumByteCount,
+      let result = String(data: data, encoding: .utf8)
+    else {
+      return
+        #"{"ok":true,"text":"Tool result truncated.","toolResultEnvelope":{"version":1,"status":"succeeded","truncated":true,"originalBytes":49153,"projectedBytes":40,"fullOutputRef":"artifact:unavailable","provenance":{"invocationId":"realtime-transport-clamp","runId":"unknown","attemptId":"unknown","toolName":"unknown"}}}"#
+    }
+    return result
   }
 
   static func rejectedOutput(
@@ -458,34 +512,6 @@ enum RealtimeProviderToolResultPolicy {
     let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     return data.flatMap { String(data: $0, encoding: .utf8) }
       ?? #"{"ok":false,"error":{"code":"realtime_tool_rejected","message":"The tool could not be completed."}}"#
-  }
-
-  private static func oversizedFailure(
-    provider: RealtimeHubProvider,
-    name: String,
-    originalOutput: String,
-    originalByteCount: Int
-  ) -> RealtimeProviderToolResult {
-    let error: [String: Any] = [
-      "code": "tool_result_too_large",
-      "message": "The tool returned too much detail. Retry with narrower filters.",
-      "tool": String(name.prefix(128)),
-      "originalBytes": originalByteCount,
-    ]
-    let payload: [String: Any] = [
-      "ok": false,
-      "error": error,
-      "toolResultEnvelope": providerFailureEnvelope(
-        provider: provider, name: name, error: error, originalOutput: originalOutput),
-    ]
-    let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    let bounded =
-      data.flatMap { String(data: $0, encoding: .utf8) }
-      ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
-    return RealtimeProviderToolResult(
-      output: bounded,
-      originalByteCount: originalByteCount,
-      wasOversized: true)
   }
 
   private static func finalize(provider: RealtimeHubProvider, name: String, output: String) -> String {
@@ -1090,4 +1116,58 @@ enum RealtimeHubBargeInContinuity {
     }
     return Task.isCancelled ? .cancelled : .contextUnavailable
   }
+}
+
+/// Presence-gated warming. The warm hub socket exists so PTT answers instantly
+/// while the user is at the machine. Gemini idle-closes a silent socket every
+/// ~150s, and each re-warm re-bills the full session context (~18.5k tokens
+/// measured on a 37k-char context) — 24/7, per running app, whether or not the
+/// user is even at the computer. Fleet-wide that loop is what tripped the
+/// project's Gemini spend throttle (close 1011 "exceeded your current quota")
+/// and flipped every user's voice to OpenAI. Deferring re-warm while the user
+/// is away keeps the latency guarantee whenever they are present: warming
+/// resumes on the first returned input event, seconds before any realistic PTT
+/// press, and a cold PTT still has the bounded warm-wait + cascade fallback.
+enum RealtimeHubWarmPresencePolicy {
+  /// User-input idle time after which an idle-teardown re-warm is deferred.
+  static let idleThreshold: TimeInterval = 10 * 60
+  /// While deferred, how often the controller re-samples for returned input.
+  static let presencePollInterval: TimeInterval = 10
+  /// Slack added to the measured inter-poll gap: a poll that fires late must
+  /// still accept input that arrived any time since the previous sample, or a
+  /// brief return between delayed polls is missed permanently.
+  static let presencePollSlack: TimeInterval = 2
+
+  /// `nil` = the idle query failed → warm (fail-open to today's behavior).
+  static func shouldRewarmAfterIdleTeardown(secondsSinceLastUserInput: TimeInterval?) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < idleThreshold
+  }
+
+  /// While deferred: input newer than the freshness window → resume warming.
+  /// The poll loop passes its MEASURED elapsed time (+ slack) so scheduler
+  /// delay widens the window instead of losing the return; passive
+  /// `ensureWarm` callers use the default one-interval window.
+  static func shouldResumeWarming(
+    secondsSinceLastUserInput: TimeInterval?,
+    freshnessWindow: TimeInterval = presencePollInterval
+  ) -> Bool {
+    guard let idle = secondsSinceLastUserInput else { return true }
+    return idle < freshnessWindow
+  }
+}
+enum RealtimeProviderCloseRecoveryAction: String {
+  case none
+  case sessionRewarm = "session_rewarm"
+  case providerFailover = "provider_failover"
+  case cascade
+}
+
+enum RealtimeProviderCloseRecoveryResult: String {
+  case notNeeded = "not_needed"
+  case started
+  case exhausted
+  /// Idle-teardown re-warm deferred because the user is away from the machine
+  /// (RealtimeHubWarmPresencePolicy); warming resumes on returned input.
+  case deferredUserAway = "deferred_user_away"
 }

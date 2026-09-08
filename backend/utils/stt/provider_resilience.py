@@ -81,6 +81,19 @@ class ProviderCircuitBreaker:
         with self._lock:
             return self._state
 
+    def cooldown_elapsed(self) -> bool:
+        """Read-only: whether a caller *would* be let through right now.
+
+        Mirrors ``allow_request``'s open->half_open cooldown check without
+        mutating state or claiming the single half-open probe slot, so a
+        read-only pre-flight check can't itself flip the breaker or starve a
+        real connection attempt of the probe.
+        """
+        with self._lock:
+            if self._state != 'open':
+                return True
+            return self._clock() - self._opened_at >= self._cooldown_seconds
+
     def allow_request(self) -> bool:
         with self._lock:
             if self._state == 'closed':
@@ -112,6 +125,25 @@ class ProviderCircuitBreaker:
             if self._failures >= self._failure_threshold:
                 self._state = 'open'
                 self._opened_at = self._clock()
+
+    def record_serve_failure(self) -> None:
+        """Open the circuit after a provider died while serving a session.
+
+        Serve-time deaths cannot flow through ``record_failure``: a provider
+        that accepted the upgrade and served audio before dying passes the
+        connect-time checks, and the next session's successful *connect* calls
+        ``record_success``, resetting the failure counter. Under the reconnect
+        load a mid-session outage produces (connect -> die -> reconnect ->
+        die), the counter never reaches ``failure_threshold``, so selection
+        keeps choosing the provider that stopped serving. A serve-time death
+        is terminal evidence for the session it killed, so it opens the
+        circuit for the full cooldown; the half-open probe afterwards restores
+        the provider as soon as one probe serves again.
+        """
+        with self._lock:
+            self._probe_in_flight = False
+            self._state = 'open'
+            self._opened_at = self._clock()
 
     def record_rejection(self, reason: str) -> None:
         if reason in EXPECTED_REJECTIONS:

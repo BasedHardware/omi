@@ -88,6 +88,11 @@ def store():
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
     client_stub.get_firestore_client = MagicMock(return_value=client_stub.db)
+    # memory_apply_store imports the data-plane seam's lazy proxy (aliased to
+    # `db` at its own import site) rather than the shared `db` above — see
+    # database/_client.py's get_data_plane_firestore_client().
+    client_stub.data_plane_db = MagicMock(name="data_plane_db")
+    client_stub.get_data_plane_firestore_client = MagicMock(return_value=client_stub.data_plane_db)
 
     firestore_v1_stub = ModuleType("google.cloud.firestore_v1")
     firestore_v1_stub.transactional = _fake_transactional()

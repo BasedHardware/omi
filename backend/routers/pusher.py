@@ -10,7 +10,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
-from utils.pusher_finalization import process_conversation_task
+from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from utils.pusher_protocol import (
     BUFFERED_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
@@ -61,6 +61,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _parse_finalization_result_protocol(value: Any) -> int:
+    """Return the result capability, defaulting callers to the legacy wire contract."""
+    if value is None:
+        return FINALIZATION_RESULT_PROTOCOL_LEGACY
+    if isinstance(value, bool) or not isinstance(value, int) or value < FINALIZATION_RESULT_PROTOCOL_LEGACY:
+        raise ValueError('finalization_result_protocol must be a positive integer')
+    return value
+
 
 # Constants for speaker sample extraction
 SPEAKER_SAMPLE_PROCESS_INTERVAL = 15.0
@@ -518,6 +528,9 @@ async def _websocket_util_trigger(
                     byok_keys = res.get('byok_keys') or None
                     finalization_job_id = res.get('finalization_job_id')
                     dispatch_generation = res.get('dispatch_generation')
+                    finalization_result_protocol = _parse_finalization_result_protocol(
+                        res.get('finalization_result_protocol')
+                    )
                     if conversation_id is not None and not isinstance(conversation_id, str):
                         raise ValueError('conversation_id must be a string')
                     if not isinstance(language, str):
@@ -545,10 +558,15 @@ async def _websocket_util_trigger(
                                 conversation_id,
                                 language,
                                 websocket,
-                                byok_keys,
-                                finalization_job_id if isinstance(finalization_job_id, str) else None,
-                                dispatch_generation if isinstance(dispatch_generation, int) else None,
-                                resolved_client_kind,
+                                byok_keys=byok_keys,
+                                finalization_job_id=(
+                                    finalization_job_id if isinstance(finalization_job_id, str) else None
+                                ),
+                                dispatch_generation=(
+                                    dispatch_generation if isinstance(dispatch_generation, int) else None
+                                ),
+                                client_kind=resolved_client_kind,
+                                finalization_result_protocol=finalization_result_protocol,
                             ),
                             name=f'pusher_finalization:{uid}:{conversation_id}',
                         )

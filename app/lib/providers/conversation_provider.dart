@@ -131,6 +131,14 @@ class ConversationProvider extends ChangeNotifier {
   bool get hasMoreConversations => _conversationServerHasMore;
   int get conversationServerOffset => _conversationServerOffset;
 
+  /// The exact ordered set currently rendered by the conversation groups.
+  ///
+  /// Consumers that mirror the list (for example the map) must use this
+  /// boundary instead of [conversations], because grouping already applies
+  /// text/speaker search and every client-side visibility filter.
+  List<ServerConversation> get displayedConversations =>
+      List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
+
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
@@ -1238,27 +1246,6 @@ class ConversationProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
-
-  // _handleCalendarCreation(ServerMemory memory) {
-  //   if (!SharedPreferencesUtil().calendarEnabled) return;
-  //   if (SharedPreferencesUtil().calendarType != 'auto') return;
-  //
-  //   List<Event> events = memory.structured.events;
-  //   if (events.isEmpty) return;
-  //
-  //   List<int> indexes = events.mapIndexed((index, e) => index).toList();
-  //   setMemoryEventsState(memory.id, indexes, indexes.map((_) => true).toList());
-  //   for (var i = 0; i < events.length; i++) {
-  //     if (events[i].created) continue;
-  //     events[i].created = true;
-  //     CalendarUtil().createEvent(
-  //       events[i].title,
-  //       events[i].startsAt,
-  //       events[i].duration,
-  //       description: events[i].description,
-  //     );
-  //   }
-  // }
 
   /////////////////////////////////////////////////////////////////
   ////////// Delete Memory With Undo Functionality ///////////////

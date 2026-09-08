@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import {
   getPrimarySourceId,
   getRewindCaptureSourceId,
+  getRewindCaptureDiagnostics,
   isCurrentRewindCaptureSource
 } from '../rewind/sourceId'
 import {
@@ -169,6 +170,10 @@ export function registerRewindHandlers(
   // Rewind follows the foreground window across displays while retaining one
   // persistent stream. Source enumeration is cached; each lookup is cheap.
   ipcMain.handle('rewind:captureSourceId', async () => getRewindCaptureSourceId())
+  // UI-facing seam for a getSources() failure (see sourceId.ts): the Rewind tab
+  // calls this once on mount to show a real error instead of capture just
+  // never starting with only a console line.
+  ipcMain.handle('rewind:captureDiagnostics', async () => getRewindCaptureDiagnostics())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
   ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array, sourceId: string) => {

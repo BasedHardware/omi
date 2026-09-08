@@ -20,6 +20,11 @@ extension DesktopAutomationActionRegistry {
           "dismissed": manager.isDismissed ? "true" : "false",
           "thank_you": "\(manager.thankYouRating ?? 0)",
           "remotely_disabled": manager.isRemotelyDisabled ? "true" : "false",
+          "comment_pending": "\(manager.commentPendingScore ?? 0)",
+          "config_enabled": manager.config.enabled ? "true" : "false",
+          "config_threshold": "\(manager.config.questionThreshold)",
+          "config_comment_max_score": "\(manager.config.commentMaxScore)",
+          "config_revision": "\(manager.config.revision)",
         ]
       }
     }
@@ -36,7 +41,27 @@ extension DesktopAutomationActionRegistry {
           return ["submitted": "false", "reason": "prompt not visible"]
         }
         manager.submit(rating: rating)
+        if let pending = manager.commentPendingScore {
+          // Low score: nothing is submitted yet — the comment step is next.
+          return ["submitted": "false", "comment_pending": "\(pending)"]
+        }
         return ["submitted": "true", "rating": "\(manager.submittedRating)"]
+      }
+    }
+
+    register(
+      name: "rating_prompt_submit_comment",
+      summary: "Send the pending low-score comment through the same path as the Send button (empty comment = Skip)",
+      params: ["comment"]
+    ) { params in
+      let comment = params["comment"] ?? ""
+      return await MainActor.run {
+        let manager = RatingPromptManager.shared
+        guard let score = manager.commentPendingScore else {
+          return ["submitted": "false", "reason": "no comment pending"]
+        }
+        manager.submitPendingComment(comment)
+        return ["submitted": "true", "rating": "\(score)", "comment": comment]
       }
     }
 

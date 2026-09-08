@@ -31,7 +31,7 @@ from utils.llm.clients import (
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
 
 # Features that can't use get_llm() — need their own client
-_ANTHROPIC_FEATURES = {'chat_agent'}
+_ANTHROPIC_FEATURES: set[str] = set()
 _PERPLEXITY_FEATURES = {'web_search'}
 _SKIP_GET_LLM = _ANTHROPIC_FEATURES | _PERPLEXITY_FEATURES
 
@@ -75,19 +75,17 @@ class TestPremiumAllFeatures:
         print(f"  PASS {feature}: {model} [{provider}] -> {text[:60]}")
 
     @pytest.mark.asyncio
-    async def test_premium_chat_agent(self):
-        """Test chat_agent via Anthropic client."""
+    def test_premium_chat_agent(self):
+        """Test chat_agent via get_llm (OpenAI/Luna)."""
         if _active_profile_name != 'premium':
             pytest.skip("MODEL_QOS is not premium")
         model = get_model('chat_agent')
-        response = await anthropic_client.messages.create(
-            model=model,
-            max_tokens=50,
-            messages=[{"role": "user", "content": SIMPLE_PROMPT}],
-        )
-        text = response.content[0].text.strip()
+        assert model == 'gpt-5.6-luna'
+        llm = get_llm('chat_agent')
+        response = llm.invoke(SIMPLE_PROMPT)
+        text = response.content.strip() if hasattr(response, 'content') else str(response).strip()
         assert text, f"FAIL chat_agent ({model}) returned empty"
-        print(f"  PASS chat_agent: {model} [anthropic] -> {text[:60]}")
+        print(f"  PASS chat_agent: {model} [openai] -> {text[:60]}")
 
     def test_premium_web_search(self):
         """Test web_search via Perplexity."""

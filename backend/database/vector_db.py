@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 from pinecone import Pinecone
 
 from database import projection_repair
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
@@ -141,14 +141,6 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 @_account_external_data_write
-def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
-    if index is None:
-        return
-    res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
-    logger.info(f'upsert_vector {res}')
-
-
-@_account_external_data_write
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
     if index is None:
         return
@@ -167,15 +159,6 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
     metadata['memory_id'] = conversation_id
     result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
     return result
-
-
-@_account_external_data_write
-def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
-    if index is None:
-        return
-    data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
-    res = index.upsert(vectors=data, namespace="ns1")
-    logger.info(f'upsert_vectors {res}')
 
 
 def _created_at_filter(starts_at: Optional[int] = None, ends_at: Optional[int] = None) -> Optional[Dict[str, int]]:
@@ -449,7 +432,7 @@ def upsert_memory_vector(
     metadata.update(
         strip_null_metadata_values(
             projection_metadata
-            or memory_projection_metadata(
+            or projection_repair.projection_metadata_for_fact(
                 {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
             )
         )
@@ -498,7 +481,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
         metadata.update(
             strip_null_metadata_values(
                 item.get('projection_metadata')
-                or memory_projection_metadata(
+                or projection_repair.projection_metadata_for_fact(
                     {
                         'id': item['memory_id'],
                         'category': item['category'],
@@ -555,38 +538,6 @@ def find_similar_memories(
             )
 
     return results
-
-
-def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> Optional[Dict[str, Any]]:
-    """
-    Check if a similar memory already exists.
-    Returns the duplicate info if found, None otherwise.
-    """
-    similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
-    if similar:
-        logger.warning(f'Found duplicate memory: {similar[0]}')
-        return similar[0]
-    return None
-
-
-def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str]:
-    """
-    Semantic search for memories.
-    Returns list of memory_ids ordered by relevance.
-    """
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping memory search')
-        return []
-
-    vector = embeddings.embed_query(query)
-    filter_data = build_legacy_memory_vector_filter(uid)
-
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
-    )
-
-    matches: List[Any] = xc.get('matches', [])
-    return [match['metadata'].get('memory_id') for match in matches]
 
 
 @_account_external_data_write
@@ -706,55 +657,6 @@ def delete_memory_vector(uid: str, memory_id: str) -> None:
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
-
-
-def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None) -> List[str]:
-    return projection_repair.enqueue_projection_repairs(
-        uid,
-        {
-            'commit_id': source_commit_id or 'manual',
-            'mutations': [{'type': reason, 'fact_id': fact_id}],
-        },
-    )
-
-
-def memory_projection_metadata(memory: Dict[str, Any], source_commit_id: str | None = None) -> Dict[str, Any]:
-    return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
-
-
-def repair_memory_projection(uid: str, memory: Dict[str, Any] | None) -> str:
-    if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
-        memory_id = (memory or {}).get('id')
-        if memory_id:
-            delete_memory_vector(uid, memory_id)
-        return 'delete'
-
-    upsert_memory_vector(
-        uid,
-        memory['id'],
-        memory.get('content', ''),
-        memory.get('category', 'system'),
-        subject_entity_id=memory.get('subject_entity_id'),
-        projection_metadata=memory_projection_metadata(memory),
-    )
-    return projection_repair.projection_action_for_fact(memory)
-
-
-def reconcile_projections(uid: str, facts: List[Dict[str, Any]], vector_fact_ids: List[str]) -> Dict[str, Any]:
-    return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
-
-
-def process_projection_repair_queue(
-    uid: str,
-    fact_loader: Callable[[str], Optional[Dict[str, Any]]],
-    limit: int = 100,
-) -> Dict[str, Any]:
-    return projection_repair.process_projection_repairs(
-        uid,
-        fact_loader=fact_loader,
-        repair_func=repair_memory_projection,
-        limit=limit,
-    )
 
 
 # ==========================================
@@ -920,7 +822,9 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     if index is None:
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
-    index.delete(ids=vector_ids, namespace=SCREEN_ACTIVITY_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
 
 
 # ==========================================

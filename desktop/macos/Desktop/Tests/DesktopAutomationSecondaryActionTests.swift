@@ -40,6 +40,7 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "advanced_settings_snapshot",
       "settings_aichat_snapshot",
       "assign_speaker_fixture",
+      "local_summary_benchmark",
     ] {
       XCTAssertTrue(
         source.contains("name: \"\(action)\""),
@@ -58,6 +59,18 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     )
     XCTAssertTrue(
       try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
+  }
+
+  func testLocalSummaryBenchmarkReturnsReportPath() throws {
+    let source = try bridgeSource()
+    let body = try actionBody(named: "local_summary_benchmark", in: source)
+    for key in ["path", "schema_valid_count", "kind", "MemoryLocalProjectionStore"] {
+      XCTAssertTrue(body.contains(key), "local_summary_benchmark should expose \(key)")
+    }
+    XCTAssertTrue(
+      body.contains("AppBuild.isNonProduction"),
+      "benchmark action must stay off production bundles"
     )
   }
 

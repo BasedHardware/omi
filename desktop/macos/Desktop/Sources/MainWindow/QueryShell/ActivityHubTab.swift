@@ -16,9 +16,8 @@ struct ActivityHubTab: View {
   let onOpenMemory: (SpineMemory) -> Void
   let onOpenBrainMap: () -> Void
   let onOpenRewind: () -> Void
-  /// Opens one of the Memory hub's sibling pages. The chip row is the only door to them now that
-  /// the hub's switcher is gone, so a host that cannot supply this would strand three pages.
-  let onOpenHubDestination: (MemoryHubDestination) -> Void
+  let selectedDestination: MemoryHubDestination
+  let onSelectDestination: (MemoryHubDestination) -> Void
 
   @ObservedObject private var tasksStore = TasksStore.shared
   @State private var filters = QueryShellFilters()
@@ -30,8 +29,10 @@ struct ActivityHubTab: View {
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
       // The panel arithmetic with the search bar in the hero slot but no composer inside the panel.
       let room =
-        proxy.size.height - QueryShellLayout.surfaceTopInset - QueryShellLayout.barMinHeight
+        proxy.size.height - QueryShellLayout.surfaceTopInset
+        - QueryShellLayout.barMinHeight
         - QueryShellLayout.panelGap
+        - BrainSectionPageMetrics.navigationHeight
         - QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: 0)
       let bodyHeight = min(
         QueryShellLayout.maximumBodyHeight, max(QueryShellLayout.minimumBodyHeight, room))
@@ -43,7 +44,13 @@ struct ActivityHubTab: View {
           total: total,
           onExitAnswer: nil,
           bodyHeight: bodyHeight,
-          chipBehavior: .openDestinations(selected: .activity, open: openChip),
+          chipBehavior: .none,
+          topAccessory: {
+            BrainSectionNavigation(
+              selected: selectedDestination,
+              onSelect: onSelectDestination
+            )
+          },
           headerAccessory: { EmptyView() },
           footer: { EmptyView() }
         ) {
@@ -52,6 +59,7 @@ struct ActivityHubTab: View {
             appState: appState,
             memoriesViewModel: memoriesViewModel,
             tasksStore: tasksStore,
+            searchSurface: .activity,
             onOpenConversation: onOpenConversation,
             onOpenMemory: onOpenMemory,
             onOpenBrainMap: onOpenBrainMap,
@@ -68,18 +76,13 @@ struct ActivityHubTab: View {
   }
 
   private var searchBar: some View {
-    QuerySearchBar(text: $searchText, accessibilityID: "activity-search-field")
-  }
-
-  /// Every chip in this row navigates — see `ActivityDestinationChip`. `Activity` is the page we
-  /// are already on, so it is the row's selected state rather than a fifth way to reload it.
-  private func openChip(_ chip: ActivityDestinationChip) {
-    switch chip {
-    case .activity:
-      return
-    case .conversations, .memories, .brainMap:
-      onOpenHubDestination(chip.hubDestination)
-    }
+    QuerySearchBar(
+      text: $searchText,
+      accessibilityID: "activity-search-field",
+      placeholder: "Search activity…",
+      focus: nil,
+      searchSurface: .activity
+    )
   }
 
   private var requestBinding: Binding<QueryShellRequest> {

@@ -154,6 +154,20 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertNotIn("closed", workflow)
         self.assertNotIn("pull_request.merged", workflow)
 
+    def test_current_main_health_is_independent_of_the_last_commit_paths(self):
+        """#12275: unrelated pushes must not keep the last Desktop Swift verdict alive."""
+        triggers = _workflow_text().split("concurrency:", 1)[0]
+
+        self.assertIn("schedule:", triggers)
+        self.assertRegex(triggers, r'cron:\s*["\']17 5 \* \* \*["\']')
+        self.assertIn("workflow_dispatch:", triggers)
+        for event in ("schedule", "workflow_dispatch"):
+            with self.subTest(event=event):
+                plan = resolve_impact(["backend/database/users.py"], event=event)
+                self.assertTrue(plan.includes("desktop-ci-only"))
+                self.assertTrue(plan.includes("desktop-swift-tests"))
+                self.assertTrue(plan.includes("desktop-swift-release-compile"))
+
     def test_required_release_check_names_are_literals(self):
         """GitHub does not evaluate `name:` for a skipped job.
 

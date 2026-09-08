@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from database.memory_non_active_routes import (
     NonActiveRoute,
@@ -19,6 +19,7 @@ from models.memory_contracts import (
 from utils.llm.usage_tracker import Features, track_usage
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
+from utils.memory.belief_model import belief_model_enabled
 
 if TYPE_CHECKING:
     from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
@@ -52,6 +53,23 @@ logger = logging.getLogger(__name__)
 MAX_WORKING_OBSERVATION_ITEMS = 32
 
 
+def _belief_classification_instructions() -> str:
+    """Extra extractor fields. Omitted when the belief-model flag is off so prompts stay identical."""
+    if not belief_model_enabled():
+        return ""
+    return (
+        "Also classify each item:\n"
+        "- `subject_scope`: primary_user (about the account owner), third_party (another person), "
+        "or media_screen (video, article, game, or on-screen content). Never default to primary_user "
+        "when the subject is unclear — use third_party or media_screen.\n"
+        "- `belief_class`: identity, relationship, preference, state, plan, episodic, meta_standing "
+        "(durable instruction to Omi), or meta_residue (session leftover).\n"
+        "- `half_life_days`: omit unless wording names a shorter horizon (e.g. \"this week\" → 7). "
+        "identity, relationship, and meta_standing have no half-life.\n"
+        "- `valid_to`: ISO timestamp when the claim names an end date (\"until Friday\", \"until launch\").\n\n"
+    )
+
+
 def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
     return []
 
@@ -59,6 +77,26 @@ def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
 class WorkingObservationBatch(BaseModel):
     items: List[WorkingObservationArchiveItem] = Field(
         default_factory=_empty_archive_items,
+        description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
+    )
+
+
+class BeliefClassifiedArchiveItem(WorkingObservationArchiveItem):
+    """Same archive item with belief fields visible in the LLM schema when the flag is on."""
+
+    subject_scope: Optional[str] = None
+    belief_class: Optional[str] = None
+    half_life_days: Optional[float] = None
+    valid_to: Optional[AwareDatetime] = None
+
+
+def _empty_belief_archive_items() -> list[BeliefClassifiedArchiveItem]:
+    return []
+
+
+class BeliefWorkingObservationBatch(BaseModel):
+    items: List[BeliefClassifiedArchiveItem] = Field(
+        default_factory=_empty_belief_archive_items,
         description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
     )
 
@@ -161,6 +199,7 @@ def _build_l1_messages(
         f"- An entity → e.g. \"Milo (cat)\", \"neighborhood coffee shop\"\n"
         f"- If attribution is uncertain, do not emit the item. Do not hedge inside the item text or `about` field.\n"
         f"- Use class=\"sensitive\" for credentials, health details, finances, family matters.\n\n"
+        f"{_belief_classification_instructions()}"
         f"{language_instruction + chr(10) + chr(10) if language_instruction else ''}"
         f"Return JSON:\n{format_instructions}"
     )
@@ -184,7 +223,7 @@ def _content_from_response(response: object) -> str:
 
 
 def _with_deterministic_archive_ids(
-    items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
+    items: Sequence[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
 ) -> List[WorkingObservationArchiveItem]:
     normalized: list[WorkingObservationArchiveItem] = []
     for item in items:
@@ -209,7 +248,7 @@ def _with_deterministic_archive_ids(
 
 
 def _bounded_archive_items(
-    items: List[WorkingObservationArchiveItem],
+    items: Sequence[WorkingObservationArchiveItem],
 ) -> List[WorkingObservationArchiveItem]:
     """Preserve provider order while deduplicating within one attributed subject."""
     bounded: List[WorkingObservationArchiveItem] = []
@@ -258,7 +297,9 @@ def extract_l1_memory_archive_items_from_text(
         return []
 
     name = user_name or "the user"
-    parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
+    parser = PydanticOutputParser(
+        pydantic_object=BeliefWorkingObservationBatch if belief_model_enabled() else WorkingObservationBatch
+    )
     legacy_messages = _build_l1_messages(
         name,
         source_type,

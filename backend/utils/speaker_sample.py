@@ -23,6 +23,7 @@ async def verify_and_transcribe_sample(
     audio_bytes: bytes,
     sample_rate: int,
     expected_text: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> Tuple[Optional[str], bool, str]:
     """
     Transcribe audio and verify quality using PR #4291 rules.
@@ -36,6 +37,8 @@ async def verify_and_transcribe_sample(
         audio_bytes: WAV format audio bytes
         sample_rate: Audio sample rate in Hz
         expected_text: Expected text from the segment for comparison (optional)
+        language: Language of the sample, so it's transcribed in the right language instead of
+            silently defaulting to English (optional)
 
     Returns:
         (transcript, is_valid, reason): Tuple of (str or None, bool, str)
@@ -44,7 +47,12 @@ async def verify_and_transcribe_sample(
     """
     try:
         raw_words = await run_blocking(
-            sync_executor, cast(Any, deepgram_prerecorded_from_bytes), audio_bytes, sample_rate, True
+            sync_executor,
+            cast(Any, deepgram_prerecorded_from_bytes),
+            audio_bytes,
+            sample_rate,
+            True,
+            language=language,
         )
     except RuntimeError as e:
         # Transient transcription failure - distinguish from quality issues

@@ -439,10 +439,19 @@ def _get_agentic_module():
         "search_knowledge",
         "read_playbook",
         "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact_tool",
     ]
+    # ``close_fact_tool`` is the module attribute (matching the import
+    # statement in agentic.py), but the real LangChain tool overrides its
+    # runtime name to "close_fact" (see @tool("close_fact") in
+    # knowledge_ledger_write_tools.py). Mock the divergence explicitly so the
+    # stubbed CORE_TOOLS carries the same name the real JIT gating keys off.
+    tool_name_overrides = {"close_fact_tool": "close_fact"}
     for name in tool_names:
         mock_tool = MagicMock()
-        mock_tool.name = name
+        mock_tool.name = tool_name_overrides.get(name, name)
         # Add args_schema for _convert_tools to work
         mock_schema = MagicMock()
         mock_schema.schema.return_value = {"properties": {"query": {"type": "string"}}, "required": ["query"]}
@@ -673,10 +682,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_31_tools():
-    """CORE_TOOLS includes the explicit historical-facts tool; web search remains server-built-in."""
+def test_core_tools_has_34_tools():
+    """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 31, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 31"
+    assert len(agentic_mod.CORE_TOOLS) == 34, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 34"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -699,9 +708,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 32
-    assert len(tools_b) == 31
-    assert len(agentic_mod.CORE_TOOLS) == 31, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 35
+    assert len(tools_b) == 34
+    assert len(agentic_mod.CORE_TOOLS) == 34, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -743,6 +752,9 @@ def test_core_tools_order_matches_exports():
         "search_knowledge",
         "read_playbook",
         "search_historical_facts",
+        "save_playbook",
+        "create_standing_trigger",
+        "close_fact",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -763,31 +775,29 @@ def test_core_tools_not_accidentally_duplicated():
 # ---------------------------------------------------------------------------
 
 
-def test_convert_tools_produces_valid_anthropic_schemas():
-    """
-    _convert_tools should produce valid Anthropic tool schemas from CORE_TOOLS,
-    filtering out the 'config' parameter and preserving tool order.
-    """
+def _openai_tool_name(schema: dict) -> str:
+    return schema.get('function', {}).get('name') or schema.get('name')
+
+
+def test_convert_tools_produces_valid_openai_schemas():
+    """_convert_tools produces OpenAI chat-completions function schemas from CORE_TOOLS."""
     agentic_mod = _get_agentic_module()
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # +1 for web_search server tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per core tool"
     assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all client tools"
+    assert all(schema.get('type') != 'web_search_20260209' for schema in tool_schemas)
 
-    # First schema should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-
-    for schema in tool_schemas[1:]:  # Skip web_search server tool
-        assert "name" in schema, "Schema must have a name"
-        assert "description" in schema, "Schema must have a description"
-        assert "input_schema" in schema, "Schema must have input_schema"
-        # Config parameter should be filtered out
-        props = schema["input_schema"].get("properties", {})
-        assert "config" not in props, f"Tool {schema['name']} should not expose 'config' parameter"
-        # Core tools should NOT have defer_loading
-        assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
+    for schema in tool_schemas:
+        function = schema['function']
+        assert schema['type'] == 'function'
+        assert function['name']
+        assert 'description' in function
+        assert 'parameters' in function
+        props = function['parameters'].get('properties', {})
+        assert 'config' not in props, f"Tool {function['name']} should not expose 'config' parameter"
+        assert 'defer_loading' not in schema, f"Core tool {function['name']} should not have defer_loading"
 
 
 def test_entity_timeline_is_registered_with_schema_and_display_status():
@@ -797,10 +807,10 @@ def test_entity_timeline_is_registered_with_schema_and_display_status():
     timeline_tool = next(tool for tool in agentic_mod.CORE_TOOLS if tool.name == "get_entity_timeline_tool")
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    timeline_schema = next(schema for schema in tool_schemas if schema.get("name") == timeline_tool.name)
+    timeline_schema = next(schema for schema in tool_schemas if _openai_tool_name(schema) == timeline_tool.name)
     raw_schema = timeline_tool.args_schema.schema()
-    assert timeline_schema["input_schema"]["properties"] == raw_schema["properties"]
-    assert timeline_schema["input_schema"]["required"] == raw_schema["required"]
+    assert timeline_schema["function"]["parameters"]["properties"] == raw_schema["properties"]
+    assert timeline_schema["function"]["parameters"]["required"] == raw_schema["required"]
     assert tool_registry[timeline_tool.name] is timeline_tool
     assert agentic_mod.get_tool_display_name(timeline_tool.name) == "Reviewing entity timeline"
 
@@ -810,7 +820,7 @@ def test_knowledge_ledger_tools_are_registered_with_progressive_disclosure_names
     agentic_mod = _get_agentic_module()
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
-    schema_names = {schema.get("name") for schema in tool_schemas}
+    schema_names = {_openai_tool_name(schema) for schema in tool_schemas}
     for name, display in (
         ("search_knowledge", "Searching current knowledge"),
         ("read_playbook", "Reading playbook"),
@@ -830,11 +840,31 @@ def test_historical_fact_tool_is_registered_after_policy_ratification():
     assert agentic_mod.get_tool_display_name(tool.name) == "Searching historical facts"
 
 
-def test_convert_tools_defers_app_tools():
+def test_ledger_write_verbs_are_registered_as_jit_only_with_display_names():
+    """The three dormant ledger write verbs are wired as JIT-gated chat tools.
+
+    ``close_fact_tool`` is the Python identifier this stub mocks under; the
+    real tool's runtime name is ``close_fact`` (see JIT_ONLY_TOOL_NAMES in
+    ``utils/retrieval/agentic.py``), matching how ``look_at_frame_tool`` is
+    mocked here under its identifier while its real name is ``look_at_frame``.
     """
-    App tools should be marked with defer_loading=True and tool_search_tool
-    should be added when app tools are present.
-    """
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    schema_names = {_openai_tool_name(schema) for schema in tool_schemas}
+    for name, display in (
+        ("save_playbook", "Saving playbook"),
+        ("create_standing_trigger", "Creating standing trigger"),
+        ("close_fact", "Closing fact"),
+    ):
+        assert name in schema_names
+        assert name in tool_registry
+        assert name in agentic_mod.JIT_ONLY_TOOL_NAMES
+        assert agentic_mod.get_tool_display_name(name) == display
+
+
+def test_convert_tools_exposes_app_tools_directly():
+    """Live chat-agent lane exposes app tools by name; no Anthropic tool_search."""
     agentic_mod = _get_agentic_module()
 
     mock_app_tool = MagicMock()
@@ -846,19 +876,10 @@ def test_convert_tools_defers_app_tools():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    # Should have web_search + tool_search_tool + core tools + 1 app tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
-
-    # First should be web_search server tool
-    assert tool_schemas[0]["type"] == "web_search_20260209"
-    # Second should be tool_search_tool
-    assert tool_schemas[1]["type"] == "tool_search_tool_regex_20251119"
-
-    # Last should be the deferred app tool
-    assert tool_schemas[-1]["name"] == "custom_weather_app"
-    assert tool_schemas[-1]["defer_loading"] is True
-
-    # Registry should include all tools
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1
+    assert all(schema.get('type') == 'function' for schema in tool_schemas)
+    assert _openai_tool_name(tool_schemas[-1]) == "custom_weather_app"
+    assert "defer_loading" not in tool_schemas[-1]
     assert "custom_weather_app" in tool_registry
 
 
@@ -871,8 +892,7 @@ def test_convert_tools_preserves_core_tool_order():
 
     tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    # Skip web_search server tool (first element) when checking core tool order
-    schema_names = [s["name"] for s in tool_schemas[1:]]
+    schema_names = [_openai_tool_name(s) for s in tool_schemas]
     core_names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 

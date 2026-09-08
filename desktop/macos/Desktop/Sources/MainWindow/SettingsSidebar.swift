@@ -13,7 +13,7 @@ struct SettingsSearchItem: Identifiable {
   let settingId: String
 
   var breadcrumb: String {
-    return section.rawValue
+    section.displayTitle
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
@@ -354,22 +354,9 @@ enum SettingsSidebarMetrics {
   ///
   /// The value is **derived from the longest label rather than chosen**, because this row truncates
   /// (`lineLimit(1)`, `.tail`) and a truncated item in a table of contents is worse than a wide one.
-  /// "Notifications & Privacy" needs 196 pt including its fixtures — the icon column, the gap after
-  /// it and the row's two side paddings — measured through the real font by
-  /// `SettingsSidebarItemLayoutTests`, at the *selected* weight, which is the wider of the two.
-  ///
-  /// The two numbers below the floor were both tried on a build and both truncated:
-  ///
-  /// - **196**, the settings kit's nominal width, renders "Notifications & P…".
-  /// - **216**, which clears the 196 pt requirement by 4 pt on paper, still renders
-  ///   "Notifications & Priva…" — a bare fit is not a fit once the scroll container and subpixel
-  ///   rounding have taken their share.
-  ///
-  /// So the width carries **`labelSlack`** rather than trusting the arithmetic to the last point,
-  /// and the guard test asserts the slack rather than the fit. 232 is still 28 pt narrower than the
-  /// 260 this started at, which was the app's *main* sidebar width — that one carries conversation
-  /// titles and has something to do with the room; nine section names do not.
-  static let expandedWidth: CGFloat = 232
+  /// The longest merged label is deliberately concise, so the table of contents
+  /// can stay narrow without truncating or stealing room from the settings pane.
+  static let expandedWidth: CGFloat = 208
 
   /// Headroom over the measured label requirement. See `expandedWidth`: a zero-slack fit truncated
   /// on a real build, so the fit is held open by this rather than by luck.
@@ -500,11 +487,12 @@ struct SettingsSidebar: View {
         .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
-      TextField("Search settings...", text: $searchQuery)
+      TextField("Search", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
+        .straysTypingHere($isSearchFocused)
 
       if !searchQuery.isEmpty {
         Button {
@@ -608,7 +596,7 @@ struct SettingsSidebarItem: View {
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
-    case .advanced: return "chart.bar"
+    case .advanced: return "cpu"
     case .referral: return "gift"
     case .about: return "info.circle"
     case .permissions: return PermissionNavSymbol.outline

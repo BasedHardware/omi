@@ -249,6 +249,42 @@ enum ChatCitationMarkup {
     !kindOnlyMatches(in: text).isEmpty
   }
 
+  /// References a follow-up borrows from the turns before it.
+  ///
+  /// Ordinals are assigned per attempt, so `[1]` in one answer and `[1]` in the
+  /// next can name different sources. But a turn that retrieved nothing has no
+  /// ordinals of its own, and when the model writes `[1]` there it is pointing
+  /// back at the list the reader was just shown — "pick one conversation from
+  /// that day" answered without a tool call is exactly this. Left unbound the
+  /// marker drew as plain text next to a title the reader could not open.
+  ///
+  /// Only ordinals this turn cannot resolve itself are borrowed, and each from
+  /// the nearest earlier assistant turn that persisted it, so a turn's own
+  /// provenance always outranks the past and a stale list is never reached
+  /// past a fresher one that has the same number.
+  static func inheritedReferences(
+    citedIn message: ChatMessage,
+    resolved: [ChatCitationReference],
+    earlierTurns: [ChatMessage],
+    lookback: Int = 8
+  ) -> [ChatCitationReference] {
+    var unresolved = message.citedCitationOrdinals.subtracting(resolved.map(\.ordinal))
+    guard !unresolved.isEmpty else { return [] }
+    var inherited = [ChatCitationReference]()
+    var searched = 0
+    for earlier in earlierTurns.reversed() where earlier.sender == .ai && earlier.id != message.id {
+      guard searched < lookback else { break }
+      searched += 1
+      for block in earlier.contentBlocks {
+        guard case .citation(_, let reference) = block, unresolved.remove(reference.ordinal) != nil
+        else { continue }
+        inherited.append(reference)
+      }
+      if unresolved.isEmpty { break }
+    }
+    return inherited.sorted { $0.ordinal < $1.ordinal }
+  }
+
   /// Replace `[memory]` / `[conversation]` with the numeric marker for the best matching source of
   /// that kind. Unmatched labels stay inert instead of opening a random row.
   static func resolvingKindLabels(
@@ -443,13 +479,22 @@ enum ChatCitationMarkup {
 
   /// Rich blocks are an authoritative selection made by the model. If it omits inline markers
   /// after rendering those blocks, retain source discoverability as one compact inline fallback.
+  ///
+  /// `renderedEntityIDs` are the entities the turn already draws as their own
+  /// components. A rendered task card is a better citation of that task than
+  /// `[3]` is — it opens the same thing and says what it is — so a rail that
+  /// only repeats those ids is noise printed under the cards, and now that
+  /// components are a turn's whole answer rather than a garnish, it is noise on
+  /// every such turn.
   static func appendingSelectedSources(
     to text: String,
     selectedReferences: [ChatCitationReference],
     requestedSources: Bool = false,
-    retrievedReferences: [ChatCitationReference] = []
+    retrievedReferences: [ChatCitationReference] = [],
+    renderedEntityIDs: Set<String> = []
   ) -> String {
-    let fallback = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let selection = selectedReferences.isEmpty && requestedSources ? retrievedReferences : selectedReferences
+    let fallback = selection.filter { !renderedEntityIDs.contains($0.sourceID) }
     guard !fallback.isEmpty else { return text }
     let fallbackOrdinals = Set(fallback.map(\.ordinal))
     let hasResolvedNumericCitation = ordinals(in: text).contains { fallbackOrdinals.contains($0) }
@@ -458,6 +503,23 @@ enum ChatCitationMarkup {
     guard !hasResolvedNumericCitation, webReferences(in: text).isEmpty else { return text }
     let markers = fallback.prefix(8).map { "[\($0.ordinal)]" }.joined()
     return text + "\n\nSources: \(markers)"
+  }
+
+  /// The entities this turn already draws as components, by the id a citation
+  /// would carry for the same thing.
+  static func renderedEntityIDs(in blocks: [ChatContentBlock]) -> Set<String> {
+    var identifiers = Set<String>()
+    for block in blocks {
+      switch block {
+      case .taskCard(_, let taskId): identifiers.insert(taskId)
+      case .goalLink(_, let goalId, _): identifiers.insert(goalId)
+      case .captureLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .conversationLink(_, let conversationId, _, _): identifiers.insert(conversationId)
+      case .memoryLink(_, let memoryId, _): identifiers.insert(memoryId)
+      default: continue
+      }
+    }
+    return identifiers
   }
 
   private static func webReferences(in text: String) -> [ChatCitationReference] {
@@ -539,13 +601,19 @@ extension ChatMessage {
     }
   }
 
-  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+  /// Every numeric marker the answer writes, in its body and its text blocks.
+  var citedCitationOrdinals: Set<Int> {
     var cited = Set(ChatCitationMarkup.ordinals(in: text))
     for block in contentBlocks {
       if case .text(_, let blockText) = block {
         cited.formUnion(ChatCitationMarkup.ordinals(in: blockText))
       }
     }
+    return cited
+  }
+
+  mutating func persistCitedReferences(from references: [ChatCitationReference]) {
+    let cited = citedCitationOrdinals
     let existing = Set(
       contentBlocks.compactMap { block -> Int? in
         guard case .citation(_, let reference) = block else { return nil }
@@ -561,18 +629,54 @@ extension ChatMessage {
       })
   }
 
+  /// The adapter's terminal result is the complete provider response. Streaming
+  /// deltas are only a low-latency projection and may legally omit the final
+  /// chunk, so a successful turn must settle its visible answer from this text
+  /// before citation decoration and journal persistence.
+  mutating func applyAuthoritativeTerminalAnswer(_ terminalText: String) {
+    guard !terminalText.isEmpty else { return }
+
+    text = terminalText
+    let lastToolIndex = contentBlocks.lastIndex { block in
+      if case .toolCall = block { return true }
+      return false
+    }
+    let answerStartIndex = lastToolIndex.map { $0 + 1 } ?? contentBlocks.startIndex
+    var reconciled: [ChatContentBlock] = []
+    var replacedAnswerText = false
+
+    for (index, block) in contentBlocks.enumerated() {
+      guard index >= answerStartIndex, case .text(let id, _) = block else {
+        reconciled.append(block)
+        continue
+      }
+      if !replacedAnswerText {
+        reconciled.append(.text(id: id, text: terminalText))
+        replacedAnswerText = true
+      }
+    }
+
+    if !replacedAnswerText {
+      let insertionIndex = lastToolIndex.map { min($0 + 1, reconciled.count) } ?? 0
+      reconciled.insert(.text(id: "\(id):terminal", text: terminalText), at: insertionIndex)
+    }
+    contentBlocks = reconciled
+  }
+
   mutating func applySelectedSourceFallback(
     selectedReferences: [ChatCitationReference],
     requestedSources: Bool,
     retrievedReferences: [ChatCitationReference],
     fallbackText: String = ""
   ) {
+    let rendered = ChatCitationMarkup.renderedEntityIDs(in: contentBlocks)
     func apply(_ value: String) -> String {
       ChatCitationMarkup.appendingSelectedSources(
         to: value,
         selectedReferences: selectedReferences,
         requestedSources: requestedSources,
-        retrievedReferences: retrievedReferences)
+        retrievedReferences: retrievedReferences,
+        renderedEntityIDs: rendered)
     }
     if text.isEmpty {
       text = fallbackText
@@ -835,6 +939,13 @@ actor ChatCitationProvenanceRegistry {
   /// callbacks in a different process from terminal finalization, so the tool output is the durable
   /// handoff; the in-process registry remains only a fast path.
   static func references(fromAnnotatedToolOutput output: String) -> [ChatCitationReference] {
+    if let data = output.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let sections = object["sections"] as? [[String: Any]]
+    {
+      let typed = references(fromTypedSections: sections)
+      if !typed.isEmpty { return typed }
+    }
     let text: String
     if let data = output.data(using: .utf8),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -871,6 +982,48 @@ actor ChatCitationProvenanceRegistry {
         appName: entry["app_name"] as? String,
         url: url)
     }
+  }
+
+  private static func references(fromTypedSections sections: [[String: Any]]) -> [ChatCitationReference] {
+    sections.flatMap { section -> [ChatCitationReference] in
+      guard let sectionName = section["name"] as? String,
+        let kind = citationKind(forSection: sectionName),
+        let items = section["items"] as? [[String: Any]]
+      else { return [] }
+      return items.compactMap { item in
+        guard let marker = item["citationMarker"] as? String,
+          let ordinal = citationOrdinal(from: marker),
+          let sourceID = item["sourceId"] as? String,
+          !sourceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        let rawURL = item["url"] as? String
+        return ChatCitationReference(
+          ordinal: ordinal,
+          kind: kind,
+          sourceID: sourceID,
+          title: item["title"] as? String ?? "",
+          preview: item["summary"] as? String ?? item["content"] as? String ?? "",
+          momentTimestampMs: ChatJSONScalar.int(item["momentTimestampMs"]),
+          createdAt: item["createdAt"] as? String,
+          appName: item["appName"] as? String,
+          url: rawURL.flatMap(safeWebURL))
+      }
+    }
+  }
+
+  private static func citationKind(forSection name: String) -> ChatCitationReference.Kind? {
+    switch name {
+    case "conversations": return .conversation
+    case "memories": return .memory
+    case "action_items", "tasks": return .task
+    default: return nil
+    }
+  }
+
+  private static func citationOrdinal(from marker: String) -> Int? {
+    let digits = marker.filter(\.isNumber)
+    guard let ordinal = Int(digits), ordinal > 0 else { return nil }
+    return ordinal
   }
 
   private static func safeWebURL(_ value: String) -> URL? {

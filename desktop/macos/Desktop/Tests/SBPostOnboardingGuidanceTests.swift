@@ -20,8 +20,11 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
 
     XCTAssertEqual(
       suggestions,
-      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.universalFallback],
+      [HomeSuggestionComposer.universalFirstQuestion, SBPostOnboardingGuidance.teachMeDraft],
       "A user who skipped every step must still get questions that need no connector and no permission")
+    XCTAssertFalse(
+      suggestions.contains("What can you help me with?"),
+      "The capability-list question over-indexed among users who stopped after one question")
   }
 
   func testNoConnectorSuggestionSurvivesASkippedConnector() {
@@ -36,7 +39,8 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
       "What email follow-ups matter most today?",
       "What am I working on, based on my files?",
       "Summarize my recent notes.",
-      "What's on my screen right now?",
+      DayZeroChips.summarizeScreen,
+      DayZeroChips.lastHour,
     ] {
       XCTAssertFalse(
         suggestions.contains(banned),
@@ -48,10 +52,20 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
     var granted = SBSetupSnapshot()
     granted.canSeeScreen = true
 
-    XCTAssertTrue(SBPostOnboardingGuidance.suggestions(for: granted).contains("What's on my screen right now?"))
+    XCTAssertTrue(SBPostOnboardingGuidance.suggestions(for: granted).contains(DayZeroChips.summarizeScreen))
     XCTAssertFalse(
-      SBPostOnboardingGuidance.suggestions(for: SBSetupSnapshot()).contains("What's on my screen right now?"),
+      SBPostOnboardingGuidance.suggestions(for: SBSetupSnapshot()).contains(DayZeroChips.summarizeScreen),
       "Screen Recording denied must not produce a question that reads the screen")
+  }
+
+  func testSystemLanguageMismatchLeadsWithTheSwitchChip() {
+    var setup = SBSetupSnapshot()
+    setup.systemLanguageName = "Español"
+    let suggestions = SBPostOnboardingGuidance.suggestions(for: setup)
+    XCTAssertEqual(suggestions.dropFirst().first, "Switch to Español")
+    XCTAssertFalse(
+      SBPostOnboardingGuidance.suggestions(for: SBSetupSnapshot()).contains { $0.hasPrefix("Switch to") },
+      "No mismatch, no switch chip")
   }
 
   func testConnectedContextConnectorsProduceTheirOwnQuestions() {

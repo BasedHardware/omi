@@ -34,6 +34,8 @@ def _load_modules():
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
     client_stub.get_firestore_client = lambda: client_stub.db
+    client_stub.get_data_plane_firestore_client = lambda: client_stub.db
+    client_stub.data_plane_db = client_stub.db
     client_stub.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
 
     legal_holds_stub = ModuleType("database.legal_holds")

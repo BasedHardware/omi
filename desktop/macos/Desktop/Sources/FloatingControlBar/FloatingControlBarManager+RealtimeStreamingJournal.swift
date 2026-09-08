@@ -33,10 +33,16 @@ extension FloatingControlBarManager {
   }
 
   /// Finalizes the existing pair after any late input-transcript correction.
+  ///
+  /// The user row always completes — the utterance happened regardless of how the
+  /// turn ended. Only the assistant row carries the outcome, because only the reply
+  /// can be cut off.
   func completeStreamingRealtimeExchange(
     projection: RealtimeStreamingJournalProjection,
     userText: String,
-    assistantText: String
+    assistantText: String,
+    assistantStatus: KernelJournalTurnStatus = .completed,
+    terminalReason: String? = nil
   ) async -> Bool {
     guard RuntimeOwnerIdentity.currentOwnerId() == projection.ownerID,
       let provider = sharedFloatingProvider
@@ -53,7 +59,42 @@ extension FloatingControlBarManager {
       if await provider.kernelTurnProjection.updateTurn(
         surface: surface,
         message: projection.assistantMessage(text: assistantText, isStreaming: false),
-        status: .completed, ownerID: projection.ownerID) != nil
+        status: assistantStatus, terminalReason: terminalReason, ownerID: projection.ownerID) != nil
+      {
+        await consumeInterjectHubTranscript(assistantText)
+        return true
+      }
+    }
+    return false
+  }
+
+  /// Revises an assistant row that was finalized `.completed` at
+  /// provider-response-finish after its turn terminalized without delivering
+  /// the answer (#12743). The revision is payload-free — it changes only the
+  /// row's status and truncation cause — so the sealed row's content blocks,
+  /// resources, and canonical metadata (model attribution, continuity) stay
+  /// exactly as the funnel wrote them; the kernel merges the terminal reason
+  /// into the existing metadata instead of replacing it. The journal stays
+  /// the one transcript authority (INV-CHAT-1). Bounded retry mirrors
+  /// `completeStreamingRealtimeExchange` so a transient rejection does not
+  /// strand the optimistic status.
+  func reviseSealedRealtimeAssistantStatus(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    continuityKey: String,
+    terminalReason: String
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let provider = sharedFloatingProvider
+    else { return false }
+    let turnID = KernelTurnProjection.stableTurnID(
+      continuityKey: continuityKey, role: "assistant")
+    for _ in 0..<3 {
+      if await provider.kernelTurnProjection.reviseSealedTerminalTurn(
+        surface: surface,
+        turnId: turnID,
+        terminalReason: terminalReason,
+        ownerID: ownerID) != nil
       {
         return true
       }

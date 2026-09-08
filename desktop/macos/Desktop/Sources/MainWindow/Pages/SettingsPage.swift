@@ -76,22 +76,8 @@ struct SettingsPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          // The pane's own heading. Open Runde at display size — the one run on this surface above
-          // `Font.inkDisplayThreshold`, which is what decides the face; everything below it stays SF
-          // Pro, because that is what a native macOS app sets a settings pane in.
-          HStack {
-            Text(selectedSection.displayTitle)
-              .inkStyle(.stepHeadline, color: Ink.primary)
-              .id(selectedSection)
-              .transition(.opacity)
-              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
-
-            Spacer()
-          }
-          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
-          .padding(.top, SettingsGlassMetrics.paneTopPadding)
-          .padding(.bottom, SettingsGlassMetrics.sectionSpacing)
-
+          // The selected sidebar row already names the destination. Repeating
+          // it as a large page title consumed a row without adding context.
           SettingsContentView(
             appState: appState,
             selectedSection: $selectedSection,
@@ -100,6 +86,7 @@ struct SettingsPage: View {
             showResetOnboardingConfirm: $showResetOnboardingConfirm
           )
           .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.top, SettingsGlassMetrics.paneTopPadding)
           .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
 
           Spacer()
@@ -374,8 +361,6 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
-  @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
-  @AppStorage("useOldestHomeDesign") var useOldestHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
@@ -400,6 +385,7 @@ struct SettingsContentView: View {
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
   @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
+  @State var advancedDetailsExpanded = false
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
@@ -453,7 +439,8 @@ struct SettingsContentView: View {
     var displayTitle: String {
       switch self {
       case .account, .planUsage: return "Account & Plan"
-      case .notifications, .privacy: return "Notifications & Privacy"
+      case .notifications, .privacy: return "Alerts & Privacy"
+      case .advanced: return "AI & Automation"
       default: return rawValue
       }
     }
@@ -722,9 +709,17 @@ struct SettingsContentView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
+      // The whole transition is data from SettingsDeepLinkTransition, so the test
+      // that pins it drives this exact production value. While the Task Assistant
+      // pane is hidden the highlight is nil — a highlight that targets a card that
+      // does not render scrolls to nothing, which is how the pane got "fixed back"
+      // once before.
+      let transition = SettingsDeepLinkTransition.taskSettings()
       selectedSection = .advanced
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-        highlightedSettingId = "advanced.taskassistant"
+      if let target = transition.highlight {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+          highlightedSettingId = target
+        }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in

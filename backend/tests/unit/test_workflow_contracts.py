@@ -74,11 +74,13 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/config/plan_catalog.json": "tests/unit/test_plan_catalog_contract.py",
         "backend/scripts/generate_plan_catalog.py": "tests/unit/test_plan_catalog_contract.py",
         "backend/scripts/validate-backend-runtime-env.py": "tests/unit/test_backend_runtime_env_validator.py",
+        "backend/scripts/runtime_env_capability_contracts.py": "tests/unit/test_pusher_static_capability_admission.py",
         "backend/scripts/firebase_release_probe_token.py": "tests/unit/test_firebase_release_probe_token.py",
         "scripts/voice-provider-probe.sh": "tests/unit/test_voice_provider_probe.py",
         ".github/workflows/desktop_backend_auto_dev.yml": "tests/unit/test_voice_provider_probe.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_pusher.yml": "tests/unit/test_verify_pusher_rollout_budget.py",
+        "backend/scripts/pusher_prod_canary.py": "tests/unit/test_pusher_deployment_control_workflow.py",
         "backend/scripts/verify_pusher_rollout_budget.py": "tests/unit/test_verify_pusher_rollout_budget.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
@@ -194,6 +196,17 @@ def test_location_context_paths_select_their_focused_privacy_regressions(selecto
         selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
         assert "tests/unit/test_location_context_consent.py" in selected, source_path
         assert "tests/unit/test_chat_async_offload.py" in selected, source_path
+        assert selected != all_tests, source_path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
+def test_csat_surface_paths_select_their_focused_contracts(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    for source_path in ("backend/database/csat.py", "backend/routers/csat.py"):
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert "tests/unit/test_csat.py" in selected, source_path
+        assert "tests/unit/test_desktop_rest_inventory.py" in selected, source_path
         assert selected != all_tests, source_path
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 

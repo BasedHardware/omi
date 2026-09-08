@@ -139,7 +139,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
       "The legacy branch must remain reachable for users outside the cohort."
     )
     XCTAssertEqual(
-      source.components(separatedBy: "MemoryGraphPage(viewModel:").count - 1,
+      source.components(separatedBy: "MemoryGraphPage(").count - 1,
       1,
       "The legacy graph should be constructed once, inside the gated branch."
     )

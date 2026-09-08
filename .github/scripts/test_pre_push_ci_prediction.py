@@ -313,13 +313,23 @@ class PrePushCiPredictionTests(unittest.TestCase):
         """`scripts/pre-push` relies on the default; dropping it would break the hook."""
         self.assertIn("local", ACCEPTED_EVENTS)
 
-    def test_event_does_not_change_the_resolved_plan(self) -> None:
-        """Widening `--event` is safe precisely because no routing decision reads it."""
-        paths = ["desktop/macos/Desktop/Package.swift", "backend/database/users.py", "app/lib/main.dart"]
-        baseline = self.plan(paths, event="push").ordered()
-        for event in ACCEPTED_EVENTS:
+    def test_path_filtered_events_keep_unrelated_changes_off_macos(self) -> None:
+        """Ordinary local, PR, and push routing must retain the hosted-macOS saving."""
+        for event in ("local", "pull_request", "push"):
             with self.subTest(event=event):
-                self.assertEqual(self.plan(paths, event=event).ordered(), baseline)
+                plan = self.plan(["backend/database/users.py"], event=event)
+                self.assertFalse(plan.includes("desktop-ci-only"))
+                self.assertFalse(plan.includes("desktop-swift-tests"))
+                self.assertFalse(plan.includes("desktop-swift-release-compile"))
+
+    def test_authoritative_main_health_events_ignore_changed_paths(self) -> None:
+        """#12275: recovery/health runs must compile the current main SHA itself."""
+        for event in ("workflow_dispatch", "schedule"):
+            with self.subTest(event=event):
+                plan = self.plan(["backend/database/users.py"], event=event)
+                self.assertTrue(plan.includes("desktop-ci-only"))
+                self.assertTrue(plan.includes("desktop-swift-tests"))
+                self.assertTrue(plan.includes("desktop-swift-release-compile"))
 
 
 if __name__ == "__main__":

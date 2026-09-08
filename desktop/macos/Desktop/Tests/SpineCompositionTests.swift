@@ -3,7 +3,7 @@
 //
 //  Every assertion here is about a decision that is otherwise only checkable by looking at a
 //  screenshot: what attaches to what, what a day header counts, what a soloed filter does to the
-//  indent, and which way the hour rail runs. Those are exactly the rules a later change breaks
+//  attachment, and which way the hour rail runs. Those are exactly the rules a later change breaks
 //  silently, so they are held here rather than in a rendered image.
 //
 
@@ -124,7 +124,7 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(summary.memoryCount, 1)
     XCTAssertEqual(summary.momentCount, 1, "only the frame inside the window attaches")
 
-    // Its memories and its frames follow it immediately, indented.
+    // Its memories and its frames follow it immediately, attached.
     XCTAssertEqual(rows[conversationIndex + 1].kind, .memories)
     XCTAssertTrue(rows[conversationIndex + 1].isAttached)
     XCTAssertEqual(rows[conversationIndex + 2].kind, .screen)
@@ -173,8 +173,8 @@ final class SpineCompositionTests: XCTestCase {
 
     let matchingOneTask = SpineComposer.filter(days, kind: .everything, query: "coffee")
     XCTAssertEqual(
-      matchingOneTask[0].taskCount, 2,
-      "a filtered day header still describes every task hidden behind that day"
+      matchingOneTask[0].taskCount, 1,
+      "a filtered day header describes the task that remains visible"
     )
 
     let tasksOnly = SpineComposer.filter(days, kind: .tasks, query: "")
@@ -228,7 +228,7 @@ final class SpineCompositionTests: XCTestCase {
 
   // MARK: - Day header counts
 
-  func testTheDayHeaderCountsTheWholeDayNotTheFilteredView() {
+  func testTheDayHeaderCountsTheFilteredView() {
     let start = date(6, 20, 0)
     let screen = SpineDayScreen(total: 1204, hourCounts: [], sampled: [moment(1, at: date(6, 20, 2))])
     let composed = SpineComposer.compose(
@@ -246,13 +246,21 @@ final class SpineCompositionTests: XCTestCase {
 
     let soloed = SpineComposer.filter(composed, kind: .memories, query: "")
     XCTAssertEqual(
-      soloed[0].momentCount, 1204, "a filtered spine still says how big the day really was")
-    XCTAssertEqual(soloed[0].conversationCount, 1)
+      soloed[0].momentCount, 0, "a memory filter must not claim screen moments are visible")
+    XCTAssertEqual(soloed[0].conversationCount, 0)
+    XCTAssertEqual(soloed[0].memoryCount, 1)
+    XCTAssertEqual(soloed[0].subtitle, "1 memory")
+
+    let matchingMemory = SpineComposer.filter(composed, kind: .everything, query: "doors")
+    XCTAssertEqual(matchingMemory[0].momentCount, 0)
+    XCTAssertEqual(matchingMemory[0].conversationCount, 0)
+    XCTAssertEqual(matchingMemory[0].memoryCount, 1)
+    XCTAssertEqual(matchingMemory[0].subtitle, "1 memory")
   }
 
   // MARK: - Solo
 
-  func testSoloingOneKindCollapsesTheIndentSoEveryRowKeepsItsOwnTime() {
+  func testSoloingOneKindCollapsesTheAttachmentSoEveryRowKeepsItsOwnTime() {
     let start = date(6, 20, 0)
     let composed = SpineComposer.compose(
       conversations: [conversation(id: "c1", start: start)],
@@ -262,7 +270,7 @@ final class SpineCompositionTests: XCTestCase {
     )
     XCTAssertTrue(
       composed[0].rows.contains { $0.kind == .memories && $0.isAttached },
-      "unfiltered, the memory is indented under its conversation")
+      "unfiltered, the memory is attached under its conversation")
 
     let soloed = SpineComposer.filter(composed, kind: .memories, query: "")
     XCTAssertFalse(

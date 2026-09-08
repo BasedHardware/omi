@@ -65,6 +65,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/chat',
     '/v1/connectors',
     '/v1/conversations',
+    '/v1/csat',
     '/v1/dev',
     '/v1/fair-use',
     '/v1/frame-requests',
@@ -178,6 +179,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'PATCH',
         '/v1/conversations/{conversation_id}/starred',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/mutations',
+    ): 'Firebase-authenticated first-party sync route; not part of the Developer API key contract.',
     (
         'PATCH',
         '/v1/conversations/{conversation_id}/folder',
@@ -1061,7 +1066,7 @@ def stable_json(schema: dict[str, Any]) -> str:
 
 def write_spec(path: Path, generated: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(generated)
+    path.write_text(generated, encoding='utf-8', newline='\n')
 
 
 def regenerate_hint(path: Path, surface: str) -> str:
@@ -1081,7 +1086,7 @@ def check_spec(path: Path, generated: str, *, surface: str = 'public') -> None:
     hint = regenerate_hint(path, surface)
     if not path.exists():
         raise OpenAPIContractError(f'{path} does not exist; run {hint}')
-    current = path.read_text()
+    current = path.read_text(encoding='utf-8')
     if current != generated:
         raise OpenAPIContractError(f'{path} is stale; run {hint}')
 

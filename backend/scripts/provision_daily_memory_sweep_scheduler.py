@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create or update the retained daily-memory-sweep Cloud Scheduler trigger.
+"""Create or update an allowed retained Cloud Run Job Scheduler trigger.
 
 This is intentionally separate from the legacy read-only maintenance
 validator.  The deployment workflow checks out an admitted main SHA before
@@ -16,6 +16,10 @@ from typing import Any
 
 EXPECTED_SCHEDULER_JOB = "daily-memory-sweep-hourly"
 EXPECTED_CLOUD_RUN_JOB = "daily-memory-sweep-job"
+EXPECTED_TARGETS = {
+    EXPECTED_SCHEDULER_JOB: EXPECTED_CLOUD_RUN_JOB,
+    "knowledge-ledger-drain-hourly": "knowledge-ledger-drain-job",
+}
 EXPECTED_SCHEDULE = "0 * * * *"
 EXPECTED_TIME_ZONE = "Etc/UTC"
 
@@ -47,8 +51,8 @@ def scheduler_http_args(
     scheduler_job = _required_identity(scheduler_job, field="scheduler_job")
     cloud_run_job = _required_identity(cloud_run_job, field="cloud_run_job")
     service_account = _required_identity(service_account, field="service_account")
-    if scheduler_job != EXPECTED_SCHEDULER_JOB or cloud_run_job != EXPECTED_CLOUD_RUN_JOB:
-        raise ValueError("daily replacement scheduler identity does not match the retained contract")
+    if EXPECTED_TARGETS.get(scheduler_job) != cloud_run_job:
+        raise ValueError("scheduler identity does not match a retained contract for Cloud Run Jobs")
     return [
         "gcloud",
         "scheduler",
@@ -150,9 +154,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             service_account=args.service_account,
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
-        print(f"daily memory sweep scheduler provisioning failed: {exc}")
+        print(f"retained job scheduler provisioning failed: {exc}")
         return 1
-    print(f"daily memory sweep scheduler provisioning: {action}")
+    print(f"retained job scheduler provisioning: {action}")
     return 0
 
 

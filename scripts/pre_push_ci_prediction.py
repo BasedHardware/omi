@@ -84,8 +84,15 @@ ACCEPTED_EVENTS = (
     "local",
     "pull_request",
     "push",
+    "schedule",
     "workflow_dispatch",
 )
+
+# These events ask whether the current default-branch SHA is healthy, not whether its
+# final commit happened to touch a Desktop Swift path.  A path-filtered main push can
+# only establish evidence for its own diff; it cannot keep an older compiler verdict
+# current after unrelated commits land (#12275).
+FULL_DESKTOP_HEALTH_EVENTS = frozenset({"schedule", "workflow_dispatch"})
 
 ROUTING_INPUTS = {
     ".github/checks-manifest.yaml",
@@ -378,6 +385,18 @@ def resolve_impact(
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
+            }
+        )
+
+    if event in FULL_DESKTOP_HEALTH_EVENTS:
+        # Manual dispatch is the exact-SHA recovery hatch and the scheduled run
+        # is the default-branch health pulse. Both must exercise debug tests and
+        # release compilation even when HEAD's final diff is backend/docs only.
+        selected.update(
+            {
+                "desktop-ci-only",
+                "desktop-swift-tests",
+                "desktop-swift-release-compile",
             }
         )
 

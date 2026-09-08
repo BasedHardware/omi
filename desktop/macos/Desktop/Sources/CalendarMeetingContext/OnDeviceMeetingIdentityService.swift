@@ -62,7 +62,10 @@ enum OnDeviceMeetingIdentityExtractor {
   ) -> DesktopMeetingPayload? {
     let selected = selectConferencingRows(snapshots)
     guard !selected.isEmpty else { return nil }
-    let participants = participants(from: selected.map(\.combinedText))
+    var participants = participants(from: selected.map(\.combinedText))
+    if participants.isEmpty {
+      participants = messagingCallParticipants(from: snapshots)
+    }
     guard !participants.isEmpty else { return nil }
 
     let title = selected.compactMap(meetingTitle).first ?? "Video meeting"
@@ -164,6 +167,9 @@ enum OnDeviceMeetingIdentityExtractor {
     }
     if metadata.contains("webex") || snapshot.combinedText.lowercased().contains("webex.com/meet") { return "Webex" }
     if metadata.contains("facetime") { return "FaceTime" }
+    if ConferencingApps.isMessagingCallApp(appName: snapshot.appName) {
+      return ConferencingApps.nativeCallPlatform(forAppName: snapshot.appName)
+    }
     return nil
   }
 
@@ -174,9 +180,67 @@ enum OnDeviceMeetingIdentityExtractor {
 
     // A native conferencing app owns its window title. A browser row recognized
     // only from OCR does not: its tab/window title might describe any other page.
+    if ConferencingApps.nativeCallPlatform(forAppName: snapshot.appName) != nil {
+      return title
+    }
     let app = snapshot.appName.lowercased()
     let nativeMarkers = ["zoom", "microsoft teams", "webex", "facetime", "google meet"]
     return nativeMarkers.contains(where: app.contains) ? title : nil
+  }
+
+  private static let callControlMarkers: [String] = [
+    "mute", "unmute", "end call", "hang up", "leave call",
+    "stop video", "start video", "screen share", "screenshare",
+    "in call", "in-call", "camera off", "camera on",
+  ]
+
+  private static func hasCallControlChrome(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
+    let haystack = snapshot.combinedText.lowercased()
+    return callControlMarkers.contains { marker in
+      let pattern = "\\b\(NSRegularExpression.escapedPattern(for: marker))\\b"
+      return haystack.range(of: pattern, options: .regularExpression) != nil
+    }
+  }
+
+  /// For native messaging-call apps only: a name-shaped window title is a
+  /// participation assertion when the row also shows in-call chrome, or when one
+  /// stable call window dominates the interval. Unrelated chat titles are ignored.
+  private static func messagingCallParticipants(from snapshots: [MeetingScreenActivitySnapshot])
+    -> [DesktopMeetingParticipant]
+  {
+    let messaging = snapshots.filter { ConferencingApps.isMessagingCallApp(appName: $0.appName) }
+    guard !messaging.isEmpty else { return [] }
+    let callRows = messaging.filter(hasCallControlChrome)
+    let source = callRows.isEmpty ? dominatingCallWindows(in: messaging) : callRows
+    guard !source.isEmpty else { return [] }
+
+    var names: [String] = []
+    for snapshot in source {
+      let title = cleanLine(snapshot.windowTitle ?? "")
+      guard looksLikePersonName(title), !uiTitles.contains(title.lowercased()) else { continue }
+      if title.lowercased() == snapshot.appName.lowercased() { continue }
+      if !names.contains(title) { names.append(title) }
+    }
+    return names.prefix(maximumParticipants).map { DesktopMeetingParticipant(name: $0, email: nil) }
+  }
+
+  private static func dominatingCallWindows(in snapshots: [MeetingScreenActivitySnapshot])
+    -> [MeetingScreenActivitySnapshot]
+  {
+    var counts: [String: Int] = [:]
+    for snapshot in snapshots {
+      let title = cleanLine(snapshot.windowTitle ?? "")
+      guard !title.isEmpty else { continue }
+      counts[title, default: 0] += 1
+    }
+    let titledCount = counts.values.reduce(0, +)
+    guard titledCount > 0, let (topTitle, topCount) = counts.max(by: { $0.value < $1.value }) else {
+      return []
+    }
+    guard looksLikePersonName(topTitle) else { return [] }
+    let runnerUp = counts.filter { $0.key != topTitle }.map(\.value).max() ?? 0
+    guard topCount * 2 > titledCount, topCount > runnerUp else { return [] }
+    return snapshots.filter { cleanLine($0.windowTitle ?? "") == topTitle }
   }
 
   private static func rosterNames(in text: String) -> [String] {

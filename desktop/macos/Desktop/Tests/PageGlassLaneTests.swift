@@ -23,11 +23,11 @@ final class PageGlassLaneTests: XCTestCase {
 
   // MARK: - Which destinations already have glass
 
-  /// QueryShell Home and Rewind build their own panels when the router says they do. Wrapping them
+  /// Search-first pages and Rewind build their own panels. Wrapping them
   /// again does not stack two materials — a
   /// nested `.behindWindow` surface takes a *second* copy of the desktop and doubles the scrim — so a
   /// double-wrapped page reads visibly muddier than the pages around it.
-  func testHomeAndRewindKeepTheirOwnPanelsAndEveryOtherDestinationIsGivenOne() {
+  func testSearchFirstPagesAndRewindKeepTheirOwnPanelsAndOtherDestinationsAreGivenOne() {
     for homeOwnsItsPanels in [false, true] {
       XCTAssertEqual(
         PageGlassLanePolicy.ownsItsPanels(
@@ -39,54 +39,29 @@ final class PageGlassLaneTests: XCTestCase {
           selectedIndex: SidebarNavItem.rewind.rawValue,
           homeOwnsItsPanels: homeOwnsItsPanels))
 
-      for item in SidebarNavItem.allCases where item != .dashboard && item != .rewind {
+      let selfContained: Set<SidebarNavItem> = [
+        .dashboard, .conversations, .memories, .rewind, .tasks, .apps,
+      ]
+      for item in SidebarNavItem.allCases where !selfContained.contains(item) {
         XCTAssertFalse(
           PageGlassLanePolicy.ownsItsPanels(
             selectedIndex: item.rawValue,
             homeOwnsItsPanels: homeOwnsItsPanels),
-          "\(item.title) has no glass of its own and must be given the lane's")
+          "\(item.title) has no page panels of its own and must be given the lane's")
       }
     }
   }
 
-  /// **The hub is one rail index wearing four pages, and only one of them brings its own glass.**
-  ///
-  /// Activity is Home's column — a search bar and a results panel, each already an `inkGlassPanel`.
-  /// Wrapping the hub wholesale nested both inside a third panel, which does not stack two materials
-  /// but takes a second copy of the desktop and doubles the scrim, so Activity read visibly muddier
-  /// than Chat and its two panels lost their separation. The hub's list pages paint no ground of
-  /// their own and must keep the lane.
-  func testOnlyTheActivityHubPageBringsItsOwnPanels() {
-    let hubIndex = SidebarNavItem.conversations.rawValue
-    XCTAssertTrue(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: hubIndex,
-        memoryDestinationRawValue: MemoryHubDestination.activity.rawValue,
-        homeOwnsItsPanels: true),
-      "Activity builds Home's own two panels and must not be wrapped in a third")
-
-    for destination in MemoryHubDestination.allCases where destination != .activity {
-      XCTAssertFalse(
+  /// Conversations, Memories, and Rewind are compatibility aliases for the
+  /// same MemoryHubPage, whose child destinations own their panels.
+  func testEveryMemoryAliasUsesTheHubOwnedGlass() {
+    for item: SidebarNavItem in [.conversations, .memories, .rewind] {
+      XCTAssertTrue(
         PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: hubIndex,
-          memoryDestinationRawValue: destination.rawValue,
+          selectedIndex: item.rawValue,
           homeOwnsItsPanels: true),
-        "\(destination.title) paints no ground of its own and must be given the lane's")
+        "\(item.title) must mount the hub without a second lane")
     }
-
-    for destination in MemoryHubDestination.allCases {
-      XCTAssertFalse(
-        PageGlassLanePolicy.ownsItsPanels(
-          selectedIndex: SidebarNavItem.memories.rawValue,
-          memoryDestinationRawValue: destination.rawValue,
-          homeOwnsItsPanels: true),
-        "the standalone Memories page must keep the lane whatever the hub last showed")
-    }
-
-    XCTAssertFalse(
-      PageGlassLanePolicy.ownsItsPanels(
-        selectedIndex: SidebarNavItem.conversations.rawValue,
-        homeOwnsItsPanels: true))
   }
 
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
@@ -144,7 +119,7 @@ final class PageGlassLaneTests: XCTestCase {
   func testAWrappedDestinationIsPlacedInTheLaneWithTheGapAboveAndBelowIt() throws {
     let size = CGSize(width: 1_400, height: 800)
     for (index, homeOwnsItsPanels) in [
-      (SidebarNavItem.tasks.rawValue, true),
+      (SidebarNavItem.permissions.rawValue, true),
       (SidebarNavItem.dashboard.rawValue, false),
     ] {
       let recorder = PageGlassLaneFrameRecorder()
@@ -185,7 +160,7 @@ final class PageGlassLaneTests: XCTestCase {
       let recorder = PageGlassLaneFrameRecorder()
       let host = NSHostingView(
         rootView: PageGlassLane(
-          selectedIndex: SidebarNavItem.tasks.rawValue,
+          selectedIndex: SidebarNavItem.permissions.rawValue,
           homeOwnsItsPanels: true
         ) {
           PageGlassLaneProbe(recorder: recorder) { Color.clear }
@@ -234,6 +209,31 @@ final class PageGlassLaneTests: XCTestCase {
     }
     XCTAssertEqual(placed.width, size.width, accuracy: 0.5)
     XCTAssertEqual(placed.height, size.height, accuracy: 0.5)
+  }
+
+  func testTransientStatusPanelPaintsAnOpaqueFallbackGround() throws {
+    let size = CGSize(width: 900, height: 600)
+    let view = ZStack {
+      Color(red: 1, green: 0, blue: 1)
+      TransparentWindowStatusPanel(reduceTransparency: true) {
+        Color.clear
+      }
+    }
+
+    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+    let representation = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: representation)
+
+    let center = try XCTUnwrap(
+      representation.colorAt(
+        x: representation.pixelsWide / 2,
+        y: representation.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+    XCTAssertGreaterThan(
+      center.greenComponent,
+      0.4,
+      "the status panel must replace a vivid wallpaper with its neutral fallback ground")
   }
 }
 

@@ -4,9 +4,11 @@ tier: 2
 description: AI Chat settings section navigation and snapshot (non-prod only)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Preferences/LaunchAtLoginPreference.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift

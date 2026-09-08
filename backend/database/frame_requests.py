@@ -14,8 +14,9 @@ from typing import Any, Callable
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.conversations import conversations_collection, prepare_photo_for_write
+from database.durable_queue import ProcessOutcome, drain_isolated
 from database.firestore_index_registry import (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,
@@ -61,7 +62,7 @@ def _get_client(firestore_client: Any | None) -> Any:
     of a customer-data client during module import.
     """
 
-    return firestore_client if firestore_client is not None else get_firestore_client()
+    return firestore_client if firestore_client is not None else get_data_plane_firestore_client()
 
 
 def _collection(uid: str, *, firestore_client: Any | None = None) -> Any:
@@ -233,28 +234,34 @@ def cleanup_conversation_frame_deletion_outbox(
         .order_by("cleanup_next_attempt_at", direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
+    snapshots = list(query.stream())
     processed = cleaned = 0
-    for snapshot in query.stream():
+
+    def process_one(snapshot: Any) -> ProcessOutcome:
+        nonlocal processed, cleaned
         row = snapshot.to_dict() or {}
         storage_id = row.get("storage_id")
         attempts = max(0, int(row.get("cleanup_attempts") or 0))
+        processed += 1
         if not isinstance(storage_id, str) or not storage_id or "/" in storage_id or "\\" in storage_id:
             snapshot.reference.delete()
-            processed += 1
-            continue
-        processed += 1
+            return ProcessOutcome.reject("invalid frame storage id", reason="malformed")
         try:
             delete_storage(storage_id)
-        except Exception:
+        except Exception as exc:
             snapshot.reference.update(
                 {
                     "cleanup_attempts": attempts + 1,
                     "cleanup_next_attempt_at": current + timedelta(seconds=min(86400, 2 ** min(attempts, 16))),
+                    "last_error_text": str(exc)[:2000],
                 }
             )
-            continue
+            return ProcessOutcome.retry(str(exc), reason="storage_delete_failed")
         snapshot.reference.delete()
         cleaned += 1
+        return ProcessOutcome.ack()
+
+    drain_isolated(snapshots, process_one)
     page = FrameCleanupPage(processed=processed, cleaned=cleaned)
     return page if report_page else page.cleaned
 

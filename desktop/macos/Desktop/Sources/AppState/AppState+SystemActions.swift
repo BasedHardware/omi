@@ -53,9 +53,14 @@ extension AppState {
     return AudioCaptureService.isPermissionDenied()
   }
 
-  /// Check if screen recording permission is denied (onboarding complete but permission not granted)
+  /// Check if screen recording permission is denied (onboarding complete, capture
+  /// intent on, permission missing). A skip during onboarding turns the intent off,
+  /// so "onboarded but never asked" no longer pulses as denied.
   func isScreenRecordingPermissionDenied() -> Bool {
-    return hasCompletedOnboarding && !CGPreflightScreenCaptureAccess()
+    SBOnboardingPermissionIntentPolicy.screenRecordingDenied(
+      hasCompletedOnboarding: hasCompletedOnboarding,
+      screenAnalysisIntentEnabled: AssistantSettings.shared.screenAnalysisEnabled,
+      permissionGranted: CGPreflightScreenCaptureAccess())
   }
 
   /// Restart the app by launching a new instance and terminating the current one

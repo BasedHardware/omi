@@ -11,7 +11,7 @@ extension RealtimeHubController {
   /// result is the caller's fail-closed gate for buffered audio replay.
   @discardableResult
   func beginTurn(turnID requestedTurnID: VoiceTurnID? = nil) -> RealtimeInputPreparationResult {
-    if discardMismatchedSessionIfNeeded() { ensureWarm() }
+    if discardMismatchedSessionIfNeeded() { ensureWarm(userInitiated: true) }
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
     // Barge-in: was a reply from the previous turn still in flight when the user
@@ -52,7 +52,8 @@ extension RealtimeHubController {
     audioReceivedThisTurn = false
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
-    turnIdempotencyKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+    turnIdempotencyKey = Self.voiceContinuityKey(for: turnID)
+    turnPublicWebEvidence = nil
     resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
@@ -62,9 +63,10 @@ extension RealtimeHubController {
             ownerID: interruptedTurn.ownerID,
             userText: interruptedTurn.userText,
             assistantText: interruptedTurn.assistantText,
-            interrupted: true,
+            terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
-            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID) ?? false
+            acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
+            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered) ?? false
         }
       }
     }
@@ -219,7 +221,24 @@ extension RealtimeHubController {
     let partialAssistantText = assistantText
     let idempotencyKey = turnIdempotencyKey
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[idempotencyKey]?.ownerID
-    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID else { return nil }
+    guard let activeTurn = VoiceTurnCoordinator.shared.activeTurn,
+      let ownerID = activeTurn.ownerID
+    else { return nil }
+    // On a barge-in press the old turn was superseded synchronously by the new
+    // turn's `begin` (the reducer terminalizes it `.interruptedByBargeIn` and
+    // consumes its per-turn full-answer duration), so `activeTurn` here is the
+    // NEW turn and reading its drain state would always be false. The delivery
+    // state of the superseded turn survives on the coordinator's last terminal.
+    let coordinator = VoiceTurnCoordinator.shared
+    let answerDelivered: Bool
+    if let superseded = coordinator.model.lastTerminal,
+      superseded.reason == .interruptedByBargeIn,
+      superseded.turnID != activeTurn.id
+    {
+      answerDelivered = coordinator.lastTerminalAnswerDelivered
+    } else {
+      answerDelivered = coordinator.fullAnswerDrained(turnID: activeTurn.id)
+    }
     return Task {
       let resolution = await Self.resolveTranscript(
         providerText: providerText,
@@ -232,7 +251,8 @@ extension RealtimeHubController {
         assistantText: InterruptedTurnPayload.visibleAssistantText(
           partialAssistantText: partialAssistantText),
         idempotencyKey: idempotencyKey,
-        acceptedSpawnOwnerID: acceptedSpawnOwnerID)
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        answerDelivered: answerDelivered)
     }
   }
 
@@ -243,7 +263,7 @@ extension RealtimeHubController {
     if VoiceTurnCoordinator.shared.activeTurnID == nil,
       discardMismatchedSessionIfNeeded()
     {
-      ensureWarm()
+      ensureWarm(userInitiated: true)
     }
     if let requestedTurnID {
       guard requestedTurnID == VoiceTurnCoordinator.shared.activeTurnID,
@@ -311,7 +331,7 @@ extension RealtimeHubController {
           identity: identity,
           previousSessionID: voiceSessionID))
       log("RealtimeHub[\(providerTag)]: buffering mic audio until the reconnecting session is ready")
-      ensureWarm()
+      ensureWarm(userInitiated: true)
       return
     }
     sendAudio(pcm16k, to: s)
@@ -356,7 +376,7 @@ extension RealtimeHubController {
     if VoiceTurnCoordinator.shared.activeTurnID == nil,
       discardMismatchedSessionIfNeeded()
     {
-      ensureWarm()
+      ensureWarm(userInitiated: true)
     }
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID,
       VoiceTurnCoordinator.shared.requireCurrentOwner(for: turnID) != nil
@@ -392,7 +412,7 @@ extension RealtimeHubController {
         "RealtimeHub[\(providerTag)]: session reconnect not ready at commit — "
           + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
       )
-      ensureWarm()
+      ensureWarm(userInitiated: true)
       return .deferredForReconnect
     }
     guard session != nil, voiceSessionID != nil else {
@@ -449,7 +469,8 @@ extension RealtimeHubController {
       // PTT-up can beat asynchronous context preparation. Queue begin before
       // commit on the session transport so Gemini always has activityStart and
       // OpenAI always has an immutable event identity.
-      s.beginInputTurn(
+      beginLiveInputTurn(
+        s,
         turnID: turnID,
         responseID: voiceResponseID,
         interrupting: reducerInterruptsPreviousTurn)
@@ -457,8 +478,13 @@ extension RealtimeHubController {
     s.commitInputTurn()
     AnalyticsManager.shared.floatingBarQuerySent(
       messageLength: turnTranscript.count,
-      hasScreenshot: false,
-      source: .pttRealtime
+      // A PTT turn does carry a screenshot whenever the pre-overlay capture produced usable
+      // pixels. Hard-coding false made every screen-grounded voice turn look screenshot-free.
+      // Only a Gemini session attaches the pre-overlay frame to the turn
+      // (`attachTurnScreenFrameIfNeeded`); elsewhere the image is not sent.
+      hasScreenshot: sessionProvider == .gemini && screenEvidence?.descriptor.canVerifyCurrentScreen == true,
+      source: .pttRealtime,
+      attemptID: turnID.description
     )
     VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(

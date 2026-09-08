@@ -579,6 +579,7 @@ class ShortcutSettings: ObservableObject {
       UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
       FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
       FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
+      FloatingBarVoicePlaybackService.shared.prewarmRealtimeSlowToolAcknowledgementPhrases()
     }
   }
 
@@ -666,6 +667,7 @@ class ShortcutSettings: ObservableObject {
 
     Task { @MainActor in
       FloatingBarVoicePlaybackService.shared.prewarmBackgroundAgentKickoffPhrases()
+      FloatingBarVoicePlaybackService.shared.prewarmRealtimeSlowToolAcknowledgementPhrases()
     }
   }
 

@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -332,6 +333,156 @@ import XCTest
       recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
     }
 
+    // MARK: - Instrument honesty: measurements are real or absent, never literal
+
+    func testCommittedTurnReportsItsRealEnergy() {
+      // Committed turns reported peak/rms/seconds of literal 0 while rejected turns
+      // reported real values, so admitted and rejected audio were on different
+      // scales and the speech gate could not be tuned against its own traffic.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 1600))
+
+      let snap = terminate(
+        recorder, disposition: .committed, peak: 4200, rms: 900, seconds: 1.4, judgeable: true)
+
+      XCTAssertEqual(snap.peak, 4200)
+      XCTAssertEqual(snap.rms, 900)
+      XCTAssertEqual(snap.turnAudioSeconds, 1.4)
+      XCTAssertEqual(snap.properties["peak"] as? Int, 4200)
+      XCTAssertEqual(snap.properties["turn_audio_seconds"] as? Double, 1.4)
+    }
+
+    func testUnknownEnergyIsOmittedRatherThanReportedAsZero() {
+      // Some terminal paths genuinely no longer hold the turn's PCM. Absent is
+      // honest; a literal 0 is indistinguishable from a real dead mic.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 1600))
+
+      let snap = recorder.terminate(
+        disposition: .committed, source: "omni_stt", peak: nil, rms: nil,
+        turnAudioSeconds: nil, voicedAudioSeconds: nil, judgeable: true)
+
+      XCTAssertNil(snap.peak)
+      XCTAssertNil(snap.isNearZero)
+      XCTAssertNil(snap.properties["peak"])
+      XCTAssertNil(snap.properties["rms"])
+      XCTAssertNil(snap.properties["turn_audio_seconds"])
+      XCTAssertNil(snap.properties["is_near_zero"])
+    }
+
+    func testNearZeroVerdictIsDerivedFromReportedEnergy() {
+      // Derived, never supplied: a caller cannot report loud audio and a near-zero
+      // verdict in the same call.
+      let recorder = makeRecorder()
+      begin(recorder)
+      recorder.captureStartRequested()
+      recorder.captureStartResolved(outcome: .accepted, statusClass: .ok)
+
+      let silent = terminate(
+        recorder, disposition: .silentRejected, peak: 2, rms: 1, seconds: 1.0, judgeable: true)
+      XCTAssertEqual(silent.isNearZero, true)
+
+      let loud = makeRecorder()
+      begin(loud)
+      loud.captureStartRequested()
+      loud.captureStartResolved(outcome: .accepted, statusClass: .ok)
+      let audible = terminate(
+        loud, disposition: .committed, peak: 5000, rms: 800, seconds: 1.0, judgeable: true)
+      XCTAssertEqual(audible.isNearZero, false)
+    }
+
+    // MARK: - The user-facing disposition of `capture_never_operational`
+
+    /// The telemetry class and the string the user reads are decided in two
+    /// different files, and they drifted: a press that lost its audio to
+    /// capture-start latency was reported as a capture failure and shown "Hold
+    /// longer to record". This pins the pair together.
+    func testCaptureNeverOperationalNeverTellsTheUserToHoldLonger() {
+      let lateCapture = PTTDiscardedTurnResolution(.captureStartedLate)
+
+      XCTAssertEqual(
+        PTTAttemptLifecycleRecorder.classify(
+          disposition: lateCapture.disposition,
+          captureStartOutcome: .accepted,
+          hadFirstAudioCallback: true,
+          hadFirstUsableFrame: true,
+          judgeable: lateCapture.judgeable,
+          captureStartedLate: lateCapture.captureStartedLate,
+          resolvedRecoveryOutcome: .none),
+        .captureNeverOperational)
+
+      XCTAssertEqual(lateCapture.terminalReason, .captureNotReady)
+      let hint = VoiceTurnUICopy.terminalHint(for: lateCapture.terminalReason)
+      XCTAssertNotNil(hint)
+      XCTAssertNotEqual(hint, VoiceTurnUICopy.terminalHint(for: .tooShort))
+      XCTAssertEqual(hint, "Microphone wasn't ready — retrying, hold again")
+    }
+
+    /// A genuine sub-gate tap keeps the hold-longer hint and the `too_short`
+    /// disposition — the cut this fix is careful not to over-apply.
+    func testGenuineTapKeepsTheHoldLongerHint() {
+      let tap = PTTDiscardedTurnResolution(.shortTap)
+
+      XCTAssertEqual(tap.disposition, .tooShort)
+      XCTAssertEqual(tap.terminalReason, .tooShort)
+      XCTAssertFalse(tap.captureStartedLate)
+      XCTAssertEqual(
+        VoiceTurnUICopy.terminalHint(for: tap.terminalReason), "Hold longer to record")
+    }
+
+    /// End to end through the recorder: the observed 947 ms press with a capture
+    /// that came up at the end of it must not be reported as `too_short_audible`.
+    func testLateCaptureTurnEmitsCaptureNeverOperationalNotTooShortAudible() {
+      let clock = MutableTestClock()
+      let recorder = makeRecorder(clock: clock)
+      begin(recorder)
+      captureAccepted(recorder)
+      clock.advance(milliseconds: 900)
+      recorder.ingestAudioChunk(Self.audiblePCM(sampleCount: 160))
+      clock.advance(milliseconds: 50)
+      recorder.noteRelease()
+      // Finalization can land well after the release; the hold must not grow.
+      clock.advance(milliseconds: 1000)
+
+      let resolution = PTTDiscardedTurnResolution(
+        PTTTurnDiscardJudgement.judge(
+          holdSeconds: recorder.holdSeconds,
+          deliveredAudioSeconds: 0.01,
+          minTurnAudioSeconds: 0.35))
+      let snap = recorder.terminate(
+        disposition: resolution.disposition,
+        source: "hub",
+        peak: 1000,
+        rms: 400,
+        turnAudioSeconds: 0.01,
+        voicedAudioSeconds: nil,
+        judgeable: resolution.judgeable,
+        captureStartedLate: resolution.captureStartedLate)
+
+      XCTAssertEqual(snap.msToFirstUsableFrameBucket, .ge500)
+      XCTAssertNotEqual(snap.failureClass, .tooShortAudible)
+      XCTAssertEqual(snap.failureClass, .captureNeverOperational)
+    }
+
+    /// The press clock is the hold, not the audio the capture managed to deliver
+    /// inside it — the whole point of not charging capture latency to the user.
+    func testHoldSecondsMeasuresTheHold() {
+      let clock = MutableTestClock()
+      let recorder = makeRecorder(clock: clock)
+      XCTAssertNil(recorder.holdSeconds)
+
+      begin(recorder)
+      clock.advance(milliseconds: 947)
+
+      XCTAssertEqual(recorder.holdSeconds ?? 0, 0.947, accuracy: 0.001)
+    }
+
     private func terminate(
       _ recorder: PTTAttemptLifecycleRecorder,
       disposition: PTTAttemptLifecycleRecorder.TurnDisposition,
@@ -347,7 +498,6 @@ import XCTest
         rms: rms,
         turnAudioSeconds: seconds,
         voicedAudioSeconds: nil,
-        isNearZero: peak <= 5 && rms <= 5,
         judgeable: judgeable)
     }
 

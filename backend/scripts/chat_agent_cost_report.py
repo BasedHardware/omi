@@ -13,7 +13,9 @@ Aggregation is pure and takes ledger rows as plain mappings, so the arithmetic i
 testable without Firestore. Only the fetch step touches the database.
 
 Reads one day per query using two equality filters, which Firestore serves from
-single-field indexes — no composite index and no schema change.
+single-field indexes — no composite index and no schema change. An optional
+user_uid equality filter is served the same way, so scoping to one user still
+needs no composite index.
 """
 
 from __future__ import annotations
@@ -237,12 +239,16 @@ def date_range(end: date, days: int) -> list[str]:
     return [(end - timedelta(days=offset)).isoformat() for offset in reversed(range(days))]
 
 
-def fetch_rows(client: Any, feature: str, days: Sequence[str]) -> Iterator[Mapping[str, Any]]:
+def fetch_rows(
+    client: Any, feature: str, days: Sequence[str], *, uid: str | None = None
+) -> Iterator[Mapping[str, Any]]:
     """Stream ledger rows for one feature, one day per query.
 
     Two equality filters are served by single-field indexes, so this needs no
-    composite index. Days are queried separately to keep each result set bounded
-    and to let a partial run still report the days it did read.
+    composite index. An optional user_uid equality filter is served the same way,
+    so scoping to one user still needs no composite index. Days are queried
+    separately to keep each result set bounded and to let a partial run still
+    report the days it did read.
     """
     from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -252,6 +258,8 @@ def fetch_rows(client: Any, feature: str, days: Sequence[str]) -> Iterator[Mappi
             .where(filter=FieldFilter('feature', '==', feature))
             .where(filter=FieldFilter('date', '==', day))
         )
+        if uid is not None:
+            query = query.where(filter=FieldFilter('user_uid', '==', uid))
         for snapshot in query.stream():
             row = snapshot.to_dict()
             if isinstance(row, Mapping):
@@ -266,14 +274,18 @@ def _usd(micro_usd: int) -> str:
     return f'${micro_usd / MICRO_USD_PER_USD:,.2f}'
 
 
-def render(totals: Totals, rates: Rates, feature: str) -> str:
+def render(totals: Totals, rates: Rates, feature: str, *, uid: str | None = None) -> str:
     """Render the report as plain text."""
+    scope = f'scope: uid={uid}' if uid is not None else None
     if totals.attempts == 0:
-        return f'No {feature} attempts found. Check the date range and that accounting is enabled.'
+        message = f'No {feature} attempts found. Check the date range and that accounting is enabled.'
+        return f'{scope}\n{message}' if scope is not None else message
 
     lines: list[str] = []
     span = f'{min(totals.days)}..{max(totals.days)}' if totals.days else 'unknown'
     lines.append(f'{feature} spend composition — {span} ({len(totals.days)} day(s))')
+    if scope is not None:
+        lines.append(scope)
     lines.append(f'rate card: {rates.rate_card_id}')
     lines.append('')
     lines.append(f'attempts: {totals.attempts:,}')
@@ -374,6 +386,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         '--days', type=int, default=DEFAULT_DAYS, help=f'days to read, ending at --end (default: {DEFAULT_DAYS})'
     )
     parser.add_argument('--end', default=None, help='last day to read, YYYY-MM-DD (default: today, UTC)')
+    parser.add_argument('--uid', default=None, help='ledger user_uid to scope the report to one user')
     parser.add_argument(
         '--model', default=None, help='rate-card model (default: resolved from the gateway route override)'
     )
@@ -422,9 +435,9 @@ def main(argv: Sequence[str] | None = None, *, get_client: Callable[[], Any] | N
 
         get_client = get_firestore_client
 
-    grouped = build_totals_by_pricing_basis(fetch_rows(get_client(), args.feature, days))
+    grouped = build_totals_by_pricing_basis(fetch_rows(get_client(), args.feature, days, uid=args.uid))
     if not grouped:
-        print(render(Totals(), Rates('none', 0, 0, 0, 0, 0), args.feature))
+        print(render(Totals(), Rates('none', 0, 0, 0, 0, 0), args.feature, uid=args.uid))
         return 0
 
     for basis in sorted(grouped, key=lambda key: -grouped[key].attempts):
@@ -438,7 +451,7 @@ def main(argv: Sequence[str] | None = None, *, get_client: Callable[[], Any] | N
                 # One unpriceable basis must not cost the operator the rest of the report.
                 print(f'{args.feature} — {model}: not priced ({error})\n', file=sys.stderr)
                 continue
-        print(render(grouped[basis], rates, args.feature))
+        print(render(grouped[basis], rates, args.feature, uid=args.uid))
         print()
     return 0
 

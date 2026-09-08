@@ -74,8 +74,21 @@ extension SBOnboardingModel {
       } onCancel: {
         request.cancel()
       }
+    case "notifications":
+      requestNotifications()
     default: break
     }
+  }
+
+  /// Ask macOS for notification authorization through the same policy-driven
+  /// path Settings uses (`AppState.requestNotificationPermission()`), never
+  /// `UNUserNotificationCenter` directly. `notDetermined` raises the system
+  /// prompt; `denied` opens System Settings instead of re-asking a spent
+  /// prompt macOS will never show again.
+  func requestNotifications() {
+    notifState = .waiting
+    appState.requestNotificationPermission()
+    pollPermission("notifications")
   }
 
   func requestFullDiskAccess() {
@@ -86,7 +99,7 @@ extension SBOnboardingModel {
       // matching Screen Recording's flow. Full Disk Access has no in-place toggle,
       // so the drag card is the fastest grant path (#9742). Both FDA entry points
       // (the permission step and the Files connector) route through here.
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      Task { await PermissionDragGuidance.presentDragToGrantHelper(for: .fullDiskAccess) }
     }
     pollPermission("full_disk_access")
   }
@@ -189,6 +202,7 @@ extension SBOnboardingModel {
     case "full_disk_access": appState.checkFullDiskAccess()
     case "accessibility": appState.checkAccessibilityPermission()
     case "automation": appState.checkAutomationPermission()
+    case "notifications": appState.checkNotificationPermission()
     default: appState.checkAllPermissions()
     }
   }
@@ -251,6 +265,7 @@ extension SBOnboardingModel {
     case "full_disk_access": return appState.hasFullDiskAccess
     case "accessibility": return appState.hasAccessibilityPermission && !appState.isAccessibilityBroken
     case "automation": return appState.hasAutomationPermission
+    case "notifications": return appState.hasNotificationPermission
     default: return false
     }
   }
@@ -276,6 +291,7 @@ extension SBOnboardingModel {
     // explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
+    case "notifications": notifState = .on
     default: break
     }
   }
@@ -290,6 +306,7 @@ extension SBOnboardingModel {
     case "full_disk_access": fdaState = .ask
     case "accessibility": accState = .ask
     case "automation": autoState = .ask
+    case "notifications": notifState = .ask
     default: break
     }
   }
@@ -302,13 +319,36 @@ extension SBOnboardingModel {
     case "full_disk_access": return fdaState
     case "accessibility": return accState
     case "automation": return autoState
+    case "notifications": return notifState
     default: return .ask
     }
   }
 
-  func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
+  /// Skip on the mic step is a durable off for the automatic listening path: write
+  /// `.off` so launch/restore never tries to start (and prompt) again. Allowing
+  /// undoes an earlier skip so a user who goes Back and grants isn't left dark —
+  /// the capture step's explicit answer remains the final word either way.
+  func answerMic() {
+    let allowed = micState == .on
+    if allowed {
+      if AssistantSettings.shared.audioRecordingMode == .off {
+        AssistantSettings.shared.audioRecordingMode = .onlyMeetings
+      }
+    } else {
+      AssistantSettings.shared.audioRecordingMode = .off
+    }
+    advance(userAnswer: allowed ? "Allowed" : "Skip", to: .systemAudio)
+  }
+
   func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
-  func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
+
+  /// Skip on the screen step is a durable off for screen analysis — completion and
+  /// every later automatic restore read this as the user's standing intent instead
+  /// of force-enabling Rewind for someone who just declined it.
+  func answerScreen() {
+    AssistantSettings.shared.screenAnalysisEnabled = scrState == .on
+    advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files)
+  }
   /// Restores the legacy Files-stage contract: scan what is readable after the
   /// Full Disk Access choice, then form the aggregate local-file memories
   /// before moving on. A skipped FDA grant still scans folders macOS permits.
@@ -360,8 +400,16 @@ extension SBOnboardingModel {
     guard localFileProfileState.isTerminal else { return }
     advance(userAnswer: nil, to: .accessibility)
   }
-  func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
-  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
+  /// Skip on accessibility is a durable "not now": the sidebar must not pulse the
+  /// row as denied for a user who explicitly walked past it. macOS exposes no
+  /// denied/notDetermined distinction for AX, so the onboarding decision is the
+  /// only honest signal — an Allow clears it, a Skip sets it.
+  func answerAccessibility() {
+    UserDefaults.standard.set(accState != .on, forKey: .onboardingAccessibilitySkipped)
+    advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation)
+  }
+  func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .notifications) }
+  func answerNotifications() { advance(userAnswer: notifState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 
   /// Advance past a permission step automatically once its grant lands — but only
   /// when the user is still ON that step, so a late poll never skips a step they've
@@ -385,6 +433,7 @@ extension SBOnboardingModel {
     case .files: answerFiles()
     case .accessibility: answerAccessibility()
     case .automation: answerAutomation()
+    case .notifications: answerNotifications()
     default: break
     }
   }
@@ -398,6 +447,7 @@ extension SBOnboardingModel {
     case .files: return "full_disk_access"
     case .accessibility: return "accessibility"
     case .automation: return "automation"
+    case .notifications: return "notifications"
     default: return nil
     }
   }
@@ -743,6 +793,21 @@ extension SBOnboardingModel {
   /// the notch, which spins while Omi is thinking.
   func startScreenDemo() {
     screenDemoDone = false
+    threeDoorsOpened = false
+    ThreeDoorsDemoPage.activeModelNote = ThreeDoorsDemoPage.modelNote
+    openDoorsObserver = NotificationCenter.default.addObserver(
+      forName: .onboardingOpenDoorsRequested, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.openThreeDoorsPage() }
+    }
+    doorsCompletedObserver = NotificationCenter.default.addObserver(
+      forName: .onboardingDoorsCompleted, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, self.step == .screenDemo else { return }
+        self.screenDemoDone = true
+      }
+    }
     screenDemoPTTReady = false
     screenDemoPTTUnavailable = false
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -800,6 +865,39 @@ extension SBOnboardingModel {
     FloatingControlBarManager.shared.showForOnboardingDemo()
   }
 
+  /// Open the bundled three-doors page in the default browser. Only ever user-initiated, from the
+  /// step's "Open the doors" button, so the person reads the instructions before the page appears.
+  func openThreeDoorsPage() {
+    guard let url = ThreeDoorsDemoPage.url(pttTokens: voiceChordTokens) else {
+      log("SBOnboarding: three-doors page missing from bundle; demo step shows without it")
+      return
+    }
+    threeDoorsOpened = true
+    startScreenHistoryCaptureForDemo()
+    NSWorkspace.shared.open(url)
+  }
+
+  /// Rewind normally starts from the home view, i.e. only after onboarding completes. The third
+  /// door asks about text that has scrolled off screen, which only screen history can answer, so
+  /// the demo needs capture running from the moment the doors open. Same gates as the home view:
+  /// the setting the user chose at the screen step, Screen Recording actually granted, keys loaded.
+  func startScreenHistoryCaptureForDemo() {
+    let plugin = ProactiveAssistantsPlugin.shared
+    guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else { return }
+    guard APIKeyService.keysAvailable else {
+      log("SBOnboarding: screen history capture deferred for the demo; API keys not loaded yet")
+      return
+    }
+    plugin.refreshScreenRecordingPermission()
+    guard plugin.hasScreenRecordingPermission else {
+      log("SBOnboarding: screen history capture not started for the demo; Screen Recording not granted")
+      return
+    }
+    plugin.startMonitoring { success, error in
+      log("SBOnboarding: screen history capture for the demo \(success ? "started" : "failed: \(error ?? "unknown")")")
+    }
+  }
+
   private func resetFloatingBarConversation() {
     guard let bar = FloatingControlBarManager.shared.barState else { return }
     bar.showingAIConversation = false
@@ -809,6 +907,11 @@ extension SBOnboardingModel {
   }
 
   func teardownVoiceDemo() {
+    ThreeDoorsDemoPage.activeModelNote = nil
+    if let openDoorsObserver { NotificationCenter.default.removeObserver(openDoorsObserver) }
+    openDoorsObserver = nil
+    if let doorsCompletedObserver { NotificationCenter.default.removeObserver(doorsCompletedObserver) }
+    doorsCompletedObserver = nil
     screenDemoSetupTask?.cancel()
     screenDemoSetupTask = nil
     voiceTimeout?.cancel()

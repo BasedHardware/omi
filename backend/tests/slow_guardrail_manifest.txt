@@ -1,0 +1,51 @@
+# Backend unit-test files whose `@pytest.mark.slow` tests run in CI.
+#
+# Why this file exists. `scripts/run-unit-ci.sh` is the only backend unit lane
+# and it runs `not integration and not slow`. `tests/README.md` tells authors to
+# mark codebase greps `slow` "rather than being allowlisted" — a rule that
+# assumes `slow` means *runs in some other lane*. There was no other lane, so
+# every codebase guardrail in the repository was inert: an exact-set pin that
+# fails nothing is a comment.
+#
+# It was not theoretical. #12701 (belief model) added two managed `get_llm`
+# call sites that `test_managed_call_sites_absent_from_the_inventory_fail_ci`
+# rejects, and merged anyway, within the hour, because nothing ran the test.
+#
+# The marker's cost premise does not survive measurement either: the 22
+# slow-marked unit files run to completion in ~74s wall clock in total, and the
+# LLM-inventory pin in 2.6s. These are greps, not stress tests.
+#
+# Every file listed here is green as of 2026-09-04. Files are added, never
+# silently dropped: a guardrail that starts failing is fixed or removed with a
+# stated reason, not un-listed.
+#
+# Removed: tests/unit/test_ws_g_module_aliases.py — the file itself was deleted
+# in a7bc5fd0c2 (WS-G11 dead-code removal) the day before this manifest was
+# built, so it was never actually green under this lane; there is no guardrail
+# left to track.
+#
+# NOT YET LISTED — red on `main` at the time this lane was built, each needs its
+# own fix and its own PR. They are named rather than omitted so the gap stays
+# countable:
+#   tests/unit/test_subscription_restructure.py       32 failed, 2 passed
+#   tests/unit/test_firestore_query_coverage_ratchet.py    1 failed, 1 passed
+#   tests/unit/test_sys_modules_hermeticity.py             1 failed, 1 passed
+
+tests/unit/test_async_tasks.py
+tests/unit/test_desktop_transcribe.py
+tests/unit/test_firestore_di_seam.py
+tests/unit/test_firestore_query_contract.py
+tests/unit/test_flush_pending_batch1.py
+tests/unit/test_llm_gateway_coverage_guardrails.py
+tests/unit/test_managed_spend_ledger.py
+tests/unit/test_memories_validation.py
+tests/unit/test_p1_5_tools_fastapi_testclient_readiness.py
+tests/unit/test_pusher_circuit_breaker.py
+tests/unit/test_pusher_ghost_connections.py
+tests/unit/test_pusher_heartbeat.py
+tests/unit/test_storage_fanout_limits.py
+tests/unit/test_streaming_deepgram_backoff.py
+tests/unit/test_subscription_import_cycle.py
+tests/unit/test_sync_ordered_assignment.py
+tests/unit/test_thread_join_elimination.py
+tests/unit/test_vad_gate.py

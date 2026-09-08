@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import os
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -30,6 +31,7 @@ from models.jit_proactivity import (
     JITProactivityOperation,
 )
 from models.jit_trigger_feedback import JITTriggerFeedbackAction, JITTriggerFeedbackReceipt
+from database._client import get_data_plane_firestore_client
 from database.jit_proactivity_store import JITProactivityReservationError, reserve_jit_proactivity_event
 from database.memory_apply_store import MemoryFirestoreApplyError
 from database.read_boundary import MalformedDocError
@@ -39,6 +41,8 @@ _DECISION_PATH = '/v1/jit/rollout-decision'
 _TRIGGER_SNAPSHOT_PATH = '/v1/jit/trigger-snapshot'
 _TRIGGER_FEEDBACK_PATH = '/v1/jit/trigger-feedback'
 _PROACTIVITY_RESERVATION_PATH = '/v1/jit/proactivity/reservations'
+_JIT_BUDGET_CONTRACT_ENV = 'OMI_JIT_PROACTIVITY_BUDGET_CONTRACT'
+_JIT_BUDGET_CONTRACT_VERSION = 'jit-cloud-qa-v1'
 
 
 class JITRolloutDecisionEnvelope(BaseModel):
@@ -51,6 +55,7 @@ class JITRolloutDecisionEnvelope(BaseModel):
     error_class: JITErrorClass
     cache_hit: bool
     cache_ttl_seconds: int
+    budget_contract_version: str | None = None
 
     @classmethod
     def from_decision(cls, decision: JITRolloutDecision) -> 'JITRolloutDecisionEnvelope':
@@ -62,6 +67,11 @@ class JITRolloutDecisionEnvelope(BaseModel):
             error_class=decision.error_class,
             cache_hit=decision.cache_hit,
             cache_ttl_seconds=decision.cache_ttl_seconds,
+            budget_contract_version=(
+                _JIT_BUDGET_CONTRACT_VERSION
+                if os.getenv(_JIT_BUDGET_CONTRACT_ENV, '').strip() == _JIT_BUDGET_CONTRACT_VERSION
+                else None
+            ),
         )
 
 
@@ -96,6 +106,11 @@ class JITTriggerSnapshotEnvelope(BaseModel):
     rows: list[JITTriggerSnapshotRowEnvelope]
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
     failure_reason: str | None = None
+    # Matches the timezone authority used by the reservation transaction. Both
+    # are optional for old/synthetic user records; reservations still fail
+    # closed when the profile has no usable timezone.
+    budget_day: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    budget_timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class JITTriggerFeedbackRequest(BaseModel):
@@ -232,7 +247,24 @@ async def get_jit_trigger_snapshot(
         ],
         policy=snapshot.policy,
         failure_reason=snapshot.failure_reason,
+        budget_day=snapshot.budget_day,
+        budget_timezone=snapshot.budget_timezone,
     )
+
+
+def _apply_trigger_feedback_on_data_plane(uid: str, memory_id: str, **kwargs):
+    """Apply trigger feedback against the plane the trigger snapshot reads.
+
+    The canonical adapter defaults to the compute-plane client. This router is
+    mounted on desktop-backend, whose compute project differs from the customer
+    data plane in development, so that default would look for the trigger row
+    in the wrong project and fail every retraction.
+
+    Resolving the client here rather than in the route keeps the (blocking)
+    first-use client construction off the event loop.
+    """
+
+    return apply_canonical_trigger_feedback(uid, memory_id, db_client=get_data_plane_firestore_client(), **kwargs)
 
 
 @router.post(_TRIGGER_FEEDBACK_PATH, response_model=JITTriggerFeedbackEnvelope)
@@ -257,7 +289,7 @@ async def post_jit_trigger_feedback(
         )
         result = await run_blocking(
             db_executor,
-            apply_canonical_trigger_feedback,
+            _apply_trigger_feedback_on_data_plane,
             uid,
             request.trigger_memory_id,
             event_id=request.event_id,

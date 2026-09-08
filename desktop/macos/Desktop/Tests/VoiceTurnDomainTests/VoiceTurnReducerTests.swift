@@ -240,6 +240,93 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
+  func testHubWarmTimeoutDuringRecordingReplacementDoesNotFallbackToOmni() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("in-flight-replacement")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    XCTAssertEqual(model.turn?.phase, .recording)
+    XCTAssertTrue(model.turn?.deadlines.contains(.hubWarm) == true)
+
+    let timedOut = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm))
+
+    XCTAssertEqual(timedOut.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(timedOut.model.turn?.phase, .recording)
+    if case .replacing = timedOut.model.turn?.providerConnection {
+    } else {
+      XCTFail("replacement must stay in flight after hub_warm during recording")
+    }
+    XCTAssertFalse(
+      timedOut.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+    XCTAssertTrue(timedOut.model.turn?.deadlines.contains(.bargeInReplacement) == true)
+  }
+
+  func testReplacementReadyAfterHubWarmWhileRecordingAdmitsLivePath() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let replacementResponseID = VoiceResponseID("ready-after-warm")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm)).model
+
+    let ready = reduce(
+      model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID,
+        responseID: replacementResponseID))
+
+    XCTAssertEqual(ready.model.staleEventCount, 0)
+    XCTAssertEqual(ready.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(ready.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(ready.model.turn?.route, .hubWarmWait)
+    XCTAssertNotEqual(ready.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(ready.model.turn?.phase, .recording)
+    XCTAssertTrue(ready.model.turn?.deadlines.contains(.hubWarm) == true)
+  }
+
+  func testSelectedVoiceFallbackDrainKeepsPlayingOwner() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let lease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .selectedVoiceFallback)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: lease)).model
+
+    let drained = reduce(playing, .deadlineFired(turnID: turnID, deadline: .playbackDrain))
+
+    XCTAssertEqual(drained.model.turn?.phase, .playing(.selectedVoiceFallback))
+    XCTAssertEqual(drained.model.turn?.activeLease?.id, playing.turn?.activeLease?.id)
+    XCTAssertNil(drained.model.turn?.terminalReason)
+    XCTAssertTrue(drained.model.turn?.deadlines.contains(.playbackDrain) == true)
+    XCTAssertTrue(
+      drained.effects.contains(
+        .scheduleDeadline(
+          turnID: turnID,
+          deadline: .playbackDrain,
+          after: reducer.deadlines.playbackDrain)))
+  }
+
   func testBargeInReplacementUsesTheBoundedReconnectWindow() {
     XCTAssertEqual(reducer.deadlines.bargeInReplacement, 3)
     XCTAssertEqual(reducer.deadlines.providerReconnect, 3)
@@ -933,6 +1020,205 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(finished.model.turn?.deadlines.contains(.providerResponse) == true)
   }
 
+  func testChatLaneToolKeepsGlowAfterHeadsUpPlaybackDrains() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: lease)).model
+
+    let reservation = reserveIdentity(model, turnID: turnID)
+    let callID = VoiceToolCallID("ask-higher-model")
+    let started = reducer.reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID))
+    model = started.model
+
+    let selected = reducer.reduce(
+      model,
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID,
+        deadlineClass: .chatLane))
+    model = selected.model
+
+    XCTAssertTrue(
+      selected.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+    let drained = reduce(model, .playbackDrained(turnID: turnID, leaseID: lease.id))
+    XCTAssertEqual(drained.model.turn?.phase, .awaitingTools)
+    XCTAssertTrue(drained.model.turn?.projection.isThinking == true)
+    XCTAssertFalse(drained.model.turn?.projection.isResponseActive == true)
+    XCTAssertTrue(drained.model.turn?.projection.isResponseWaiting == true)
+    XCTAssertTrue(drained.model.turn?.pendingToolCallIDs.contains(callID) == true)
+  }
+
+  func testDeterministicSlowToolAckSuppressesLateProviderStatusUntilToolFinishes() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    let callID = VoiceToolCallID("think-deeper")
+    model =
+      reducer.reduce(
+        reservation.model,
+        .toolStartedScoped(
+          turnID: turnID,
+          identity: reservation.identity,
+          callID: callID)
+      ).model
+
+    let lease = VoiceOutputLease(
+      id: VoiceLeaseID(),
+      turnID: turnID,
+      lane: .deterministicAgentAck)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: lease)).model
+    XCTAssertTrue(model.turn?.providerOutputSuppressed == true)
+
+    model = reduce(model, .playbackDrained(turnID: turnID, leaseID: lease.id)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingTools)
+    XCTAssertTrue(model.turn?.providerOutputSuppressed == true)
+
+    let finished = reducer.reduce(
+      model,
+      .toolFinishedScoped(
+        turnID: turnID,
+        identity: reservation.identity,
+        callID: callID))
+    XCTAssertFalse(finished.model.turn?.providerOutputSuppressed == true)
+    XCTAssertEqual(finished.model.turn?.phase, .awaitingResponse)
+  }
+
+  func testChatLaneThenStandardToolKeepsLongestPendingToolsDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let chatReservation = reserveIdentity(model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    model =
+      reducer.reduce(
+        model,
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: chatReservation.identity,
+          callID: chatCall,
+          deadlineClass: .chatLane)
+      ).model
+
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    let startedStandard = reducer.reduce(
+      standardReservation.model,
+      .toolStartedScoped(
+        turnID: turnID, identity: standardReservation.identity, callID: standardCall))
+
+    XCTAssertEqual(startedStandard.model.turn?.toolDeadlineClasses[chatCall], .chatLane)
+    XCTAssertEqual(startedStandard.model.turn?.toolDeadlineClasses[standardCall], .standard)
+    XCTAssertTrue(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+    XCTAssertFalse(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+  }
+
+  func testStandardThenChatLaneToolReschedulesAggregateToChatLaneDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    let startedStandard = reducer.reduce(
+      standardReservation.model,
+      .toolStartedScoped(
+        turnID: turnID, identity: standardReservation.identity, callID: standardCall))
+    XCTAssertTrue(
+      startedStandard.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+
+    let chatReservation = reserveIdentity(startedStandard.model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    let selected = reducer.reduce(
+      model,
+      .toolDeadlineClassSelectedScoped(
+        turnID: turnID,
+        identity: chatReservation.identity,
+        callID: chatCall,
+        deadlineClass: .chatLane))
+
+    XCTAssertEqual(selected.model.turn?.toolDeadlineClasses[standardCall], .standard)
+    XCTAssertEqual(selected.model.turn?.toolDeadlineClasses[chatCall], .chatLane)
+    XCTAssertTrue(
+      selected.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 180)))
+  }
+
+  func testFinishingChatLaneToolRestoresStandardPendingToolsDeadline() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    var model = reduce(
+      startingModel,
+      .providerResponseStarted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+    ).model
+    let chatReservation = reserveIdentity(model, turnID: turnID)
+    let chatCall = VoiceToolCallID("ask-higher-model")
+    model =
+      reducer.reduce(
+        chatReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: chatReservation.identity, callID: chatCall)
+      ).model
+    model =
+      reducer.reduce(
+        model,
+        .toolDeadlineClassSelectedScoped(
+          turnID: turnID,
+          identity: chatReservation.identity,
+          callID: chatCall,
+          deadlineClass: .chatLane)
+      ).model
+    let standardReservation = reserveIdentity(model, turnID: turnID)
+    let standardCall = VoiceToolCallID("screenshot")
+    model =
+      reducer.reduce(
+        standardReservation.model,
+        .toolStartedScoped(
+          turnID: turnID, identity: standardReservation.identity, callID: standardCall)
+      ).model
+
+    let finishedChat = reducer.reduce(
+      model,
+      .toolFinishedScoped(
+        turnID: turnID, identity: chatReservation.identity, callID: chatCall))
+    XCTAssertEqual(finishedChat.model.turn?.pendingToolCallIDs, [standardCall])
+    XCTAssertTrue(
+      finishedChat.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .pendingTools, after: 30)))
+  }
+
   func testProviderFinishDuringToolWaitRequiresPostToolContinuationBeforeJournal() throws {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     let callID = VoiceToolCallID("pending")
@@ -1534,16 +1820,49 @@ final class VoiceTurnReducerTests: XCTestCase {
     let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: requestedLease)).model
     let lease = try XCTUnwrap(playing.turn?.activeLease)
 
-    let refreshed = reducer.reduce(
-      playing,
-      .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
+    var model = playing
+    for _ in 0..<3 {
+      let refreshed = reducer.reduce(
+        model,
+        .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
 
-    XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
-    XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
-    XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
-    XCTAssertTrue(
-      refreshed.effects.contains(
-        .scheduleDeadline(turnID: turnID, deadline: .playbackDrain, after: reducer.deadlines.playbackDrain)))
+      XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
+      XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
+      XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
+      XCTAssertTrue(
+        refreshed.effects.contains(
+          .scheduleDeadline(
+            turnID: turnID,
+            deadline: .playbackDrain,
+            after: reducer.deadlines.playbackDrain)))
+      XCTAssertTrue(refreshed.model.turn?.deadlines.contains(.playbackDrain) == true)
+      model = refreshed.model
+    }
+  }
+
+  func testPlaybackDrainWithoutProgressFailsClosed() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let requestedLease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: requestedLease)).model
+    let lease = try XCTUnwrap(playing.turn?.activeLease)
+
+    let failed = reduce(
+      playing,
+      .deadlineFired(turnID: turnID, deadline: .playbackDrain))
+
+    XCTAssertEqual(failed.model.turn?.phase, .terminal(.playbackFailed))
+    XCTAssertNil(failed.model.turn?.activeLease)
+    XCTAssertTrue(failed.effects.contains(where: \.isTerminal))
+
+    let lateProgress = reducer.reduce(
+      failed.model,
+      .playbackProgressScoped(
+        turnID: turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    XCTAssertEqual(lateProgress.model.turn?.phase, .terminal(.playbackFailed))
+    XCTAssertEqual(lateProgress.model.staleEventCount, failed.model.staleEventCount + 1)
+    XCTAssertFalse(lateProgress.effects.contains(where: \.isTerminal))
   }
 
   func testCompetingPlaybackLeaseIsRejectedAsInvalidTransition() {
@@ -1619,6 +1938,53 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(drained.model.turn?.phase, .awaitingResponse)
     XCTAssertNil(drained.model.lastTerminal)
     XCTAssertTrue(drained.model.turn?.deadlines.contains(.providerResponse) == true)
+
+    let providerFinished = reduce(
+      drained.model,
+      .providerTurnFinished(
+        turnID: turnID,
+        sessionID: sessionID,
+        responseID: responseID))
+    XCTAssertEqual(providerFinished.model.turn?.providerFinished, true)
+    XCTAssertEqual(providerFinished.model.turn?.phase, .awaitingJournal)
+
+    let journalAccepted = acceptJournal(providerFinished.model)
+    XCTAssertEqual(journalAccepted.model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(journalAccepted.effects.filter(\.isTerminal).count, 1)
+  }
+
+  func testStalePlaybackProgressAfterLeaseReplacementCannotRefreshNewLease() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let firstRequestedLease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    var model = reduce(awaiting, .playbackStarted(turnID: turnID, lease: firstRequestedLease)).model
+    let firstLease = try XCTUnwrap(model.turn?.activeLease)
+
+    model = reduce(model, .playbackDrained(turnID: turnID, leaseID: firstLease.id)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+
+    let secondRequestedLease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    model = reduce(model, .playbackStarted(turnID: turnID, lease: secondRequestedLease)).model
+    let secondLease = try XCTUnwrap(model.turn?.activeLease)
+    let staleCount = model.staleEventCount
+
+    let stale = reducer.reduce(
+      model,
+      .playbackProgressScoped(
+        turnID: turnID,
+        identity: firstLease.identity,
+        leaseID: firstLease.id))
+
+    XCTAssertEqual(stale.model.turn?.phase, .playing(.nativeRealtime))
+    XCTAssertEqual(stale.model.turn?.activeLease, secondLease)
+    XCTAssertEqual(stale.model.staleEventCount, staleCount + 1)
+    XCTAssertFalse(
+      stale.effects.contains(
+        .scheduleDeadline(
+          turnID: turnID,
+          deadline: .playbackDrain,
+          after: reducer.deadlines.playbackDrain)))
   }
 
   func testCleanupFromEveryNonIdlePhaseConvergesToTerminalThenReset() {
@@ -1699,6 +2065,36 @@ final class VoiceTurnReducerTests: XCTestCase {
     let cleared = reduce(model, .deadlineFired(turnID: turnID, deadline: .hintVisibility))
 
     XCTAssertEqual(cleared.model.turn?.projection.hint, "")
+  }
+
+  func testDictationRecognizedMarksTheProjectionUntilTheTurnEnds() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    XCTAssertFalse(model.turn?.projection.isDictating == true)
+
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+    // Presentation only: still listening, nothing routed or terminated.
+    XCTAssertTrue(model.turn?.projection.isListening == true)
+    XCTAssertEqual(model.turn?.phase, .recording)
+
+    model = reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true, "the flag survives key-up while the paste is prepared")
+
+    let ended = reduce(model, .cancel(turnID: turnID, reason: .cancelled)).model
+    XCTAssertFalse(ended.turn?.projection.isDictating == true)
+  }
+
+  func testClearPresentationResetsDictationTint() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+
+    let cleared = reduce(model, .clearPresentation(turnID: turnID))
+
+    XCTAssertEqual(cleared.model.turn?.projection, .idle)
+    XCTAssertEqual(cleared.model.turn?.phase, .recording)
   }
 
   func testTerminalHintDeadlineClearsHintWithoutResurrectingTurn() {
