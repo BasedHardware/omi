@@ -161,6 +161,20 @@ extension SettingsContentView {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
   }
 
+  /// Restarts every live local-mode bridge, not just the main window's. The
+  /// floating control bar keeps its own independent ChatProvider (see
+  /// FloatingControlBarManager.sharedFloatingProvider) that never picks up a
+  /// Settings change on its own — restarting only `chatProvider` here would
+  /// leave it running indefinitely on whatever model/vision config it
+  /// started with, silently diverging from the main window after any later
+  /// edit.
+  func restartLocalBridgesIfActive() {
+    Task {
+      await chatProvider?.restartLocalBridgeIfActive()
+      await FloatingControlBarManager.shared.sharedFloatingProvider?.restartLocalBridgeIfActive()
+    }
+  }
+
   /// Endpoint/model fields for the Local provider, shown under the AI Provider
   /// picker (in both aiChatSection and the Advanced AI Provider card) when
   /// Local is selected.
@@ -205,7 +219,7 @@ extension SettingsContentView {
           TextField(AIProvider.defaultLocalModelID, text: $localLLMModelID)
             .textFieldStyle(.roundedBorder)
             .onChange(of: localLLMModelID) { _, _ in
-              Task { await chatProvider?.restartLocalBridgeIfActive() }
+              restartLocalBridgesIfActive()
             }
           if localModelsFetchFailed {
             Text("Couldn't reach the server to list models — enter the model id manually.")
@@ -221,7 +235,7 @@ extension SettingsContentView {
           .pickerStyle(.menu)
           .labelsHidden()
           .onChange(of: localLLMModelID) { _, _ in
-            Task { await chatProvider?.restartLocalBridgeIfActive() }
+            restartLocalBridgesIfActive()
           }
         }
       }
@@ -235,7 +249,7 @@ extension SettingsContentView {
           TextField("None", text: $localLLMVisionModelID)
             .textFieldStyle(.roundedBorder)
             .onChange(of: localLLMVisionModelID) { _, _ in
-              Task { await chatProvider?.restartLocalBridgeIfActive() }
+              restartLocalBridgesIfActive()
             }
         } else {
           Picker("", selection: $localLLMVisionModelID) {
@@ -247,7 +261,7 @@ extension SettingsContentView {
           .pickerStyle(.menu)
           .labelsHidden()
           .onChange(of: localLLMVisionModelID) { _, _ in
-            Task { await chatProvider?.restartLocalBridgeIfActive() }
+            restartLocalBridgesIfActive()
           }
         }
 
