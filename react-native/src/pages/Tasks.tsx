@@ -35,6 +35,7 @@ function formatTaskDue(dueAt: number | null): string {
   return new Date(dueAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
+    year: 'numeric',
     timeZone: 'UTC',
   });
 }

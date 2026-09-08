@@ -133,11 +133,49 @@ test('task due dates use canonical epoch milliseconds', () => {
   const expected = new Date(dueAt).toLocaleDateString(undefined, {
     day: 'numeric',
     month: 'short',
+    year: 'numeric',
     timeZone: 'UTC',
   });
   expect(
     renderer.root.findAll(node => node.props.children === expected).length,
   ).toBeGreaterThan(0);
+});
+
+test('task due dates include the year so last-year dues do not look like this year', () => {
+  const dueAt = Date.UTC(2025, 11, 31);
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {...outcome.value, items: [{...task, dueAt}]},
+        }}
+      />,
+    );
+  });
+  const expected = new Date(dueAt).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  expect(expected).toContain('2025');
+  expect(
+    renderer.root.findAll(node => node.props.children === expected).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.children ===
+        new Date(dueAt).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          timeZone: 'UTC',
+        }),
+    ).length,
+  ).toBe(0);
 });
 
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
