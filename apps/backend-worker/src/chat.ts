@@ -6,6 +6,7 @@ import {
   bindAttachmentStatement,
   resolveAttachmentsForAdmit,
 } from "./attachments";
+import { isVisibleGenerationText } from "./generation-prompt";
 import {
   CHAT_CAPABILITIES,
   type ChatCreate,
@@ -342,6 +343,9 @@ export async function completeGeneration(
 
   const human = await readMessage(db, accountId, admission.messageId);
   if (human === null) throw new Error("human message not found for generation");
+  if (!isVisibleGenerationText(text)) {
+    return failGeneration(db, accountId, generationId);
+  }
 
   const createdAt = Date.now();
   const message: ChatCompletedAssistantMessage = {

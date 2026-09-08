@@ -8,7 +8,7 @@ import {
   isGenerationTextMimeType,
   isVisibleGenerationText,
 } from "../src/generation-prompt";
-import { failGeneration } from "../src/chat";
+import { completeGeneration, failGeneration } from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -637,5 +637,82 @@ describe("failGeneration retryability", () => {
       kind: "failed",
       error: { code: "generation_failed", retryable: false },
     });
+  });
+});
+
+const seedAdmittedHuman = async (
+  database: D1Database,
+  accountId: string,
+  messageId: string,
+  generationId: string
+) => {
+  await database
+    .prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', 1, NULL, 1, NULL)"
+    )
+    .bind(messageId, accountId, "hello")
+    .run();
+  await database
+    .prepare(
+      "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+    )
+    .bind(messageId, accountId, "op-1", "{}", generationId)
+    .run();
+};
+
+const countAssistantRows = async (
+  database: D1Database,
+  accountId: string
+): Promise<number> => {
+  const row = await database
+    .prepare(
+      "SELECT COUNT(*) AS count FROM chat_messages WHERE account_id = ? AND sender = 'ai'"
+    )
+    .bind(accountId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+};
+
+describe("completeGeneration visibility", () => {
+  test("fails empty text instead of persisting a blank assistant", async () => {
+    await seedAdmittedHuman(db, "acct-a", "msg-empty", "gen-empty");
+    const event = await completeGeneration(db, "acct-a", "gen-empty", "");
+    expect(event).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    expect(await countAssistantRows(db, "acct-a")).toBe(0);
+  });
+
+  test("fails whitespace-only text instead of persisting a blank assistant", async () => {
+    await seedAdmittedHuman(db, "acct-a", "msg-blank", "gen-blank");
+    const event = await completeGeneration(db, "acct-a", "gen-blank", " \t\n");
+    expect(event).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    expect(await countAssistantRows(db, "acct-a")).toBe(0);
+  });
+
+  test("persists visible padded text as a completed assistant", async () => {
+    await seedAdmittedHuman(db, "acct-a", "msg-padded", "gen-padded");
+    const event = await completeGeneration(
+      db,
+      "acct-a",
+      "gen-padded",
+      "  ok  "
+    );
+    expect(event.kind).toBe("done");
+    if (event.kind !== "done") throw new Error("expected done event");
+    expect(event.message.text).toBe("  ok  ");
+    expect(await countAssistantRows(db, "acct-a")).toBe(1);
+  });
+
+  test("empty text still requires admission", async () => {
+    await expect(
+      completeGeneration(db, "acct-a", "gen-missing", "")
+    ).rejects.toThrow("admission not found for generation");
   });
 });
