@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
@@ -25,6 +27,104 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
+
+
+def _read_utf8_file(path: Path) -> str:
+    """Read UTF-8 text from a file, mapping failures to UsageError."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise UsageError(
+            message=f"File not found: {path}",
+            detail="Check the path and try again.",
+        ) from None
+    except IsADirectoryError:
+        raise UsageError(message=f"Path is a directory: {path}") from None
+    except UnicodeDecodeError:
+        raise UsageError(
+            message=f"File is not valid UTF-8: {path}",
+            detail="Encode the file as UTF-8 and try again.",
+        ) from None
+    except OSError:
+        raise UsageError(
+            message=f"Cannot read file: {path}",
+            detail="Check permissions and try again.",
+        ) from None
+    return content
+
+
+def _read_batch_memories(file_path: Path) -> list[dict[str, object]]:
+    """Validate a batch memory JSON file and map it to request entries.
+
+    Accepts a JSON array of memory objects, or an object with a ``memories``
+    array. Each entry must be an object with non-empty ``content``; ``category``
+    and ``visibility`` are validated against the CLI enums, and ``tags`` must be
+    a list of strings.
+    """
+    try:
+        payload = json.loads(_read_utf8_file(file_path))
+    except json.JSONDecodeError as exc:
+        raise UsageError(
+            message=f"Memory file is not valid JSON: {file_path}",
+            detail=f"Parse error at line {exc.lineno} column {exc.colno}.",
+        ) from None
+
+    if isinstance(payload, dict) and isinstance(payload.get("memories"), list):
+        payload = payload["memories"]
+    if not isinstance(payload, list):
+        raise UsageError(
+            message="Memory file must contain a JSON array of memories",
+            detail="Provide an array like [{\"content\": \"...\"}] or {\"memories\": [...]}.",
+        )
+    if not payload:
+        raise UsageError(
+            message="Memory file contains no memories",
+            detail="Provide at least one memory entry.",
+        )
+    if len(payload) > 25:
+        raise UsageError(
+            message=f"Maximum 25 memories per batch request, got {len(payload)}",
+            detail="Split the file into batches of 25 or fewer entries.",
+        )
+
+    entries: list[dict[str, object]] = []
+    for index, item in enumerate(payload, start=1):
+        if not isinstance(item, dict):
+            raise UsageError(
+                message=f"Memory entry {index} is not an object",
+                detail="Every entry must be a JSON object.",
+            )
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise UsageError(
+                message=f"Memory entry {index} has empty content",
+                detail="Every entry needs non-empty string content.",
+            )
+        entry: dict[str, object] = {"content": content.strip()}
+        visibility = item.get("visibility", MemoryVisibility.private.value)
+        if not isinstance(visibility, str) or visibility not in MemoryVisibility._value2member_map_:
+            raise UsageError(
+                message=f"Memory entry {index} has invalid visibility: {visibility}",
+                detail="Use 'public' or 'private'.",
+            )
+        entry["visibility"] = visibility
+        tags = item.get("tags", [])
+        if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+            raise UsageError(
+                message=f"Memory entry {index} has invalid tags",
+                detail="'tags' must be a list of strings.",
+            )
+        entry["tags"] = list(tags)
+        category = item.get("category")
+        if category is not None:
+            if not isinstance(category, str) or category not in MemoryCategory._value2member_map_:
+                raise UsageError(
+                    message=f"Memory entry {index} has invalid category: {category}",
+                    detail="Use a known memory category (e.g. work, skills, personal).",
+                )
+            entry["category"] = category
+        entries.append(entry)
+    return entries
 
 
 @app.command("list", help="List memories.")
@@ -106,6 +206,20 @@ def create_memory(
         result = client.post("/v1/dev/user/memories", json_body=body)
     ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
     ctx.renderer.emit(result, title="memory")
+
+
+@app.command("create-batch", help="Create up to 25 memories from a UTF-8 JSON file.")
+def create_memories_batch(
+    typer_ctx: typer.Context,
+    file_path: Path = typer.Argument(..., help="Path to a UTF-8 JSON file with a 'memories' array."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    entries = _read_batch_memories(file_path)
+    with ctx.make_client() as client:
+        result = client.post("/v1/dev/user/memories/batch", json_body={"memories": entries})
+    created_count = result.get("created_count", 0)
+    ctx.renderer.success(f"Created [bold]{created_count}[/bold] memories")
+    ctx.renderer.emit(result, title="memories")
 
 
 @app.command("update", help="Update an existing memory.")

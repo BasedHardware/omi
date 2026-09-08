@@ -206,6 +206,7 @@ omi
 │   ├── list [--limit N] [--offset N] [--categories ...]
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
+│   ├── create-batch <file.json>
 │   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]
 │   └── delete <id> [-y]
 ├── conversation
@@ -247,6 +248,29 @@ omi
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
+
+`memory create-batch` imports up to 25 memories from a UTF-8 JSON file in one
+request. The file can be a JSON array of memory objects, or an object with a
+`memories` array:
+
+```json
+{
+  "memories": [
+    { "content": "Team retro every Friday", "category": "work", "visibility": "private", "tags": ["meetings"] },
+    { "content": "Prefers dark mode" }
+  ]
+}
+```
+
+```bash
+omi memory create-batch memories.json
+```
+
+Every entry needs non-empty string `content`. Optional fields: `category`
+(known category), `visibility` (`public` or `private`, defaults to `private`),
+and `tags` (list of strings). Invalid JSON, more than 25 entries, or malformed
+entries fail before any HTTP request; the server still applies its own
+authorization and validation on the single batch call.
 
 ## Global flags
 
