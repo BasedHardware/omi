@@ -531,6 +531,14 @@ realTest(
         `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as chat-main','human','text',1100,1100,'chat-main',NULL,0,'sha256:main','desktop_chat',NULL,false,'rev-main','[]'::jsonb,'gen_main')`,
         [account, "55555555-5555-4555-8555-555555555555"]
       );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-padded chat-main','human','text',1050,1050,' chat-main ',NULL,0,'sha256:padded-main','desktop_chat',NULL,false,'rev-padded-main','[]'::jsonb,'gen_padded_main')`,
+        [account, "66666666-6666-4666-8666-666666666666"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as space-only chatSessionId','human','text',1075,1075,'  ',NULL,0,'sha256:space-main','desktop_chat',NULL,false,'rev-space-main','[]'::jsonb,'gen_space_main')`,
+        [account, "77777777-7777-4777-8777-777777777777"]
+      );
       const withoutGrant = (await (await call()).json()) as { items: Array<{ id: string }> };
       expect(ids(withoutGrant)).not.toContain("chat:chat-main");
       await owner.unsafe(
