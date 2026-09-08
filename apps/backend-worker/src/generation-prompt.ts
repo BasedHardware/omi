@@ -118,8 +118,9 @@ async function readGenerationHistory(
           role: row.sender === "human" ? "user" : "assistant",
           content: prefix,
         });
+        break;
       }
-      break;
+      continue;
     }
     remaining -= size;
     history.push({
