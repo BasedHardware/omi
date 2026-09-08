@@ -34,8 +34,7 @@
     "prepare": "npm run build",
     "release": "release-it",
     "example": "yarn --cwd example",
-    "bootstrap": "yarn example && yarn install",
-    "test:issue12979": "jest --config jest.config.issue12979.js"
+    "bootstrap": "yarn example && yarn install"
   },
   "keywords": [
     "react-native",
@@ -72,7 +71,10 @@
     "react-native": "0.79.2",
     "react-native-builder-bob": "^0.20.0",
     "release-it": "^15.0.0",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "babel-jest": "^29.7.0"
   },
   "peerDependencies": {
     "react": "*",
