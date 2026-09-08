@@ -752,6 +752,60 @@ test('conversation detail status is not a raw wire token', () => {
   expect(copy).not.toContain('in_progress');
 });
 
+test('whitespace conversation detail status is not a blank row', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:blank-status-one',
+    title: 'Morning standup',
+    summary: 'Still processing this recording.',
+    searchableText: 'Morning standup\nStill processing this recording.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: ' \t\n',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Morning standup',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Status ·');
+  expect(copy).toContain('Status unavailable');
+  expect(copy).not.toContain(' \t\n');
+});
+
 test('a zero conversation createdAt groups as Date unavailable instead of 1970', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

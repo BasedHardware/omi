@@ -53,22 +53,23 @@ export function conversationDisplaySummary(item: {
 }
 
 export function conversationStatusCopy(status: string): string {
-  if (status === 'in_progress') {
+  const trimmed = status.trim();
+  if (trimmed === 'in_progress') {
     return 'In progress';
   }
-  if (status === 'processing') {
+  if (trimmed === 'processing') {
     return 'Processing';
   }
-  if (status === 'merging') {
+  if (trimmed === 'merging') {
     return 'Merging';
   }
-  if (status === 'completed') {
+  if (trimmed === 'completed') {
     return 'Completed';
   }
-  if (status === 'failed') {
+  if (trimmed === 'failed') {
     return 'Failed';
   }
-  return status === '' ? 'Status unavailable' : status;
+  return trimmed === '' ? 'Status unavailable' : trimmed;
 }
 
 export function accountWireCopy(value: string, unavailable: string): string {

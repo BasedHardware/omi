@@ -621,7 +621,10 @@ test('conversation status copy is not a raw wire token', () => {
   expect(conversationStatusCopy('completed')).toBe('Completed');
   expect(conversationStatusCopy('failed')).toBe('Failed');
   expect(conversationStatusCopy('')).toBe('Status unavailable');
+  expect(conversationStatusCopy(' \t\n')).toBe('Status unavailable');
+  expect(conversationStatusCopy('\u00A0')).toBe('Status unavailable');
   expect(conversationStatusCopy('queued')).toBe('queued');
+  expect(conversationStatusCopy('  queued  ')).toBe('queued');
 });
 
 test('account subscription copy is not a raw wire token', () => {
