@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Redact every supported screenshot payload alias
+
+When `omi local screenshot --output FILE` saves a payload, supported Base64 aliases are removed from printed metadata. Omitting `--output` preserves the payload.
+
 ## Development
 
 ```bash

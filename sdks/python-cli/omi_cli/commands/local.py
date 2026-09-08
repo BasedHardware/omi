@@ -224,6 +224,9 @@ def _emit_tool(
     ctx.renderer.emit(result, title=tool_name)
 
 
+_SCREENSHOT_PAYLOAD_KEYS = ("image_base64", "base64", "data_base64", "data")
+
+
 def _write_screenshot_result(result: Any, output: Path) -> Path:
     output = output.expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +247,7 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
                 shutil.copyfile(source, output)
                 return output
 
-        encoded = _first_string(result, ("image_base64", "base64", "data_base64", "data"))
+        encoded = _first_string(result, _SCREENSHOT_PAYLOAD_KEYS)
         if encoded:
             output.write_bytes(_decode_base64_payload(encoded))
             return output
@@ -262,10 +265,11 @@ def _redact_screenshot_payload(result: Any) -> Any:
     if not isinstance(result, Mapping):
         return result
     redacted = dict(result)
-    image_payload = redacted.pop("image_base64", None)
-    if image_payload is not None:
-        redacted["image_base64_redacted"] = True
-        redacted["image_base64_chars"] = len(str(image_payload))
+    for key in _SCREENSHOT_PAYLOAD_KEYS:
+        image_payload = redacted.pop(key, None)
+        if image_payload is not None:
+            redacted[f"{key}_redacted"] = True
+            redacted[f"{key}_chars"] = len(str(image_payload))
     return redacted
 
 
