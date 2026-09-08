@@ -45,6 +45,9 @@ function formatConversationDuration(
   if (!Number.isFinite(duration) || duration < 0) {
     return 'Duration unavailable';
   }
+  if (duration < 60_000) {
+    return '< 1 min';
+  }
   const minutes = Math.round(duration / 60_000);
   if (minutes < 60) {
     return `${minutes} min`;

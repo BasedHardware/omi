@@ -461,3 +461,58 @@ test('conversation list and detail date older days instead of month and day only
     }),
   );
 });
+
+test('conversation durations under a minute do not claim 0 min', () => {
+  const startedAt = '2026-09-07T12:00:00.000Z';
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:short-one',
+    title: 'Quick note',
+    summary: 'Twenty seconds.',
+    searchableText: 'Quick note\nTwenty seconds.',
+    createdAt: startedAt,
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt,
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const page = {
+    status: 'success' as const,
+    value: {
+      items: [item],
+      page: {
+        ...incompletePage,
+        windowStatus: 'complete' as const,
+        complete: true,
+        completenessStatus: 'complete' as const,
+        reasons: [],
+      },
+    },
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage outcome={page} loading={false} />,
+    );
+  });
+  expect(textOf(renderer)).toContain('< 1 min');
+  expect(textOf(renderer)).not.toContain('0 min');
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Quick note',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('< 1 min');
+  expect(copy).not.toContain('0 min');
+});
