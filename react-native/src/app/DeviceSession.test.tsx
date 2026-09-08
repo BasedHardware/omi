@@ -7,7 +7,7 @@ jest.mock('../omiNative', () => ({
   isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
 }));
 
-test('connected device details show reported values and truthful unknown fields', async () => {
+test('connected device details show reported values and truthful unavailable fields', async () => {
   const snapshot = {
     bluetooth: 'poweredOn',
     devices: [
@@ -38,8 +38,9 @@ test('connected device details show reported values and truthful unknown fields'
   const output = JSON.stringify(renderer.toJSON());
   expect(output).toContain('Omi Dev Kit');
   expect(output).toContain('1.2.3');
-  expect(output).toContain('Unknown');
-  expect(output).toContain('Serial number');
+  expect(output).toContain('"Serial number",": ","Unavailable"');
+  expect(output).toContain('"Hardware",": ","Unavailable"');
+  expect(output).not.toContain('Unknown');
   await act(async () => {
     renderer.update(
       <DeviceSession

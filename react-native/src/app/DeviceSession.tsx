@@ -355,7 +355,7 @@ export function DeviceSession({
         ] as const
       ).map(([field, label]) => (
         <Text key={field} selectable style={styles.deviceMeta}>
-          {label}: {connected.information?.[field] ?? 'Unknown'}
+          {label}: {connected.information?.[field] ?? 'Unavailable'}
         </Text>
       ))}
     </View>

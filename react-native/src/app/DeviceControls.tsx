@@ -154,7 +154,7 @@ export function DeviceControls({
       <Text style={styles.deviceMeta}>
         Charging:{' '}
         {device.charging === undefined
-          ? 'Unknown'
+          ? 'Unavailable'
           : device.charging
           ? 'Charging'
           : 'Not charging'}
