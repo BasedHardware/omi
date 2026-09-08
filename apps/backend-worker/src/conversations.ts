@@ -1,4 +1,4 @@
-import { recoveredPayloadSql } from "./generation-prompt";
+import { recoveredPayloadTextKeySql } from "./generation-prompt";
 
 type StoredConversation = {
   id: number[];
@@ -82,10 +82,10 @@ export async function readConversations(
     .prepare(
       `WITH normalized AS (
          SELECT position, sender, created_at, generation_outcome, text,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
-             "chat_messages"
-           )})
-            WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
+           ${recoveredPayloadTextKeySql(
+             "chat_messages",
+             "chatSessionId"
+           )} AS session_key
          FROM chat_messages WHERE account_id = ?
        ), sessions AS (
          SELECT position, sender, created_at, generation_outcome, text,

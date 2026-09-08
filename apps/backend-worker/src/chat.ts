@@ -9,7 +9,7 @@ import {
 } from "./attachments";
 import {
   isVisibleGenerationText,
-  recoveredPayloadSql,
+  recoveredPayloadTextKeySql,
 } from "./generation-prompt";
 import {
   CHAT_CAPABILITIES,
@@ -207,10 +207,10 @@ export async function readHistory(
       `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
        FROM (
          SELECT id, text, sender, created_at, generation_outcome, position, payload,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
-             "chat_messages"
-           )})
-            WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
+           ${recoveredPayloadTextKeySql(
+             "chat_messages",
+             "chatSessionId"
+           )} AS session_key
          FROM chat_messages WHERE account_id = ?
        ) AS normalized
        WHERE (? IS NULL OR position < ?)

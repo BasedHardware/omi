@@ -82,14 +82,14 @@ async function readGenerationHistory(
        FROM chat_messages AS prior
        JOIN chat_messages AS current ON current.id = ? AND current.account_id = ?
        WHERE prior.account_id = current.account_id AND prior.position < current.position
-         AND ${recoveredPayloadJsonExtract(
+         AND ${recoveredPayloadTextKeySql(
            "prior",
            "chatSessionId"
-         )} IS ${recoveredPayloadJsonExtract("current", "chatSessionId")}
-         AND ${recoveredPayloadJsonExtract(
+         )} IS ${recoveredPayloadTextKeySql("current", "chatSessionId")}
+         AND ${recoveredPayloadTextKeySql(
            "prior",
            "appId"
-         )} IS ${recoveredPayloadJsonExtract("current", "appId")}
+         )} IS ${recoveredPayloadTextKeySql("current", "appId")}
          AND (prior.sender = 'human' OR (prior.sender = 'ai' AND prior.generation_outcome = 'completed'))
        ORDER BY prior.position DESC
        LIMIT ?`
@@ -140,11 +140,13 @@ export function recoveredPayloadSql(alias: string): string {
   return `CASE WHEN json_valid(${payload}) THEN CASE WHEN json_type(${payload}) = 'object' THEN ${payload} ELSE ${admission} END ELSE ${admission} END`;
 }
 
-function recoveredPayloadJsonExtract(
-  alias: "prior" | "current",
+export function recoveredPayloadTextKeySql(
+  alias: string,
   key: "chatSessionId" | "appId"
 ): string {
-  return `json_extract(${recoveredPayloadSql(alias)}, '$.${key}')`;
+  return `(SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
+    alias
+  )}) WHERE key = '${key}' ORDER BY id DESC LIMIT 1)`;
 }
 
 function utf8Bytes(value: string): number {

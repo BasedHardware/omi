@@ -233,6 +233,63 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("generation history uses the last duplicate chatSessionId like conversation grouping", async () => {
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "main",
+        "acct-a",
+        "human",
+        "main session words",
+        1,
+        JSON.stringify({ chatSessionId: null }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "named-prior",
+        "acct-a",
+        "human",
+        "My name is Ana",
+        2,
+        '{"chatSessionId":"wrong","chatSessionId":"session-a"}',
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "current",
+        "acct-a",
+        "human",
+        "What is my name?",
+        3,
+        JSON.stringify({ chatSessionId: "session-a" }),
+        null
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [{ role: "user", content: "My name is Ana" }],
+    });
+  });
+
   test("keeps named-session history when the current payload JSON is unreadable", async () => {
     const rows = [
       ["main", "acct-a", "human", "main session words", 1, null, null, null],
