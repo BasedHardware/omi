@@ -44,6 +44,11 @@ def _read_memory_file(path: Path) -> str:
             message=f"Memory file is not valid UTF-8: {path}",
             detail="Encode the file as UTF-8 and try again.",
         ) from None
+    except OSError:
+        raise UsageError(
+            message=f"Cannot read memory file: {path}",
+            detail="Check permissions and try again.",
+        ) from None
     if not content.strip():
         raise UsageError(
             message="Memory file is empty",

@@ -117,6 +117,12 @@ def test_memory_create_from_empty_file_is_usage_error(authed_profile, cli_runner
     assert "empty" in result.stderr.lower()
 
 
+def test_memory_create_from_directory_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    result = cli_runner.invoke(app, ["memory", "create", "--file", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "memory file" in result.stderr.lower()
+
+
 def test_memory_create_rejects_content_and_file_together(authed_profile, cli_runner, tmp_path) -> None:
     memory_file = tmp_path / "m.txt"
     memory_file.write_text("x", encoding="utf-8")
