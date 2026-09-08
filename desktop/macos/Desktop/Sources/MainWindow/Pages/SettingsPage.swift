@@ -369,6 +369,7 @@ struct SettingsContentView: View {
   @AppStorage(AIProvider.localBaseURLKey) var localLLMBaseURL: String = AIProvider.defaultLocalBaseURL
   @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
   @AppStorage(AIProvider.localVisionModelIDKey) var localLLMVisionModelID: String = ""
+  @AppStorage(AIProvider.localBackendURLKey) var localBackendURL: String = ""
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false

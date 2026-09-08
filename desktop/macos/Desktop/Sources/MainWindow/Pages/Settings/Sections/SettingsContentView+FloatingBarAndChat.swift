@@ -270,6 +270,19 @@ extension SettingsContentView {
           .foregroundColor(Ink.secondary)
       }
 
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Local Backend URL (optional)")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+
+        TextField("https://your-backend.example.com", text: $localBackendURL)
+          .textFieldStyle(.roundedBorder)
+
+        Text("Points voice transcription and memory/conversation sync at a self-hosted backend instead of api.omi.me. You still need to be signed in — the backend keeps its own Firebase auth. Leave unset to use Omi's servers. Restart the app after changing this.")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+      }
+
       Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)

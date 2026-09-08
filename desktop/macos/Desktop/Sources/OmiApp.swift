@@ -959,7 +959,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Quick toggles for screen capture and audio recording.
     // When paywalled (trial expired / usage limit hit) both render OFF — the
     // features can't run, and tapping a toggle surfaces the upgrade popup.
+    // Audio recording has its own, narrower exemption: it's also off the
+    // hook once transcription is pointed at a self-hosted backend, even
+    // without BYOK — screen capture still routes through Omi's Gemini proxy
+    // regardless, so it stays on the general paywall check.
     let paywalled = AppState.isPaywalledEffective
+    let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
@@ -975,7 +980,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: !paywalled && AssistantSettings.shared.audioRecordingMode != .off,
+      isOn: !transcriptionPaywalled && AssistantSettings.shared.audioRecordingMode != .off,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -1314,10 +1319,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // Refresh toggle states to match current runtime state. When paywalled,
     // force both OFF — the features can't run until the user upgrades.
     let paywalled = AppState.isPaywalledEffective
+    let transcriptionPaywalled = !AppState.isTranscriptionExemptFromPaywall
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
-      (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
+      (!transcriptionPaywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }
 
   func menuDidClose(_ menu: NSMenu) {

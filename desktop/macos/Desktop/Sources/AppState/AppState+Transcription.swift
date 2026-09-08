@@ -43,8 +43,9 @@ extension AppState {
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
-    // shortcuts. Refuse to start and surface the upgrade popup.
-    if blockIfPaywalled() { return }
+    // shortcuts. Refuse to start and surface the upgrade popup — unless
+    // transcription itself is exempt (BYOK, or a local backend configured).
+    if !Self.isTranscriptionExemptFromPaywall, blockIfPaywalled() { return }
 
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource

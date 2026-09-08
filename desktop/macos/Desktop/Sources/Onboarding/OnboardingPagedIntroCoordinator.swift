@@ -1347,12 +1347,14 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       """
 
     do {
+      let mode = AIProvider.resolveBridgeMode()
       let result = try await AgentClient.run(
         surface: .onboarding(),
         prompt: prompt,
-        model: ModelQoS.Claude.chat,
+        model: AIProvider.resolveModel(cloudDefault: ModelQoS.Claude.chat),
         systemPrompt:
           "You are a structured onboarding research assistant. Output only valid JSON.",
+        harnessMode: mode.nodeHarnessMode,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

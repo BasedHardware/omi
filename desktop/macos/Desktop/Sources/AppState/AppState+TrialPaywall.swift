@@ -29,6 +29,20 @@ extension AppState {
     !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
+  /// True when transcription specifically is exempt from the paywall — either
+  /// the general BYOK exemption above, or because the local provider is
+  /// active with a self-hosted backend configured (Settings' "Local Backend
+  /// URL", see `AIProvider.localBackendURLKey`), which routes voice
+  /// transcription away from Omi's Deepgram proxy entirely. Distinct from
+  /// `isPaywalledEffective`: screen capture/proactive assistants still route
+  /// through Omi's Gemini proxy regardless of this flag, so they stay gated
+  /// by the general paywall until they have their own local path.
+  nonisolated static var isTranscriptionExemptFromPaywall: Bool {
+    if !isPaywalledEffective { return true }
+    guard UserDefaults.standard.string(forKey: "chatBridgeMode") == "local" else { return false }
+    return !(UserDefaults.standard.string(forKey: AIProvider.localBackendURLKey) ?? "").isEmpty
+  }
+
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
   /// Pure so it is unit-testable: resume screen-analysis monitoring only when
   /// this fetch actually cleared the paywall (set → clear transition), the
