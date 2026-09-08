@@ -14,6 +14,7 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
+import 'package:omi/services/notifications/fcm_background_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/pages/home/page.dart';
@@ -46,6 +47,12 @@ class _FCMNotificationService implements NotificationInterface {
     await _initializeAwesomeNotifications();
     await _firebaseMessaging.getAPNSToken();
     listenForMessages();
+    // Re-register after main.dart's sync handler so chat answers get BigText in
+    // background/terminated (#4375). Runs on the next event-loop turn, still
+    // before runApp because main awaits more work after initialize().
+    Future(() {
+      FirebaseMessaging.onBackgroundMessage(omiFirebaseMessagingBackgroundHandler);
+    });
   }
 
   Future<void> _initializeAwesomeNotifications() async {
