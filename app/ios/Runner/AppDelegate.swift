@@ -316,7 +316,10 @@ final class QuickActionsIconPatcher: NSObject {
       label.trailingAnchor.constraint(equalTo: notice.view.layoutMarginsGuide.trailingAnchor, constant: -16),
       label.centerYAnchor.constraint(equalTo: notice.view.centerYAnchor),
     ])
+    // Also covers an iOS background relaunch (BLE/VoIP): nothing is drawn
+    // until the user foregrounds the app, and this is what they see then.
     window?.rootViewController = notice
+    window?.makeKeyAndVisible()
   }
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
