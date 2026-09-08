@@ -1,6 +1,7 @@
 import {FocusPressable as Pressable} from './Pressable';
 import React, {useEffect, useRef, useState} from 'react';
 import {Platform, StyleSheet, Text, TextInput, View} from 'react-native';
+import {visibleDisplayText} from '../desktopReadClient';
 
 export type TaskMutationProps = {
   onTaskToggle?: (id: string) => void;
@@ -86,7 +87,9 @@ export function TaskEditor({
     );
   }, [id, title]);
   const disabled =
-    busy || description.trim().length === 0 || description === title;
+    busy ||
+    visibleDisplayText(description).length === 0 ||
+    description === title;
   return (
     <View style={styles.editor}>
       <TextInput

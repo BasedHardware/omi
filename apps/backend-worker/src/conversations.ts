@@ -1,4 +1,7 @@
-import { recoveredPayloadTextKeySql } from "./generation-prompt";
+import {
+  recoveredPayloadTextKeySql,
+  visibleGenerationTrim,
+} from "./generation-prompt";
 
 type StoredConversation = {
   id: number[];
@@ -131,10 +134,8 @@ export async function readConversations(
   for (const recording of recordings.results) {
     conversations.push({
       id: `recording:${recording.id}`,
-      title: recording.text?.trim()
-        ? displayText(recording.text).slice(0, 80)
-        : "",
-      overview: recording.text?.trim() ? displayText(recording.text) : "",
+      title: displayText(recording.text ?? "").slice(0, 80),
+      overview: displayText(recording.text ?? ""),
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,
@@ -291,7 +292,7 @@ function boundedDisplayText(bytes: number[]): string {
 }
 
 function displayText(text: string): string {
-  const trimmed = text.trim();
+  const trimmed = visibleGenerationTrim(text);
   return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
 }
 

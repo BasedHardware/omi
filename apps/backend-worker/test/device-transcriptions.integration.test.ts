@@ -111,6 +111,44 @@ test("queued recordings stay visible without inventing a Recording title", async
   });
 });
 
+test("NEXT LINE-only recording text stays visible without inventing a Recording title", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ? WHERE session_id = ?"
+  )
+    .bind("\u0085", session.id)
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "",
+    overview: "",
+    source: "omi",
+    status: "completed",
+  });
+});
+
+test("recording titles omit leading and trailing NEXT LINE", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ? WHERE session_id = ?"
+  )
+    .bind("\u0085Recorded words\u0085", session.id)
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "Recorded words",
+    overview: "Recorded words",
+    source: "omi",
+    status: "completed",
+  });
+});
+
 test("recording conversation preserves capture provenance separately from server times", async () => {
   for (const capturedAtMs of [undefined, 0, 8640000000000000]) {
     const session = await recording(capturedAtMs);

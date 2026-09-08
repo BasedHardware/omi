@@ -147,6 +147,8 @@ test('task page edits and toggles only through handlers with pending and error r
   act(() => control(renderer, 'Open task: Prepare demo').props.onPress());
   act(() => control(renderer, 'Task description').props.onChangeText(''));
   expect(control(renderer, 'Save task description').props.disabled).toBe(true);
+  act(() => control(renderer, 'Task description').props.onChangeText('\u0085'));
+  expect(control(renderer, 'Save task description').props.disabled).toBe(true);
   act(() =>
     control(renderer, 'Task description').props.onChangeText('Revised demo'),
   );

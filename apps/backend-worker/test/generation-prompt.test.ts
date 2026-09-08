@@ -7,6 +7,7 @@ import {
   GENERATION_HISTORY_MESSAGE_LIMIT,
   isGenerationTextMimeType,
   isVisibleGenerationText,
+  visibleGenerationTrim,
 } from "../src/generation-prompt";
 import {
   admitMessage,
@@ -1626,6 +1627,8 @@ describe("composeGenerationPrompt", () => {
 
 describe("isVisibleGenerationText", () => {
   test("rejects empty and whitespace-only provider text", () => {
+    expect(visibleGenerationTrim("\u0085hello\u0085")).toBe("hello");
+    expect(visibleGenerationTrim("\u0085")).toBe("");
     expect(isVisibleGenerationText("")).toBe(false);
     expect(isVisibleGenerationText(" \t\n")).toBe(false);
     expect(isVisibleGenerationText("\u0085")).toBe(false);
