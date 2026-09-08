@@ -586,6 +586,26 @@ describe("omi tool manifest", () => {
     expect(allPolicy.toLowerCase()).not.toContain("stock plan");
   });
 
+  it("folds evidence prompt guidelines without duplicating capability bullets", () => {
+    const mergeBullets = (tool: (typeof omiToolManifest)[number]): string[] => {
+      const bullets = [...tool.capabilityDoc.bullets];
+      for (const guideline of tool.promptGuidelines ?? []) {
+        if (!bullets.includes(guideline)) bullets.push(guideline);
+      }
+      return bullets;
+    };
+    const read = omiToolManifest.find((entry) => entry.name === "read_conversation_evidence");
+    const search = omiToolManifest.find((entry) => entry.name === "search_conversation_evidence");
+    const readBullets = mergeBullets(read!);
+    const searchBullets = mergeBullets(search!);
+    expect(readBullets.filter((bullet) => /full evidence is available or required for detail/i.test(bullet))).toHaveLength(1);
+    expect(readBullets.filter((bullet) => /continue a long source/i.test(bullet))).toHaveLength(1);
+    expect(searchBullets.filter((bullet) => /earlier screen, document, attachment, or tool result/i.test(bullet))).toHaveLength(1);
+    expect(searchBullets.filter((bullet) => /offset\/nextOffset/i.test(bullet))).toHaveLength(1);
+    expect(new Set(readBullets).size).toBe(readBullets.length);
+    expect(new Set(searchBullets).size).toBe(searchBullets.length);
+  });
+
   it("requires surfaces and capabilityDoc on every manifest entry", () => {
     // spawn_background_agent is the coordinator-RPC-only entrypoint and is
     // deliberately advertised on no agent-facing surface (see sibling test).

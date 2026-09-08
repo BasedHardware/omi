@@ -180,7 +180,10 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
-import type { ConversationEvidence } from "./runtime/conversation-evidence.js";
+import {
+  conversationEvidenceRelayDiagnostic,
+  type ConversationEvidence,
+} from "./runtime/conversation-evidence.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
 import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
@@ -894,6 +897,18 @@ function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
 }
 
+function journalLocalReadToolRelayFailure(
+  canonicalToolName: string,
+): { code: string; message: string } {
+  if (canonicalToolName === "search_chat_history") {
+    return { code: "chat_history_search_failed", message: "Chat history search could not be completed" };
+  }
+  if (canonicalToolName === "read_conversation_evidence") {
+    return conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+  }
+  return conversationEvidenceRelayDiagnostic("search_conversation_evidence");
+}
+
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
   return finalizedToolResultOutcome(result);
 }
@@ -1112,16 +1127,12 @@ function startOmiToolsRelay(): Promise<string> {
                           activeOwnerId: () => currentOwnerId,
                         });
                     result = JSON.stringify(value);
-                  } catch (error) {
+                  } catch {
                     outcome = "failed";
                     // Search results and journal details are transcript data.
                     // Keep relay diagnostics shape-only even on malformed input.
-                    const code = authorized.canonicalToolName === "search_chat_history"
-                      ? "chat_history_search_failed"
-                      : authorized.canonicalToolName === "read_conversation_evidence"
-                        ? "conversation_evidence_read_failed"
-                        : "conversation_evidence_search_failed";
-                    result = relayError(code, error instanceof Error ? error.message : "Conversation evidence could not be read");
+                    const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+                    result = relayError(failure.code, failure.message);
                   }
                   const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
                   const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
@@ -2434,12 +2445,10 @@ async function main(): Promise<void> {
                   activeOwnerId: establishedOwnerId,
                 });
               result = JSON.stringify(value);
-            } catch (error) {
+            } catch {
               outcome = "failed";
-              const code = authorized.canonicalToolName === "read_conversation_evidence"
-                ? "conversation_evidence_read_failed"
-                : "conversation_evidence_search_failed";
-              result = relayError(code, error instanceof Error ? error.message : "Conversation evidence could not be read");
+              const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+              result = relayError(failure.code, failure.message);
             }
             const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
             const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);

@@ -56,8 +56,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:f08adfbf4b92518e835d98e4d4eacdfc4a2894e13b1780dda10d00c087023779"
-  static let chatFirstManifestDigest = "sha256:dec7fca87dc283dc210560f7b7401fb24b704c74c50a0a825f38e7a9c1c0b47c"
+  static let manifestDigest = "sha256:17c8cb172e775a422e0bef29841e5731a36951c5101b1a34bf8574995d1bcbb6"
+  static let chatFirstManifestDigest = "sha256:67886d42d1259b6b366909db7bc7a74e79e604ccfef1fefdcd520155477bde8b"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,

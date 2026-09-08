@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { conversationEvidenceRelayDiagnostic } from "../src/runtime/conversation-evidence.js";
 import {
   attachJournalEvidence,
   recordJournalTurn,
@@ -155,7 +156,6 @@ describe("conversation evidence tools", () => {
       result: JSON.stringify(result),
     });
 
-    const other = createRealtimeFixture();
     expect(() => fixture.kernel.authorizeExternalSurfaceToolInvocation({
       ownerId: "other-owner",
       sessionId: fixture.sessionId,
@@ -166,7 +166,6 @@ describe("conversation evidence tools", () => {
       toolInput: { query: "formation" },
       activeOwnerId: "other-owner",
     })).toThrow(/owner/i);
-    other.store.close();
     fixture.store.close();
     await Promise.resolve();
   });
@@ -378,6 +377,57 @@ describe("conversation evidence tools", () => {
     });
     fixture.adapter.resolveDeferred();
     await runPromise;
+    fixture.store.close();
+  });
+
+  it("keeps evidence tool relay failures shape-only when the kernel throws", () => {
+    const fixture = createRealtimeFixture();
+    const turnId = addTurn(fixture.store, fixture.conversationId, "relay-failure-turn", "Earlier screen");
+    const run = fixture.kernel.beginExternalSurfaceRun({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      turnId: "voice-turn-relay-failure",
+      prompt: "Read the earlier source",
+      mode: "act",
+      clientId: "realtime-hub",
+      requestId: "begin-relay-failure",
+    });
+    const invocation = fixture.kernel.authorizeExternalSurfaceToolInvocation({
+      ownerId: "owner",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: run.attemptId,
+      invocationId: "read-relay-failure",
+      toolName: "read_conversation_evidence",
+      toolInput: { evidence_id: "screen-checklist", turn_id: turnId },
+      activeOwnerId: "owner",
+    });
+    fixture.kernel.markRunToolInvocationDispatched(invocation);
+    expect(() => fixture.kernel.readAuthorizedConversationEvidence({
+      invocation,
+      toolInput: { evidence_id: "x".repeat(200), turn_id: turnId },
+      activeOwnerId: () => "owner",
+    })).toThrow(/bounded string/);
+    const readFailure = conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+    const searchFailure = conversationEvidenceRelayDiagnostic("search_conversation_evidence");
+    fixture.kernel.completeRunToolInvocation({
+      ...invocationIdentity(invocation),
+      capabilityRef: invocation.capabilityRef,
+      activeOwnerId: "owner",
+      outcome: "failed",
+      result: JSON.stringify({ ok: false, error: readFailure }),
+    });
+    expect(readToolInvocation(fixture.store, invocation.invocationId).status).toBe("failed");
+    expect(readFailure).toEqual({
+      code: "conversation_evidence_read_failed",
+      message: "Conversation evidence could not be read",
+    });
+    expect(searchFailure).toEqual({
+      code: "conversation_evidence_search_failed",
+      message: "Conversation evidence search could not be completed",
+    });
+    expect(readFailure.message).not.toMatch(/bounded string|SQLITE|no such table/i);
+    expect(searchFailure.message).not.toMatch(/bounded string|SQLITE|no such table/i);
     fixture.store.close();
   });
 });

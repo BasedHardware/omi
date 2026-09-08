@@ -1072,7 +1072,8 @@ export function searchJournalEvidence(
 
 /** Search evidence with an opaque fixed-width evidence cursor. Eight slots per
  * turn means a page can resume inside one turn without repeating or skipping
- * any of its evidence items, while the SQL scan remains bounded by turns. */
+ * any of its evidence items. Latest-revision identity is paged on turn_seq
+ * before turn_json is materialized, and the SQL scan remains bounded by turns. */
 export function searchConversationEvidence(
   store: AgentStore,
   input: SearchConversationEvidenceInput,
@@ -1094,18 +1095,28 @@ export function searchConversationEvidence(
     [input.conversationId, Date.now()],
   );
   const state = requireJournalState(store, input.conversationId);
+  // Latest-revision identity uses only turn_id/turn_seq. Ordering and the
+  // 500-turn page bound apply before turn_json is loaded. PK is
+  // (conversation_id, turn_seq); generation stays on the identity subquery.
   const rows = store.allRows(
     `SELECT turn_json
-     FROM (
-       SELECT turn_json, turn_id, turn_seq,
-              ROW_NUMBER() OVER (PARTITION BY turn_id ORDER BY turn_seq DESC) AS revision_rank
+     FROM conversation_turn_revisions
+     WHERE conversation_id = ? AND turn_seq IN (
+       SELECT MAX(turn_seq)
        FROM conversation_turn_revisions
        WHERE conversation_id = ? AND generation = ?
+       GROUP BY turn_id
+       ORDER BY MAX(turn_seq) DESC
+       LIMIT ? OFFSET ?
      )
-     WHERE revision_rank = 1
-     ORDER BY turn_seq DESC
-     LIMIT ? OFFSET ?`,
-    [input.conversationId, state.generation, MAX_CHAT_HISTORY_SEARCH_SCAN + 1, rowOffset],
+     ORDER BY turn_seq DESC`,
+    [
+      input.conversationId,
+      input.conversationId,
+      state.generation,
+      MAX_CHAT_HISTORY_SEARCH_SCAN + 1,
+      rowOffset,
+    ],
   );
   const pageRows = rows.slice(0, MAX_CHAT_HISTORY_SEARCH_SCAN);
   const matches: JournalEvidenceSearchMatch[] = [];
@@ -4071,8 +4082,19 @@ function assertIdempotentRecord(
     && existing.producingAttemptId === (input.producingAttemptId ?? null)
     && stableJson(existing.contentBlocks) === stableJson(input.contentBlocks)
     && stableJson(existing.resources) === stableJson(input.resources)
-    && stableJson(parseObjectJson(existing.metadataJson)) === stableJson(parseObjectJson(input.metadataJson));
+    && recordMetadataEquivalent(existing.metadataJson, input.metadataJson);
   if (!equivalent) throw new Error("Canonical turn or producer identity collision has different journal content");
+}
+
+/** Evidence attachment is a later revision of the same original record.
+ * A retry of that original request must still be idempotent, while a retry
+ * that changes non-evidence metadata or evidence identity/content is not. */
+function recordMetadataEquivalent(existingMetadataJson: string, incomingMetadataJson: string): boolean {
+  const comparableIncoming = preserveConversationEvidenceOnMetadataUpdate(
+    existingMetadataJson,
+    incomingMetadataJson,
+  );
+  return stableJson(parseObjectJson(existingMetadataJson)) === stableJson(parseObjectJson(comparableIncoming));
 }
 
 function canonicalJournalDelivery(

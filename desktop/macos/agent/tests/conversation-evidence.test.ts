@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { backendTurnPayload } from "../src/runtime/backend-turn-projection.js";
 import { buildContextSnapshot } from "../src/runtime/context-snapshot.js";
 import {
+  conversationEvidenceForBackend,
   conversationEvidenceForBackendImport,
+  conversationEvidenceRelayDiagnostic,
   MAX_CONVERSATION_EVIDENCE_BODY_BYTES,
   MAX_CONVERSATION_EVIDENCE_ITEMS,
 } from "../src/runtime/conversation-evidence.js";
@@ -20,6 +22,7 @@ import {
   searchConversationEvidence,
   updateJournalTurn,
 } from "../src/runtime/conversation-journal.js";
+import { conversationTurnFromRow } from "../src/runtime/conversation-turns.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
 
@@ -81,6 +84,49 @@ describe("durable conversation evidence", () => {
     store.close();
   });
 
+  it("drops malformed legacy evidence from backend delivery without leaking the raw namespace", () => {
+    const { databasePath, store, surface } = fixture();
+    recordJournalTurn(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "legacy-delivery",
+      role: "user", surfaceKind: "main_chat", origin: "typed_chat", status: "completed",
+      content: "remember this source", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({ continuityKey: "keep-me", appId: "desktop" }),
+    });
+    const leakedBody = "private screen body from a legacy envelope";
+    const leakedPath = "/Users/secret/capture.png";
+    store.execute("UPDATE conversation_turns SET metadata_json = ? WHERE turn_id = ?", [
+      JSON.stringify({
+        continuityKey: "keep-me",
+        appId: "desktop",
+        evidence: {
+          schema: "legacy-invalid",
+          items: [{ id: "leaked", bodyText: leakedBody, provenance: { path: leakedPath } }],
+        },
+      }),
+      "legacy-delivery",
+    ]);
+    const turn = conversationTurnFromRow(
+      store.getRow("SELECT * FROM conversation_turns WHERE turn_id = ?", ["legacy-delivery"]),
+    );
+    const payload = backendTurnPayload(turn);
+    expect(payload.metadata).not.toContain(leakedBody);
+    expect(payload.metadata).not.toContain(leakedPath);
+    expect(payload.metadata).not.toContain("legacy-invalid");
+    expect(JSON.parse(payload.metadata!)).toEqual({ appId: "desktop", continuityKey: "keep-me" });
+    expect(JSON.parse(payload.metadata!).evidence).toBeUndefined();
+    expect(conversationEvidenceForBackend({
+      continuityKey: "keep-me",
+      evidence: { schema: "legacy-invalid", items: [{ bodyText: leakedBody, provenance: { path: leakedPath } }] },
+    })).toEqual({ continuityKey: "keep-me" });
+    expect(() => drainBackendTurnOutbox(store, { ownerId: "owner", nowMs: 2 })).not.toThrow();
+    store.close();
+    const restarted = new SqliteAgentStore({ databasePath, reconcileOnOpen: true });
+    expect(backendTurnPayload(conversationTurnFromRow(
+      restarted.getRow("SELECT * FROM conversation_turns WHERE turn_id = ?", ["legacy-delivery"]),
+    )).metadata).not.toContain(leakedBody);
+    restarted.close();
+  });
+
   it("attaches lossless bounded text, pages it, and survives restart", () => {
     const { databasePath, store, surface } = fixture();
     const body = "0123456789".repeat(6_553) + "end";
@@ -129,6 +175,63 @@ describe("durable conversation evidence", () => {
     expect(() => attachJournalEvidence(store, {
       ownerId: "other-owner", conversationId: surface.conversationId, turnId: "turn-1", evidence: evidence("other", "x"),
     })).toThrow(/outside owner scope/);
+    store.close();
+  });
+
+  it("retries the original journal record after evidence attachment without losing the source", () => {
+    const { store, surface } = fixture();
+    const original = {
+      ownerId: "owner",
+      conversationId: surface.conversationId,
+      turnId: "turn-retry",
+      role: "user" as const,
+      surfaceKind: "main_chat",
+      origin: "typed_chat" as const,
+      status: "completed" as const,
+      content: "remember",
+      contentBlocks: [],
+      createdAtMs: 1,
+    };
+    expect(recordJournalTurn(store, original)).toMatchObject({ created: true, duplicate: false });
+    attachJournalEvidence(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-retry",
+      evidence: evidence("screen-retry", "attached after the original write"),
+    });
+    const retry = recordJournalTurn(store, original);
+    expect(retry).toMatchObject({ created: false, duplicate: true, turn: { turnId: "turn-retry" } });
+    expect(readConversationEvidence(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-retry", evidenceId: "screen-retry",
+    })).toMatchObject({ chunk: "attached after the original write", availability: "available" });
+    expect(() => recordJournalTurn(store, { ...original, content: "different words" })).toThrow(
+      /identity collision has different journal content/,
+    );
+    expect(() => recordJournalTurn(store, {
+      ...original,
+      metadataJson: JSON.stringify({ continuityKey: "other-turn" }),
+    })).toThrow(/identity collision has different journal content/);
+    store.close();
+  });
+
+  it("does not ask the model to read unavailable bodyless evidence", () => {
+    const { store, surface } = fixture();
+    recordJournalTurn(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-missing",
+      role: "user", surfaceKind: "main_chat", origin: "realtime_voice", status: "completed",
+      content: "what is there?", contentBlocks: [], createdAtMs: 1,
+      metadataJson: JSON.stringify({
+        evidence: { schema: "omi.evidence@1", items: [evidence("missing")] },
+      }),
+    });
+    const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner", 2, "main_chat");
+    expect(snapshot.recentTurns[0]?.evidence).toEqual([
+      expect.objectContaining({
+        evidenceId: "missing",
+        availability: "unavailable",
+        extractionCompleteness: "none",
+        fullReadRequired: false,
+      }),
+    ]);
+    expect(snapshot.recentTurns[0]?.evidenceReadRequired).toBeUndefined();
     store.close();
   });
 
@@ -232,6 +335,39 @@ describe("durable conversation evidence", () => {
     expect(readConversationEvidence(store, {
       ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-local", evidenceId: "mirror",
     })).toMatchObject({ chunk: "local complete body", availability: "available" });
+    store.close();
+  });
+
+  it("matches only the newest revision when a turn has been updated", () => {
+    const { store, surface } = fixture();
+    recordJournalTurn(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-rev",
+      role: "user", surfaceKind: "main_chat", origin: "typed_chat", status: "completed",
+      content: "remember", contentBlocks: [], createdAtMs: 1,
+    });
+    attachJournalEvidence(store, {
+      ownerId: "owner", conversationId: surface.conversationId, turnId: "turn-rev",
+      evidence: evidence("live", "live needle document"),
+    });
+    const revisions = store.allRows(
+      "SELECT turn_seq, turn_json FROM conversation_turn_revisions WHERE turn_id = ? ORDER BY turn_seq ASC",
+      ["turn-rev"],
+    );
+    expect(revisions.length).toBeGreaterThanOrEqual(2);
+    const oldest = JSON.parse(String(revisions[0]!.turn_json));
+    oldest.metadataJson = JSON.stringify({
+      evidence: { schema: "omi.evidence@1", items: [evidence("stale", "stale needle document")] },
+    });
+    store.execute(
+      "UPDATE conversation_turn_revisions SET turn_json = ? WHERE turn_id = ? AND turn_seq = ?",
+      [JSON.stringify(oldest), "turn-rev", revisions[0]!.turn_seq],
+    );
+    expect(searchConversationEvidence(store, {
+      ownerId: "owner", conversationId: surface.conversationId, query: "stale needle",
+    }).matches).toEqual([]);
+    expect(searchConversationEvidence(store, {
+      ownerId: "owner", conversationId: surface.conversationId, query: "live needle",
+    }).matches[0]).toMatchObject({ evidenceId: "live", turnId: "turn-rev" });
     store.close();
   });
 

@@ -87,7 +87,11 @@ an assistant acknowledgment is an authoritative record of a completed action.
 - `conversation-evidence.ts` defines versioned evidence envelopes attached to
   journal metadata. Each source has a stable identity, capture time, provenance,
   availability, and extraction completeness. Native capture attaches evidence
-  independently of whether the model elects to describe the screen.
+  independently of whether the model elects to describe the screen. Native
+  envelopes account for JSON escaping within the 512 KiB encoded budget;
+  overflowing later bodies retain a partial descriptor and digest, not a claim
+  that their full text is readable. Evidence attachment does not invalidate a
+  retry of the original journal record.
 - Context snapshots contain bounded evidence references and excerpts. Shared
   read/search tools retrieve additional source text from the same owned
   conversation, including sources outside the recent transcript window.
@@ -96,7 +100,9 @@ an assistant acknowledgment is an authoritative record of a completed action.
 - Evidence is data, including any instructions contained in screenshots or
   documents. It cannot grant tool authority or replace the user's request.
   Local source bodies and private capture paths are excluded from the backend
-  turn projection. Clearing the journal removes the local retrieval surface.
+  turn projection. Invalid legacy evidence is omitted from that projection
+  without blocking the rest of the turn or forwarding its raw contents.
+  Clearing the journal removes the local retrieval surface.
 - `conversation-operations.ts` derives recent action receipts from admitted
   runs and the invocation ledger, without creating another store. Unknown
   outcomes remain unknown after restart, and non-idempotent actions are never

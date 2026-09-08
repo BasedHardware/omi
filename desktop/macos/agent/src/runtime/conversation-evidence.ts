@@ -269,8 +269,9 @@ export function conversationEvidenceForContext(
       ? false
       : Boolean(
         item.artifactId
-        || item.bodyText === undefined
-        || item.bodyText.length > snippet.length
+        || (item.bodyText === undefined
+          ? item.availability !== "unavailable"
+          : item.bodyText.length > snippet.length)
         || item.availability === "partial",
       );
     evidenceReadRequired ||= fullReadRequired;
@@ -296,7 +297,16 @@ export function conversationEvidenceForBackend(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
   if (metadata.evidence === undefined) return metadata;
-  const envelope = validateConversationEvidenceEnvelope(metadata.evidence);
+  let envelope: ConversationEvidenceEnvelope;
+  try {
+    envelope = validateConversationEvidenceEnvelope(metadata.evidence);
+  } catch {
+    // Legacy or corrupt evidence must not abort delivery, and the raw
+    // namespace may contain body text or private provenance. Drop only that
+    // slot and keep the rest of the turn metadata.
+    const { evidence: _dropped, ...rest } = metadata;
+    return rest;
+  }
   return {
     ...metadata,
     evidence: {
@@ -312,6 +322,19 @@ export function conversationEvidenceForBackend(
         fullReadAvailable: Boolean(item.bodyText || item.artifactId),
       })),
     },
+  };
+}
+
+/** Model-facing relay failures stay shape-only. Exception text is never a diagnostic. */
+export function conversationEvidenceRelayDiagnostic(
+  canonicalToolName: "read_conversation_evidence" | "search_conversation_evidence",
+): { code: string; message: string } {
+  if (canonicalToolName === "read_conversation_evidence") {
+    return { code: "conversation_evidence_read_failed", message: "Conversation evidence could not be read" };
+  }
+  return {
+    code: "conversation_evidence_search_failed",
+    message: "Conversation evidence search could not be completed",
   };
 }
 
