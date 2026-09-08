@@ -499,14 +499,61 @@ describe("device session ingest", () => {
       { ...env, ATTACHMENTS: undefined }
     );
     expect(missingR2.status).toBe(503);
+    expect(missingR2.headers.get("retry-after")).toBeNull();
     const missingR2Body = (await missingR2.json()) as {
       error: { code: string; retryable: boolean; action: string };
     };
     expect(missingR2Body).toEqual({
       error: {
         code: "service_unavailable",
-        retryable: true,
-        action: "retry",
+        retryable: false,
+        action: "none",
+      },
+    });
+    const missingR2Audio = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/audio`,
+      {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: JSON.stringify({
+          chunks: [{ chunkIndex: 0, bytesBase64: btoa("abc") }],
+        }),
+      },
+      { ...env, ATTACHMENTS: undefined }
+    );
+    expect(missingR2Audio.status).toBe(503);
+    expect(missingR2Audio.headers.get("retry-after")).toBeNull();
+    expect((await missingR2Audio.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    const missingR2Complete = await fetchWorker(
+      `/v1/device-sessions/${created.session.id}/complete`,
+      { method: "POST", headers: authenticatedHeaders },
+      { ...env, ATTACHMENTS: undefined }
+    );
+    expect(missingR2Complete.status).toBe(503);
+    expect((await missingR2Complete.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    const missingR2List = await fetchWorker(
+      "/v1/device-sessions",
+      { headers: authenticatedHeaders },
+      { ...env, ATTACHMENTS: undefined }
+    );
+    expect(missingR2List.status).toBe(503);
+    expect((await missingR2List.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
       },
     });
 

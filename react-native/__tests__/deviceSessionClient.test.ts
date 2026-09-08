@@ -182,6 +182,32 @@ test('fail-closes when the worker is unavailable', async () => {
   ).rejects.toBeInstanceOf(DeviceSessionBackendError);
 });
 
+test('nested non-retryable capture store 503s are not transient', async () => {
+  await expect(
+    openDeviceSession(
+      backend(() => ({
+        status: 503,
+        body: JSON.stringify({
+          error: {
+            code: 'service_unavailable',
+            retryable: false,
+            action: 'none',
+          },
+        }),
+      })),
+      {
+        captureId: '11111111-2222-4333-8444-555555555555',
+        deviceId: 'omi-1',
+        codec: 21,
+      },
+    ),
+  ).rejects.toMatchObject({
+    status: 503,
+    backendCode: 'service_unavailable',
+    retryable: false,
+  });
+});
+
 test('does not treat nested non-retryable capture 503s as transient', async () => {
   await expect(
     openDeviceSession(
@@ -236,6 +262,11 @@ test('does not treat nested non-retryable capture 503s as transient', async () =
   ).toBe(true);
   expect(
     isTransientDeviceSessionError(
+      new DeviceSessionBackendError(503, 'service_unavailable', false),
+    ),
+  ).toBe(false);
+  expect(
+    isTransientDeviceSessionError(
       new DeviceSessionBackendError(503, 'unknown'),
     ),
   ).toBe(true);
@@ -267,6 +298,16 @@ test('does not treat nested non-retryable capture 503s as transient', async () =
   expect(
     deviceCaptureDoorClosed(
       new DeviceSessionBackendError(503, 'service_unavailable', true),
+    ),
+  ).toBe(false);
+  expect(
+    deviceCaptureDoorClosed(
+      new DeviceSessionBackendError(503, 'service_unavailable', false),
+    ),
+  ).toBe(true);
+  expect(
+    deviceCaptureDoorClosed(
+      new DeviceSessionBackendError(401, 'unknown', false),
     ),
   ).toBe(false);
   expect(deviceCaptureDoorClosed(new TypeError('Open response lost'))).toBe(

@@ -615,8 +615,9 @@ export async function handleDeviceSessionOpen(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -640,8 +641,9 @@ export async function handleDeviceSessionAudio(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 2_097_152);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -676,8 +678,9 @@ export async function handleDeviceSessionComplete(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const outcome = await completeDeviceSession(
     db,
     context.get("accountId"),
@@ -696,8 +699,9 @@ export async function handleDeviceSessionList(
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
   const db = context.env.DB;
-  if (r2 === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   return json({
     sessions: await listDeviceSessions(db, context.get("accountId")),
   });

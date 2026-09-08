@@ -259,7 +259,8 @@ export function deviceCaptureDoorClosed(error: unknown): boolean {
   if (error instanceof DeviceSessionBackendError) {
     return (
       error.backendCode === 'capture_ownership_unavailable' ||
-      error.backendCode === 'development_backend_unsupported'
+      error.backendCode === 'development_backend_unsupported' ||
+      (error.status >= 500 && !error.retryable)
     );
   }
   if (error === null || typeof error !== 'object') {
