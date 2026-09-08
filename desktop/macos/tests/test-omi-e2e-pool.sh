@@ -86,17 +86,22 @@ assert_contains "$status" "held     lane-b ($WT_B" "status shows holder b"
 
 # ── release: only the holder; then the slot is free again ─────────────────
 if "$POOL" release --worktree "$WT_C" --slot 2 >/dev/null 2>&1; then fail "a non-holder must not release a live lease"; fi
-"$POOL" release --quiet --worktree "$WT_B"
+# The default slot form resolves the caller worktree too; a foreign caller
+# must not be able to free a live lease by naming only its slot.
+if out="$(OMI_E2E_POOL_WORKTREE="$WT_C" "$POOL" release --slot 1 2>&1)"; then fail "a foreign default caller must not release a live lease"; fi
+assert_contains "$out" "Refusing to release someone else's lease" "foreign default release explains ownership"
+assert_contains "$out" "$WT_C" "foreign default release names the caller worktree"
+OMI_E2E_POOL_WORKTREE="$WT_B" "$POOL" release --quiet --slot 2
 [ ! -f "$WT_B/.dev/e2e-pool.env" ] || fail "release must remove the worktree env file"
 assert_eq "$("$POOL" acquire --quiet --worktree "$WT_C" --holder lane-c)" "2" "released slot is reusable"
-"$POOL" release --quiet --slot 2
+OMI_E2E_POOL_WORKTREE="$WT_C" "$POOL" release --quiet --slot 2
 "$POOL" release --quiet --worktree "$WT_B" >/dev/null   # nothing held: not an error
 
 # ── zero-padded --slot values address the canonical slot ───────────────────
 assert_eq "$("$POOL" acquire --quiet --worktree "$WT_C" --slot 02)" "2" "--slot 02 canonicalizes to slot 2"
 [ -f "$OMI_E2E_POOL_DIR/slots/2/lease" ] || fail "--slot 02 must lease the canonical slots/2 directory"
 [ ! -e "$OMI_E2E_POOL_DIR/slots/02" ] || fail "no padded slot directory may be created"
-"$POOL" release --quiet --slot 02
+OMI_E2E_POOL_WORKTREE="$WT_C" "$POOL" release --quiet --slot 02
 [ ! -f "$OMI_E2E_POOL_DIR/slots/2/lease" ] || fail "--slot 02 must release canonical slot 2"
 
 # ── liveness: a vanished worktree gives its slot up ───────────────────────
@@ -114,10 +119,13 @@ rm -rf "$WT_B/.dev"
 status="$("$POOL" status)"
 assert_contains "$status" "DEFUNCT  lane-b" "a deleted pool env file shows as defunct"
 assert_contains "$status" "no longer holds the pool env file" "the missing-env reason names the worktree"
+# A defunct lease remains reclaimable by another caller; only live ownership is
+# protected by the release guard.
+OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 1
 assert_eq "$("$POOL" acquire --quiet --worktree "$WT_A" --holder lane-a)" "1" "a deleted-env lease is reclaimable"
 
 # ── liveness: a dead holder pid gives its slot up ─────────────────────────
-"$POOL" release --quiet --slot 1
+OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 1
 sleep 0.2 &
 dead_pid=$!
 wait "$dead_pid"
@@ -137,28 +145,28 @@ assert_contains "$("$POOL" status)" "past the 3600s backstop" "stale heartbeat i
 assert_contains "$("$POOL" status)" "held     lane-a" "env touches the heartbeat"
 
 # ── isolated auth mode is persisted per slot and shapes the env ───────────
-"$POOL" release --quiet --slot 1
+OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 1
 "$POOL" acquire --quiet --worktree "$WT_A" --auth isolated >/dev/null
 env_out="$("$POOL" env --worktree "$WT_A")"
 assert_contains "$env_out" "export OMI_SKIP_AUTH_SEED='1'" "isolated slot skips the Omi Dev auth clone"
 assert_contains "$env_out" "export OMI_SKIP_REWIND_SEED='1'" "isolated slot skips the Rewind clone"
-"$POOL" release --quiet --slot 1
+OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 1
 "$POOL" acquire --quiet --worktree "$WT_B" >/dev/null
 assert_contains "$("$POOL" env --worktree "$WT_B")" "OMI_SKIP_AUTH_SEED" "auth mode sticks to the slot, not the holder"
 assert_contains "$("$POOL" status)" "auth=isolated" "status shows the slot auth mode"
 if "$POOL" acquire --quiet --worktree "$WT_B" --auth bogus >/dev/null 2>&1; then fail "auth mode must be validated"; fi
-"$POOL" release --quiet --slot 1
+OMI_E2E_POOL_WORKTREE="$WT_B" "$POOL" release --quiet --slot 1
 
 # ── identity is pinned at slot creation; a later override does not move it ─
 out="$(OMI_E2E_POOL_SIGN_IDENTITY="Apple Development: Someone" "$POOL" acquire --worktree "$WT_A" 2>&1)"
 assert_contains "$out" "WARNING slot 1 is pinned" "identity change is refused loudly"
 assert_contains "$("$POOL" env --worktree "$WT_A")" "OMI_SIGN_IDENTITY='Omi Local Dev Signing'" "pinned identity survives"
-"$POOL" release --quiet --slot 1
+OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 1
 # Slot 3 has never been created: growing the pool is how a never-used slot appears.
 fresh="$(OMI_E2E_POOL_SIZE=3 OMI_E2E_POOL_SIGN_IDENTITY="Apple Development: Someone" "$POOL" acquire --quiet --worktree "$WT_A" --slot 3)"
 assert_eq "$fresh" "3"
 assert_contains "$(OMI_E2E_POOL_SIZE=3 "$POOL" env --worktree "$WT_A")" "OMI_SIGN_IDENTITY='Apple Development: Someone'" "a fresh slot pins the requested identity"
-OMI_E2E_POOL_SIZE=3 "$POOL" release --quiet --slot 3
+OMI_E2E_POOL_SIZE=3 OMI_E2E_POOL_WORKTREE="$WT_A" "$POOL" release --quiet --slot 3
 
 # ── run: acquires, exports, and execs the command in one step ─────────────
 # shellcheck disable=SC2016
