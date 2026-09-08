@@ -381,7 +381,9 @@ export function ConversationsPage({
                   {selected.capturedAtMs !== undefined && (
                     <Text style={styles.conversationDetailField}>
                       Captured (device time) ·{' '}
-                      {new Date(selected.capturedAtMs).toLocaleString()}
+                      {formatConversationDate(
+                        new Date(selected.capturedAtMs).toISOString(),
+                      )}
                     </Text>
                   )}
                   <Text style={styles.conversationDetailField}>

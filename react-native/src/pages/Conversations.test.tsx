@@ -516,3 +516,60 @@ test('conversation durations under a minute do not claim 0 min', () => {
   expect(copy).toContain('< 1 min');
   expect(copy).not.toContain('0 min');
 });
+
+test('conversation capture time uses the same clock as Started and not 1970', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const expected = clockLabel(older.getTime(), Date.now());
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:captured-one',
+    title: 'Device capture',
+    summary: 'Recorded on the wearable.',
+    searchableText: 'Device capture\nRecorded on the wearable.',
+    createdAt: older.toISOString(),
+    updatedAt: older.toISOString(),
+    startedAt: older.toISOString(),
+    finishedAt: older.toISOString(),
+    capturedAtMs: older.getTime(),
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Device capture',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Captured (device time)');
+  expect(copy).toContain(expected);
+  expect(copy).not.toContain('1970');
+});
