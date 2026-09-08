@@ -146,8 +146,8 @@ export async function connectAndListen(
   let characteristics: any[] = [];
   if (typeof peripheral.discoverSomeServicesAndCharacteristicsAsync === 'function') {
     const found = await peripheral.discoverSomeServicesAndCharacteristicsAsync(
-      [OMI_SERVICE_UUID],
-      [AUDIO_DATA_UUID]
+      [asUuid(OMI_SERVICE_UUID)],
+      [asUuid(AUDIO_DATA_UUID)]
     );
     characteristics = found.characteristics ?? [];
   } else {
