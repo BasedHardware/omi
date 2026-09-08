@@ -421,25 +421,30 @@ export function SettingsPage({
           </Text>
         ) : (
           <SettingRow
-            action={() => {
-              const backend = omiBackend;
-              if (backend === undefined || backend === null) {
-                return;
-              }
-              runAction('recording', () =>
-                setStoreRecordingPermission(
-                  backend,
-                  !snapshot.storeRecordingPermission,
-                ),
-              ).catch(() => undefined);
-            }}
+            action={
+              privacyWritesAvailable.recording
+                ? () => {
+                    const backend = omiBackend;
+                    if (backend === undefined || backend === null) {
+                      return;
+                    }
+                    runAction('recording', () =>
+                      setStoreRecordingPermission(
+                        backend,
+                        !snapshot.storeRecordingPermission,
+                      ),
+                    ).catch(() => undefined);
+                  }
+                : undefined
+            }
             actionLabel={
-              snapshot.storeRecordingPermission
-                ? 'Turn off recording storage'
-                : 'Turn on recording storage'
+              privacyWritesAvailable.recording
+                ? snapshot.storeRecordingPermission
+                  ? 'Turn off recording storage'
+                  : 'Turn on recording storage'
+                : undefined
             }
             busy={pending === 'recording'}
-            disabled={!privacyWritesAvailable.recording}
             copy={
               snapshot.storeRecordingPermission
                 ? 'Cloud recording storage is on.'
@@ -455,7 +460,7 @@ export function SettingsPage({
         ) : (
           <SettingRow
             action={
-              snapshot.trainingOptedIn
+              snapshot.trainingOptedIn || !privacyWritesAvailable.training
                 ? undefined
                 : () => {
                     const backend = omiBackend;
@@ -467,9 +472,12 @@ export function SettingsPage({
                     ).catch(() => undefined);
                   }
             }
-            actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
+            actionLabel={
+              snapshot.trainingOptedIn || !privacyWritesAvailable.training
+                ? undefined
+                : 'Opt in'
+            }
             busy={pending === 'training'}
-            disabled={!privacyWritesAvailable.training}
             copy={
               snapshot.trainingOptedIn
                 ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
@@ -485,22 +493,27 @@ export function SettingsPage({
           </Text>
         ) : (
           <SettingRow
-            action={() => {
-              const backend = omiBackend;
-              if (backend === undefined || backend === null) {
-                return;
-              }
-              runAction('sync', () =>
-                setPrivateCloudSync(backend, !snapshot.privateCloudSync),
-              ).catch(() => undefined);
-            }}
+            action={
+              privacyWritesAvailable.sync
+                ? () => {
+                    const backend = omiBackend;
+                    if (backend === undefined || backend === null) {
+                      return;
+                    }
+                    runAction('sync', () =>
+                      setPrivateCloudSync(backend, !snapshot.privateCloudSync),
+                    ).catch(() => undefined);
+                  }
+                : undefined
+            }
             actionLabel={
-              snapshot.privateCloudSync
-                ? 'Turn off private cloud sync'
-                : 'Turn on private cloud sync'
+              privacyWritesAvailable.sync
+                ? snapshot.privateCloudSync
+                  ? 'Turn off private cloud sync'
+                  : 'Turn on private cloud sync'
+                : undefined
             }
             busy={pending === 'sync'}
-            disabled={!privacyWritesAvailable.sync}
             copy={
               snapshot.privateCloudSync
                 ? 'Private cloud sync is on.'

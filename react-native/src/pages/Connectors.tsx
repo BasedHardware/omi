@@ -261,31 +261,35 @@ export function ConnectorsPage({
                           <Text style={styles.cloudRowMeta}>{meta}</Text>
                         )}
                       </View>
-                      <FocusPressable
-                        accessibilityLabel={
-                          app.enabled
-                            ? `Remove ${app.name}`
-                            : `Install ${app.name}`
-                        }
-                        accessibilityRole="button"
-                        disabled={pendingId !== null || !writesAvailable}
-                        onPress={() => {
-                          setEnabled(app, !app.enabled).catch(() => undefined);
-                        }}
-                        style={({pressed}) => [
-                          styles.cloudAction,
-                          pressed && styles.pressed,
-                        ]}>
-                        <Text style={styles.cloudActionText}>
-                          {pendingId === app.id
-                            ? app.enabled
-                              ? 'Removing…'
-                              : 'Installing…'
-                            : app.enabled
-                            ? 'Remove'
-                            : 'Install'}
-                        </Text>
-                      </FocusPressable>
+                      {writesAvailable && (
+                        <FocusPressable
+                          accessibilityLabel={
+                            app.enabled
+                              ? `Remove ${app.name}`
+                              : `Install ${app.name}`
+                          }
+                          accessibilityRole="button"
+                          disabled={pendingId !== null}
+                          onPress={() => {
+                            setEnabled(app, !app.enabled).catch(
+                              () => undefined,
+                            );
+                          }}
+                          style={({pressed}) => [
+                            styles.cloudAction,
+                            pressed && styles.pressed,
+                          ]}>
+                          <Text style={styles.cloudActionText}>
+                            {pendingId === app.id
+                              ? app.enabled
+                                ? 'Removing…'
+                                : 'Installing…'
+                              : app.enabled
+                              ? 'Remove'
+                              : 'Install'}
+                          </Text>
+                        </FocusPressable>
+                      )}
                     </View>
                   );
                 })

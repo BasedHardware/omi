@@ -635,11 +635,9 @@ test('nested non-retryable Apps enable writes latch Install', async () => {
   expect(textOf(renderer)).toContain(
     'Apps are not available from the selected Omi service yet.',
   );
-  expect(
-    renderer.root.find(
-      node => node.props.accessibilityLabel === 'Install Owned app',
-    ).props.disabled,
-  ).toBe(true);
+  expect(labelsOf(renderer)).not.toContain('Install Owned app');
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
 });
 
 test('nested non-retryable training opt-in writes latch Opt in', async () => {
@@ -684,10 +682,10 @@ test('nested non-retryable training opt-in writes latch Opt in', async () => {
   expect(textOf(renderer)).toContain(
     'This account setting is not available from the selected Omi service yet.',
   );
-  expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Opt in').props
-      .disabled,
-  ).toBe(true);
+  expect(labelsOf(renderer)).not.toContain('Opt in');
+  expect(textOf(renderer)).toContain(
+    'This account has not opted in to training data.',
+  );
 });
 
 test('omitted training opt-in 503 still keeps Opt in live', async () => {

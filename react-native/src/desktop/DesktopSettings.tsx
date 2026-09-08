@@ -605,7 +605,8 @@ export function DesktopSettings({
         action={
           session === 'ready' &&
           backend != null &&
-          typeof account?.storeRecordingPermission === 'boolean'
+          typeof account?.storeRecordingPermission === 'boolean' &&
+          privacyWritesAvailable.recording
             ? () => {
                 runAction(
                   async () => {
@@ -622,7 +623,6 @@ export function DesktopSettings({
             : undefined
         }
         actionLabel="Update"
-        disabled={!privacyWritesAvailable.recording}
       />
       <Row
         copy={
@@ -641,7 +641,8 @@ export function DesktopSettings({
         action={
           session === 'ready' &&
           backend != null &&
-          typeof account?.privateCloudSync === 'boolean'
+          typeof account?.privateCloudSync === 'boolean' &&
+          privacyWritesAvailable.sync
             ? () => {
                 runAction(
                   async () => {
@@ -658,7 +659,6 @@ export function DesktopSettings({
             : undefined
         }
         actionLabel="Update"
-        disabled={!privacyWritesAvailable.sync}
       />
       <Row
         copy={
@@ -676,7 +676,8 @@ export function DesktopSettings({
         action={
           session === 'ready' &&
           backend != null &&
-          account?.trainingOptedIn === false
+          account?.trainingOptedIn === false &&
+          privacyWritesAvailable.training
             ? () => {
                 runAction(
                   async () => {
@@ -690,7 +691,6 @@ export function DesktopSettings({
             : undefined
         }
         actionLabel="Opt in"
-        disabled={!privacyWritesAvailable.training}
       />
     </>
   );
