@@ -8,3 +8,7 @@ Shared Omi device BLE constants + packet framing.
 ```ts
 import { AUDIO_DATA_UUID, stripPacketHeader, OmiDeviceSession } from '@basedhardware/omi-device';
 ```
+
+### Release ble resources when audio setup fails
+
+Failed BLE setup cleans up the acquired peripheral and audio listener. The returned disconnect operation is idempotent, including concurrent calls. Run `bun test` for the hardware-free suite and `bunx tsc --noEmit` for type checking; BLE tests are also selected by repository preflight.
