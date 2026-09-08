@@ -496,7 +496,7 @@ async function readMessage(
     .bind(id, accountId)
     .first<StoredMessage>();
   if (row === null) return null;
-  return parseStoredMessage(row);
+  return parseStoredMessage(row)?.message ?? null;
 }
 
 async function nextPosition(

@@ -1535,9 +1535,9 @@ describe("worker request contract", () => {
     const body = (await response.json()) as unknown;
     const envelope = wireToChatHistoryEnvelope(body);
     expect(envelope).not.toBeNull();
-    expect(envelope!.messages.map((message) => message.id)).toEqual([
-      "readable-human",
-      "broken-payload",
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored beside unreadable json",
     ]);
     expect(envelope!.messages[0]!.attachments).toEqual([]);
     expect(envelope!.messages[1]!.attachments).toEqual([

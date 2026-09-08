@@ -394,6 +394,8 @@ Cloud Linux after `e64da487b6`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `897745b1b2`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm@sha256:882236b897e39051d2368c5ccc6cda944904723506b2dfc97f2a8f5bc9afa382`) and dry-run deploy (`--dry-run: exiting now.`). Worker history GET of a column-reconstructed row loads already-bound `chat_attachments` instead of returning an empty attachment list. Staged rows stay omitted. Readable payload stays payload-authoritative. Orphan assistant rows still 503. GET still advertises `CHAT_CAPABILITIES` when R2 is unbound. Composer still has no attach UI. This does not invent an attachment producer.
 
+Cloud Linux after `743bf8af58`: GitHub `Validate backend worker` typecheck failed because `readMessage` returned `{message, fromColumns}` as if it were a `ChatMessage`. Admit replay and `completeGeneration` now unwrap the stored message so assistant `chatSessionId` copies from the human row. History GET bound-attachment coverage is unchanged. This does not invent a chat.write producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

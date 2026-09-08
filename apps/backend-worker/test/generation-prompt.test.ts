@@ -783,6 +783,50 @@ describe("completeGeneration visibility", () => {
     expect(await countAssistantRows(db, "acct-a")).toBe(1);
   });
 
+  test("completeGeneration copies the human session onto the assistant", async () => {
+    const human = {
+      id: "msg-session",
+      text: "hello",
+      sender: "human",
+      type: "text",
+      createdAt: 1,
+      updatedAt: 1,
+      chatSessionId: "named-session",
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      generationOutcome: null,
+      revision: "1",
+      attachments: [],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(
+        human.id,
+        "acct-a",
+        human.text,
+        human.createdAt,
+        JSON.stringify(human)
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(human.id, "acct-a", "op-session", "{}", "gen-session")
+      .run();
+    const event = await completeGeneration(db, "acct-a", "gen-session", "ok");
+    expect(event.kind).toBe("done");
+    if (event.kind !== "done") throw new Error("expected done event");
+    expect(event.message.chatSessionId).toBe("named-session");
+    expect(event.message).not.toHaveProperty("fromColumns");
+  });
+
   test("empty text still requires admission", async () => {
     await expect(
       completeGeneration(db, "acct-a", "gen-missing", "")
