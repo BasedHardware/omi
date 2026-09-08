@@ -537,8 +537,7 @@ export async function handleAttachmentStage(
   context: CoreContext
 ): Promise<Response> {
   const r2 = context.env.ATTACHMENTS;
-  if (r2 === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined) return backendError("service_unavailable", "none", 503);
   const parsed = await readBoundedJson(context.req.raw, 65_536);
   if (parsed.kind === "too_large")
     return backendError("attachment_too_large", "edit_request", 413);
@@ -552,7 +551,7 @@ export async function handleAttachmentStage(
     return backendError("service_unavailable", "retry", 503, true);
   const signedConfig = parseSignedUploadConfig(context.env);
   if (signedConfig === null)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "none", 503);
   const signer = makeR2UploadUrlSigner(signedConfig);
   const result = await stageAttachment(
     db,
@@ -573,8 +572,10 @@ export async function handleAttachmentComplete(
   const r2 = context.env.ATTACHMENTS;
   const ingest = context.env.ATTACHMENT_INGEST;
   const db = context.env.DB;
-  if (r2 === undefined || ingest === undefined || db === undefined)
+  if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
+  if (r2 === undefined || ingest === undefined)
+    return backendError("service_unavailable", "none", 503);
   const attachmentId = context.req.param("id");
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(

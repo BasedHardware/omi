@@ -392,11 +392,17 @@ describe("attachment staging route fail-closed behavior", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
     const body = (await response.json()) as {
-      error: { code: string; retryable: boolean };
+      error: { code: string; retryable: boolean; action: string };
     };
-    expect(body.error.code).toBe("service_unavailable");
-    expect(body.error.retryable).toBe(true);
+    expect(body).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
   });
 
   test("stages successfully when Queue binding is absent and sends no queue message (no queue send at staging)", async () => {
@@ -434,11 +440,17 @@ describe("attachment staging route fail-closed behavior", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
     const body = (await response.json()) as {
-      error: { code: string; retryable: boolean };
+      error: { code: string; retryable: boolean; action: string };
     };
-    expect(body.error.code).toBe("service_unavailable");
-    expect(body.error.retryable).toBe(true);
+    expect(body).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
 
     const row = await d1Mock
       .prepare("SELECT id FROM chat_attachments WHERE op_id = ?")
@@ -463,6 +475,14 @@ describe("attachment staging route fail-closed behavior", () => {
     );
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
     const row = await d1Mock
       .prepare("SELECT id FROM chat_attachments WHERE op_id = ?")
       .bind("op-empty-r2-account")
@@ -742,6 +762,62 @@ describe("attachment completion + queue ingest vertical slice", () => {
       "00000000-0000-0000-0000-000000000000"
     );
     expect(response.status).toBe(404);
+  });
+
+  test("missing completion attachments is nested non-retryable without inventing ingest", async () => {
+    const staged = await stageAndReturn("op-complete-no-r2");
+    const response = await handler.fetch(
+      new Request(
+        `https://worker.test/v1/chat-attachments/${staged.attachment.id}/complete`,
+        {
+          method: "POST",
+          headers: {
+            ...authenticatedHeaders,
+            "content-type": "application/json",
+          },
+        }
+      ),
+      { ...env, ATTACHMENTS: undefined } as never,
+      executionContext as never
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    expect(await attachmentState(staged.attachment.id)).toBe("staged");
+  });
+
+  test("missing completion ingest queue is nested non-retryable without inventing ingest", async () => {
+    const staged = await stageAndReturn("op-complete-no-queue");
+    const response = await handler.fetch(
+      new Request(
+        `https://worker.test/v1/chat-attachments/${staged.attachment.id}/complete`,
+        {
+          method: "POST",
+          headers: {
+            ...authenticatedHeaders,
+            "content-type": "application/json",
+          },
+        }
+      ),
+      { ...env, ATTACHMENT_INGEST: undefined } as never,
+      executionContext as never
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBeNull();
+    expect((await response.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: false,
+        action: "none",
+      },
+    });
+    expect(await attachmentState(staged.attachment.id)).toBe("staged");
   });
 
   test("complete fails for an absent R2 object (never uploaded) and leaves state staged", async () => {
