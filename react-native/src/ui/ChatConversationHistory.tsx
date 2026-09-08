@@ -71,19 +71,35 @@ export function ChatConversationHistory({
               </Text>
             )
           ) : (
-            result.messages.map(message => (
-              <View key={message.id}>
-                <Text selectable style={styles.conversationTranscriptText}>
-                  {`${message.sender === 'human' ? 'You' : 'Omi'} · ${
-                    message.text
-                  }`}
-                </Text>
-                <Text style={styles.conversationDetailField}>
-                  {chatClockLabel(message.createdAt, Date.now()) ||
-                    'Time unavailable'}
-                </Text>
-              </View>
-            ))
+            result.messages.map(message => {
+              const sender = message.sender === 'human' ? 'You' : 'Omi';
+              const body =
+                message.generationOutcome === 'failed'
+                  ? message.generationRetryable === true
+                    ? 'Response failed. Try again.'
+                    : 'Response failed.'
+                  : message.generationOutcome === 'cancelled' &&
+                    message.text === ''
+                  ? 'Response stopped'
+                  : message.text;
+              return (
+                <View key={message.id}>
+                  <Text selectable style={styles.conversationTranscriptText}>
+                    {`${sender} · ${body}`}
+                  </Text>
+                  {message.generationOutcome === 'cancelled' &&
+                  message.text !== '' ? (
+                    <Text style={styles.conversationDetailField}>
+                      Response stopped
+                    </Text>
+                  ) : null}
+                  <Text style={styles.conversationDetailField}>
+                    {chatClockLabel(message.createdAt, Date.now()) ||
+                      'Time unavailable'}
+                  </Text>
+                </View>
+              );
+            })
           )}
         </>
       )}

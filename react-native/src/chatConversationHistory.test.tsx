@@ -29,6 +29,7 @@ function historyResponse(
     text: string;
     sender: 'human' | 'ai';
     createdAt?: number;
+    generationOutcome?: 'completed' | 'cancelled' | null;
   }>,
   page: {olderCursor: string | null; hasOlder: boolean} = {
     olderCursor: null,
@@ -42,7 +43,9 @@ function historyResponse(
       messages: messages.map(message => ({
         ...message,
         createdAt: message.createdAt ?? Date.parse('2026-09-07T12:00:00.000Z'),
-        generationOutcome: message.sender === 'ai' ? 'completed' : null,
+        generationOutcome:
+          message.generationOutcome ??
+          (message.sender === 'ai' ? 'completed' : null),
         type: 'text',
         updatedAt: message.createdAt ?? Date.parse('2026-09-07T12:00:00.000Z'),
         chatSessionId: null,
@@ -585,4 +588,57 @@ test('a zero conversation-detail chat timestamp says Time unavailable instead of
   expect(textOf(renderer)).toContain('You · undated prompt');
   expect(textOf(renderer)).toContain('Time unavailable');
   expect(textOf(renderer)).not.toContain('1970');
+});
+
+test('a cancelled conversation-detail chat message says Response stopped instead of a completed blank answer', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-stopped',
+        text: 'stopped prompt',
+        sender: 'human',
+      },
+      {
+        id: 'ai-stopped',
+        text: '',
+        sender: 'ai',
+        generationOutcome: 'cancelled',
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · stopped prompt');
+  expect(textOf(renderer)).toContain('Omi · Response stopped');
+});
+
+test('a cancelled conversation-detail chat message with text still says Response stopped', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'ai-partial',
+        text: 'partial answer',
+        sender: 'ai',
+        generationOutcome: 'cancelled',
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('Omi · partial answer');
+  expect(textOf(renderer)).toContain('Response stopped');
 });
