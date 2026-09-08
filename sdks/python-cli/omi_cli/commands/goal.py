@@ -84,18 +84,33 @@ def create_goal(
     current_value: Optional[float] = typer.Option(None, "--current", help="Current progress value."),
     min_value: Optional[float] = typer.Option(None, "--min", help="Minimum scale value."),
     max_value: Optional[float] = typer.Option(None, "--max", help="Maximum scale value."),
-    unit: Optional[str] = typer.Option(None, "--unit", help="Unit label (e.g. 'users', 'points')."),
+    unit: Optional[str] = typer.Option(
+        None, "--unit", help="Unit label (e.g. 'users', 'points'). Requires a metric option such as --target."
+    ),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
+    if unit is not None and not has_metrics:
+        # The backend only persists ``unit`` on metric-backed goals; sending it on a
+        # qualitative goal would silently drop it, so reject the combination instead.
+        raise UsageError(
+            message="--unit requires a metric goal",
+            detail="Add a metric option such as --target, or drop --unit to create a qualitative goal.",
+        )
+    if has_metrics and target_value is None:
+        # ``--target`` was historically required for every metric goal. Partial metric
+        # invocations must not fabricate a target-less scale goal, so keep rejecting them.
+        raise UsageError(
+            message="--target is required when using metric options",
+            detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
+        )
     body: dict[str, object] = {"title": title}
     if unit is not None:
         body["unit"] = unit
-    has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
     if has_metrics:
         # Metric goal: keep the historical defaults for options the caller did not set.
         body["goal_type"] = (goal_type if goal_type is not None else GoalType.scale).value
-        if target_value is not None:
-            body["target_value"] = target_value
+        body["target_value"] = target_value
         body["current_value"] = current_value if current_value is not None else 0
         body["min_value"] = min_value if min_value is not None else 0
         body["max_value"] = max_value if max_value is not None else 10
