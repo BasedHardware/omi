@@ -91,6 +91,10 @@ class ServerError(CliError):
     exit_code = EXIT_SERVER
 
 
+class TransportError(ServerError):
+    """Exhausted HTTP transport attempts, distinct from an HTTP error response."""
+
+
 class NotFoundError(CliError):
     exit_code = EXIT_NOT_FOUND
 

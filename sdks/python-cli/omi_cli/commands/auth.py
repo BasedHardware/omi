@@ -12,7 +12,7 @@ from omi_cli.auth import api_key as api_key_auth
 from omi_cli.auth import oauth as oauth_auth
 from omi_cli.auth.store import clear_credentials
 from omi_cli.client import OmiClient
-from omi_cli.errors import AuthError, CliError, UsageError
+from omi_cli.errors import AuthError, CliError, TransportError, UsageError
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -106,9 +106,11 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
     except AuthError as exc:
         clear_credentials(ctx.profile_name)
         raise exc
+    except TransportError:
+        # Verification never completed; do not report a successful login.
+        raise
     except CliError as exc:
-        # Insufficient scope / 403 also bubbles as AuthError above. Anything
-        # else is a transient network blip — keep the credential, just warn.
+        # Other API errors retain the existing warn-and-keep policy.
         ctx.renderer.warn(
             f"Could not verify the new token right now ({exc.message}). It is stored — try again shortly."
         )
@@ -135,13 +137,17 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
     profile = api_key_auth.login_with_api_key(ctx.profile_name, api_key, api_base=ctx.api_base_override)
 
     # Sanity check on a tolerant endpoint — see the original launch PR's
-    # rationale. AuthError → roll back; other CliError → warn and keep.
+    # rationale. AuthError → roll back; transport failures propagate;
+    # other CliError → warn and keep.
     try:
         with OmiClient(profile, verbose=ctx.verbose) as client:
             client.get("/v1/dev/user/memories", params={"limit": 1})
     except AuthError as exc:
         clear_credentials(ctx.profile_name)
         raise exc
+    except TransportError:
+        # Verification never completed; do not report a successful login.
+        raise
     except CliError as exc:
         ctx.renderer.warn(f"Could not verify the key right now ({exc.message}). It is stored — try again shortly.")
 
