@@ -119,6 +119,20 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
+      - name: Select Go SDK prerequisites
+        id: go-sdk
+        run: |
+          if grep -Eq '^(sdks/device/go/|\.github/checks-manifest\.yaml$|\.github/workflows/repo-checks\.yml$)' /tmp/changed-files.txt; then
+            echo 'needed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go for manifest-selected SDK checks
+        if: steps.go-sdk.outputs.needed == 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.7'
+          cache-dependency-path: sdks/device/go/go.sum
+
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:

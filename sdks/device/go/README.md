@@ -19,6 +19,11 @@ go test -tags ble ./...
 go run -tags ble ./examples/...   # if present
 ```
 
+The BLE connection tests inject a fake adapter and do not access Bluetooth
+hardware. The shared preflight manifest runs both the default suite and
+`go test -race -tags ble ./...` locally and in CI. Install Go 1.23.8 or later
+and a C compiler (the race detector and macOS CoreBluetooth bindings use CGO).
+
 ```go
 devices, err := omidevice.Scan(ctx, 5*time.Second)
 err = omidevice.ListenPayload(ctx, devices[0].ID, func(payload []byte) {
