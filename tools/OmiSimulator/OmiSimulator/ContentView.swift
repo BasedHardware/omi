@@ -14,25 +14,55 @@ struct ContentView: View {
     @ObservedObject var bleManager = BLEManager()
 
     @State var recording = false
+    @State private var batterySlider: Double = 87
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Omi simulator")
                 .font(.title2)
             Text("Advertising as Omi Devkit")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button() {
-                if recording {
-                    stopRecording()
-                } else {
-                    startRecording()
+            Divider()
+
+            HStack {
+                Text("Battery \(Int(batterySlider))%")
+                Slider(value: $batterySlider, in: 0...100, step: 1)
+                    .onChange(of: batterySlider) { _, newValue in
+                        bleManager.setBatteryLevel(UInt8(newValue))
+                    }
+            }
+
+            Toggle("Charging", isOn: Binding(
+                get: { bleManager.charging },
+                set: { bleManager.setCharging($0) }
+            ))
+
+            Text("LED \(bleManager.ledBrightness) · Mic gain \(bleManager.microphoneGain)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 12) {
+                Button {
+                    bleManager.fireDoublePress()
+                } label: {
+                    Label("Double press", systemImage: "hand.tap")
                 }
-            } label: {
-                Label(recording ? "stop" : "record", systemImage: recording ? "stop.circle" : "record.circle")
+
+                Button {
+                    if recording {
+                        stopRecording()
+                    } else {
+                        startRecording()
+                    }
+                } label: {
+                    Label(recording ? "Stop" : "Record", systemImage: recording ? "stop.circle" : "record.circle")
+                }
             }
         }
         .padding()
+        .frame(minWidth: 360)
         .onAppear() {
             bleManager.start()
             setupAudio()
