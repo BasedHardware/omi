@@ -7,6 +7,7 @@ import {
   conversationGroupLabel,
   conversationStatusCopy,
   dataProtectionCopy,
+  developerWebhookStatusCopy,
   developerWebhookTypeCopy,
   appCategoryCopy,
   desktopBackendConfigurationCopy,
@@ -628,6 +629,12 @@ test('developer webhook titles are not raw API keys', () => {
   expect(developerWebhookTypeCopy('day_summary')).toBe('Day Summary');
   expect(developerWebhookTypeCopy('button_event')).toBe('Button event');
   expect(developerWebhookTypeCopy('')).toBe('Webhook unavailable');
+});
+
+test('developer webhook status copy does not say unknown for a missing enablement bit', () => {
+  expect(developerWebhookStatusCopy(true)).toBe('Enabled');
+  expect(developerWebhookStatusCopy(false)).toBe('Disabled');
+  expect(developerWebhookStatusCopy(null)).toBe('Status unavailable');
 });
 
 test('app category copy is not a raw wire token', () => {

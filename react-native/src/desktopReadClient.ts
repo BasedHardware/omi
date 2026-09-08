@@ -116,6 +116,13 @@ export function developerWebhookTypeCopy(type: string): string {
   return accountWireCopy(type, 'Webhook unavailable');
 }
 
+export function developerWebhookStatusCopy(enabled: boolean | null): string {
+  if (enabled === null) {
+    return 'Status unavailable';
+  }
+  return enabled ? 'Enabled' : 'Disabled';
+}
+
 export function appCategoryCopy(category: string): string {
   return accountWireCopy(category, '');
 }

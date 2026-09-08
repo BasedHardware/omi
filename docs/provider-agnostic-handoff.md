@@ -320,7 +320,9 @@ Cloud Linux after `2f041f8e20`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `8fc4ded3d4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. The Devices card status dot no longer uses the error color while Home and Devices say Checking Bluetooth…. That checking state uses the same muted gray as a null snapshot. Powered-on stays green and radio-off stays the error color. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer.
 
-Cloud Linux after the missing device-field honesty slice: missing charging and device-information fields no longer say Unknown. Charging, model, firmware, hardware, manufacturer, and serial use Unavailable, matching Signal unavailable and LED/mic Unavailable. Reported values stay. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `2e617df985`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Missing charging and device-information fields no longer say Unknown. Charging, model, firmware, hardware, manufacturer, and serial use Unavailable, matching Signal unavailable and LED/mic Unavailable. Reported values stay. This does not invent a BLE producer.
+
+Cloud Linux after the webhook status honesty slice: a developer webhook row with a missing enablement bit no longer says Status unknown. That row says Status unavailable, matching empty webhook types. Enabled and Disabled stay. This does not invent a Settings identity producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

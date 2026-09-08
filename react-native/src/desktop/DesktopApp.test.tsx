@@ -2238,6 +2238,11 @@ test('Settings developer webhook titles are not raw API keys', async () => {
         enabled: false,
         url: null,
       },
+      {
+        type: 'button_event',
+        enabled: null,
+        url: 'https://example.test/button',
+      },
     ],
     webhooksError: null,
   });
@@ -2259,6 +2264,8 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).toContain('Real-time Transcript');
   expect(tree).toContain('Enabled');
   expect(tree).toContain('Disabled');
+  expect(tree).toContain('Status unavailable');
+  expect(tree).not.toContain('Status unknown');
   expect(tree).not.toContain('memory_created');
   expect(tree).not.toContain('realtime_transcript');
 });

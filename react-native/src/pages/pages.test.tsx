@@ -886,6 +886,7 @@ test('Settings developer webhook titles are not raw API keys', async () => {
           realtime_transcript: false,
           audio_bytes: {enabled: true, url: 'https://example.test/audio'},
           day_summary: {enabled: false, url: null},
+          button_event: {url: 'https://example.test/button'},
         }),
       };
     }
@@ -906,6 +907,8 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('realtime_transcript');
   expect(tree).not.toContain('audio_bytes');
   expect(tree).not.toContain('day_summary');
+  expect(tree).toContain('Status unavailable');
+  expect(tree).not.toContain('Status unknown');
 });
 
 test('Apps category labels are not raw wire tokens', async () => {

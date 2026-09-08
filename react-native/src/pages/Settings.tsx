@@ -27,6 +27,7 @@ import {
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
   dataProtectionCopy,
+  developerWebhookStatusCopy,
   developerWebhookTypeCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
@@ -538,14 +539,7 @@ export function SettingsPage({
       <>
         {snapshot.webhooks.map(webhook => (
           <SettingRow
-            copy={[
-              webhook.enabled === null
-                ? 'Status unknown'
-                : webhook.enabled
-                ? 'Enabled'
-                : 'Disabled',
-              webhook.url,
-            ]
+            copy={[developerWebhookStatusCopy(webhook.enabled), webhook.url]
               .filter(item => item !== null)
               .join(' · ')}
             key={webhook.type}
