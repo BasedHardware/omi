@@ -121,7 +121,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   }
 
   Future<BleAudioCodec> _getAudioCodec() async {
-    var connection = ServiceManager.instance().device.connection;
+    var connection = ServiceManager.instance().device.connectionFor(SharedPreferencesUtil().btDevice.id);
     if (connection == null) {
       return BleAudioCodec.pcm8;
     }
