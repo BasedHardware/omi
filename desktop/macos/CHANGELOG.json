@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.320",
+      "date": "2026-09-08",
+      "changes": [
+        "Fixed conversation durations that showed the whole recording session instead of the conversation, so a short capture no longer reads as tens of minutes"
+      ]
+    },
+    {
       "version": "0.12.319",
       "date": "2026-09-08",
       "changes": [

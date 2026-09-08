@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "note": "desktop/macos/scripts/omi-e2e-pool, its run.sh lease guard, tests and docs are local QA tooling; nothing ships in the app."
-}
