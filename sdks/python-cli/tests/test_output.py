@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import pytest
+
 from omi_cli.output import Renderer, coalesce_rows, shorten
 
 
@@ -34,6 +36,15 @@ def test_json_mode_emits_errors_as_json_to_stderr(capsys) -> None:
     assert captured.out == ""
     parsed = json.loads(captured.err)
     assert parsed == {"error": "bad", "detail": "reason"}
+
+
+@pytest.mark.parametrize("literal", ["Missing [/bold]", "Keep [bold]tags[/bold] :warning:"])
+def test_pretty_error_preserves_literal_message_detail_and_metadata(capsys, literal) -> None:
+    renderer = Renderer(no_color=True)
+    renderer.error(literal, detail=literal, extra={literal: literal})
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count(literal) == 4
 
 
 def test_json_mode_serializes_datetime() -> None:
