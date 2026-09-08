@@ -7,8 +7,9 @@ import Foundation
 /// on the Neural Engine) and one `LocalSpeakerRegistry` shared by the mic and system-audio
 /// `LocalTranscriptionService` instances, so speaker ids are consistent across both lanes and
 /// across conversation rotations within an app run. Remembered voices — the user's and every
-/// named person's — live in `LocalVoiceprintStore`, so "You" and known people are recognised
-/// from the first sentence of the next session.
+/// named person's, each with a few short audio samples — live in `LocalVoiceprintStore`,
+/// bounded by `VoiceEnrollmentPolicy` (aged frequency, favorites pinned), so "You" and known
+/// people are recognised from the first sentence of the next session.
 ///
 /// Fails open: if the models can't load, `resolve` returns nil and the transcriber keeps the
 /// old source-based labels (mic = "You", system = Speaker 1).
@@ -22,6 +23,9 @@ actor LocalSpeakerDiarizer {
     let speechSeconds: Double
     let updatedAt: Date
     let isEnrolled: Bool
+    let isFavorite: Bool
+    let lastHeardAt: Date?
+    let sampleURLs: [URL]
   }
 
   private enum State {
@@ -31,10 +35,12 @@ actor LocalSpeakerDiarizer {
     case unavailable
   }
 
+  typealias RelabelSink = @MainActor ([Int: LocalSpeakerRegistry.Resolution]) -> Void
+
   /// Shortest push-to-talk sample worth learning the user's voice from.
   static let minEnrollmentSeconds = 2.0
-
-  typealias RelabelSink = @MainActor ([Int: LocalSpeakerRegistry.Resolution]) -> Void
+  /// Recent confident windows kept per live speaker, so naming them can save audio at once.
+  private static let recentWindowsPerCluster = 3
 
   private var state: State = .idle
   /// Where relabels go when they originate here rather than from a transcriber window (a
@@ -43,16 +49,27 @@ actor LocalSpeakerDiarizer {
   private var relabelSink: RelabelSink?
   private var manager: DiarizerManager?
   private var registry: LocalSpeakerRegistry
-  private var store: LocalVoiceprintStore
+  private let store: LocalVoiceprintStore
+  private let policy: VoiceEnrollmentPolicy
   private var voiceprints: [StoredVoiceprint]
   private let loadModels: @Sendable () async throws -> DiarizerModels
+  private let now: @Sendable () -> Date
+  /// Confident windows per registry cluster key, newest last.
+  private var recentWindows: [Int: [[Float]]] = [:]
+  /// Voices already counted as "heard" this app run (`VoiceEnrollmentPolicy` scores sessions).
+  private var usedThisRun: Set<String> = []
+  private var lastSampleAt: [String: Date] = [:]
 
   init(
     store: LocalVoiceprintStore = .forCurrentUser(),
-    loadModels: @escaping @Sendable () async throws -> DiarizerModels = { try await DiarizerModels.downloadIfNeeded() }
+    policy: VoiceEnrollmentPolicy = VoiceEnrollmentPolicy(),
+    loadModels: @escaping @Sendable () async throws -> DiarizerModels = { try await DiarizerModels.downloadIfNeeded() },
+    now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.store = store
+    self.policy = policy
     self.loadModels = loadModels
+    self.now = now
     let voiceprints = store.load()
     self.voiceprints = voiceprints
     self.registry = LocalSpeakerRegistry(knownVoices: voiceprints.map(Self.knownVoice))
@@ -129,11 +146,38 @@ actor LocalSpeakerDiarizer {
   ) -> LocalSpeakerRegistry.Outcome? {
     guard case .ready = state, let manager else { return nil }
     guard let embedding = dominantEmbedding(in: window, manager: manager) else { return nil }
-    let outcome = registry.observe(
-      LocalSpeakerRegistry.Observation(
-        embedding: embedding, durationSeconds: durationSeconds, loudness: rms, lane: lane))
-    if let updates = outcome?.voiceprintsToPersist, !updates.isEmpty {
-      remember(updates)
+    guard
+      let outcome = registry.observe(
+        LocalSpeakerRegistry.Observation(
+          embedding: embedding, durationSeconds: durationSeconds, loudness: rms, lane: lane))
+    else { return nil }
+
+    // A window that joined its cluster confidently (or opened it) is clean audio of one voice.
+    let confident = outcome.nearestDistance == .infinity || outcome.nearestDistance <= registry.config.updateThreshold
+    if confident, let key = registry.cluster(forSpeakerId: outcome.resolution.speakerId)?.key {
+      var windows = recentWindows[key, default: []]
+      windows.append(window)
+      if windows.count > Self.recentWindowsPerCluster { windows.removeFirst(windows.count - Self.recentWindowsPerCluster) }
+      recentWindows[key] = windows
+    }
+
+    // A remembered voice was heard: count the session and, now and then, keep a clip.
+    let owner: String??
+    if let personId = outcome.resolution.personId {
+      owner = .some(personId)
+    } else if outcome.resolution.isUser, registry.userIsConfirmed {
+      owner = .some(nil)
+    } else {
+      owner = nil
+    }
+    if let owner, voiceprints.contains(where: { $0.personId == owner }) {
+      var changed = touchUse(personId: owner)
+      if confident, saveSampleIfDue(personId: owner, samples: window) { changed = true }
+      if changed { persist() }
+    }
+
+    if !outcome.voiceprintsToPersist.isEmpty {
+      remember(outcome.voiceprintsToPersist)
     }
     return outcome
   }
@@ -142,16 +186,26 @@ actor LocalSpeakerDiarizer {
 
   /// "This is me" on a live bubble. Returns the relabels for segments already on screen.
   func markSpeakerAsUser(_ speakerId: Int) -> [Int: LocalSpeakerRegistry.Resolution] {
+    let clusterKey = registry.cluster(forSpeakerId: speakerId)?.key
     guard let result = registry.markAsUser(speakerId: speakerId) else { return [:] }
     remember([result.persist])
+    if let clusterKey { saveRecentWindows(of: clusterKey, as: nil) }
+    _ = touchUse(personId: nil)
+    persist()
     log("LocalSpeakerDiarizer: speaker \(speakerId) marked as the user")
     return result.relabels
   }
 
-  /// A live speaker was named (or un-named). Teaches that person's voice.
+  /// A live speaker was named (or un-named). Teaches that person's voice and keeps a clip.
   func assignPerson(_ personId: String?, toSpeaker speakerId: Int) -> [Int: LocalSpeakerRegistry.Resolution] {
+    let clusterKey = registry.cluster(forSpeakerId: speakerId)?.key
     guard let result = registry.assignPerson(personId, toSpeakerId: speakerId) else { return [:] }
     if let update = result.persist { remember([update]) }
+    if let personId, let clusterKey {
+      saveRecentWindows(of: clusterKey, as: personId)
+      _ = touchUse(personId: personId)
+      persist()
+    }
     return result.relabels
   }
 
@@ -167,6 +221,9 @@ actor LocalSpeakerDiarizer {
       let result = registry.enrollUser(embedding: embedding, speechSeconds: seconds)
     else { return }
     remember([result.persist])
+    _ = saveSampleIfDue(personId: nil, samples: samples, force: true)
+    _ = touchUse(personId: nil)
+    persist()
     log("LocalSpeakerDiarizer: learned the user's voice from a \(String(format: "%.1f", seconds))s push-to-talk turn")
     if !result.relabels.isEmpty, let relabelSink {
       let relabels = result.relabels
@@ -174,26 +231,102 @@ actor LocalSpeakerDiarizer {
     }
   }
 
-  /// Forget a remembered voice (the user's when `personId` is nil).
+  /// Forget a remembered voice and its audio (the user's when `personId` is nil).
   func forgetVoice(personId: String?) {
     registry.forgetVoice(personId: personId)
     voiceprints.removeAll { $0.personId == personId }
-    store.save(voiceprints)
+    store.removeAllSamples(personId: personId)
+    persist()
+  }
+
+  /// Pin (or unpin) a person so their voice is never evicted and they list first.
+  func setFavorite(personId: String, _ isFavorite: Bool) {
+    guard let index = voiceprints.firstIndex(where: { $0.personId == personId }) else { return }
+    voiceprints[index].isFavorite = isFavorite
+    persist()
   }
 
   func voiceSummaries() -> [VoiceSummary] {
-    voiceprints.map {
-      VoiceSummary(personId: $0.personId, speechSeconds: $0.speechSeconds, updatedAt: $0.updatedAt, isEnrolled: $0.isEnrolled)
+    voiceprints.map { voiceprint in
+      VoiceSummary(
+        personId: voiceprint.personId,
+        speechSeconds: voiceprint.speechSeconds,
+        updatedAt: voiceprint.updatedAt,
+        isEnrolled: voiceprint.isEnrolled,
+        isFavorite: voiceprint.isFavorite,
+        lastHeardAt: voiceprint.lastUsedAt,
+        sampleURLs: voiceprint.sampleFiles.map { store.sampleURL(for: $0) }
+      )
     }
   }
 
+  // MARK: - Remembering
+
   private func remember(_ updates: [VoiceprintUpdate]) {
+    let now = now()
     for update in updates {
-      voiceprints = LocalVoiceprintStore.applying(update, to: voiceprints)
+      voiceprints = LocalVoiceprintStore.applying(update, to: voiceprints, now: now)
     }
-    store.save(voiceprints)
+    evictIfOverCapacity()
+    persist()
     let who = updates.map { $0.personId ?? "user" }.joined(separator: ", ")
     log("LocalSpeakerDiarizer: remembered voice for \(who)")
+  }
+
+  /// Aged-frequency bookkeeping: one bump per voice per app run. Returns whether anything
+  /// changed.
+  private func touchUse(personId: String?) -> Bool {
+    let key = LocalVoiceprintStore.sampleOwner(personId)
+    guard !usedThisRun.contains(key), let index = voiceprints.firstIndex(where: { $0.personId == personId })
+    else { return false }
+    usedThisRun.insert(key)
+    voiceprints[index] = policy.recordingUse(of: voiceprints[index], now: now())
+    return true
+  }
+
+  private func evictIfOverCapacity() {
+    let evicted = policy.evictions(from: voiceprints, now: now())
+    guard !evicted.isEmpty else { return }
+    for personId in evicted {
+      registry.forgetVoice(personId: personId)
+      store.removeAllSamples(personId: personId)
+      voiceprints.removeAll { $0.personId == personId }
+    }
+    log("LocalSpeakerDiarizer: forgot \(evicted.count) rarely heard voice(s) to stay within \(policy.capacity)")
+  }
+
+  private func persist() {
+    store.save(voiceprints)
+  }
+
+  private func saveRecentWindows(of clusterKey: Int, as personId: String?) {
+    for window in recentWindows[clusterKey] ?? [] {
+      _ = saveSampleIfDue(personId: personId, samples: window, force: true)
+    }
+  }
+
+  /// Keep a clip of this voice unless one was kept recently. Trims to the freshest
+  /// `maxSampleSeconds`; drops the oldest clip beyond `maxSamplesPerVoice`.
+  @discardableResult
+  private func saveSampleIfDue(personId: String?, samples: [Float], force: Bool = false) -> Bool {
+    guard let index = voiceprints.firstIndex(where: { $0.personId == personId }) else { return false }
+    let key = LocalVoiceprintStore.sampleOwner(personId)
+    let now = now()
+    if !force, let last = lastSampleAt[key], now.timeIntervalSince(last) < policy.sampleIntervalSeconds {
+      return false
+    }
+    let maxSamples = Int(policy.maxSampleSeconds * Double(LocalVoiceprintStore.sampleRate))
+    let clip = samples.count > maxSamples ? Array(samples.suffix(maxSamples)) : samples
+    guard let file = store.addSample(personId: personId, samples: clip, now: now) else { return false }
+    lastSampleAt[key] = now
+    var files = voiceprints[index].sampleFiles
+    files.insert(file, at: 0)
+    if files.count > policy.maxSamplesPerVoice {
+      store.removeSamples(Array(files[policy.maxSamplesPerVoice...]))
+      files = Array(files.prefix(policy.maxSamplesPerVoice))
+    }
+    voiceprints[index].sampleFiles = files
+    return true
   }
 
   private static func knownVoice(_ stored: StoredVoiceprint) -> LocalSpeakerRegistry.KnownVoice {

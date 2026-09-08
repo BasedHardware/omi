@@ -17,6 +17,7 @@ covers:
   - desktop/macos/Desktop/Sources/LocalTranscription/LocalSpeakerRegistry.swift
   - desktop/macos/Desktop/Sources/LocalTranscription/LocalSpeakerDiarizer.swift
   - desktop/macos/Desktop/Sources/LocalTranscription/LocalVoiceprintStore.swift
+  - desktop/macos/Desktop/Sources/LocalTranscription/VoiceEnrollmentPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/People/PeoplePage.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift

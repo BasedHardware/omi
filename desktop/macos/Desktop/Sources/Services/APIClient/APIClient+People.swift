@@ -135,6 +135,11 @@ extension APIClient {
     return try await get("v1/users/people")
   }
 
+  /// Deletes a person (their speech profile goes with them on the backend).
+  func deletePerson(id: String) async throws {
+    try await delete("v1/users/people/\(id)")
+  }
+
   /// Creates a new person
   func createPerson(name: String) async throws -> Person {
     struct CreatePersonRequest: Encodable {
