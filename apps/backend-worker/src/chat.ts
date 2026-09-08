@@ -404,12 +404,13 @@ export async function completeGeneration(
 export async function failGeneration(
   db: D1Database,
   accountId: string,
-  generationId: string
+  generationId: string,
+  retryable = true
 ): Promise<GenerationEvent> {
   const event: GenerationEvent = {
     id: "2",
     kind: "failed",
-    error: { code: "generation_failed", retryable: true },
+    error: { code: "generation_failed", retryable },
   };
   await appendGenerationEvent(db, accountId, generationId, event);
   return event;

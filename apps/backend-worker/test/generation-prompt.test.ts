@@ -7,6 +7,7 @@ import {
   GENERATION_HISTORY_MESSAGE_LIMIT,
   isGenerationTextMimeType,
 } from "../src/generation-prompt";
+import { failGeneration } from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
 
@@ -370,6 +371,65 @@ describe("composeGenerationPrompt", () => {
     expect(result).toEqual({ kind: "fail" });
   });
 
+  test("text attachments without object storage are unavailable instead of dropping bytes", async () => {
+    await insertBound(db, {
+      id: "att-unbound",
+      accountId: "acct-a",
+      messageId: "msg-unbound",
+      mimeType: "text/plain",
+    });
+    const nonempty = await composeGenerationPrompt(
+      db,
+      undefined,
+      "acct-a",
+      "msg-unbound",
+      "summarize this"
+    );
+    const empty = await composeGenerationPrompt(
+      db,
+      undefined,
+      "acct-a",
+      "msg-unbound",
+      ""
+    );
+    expect(nonempty).toEqual({ kind: "unavailable" });
+    expect(empty).toEqual({ kind: "unavailable" });
+  });
+
+  test("text-only prompts still compose without object storage", async () => {
+    const result = await composeGenerationPrompt(
+      db,
+      undefined,
+      "acct-a",
+      "msg-text-only",
+      "hello"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toBe("hello");
+  });
+
+  test("non-text attachments still compose without object storage", async () => {
+    await insertBound(db, {
+      id: "att-pdf",
+      accountId: "acct-a",
+      messageId: "msg-pdf",
+      mimeType: "application/pdf",
+      displayName: "notes.pdf",
+    });
+    const result = await composeGenerationPrompt(
+      db,
+      undefined,
+      "acct-a",
+      "msg-pdf",
+      "look at this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toBe("look at this");
+    expect(result.prompt).not.toContain("notes.pdf");
+  });
+
   test("caps total excerpt bytes across files", async () => {
     const first = "a".repeat(20_000);
     const second = "b".repeat(20_000);
@@ -435,5 +495,25 @@ describe("composeGenerationPrompt", () => {
       console.error = error;
     }
     expect(lines.join("\n")).not.toContain(SECRET_TEXT);
+  });
+});
+
+describe("failGeneration retryability", () => {
+  test("provider failures stay retryable", async () => {
+    const event = await failGeneration(db, "acct-a", "gen-retry");
+    expect(event).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+  });
+
+  test("missing object storage does not advertise retry", async () => {
+    const event = await failGeneration(db, "acct-a", "gen-store", false);
+    expect(event).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: false },
+    });
   });
 });

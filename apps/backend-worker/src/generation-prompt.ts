@@ -12,7 +12,8 @@ export type GenerationHistoryMessage = {
 
 export type GenerationPromptResult =
   | { kind: "ok"; prompt: string; history: GenerationHistoryMessage[] }
-  | { kind: "fail" };
+  | { kind: "fail" }
+  | { kind: "unavailable" };
 
 export function isGenerationTextMimeType(mimeType: string): boolean {
   return (
@@ -29,6 +30,12 @@ export async function composeGenerationPrompt(
   userText: string
 ): Promise<GenerationPromptResult> {
   const bound = await listBoundAttachments(db, accountId, messageId);
+  if (
+    r2 === undefined &&
+    bound.some((attachment) => isGenerationTextMimeType(attachment.mediaType))
+  ) {
+    return { kind: "unavailable" };
+  }
   const excerpts: string[] = [];
   let usedBytes = 0;
   let textFiles = 0;

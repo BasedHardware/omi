@@ -154,6 +154,16 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       input.id,
       input.text
     );
+    if (composed.kind === "unavailable") {
+      const event = await failGeneration(
+        this.env.DB,
+        accountId,
+        generationId,
+        false
+      );
+      this.notifyWaiters(generationId, event);
+      return;
+    }
     if (composed.kind === "fail") {
       const event = await failGeneration(this.env.DB, accountId, generationId);
       this.notifyWaiters(generationId, event);
