@@ -1436,6 +1436,44 @@ test('Settings audio recording labels are not raw mode tokens', async () => {
   );
 });
 
+test('Settings Rewind retention does not show 0 as a keep-forever token', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    setDesktopPreference: jest.Mock;
+  };
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Rewind' &&
+          node.props.accessibilityRole === 'tab',
+      )
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Data Retention');
+  expect(tree).toContain('Forever');
+  expect(tree).toContain('7');
+  expect(tree).toContain('14');
+  expect(tree).toContain('30');
+  await act(async () => {
+    pressText(renderer, 'Forever');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.setDesktopPreference).toHaveBeenCalledWith(
+    'rewindRetentionDays',
+    0,
+  );
+});
+
 test('Settings surfaces sign-out failures without leaving the ready shell', async () => {
   const onSignOut = jest.fn(async () => {
     throw new Error('sign out failed');

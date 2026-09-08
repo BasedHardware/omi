@@ -4,6 +4,7 @@ import {
   loadDesktopPreferences,
   parseAudioRecordingMode,
   parseStampedV5Origin,
+  rewindRetentionCopy,
   setDesktopPreference,
 } from '../src/desktopSettingsClient';
 import {NativeModules} from 'react-native';
@@ -21,6 +22,8 @@ test('desktop settings persist the Advanced software plane locally', () => {
   expect(audioRecordingModeCopy('off')).toBe('Off');
   expect(audioRecordingModeCopy('always')).toBe('Always');
   expect(audioRecordingModeCopy('meetings')).toBe('Meetings');
+  expect(rewindRetentionCopy('0')).toBe('Forever');
+  expect(rewindRetentionCopy('14')).toBe('14');
   expect(
     parseStampedV5Origin('https://omi-v5-backend-staging.example.workers.dev'),
   ).toBe('https://omi-v5-backend-staging.example.workers.dev');

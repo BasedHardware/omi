@@ -92,6 +92,10 @@ export function audioRecordingModeCopy(mode: AudioRecordingMode): string {
   }
 }
 
+export function rewindRetentionCopy(days: '7' | '14' | '30' | '0'): string {
+  return days === '0' ? 'Forever' : days;
+}
+
 export function parseStampedV5Origin(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0) {
     return null;

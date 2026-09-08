@@ -24,6 +24,7 @@ import {
   loadDesktopPreferences,
   loadPermissionStatus,
   requestDesktopPermission,
+  rewindRetentionCopy,
   setDesktopPreference,
   type AudioRecordingMode,
   type DesktopPreferences,
@@ -561,6 +562,7 @@ export function DesktopSettings({
         title="Data Retention"
         trailing={
           <Segmented
+            formatOption={rewindRetentionCopy}
             onChange={value => {
               runAction(() => setPref('rewindRetentionDays', Number(value)));
             }}

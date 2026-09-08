@@ -250,7 +250,9 @@ Cloud Linux after `498b17d27f`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `88cc930056`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Desktop Settings Audio Recording shows Off / Always / Meetings instead of raw preference tokens. Stored values stay off / always / meetings. Backend and Rewind retention segmented controls are unchanged. This does not invent a capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the developer webhook title slice: mobile and desktop Settings Developer webhook rows use the same product labels as web Settings (Conversation Events, Real-time Transcript, Audio Bytes, Day Summary) instead of API keys such as memory_created. Unknown types stay visible as humanized copy. Empty types say Webhook unavailable. This does not invent a webhook producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `3b6b12edb2`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Mobile and desktop Settings Developer webhook rows use the same product labels as web Settings (Conversation Events, Real-time Transcript, Audio Bytes, Day Summary) instead of API keys such as memory_created. Unknown types stay visible as humanized copy. Empty types say Webhook unavailable. This does not invent a webhook producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Rewind retention slice: desktop Settings Data Retention shows Forever instead of 0. Native capture treats days greater than 0 as an expiry cutoff and 0 as no cutoff. Stored rewindRetentionDays stays 0. 7 / 14 / 30 stay numeric. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
