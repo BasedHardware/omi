@@ -101,6 +101,8 @@ omi memory list
 
 State lives at `~/.omi/config.toml` (overridable via `$OMI_CONFIG`). The file
 holds one or more named profiles, each with its own auth method and API base.
+Saving configuration preserves unknown settings at both the root and profile
+levels, so editing a known setting does not discard extensions from newer clients.
 Switch between them with `--profile`:
 
 ```bash
