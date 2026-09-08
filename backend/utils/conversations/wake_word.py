@@ -38,7 +38,14 @@ EVIDENCE_BACKED_WAKE_WORD_VARIANTS: tuple[tuple[str, ...], ...] = (
 )
 
 _WORD_RE = re.compile(r'[^\W_]+', re.UNICODE)
-_STRUCTURAL_MARKER_RE = re.compile(rf'(?m)^\[[^\]\n]+\] {re.escape(WAKE_WORD_MARKER)} ')
+# Renderer-owned turn headers only: the compact shapes (`[segment-id cluster]`
+# and run-length `[segment-id]`) and the legacy `[segment:ID start-end]` shape
+# produced by our transcript renderers. Other bracketed lines from an unescaped
+# caller transcript are ordinary content and must not promote a spoken marker
+# to trusted metadata; untrusted fields rely on marker escaping instead.
+_STRUCTURAL_MARKER_RE = re.compile(
+    rf'(?m)^(?:\[segment:[^\]\n]+\]|\[\S+[ \t]\d+\]|\[\S+\]) {re.escape(WAKE_WORD_MARKER)} '
+)
 
 
 @dataclass(frozen=True)

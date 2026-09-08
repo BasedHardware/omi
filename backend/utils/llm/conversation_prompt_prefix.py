@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from typing import Any, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -111,19 +112,37 @@ def build_conversation_prompt_prefix(
             ]
         )
 
-        # One-name rename guard (SCA-454), keyed off the spk map rather than a
-        # ``Speaker N:`` dialogue label: when exactly one cluster is unresolved and
-        # exactly one calendar participant is not already bound, that participant
-        # names the cluster. Anything less certain stays ``?`` — never invented.
-        unresolved_keys = [key for key, name in speaker_names.items() if not name]
-        bound_names = {name.casefold() for name in speaker_names.values() if name}
+        # One-name rename guard (SCA-454), keyed off the spk map when one is
+        # provided; otherwise fall back to scanning the transcript's legacy
+        # ``Speaker N:`` labels (map-less raw transcripts). When exactly one
+        # speaker is unresolved and exactly one calendar participant is not
+        # already bound, that participant names the speaker. Anything less
+        # certain stays unresolved — never invented.
+        if speaker_names:
+            unresolved_keys = [key for key, name in speaker_names.items() if not name]
+            bound_names = {name.casefold() for name in speaker_names.values() if name}
+        else:
+            placeholder_ids = set(re.findall(r'(?m)^(?:\[segment:[^\]]+\] )?Speaker (\d+):', transcript))
+            unresolved_keys = [int(key) for key in placeholder_ids]
+            bound_names = {
+                match.casefold()
+                for match in re.findall(r'(?m)^(?:\[segment:[^\]]+\] )?([^:\n]+):', transcript)
+                if not match.startswith('Speaker ')
+            }
         remaining_names = [
             participant.name
             for participant in calendar_context.participants
             if participant.name and participant.name.casefold() not in bound_names
         ]
-        if len(unresolved_keys) == 1 and len(remaining_names) == 1:
-            speaker_names[unresolved_keys[0]] = remaining_names[0]
+        if unresolved_keys and len(unresolved_keys) == 1 and len(remaining_names) == 1:
+            if speaker_names:
+                speaker_names[unresolved_keys[0]] = remaining_names[0]
+            else:
+                transcript = re.sub(
+                    rf'(?m)^((?:\[segment:[^\]]+\] )?)Speaker {unresolved_keys[0]}:',
+                    rf'\1{remaining_names[0]}:',
+                    transcript,
+                )
 
     if speaker_names:
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())

@@ -919,7 +919,7 @@ def extract_action_items(
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
     • Use clear, direct language
     • Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
-    • When transcript lines begin with [segment-id k] turn headers, include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no turn headers.
+    • When transcript lines begin with [segment-id k] or [segment:ID start-end] turn headers, include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no turn headers.
     • Include only essential details
 
     • CRITICAL - Resolve ALL vague references:
@@ -1127,8 +1127,10 @@ def render_sections_markdown(sections: List[Any]) -> str:
 
 # Diarization placeholders are transcript machinery, not people. Prompt wording alone
 # does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
-# `spk N` is the compact speaker-map key (SCA-454) and leaks the same way.
-_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]\d+\b:?[ \t]*')
+# `spk N` is the compact speaker-map key (SCA-454) and leaks the same way; its
+# optional trailing `?` unresolved marker is consumed with the key so an app
+# echoing `spk 1 ?` cannot leave a bare `?` in user-visible output.
+_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]\d+\b(?:[ \t]+\?)?:?[ \t]*')
 
 
 def strip_speaker_placeholders(text: str) -> str:
@@ -1267,7 +1269,7 @@ FACTUAL FIDELITY
 - Narrow exception: when participant metadata corroborates a spelling, prefer that spelling over a conflicting transcript
   spelling. A participant name corroborates that person's name; a recognizable participant email domain corroborates
   its organization name (for example, fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra").
-- When the source contains [segment-id k] turn headers, cite the smallest sufficient exact IDs in
+- When the source contains [segment-id k] or [segment:ID start-end] turn headers, cite the smallest sufficient exact IDs in
   source_segment_ids. If the source has no turn headers, return empty source_segment_ids lists.
   Never invent IDs. Copy only the ID (for [s01234 0], use "s01234", not "s01234 0" or a range).
   Keep citations in that field, not in the prose. Check that the cited segments support each factual

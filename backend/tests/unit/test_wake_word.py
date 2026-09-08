@@ -757,3 +757,20 @@ def test_live_discard_evaluation_fails_closed_on_discarder_error_log():
 
     with pytest.raises(RuntimeError, match='NOT_RUN'):
         run_live_wake_word_discard_evaluation(capture, trials=1, discarder=failed_discard)
+
+
+def test_structural_marker_rejects_generic_bracketed_line_with_spoken_marker():
+    """A caller-supplied bracketed line + spoken marker is not renderer metadata (review thread 5)."""
+    transcript = f'[meeting notes] {WAKE_WORD_MARKER} remember the budget'
+
+    assert has_structural_wake_word_marker(transcript) is False
+
+
+def test_structural_marker_accepts_legacy_and_compact_renderer_shapes():
+    legacy = f'[segment:s1 0.000-1.000] {WAKE_WORD_MARKER} Hey Omi, remember the budget.'
+    compact = f'[seg-1 0] {WAKE_WORD_MARKER} Hey Omi, remember the budget.'
+    run_length = f'[seg-1] {WAKE_WORD_MARKER} Hey Omi, remember the budget.'
+
+    assert has_structural_wake_word_marker(legacy) is True
+    assert has_structural_wake_word_marker(compact) is True
+    assert has_structural_wake_word_marker(run_length) is True

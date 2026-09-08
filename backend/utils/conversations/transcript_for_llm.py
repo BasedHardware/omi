@@ -38,12 +38,14 @@ def _speaker_map(segments: List[Any], user_name: str, people_map: dict[str, str]
     """Cluster -> bound display name (None = unresolved), ordered by first appearance.
 
     A cluster is bound only through hard evidence: ``is_user`` (profile name) or a
-    matched ``person_id`` (person name). Names are never invented.
+    matched ``person_id`` (person name). Names are never invented. A cluster that
+    first appears without identity stays open: later evidence-bearing segments of
+    the same cluster bind it retroactively instead of leaving it ``?`` forever.
     """
     speaker_map: dict[int, Optional[str]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
-        if speaker_id is None or speaker_id in speaker_map:
+        if speaker_id is None or speaker_map.get(speaker_id) is not None:
             continue
         if segment.is_user:
             speaker_map[speaker_id] = user_name

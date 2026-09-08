@@ -43,8 +43,6 @@ def _seg(segment_id: str, text: str, *, speaker: str = 'SPEAKER_00', is_user: bo
         end=2.0,
     )
 
-    return int(speaker.split('_', 1)[1])
-
 
 def test_renderer_uses_cluster_keys_and_run_length_form(monkeypatch):
     from utils.conversations import transcript_for_llm
@@ -271,3 +269,78 @@ def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
     prefix = ConversationPromptPrefix(conversation_id='conv-1', context='FULL TRANSCRIPT\n[seg-1 0] hi')
     prefixed = conversation_processing.get_app_result('raw transcript', [], _summary_app(), prompt_prefix=prefix)
     assert prefixed == 'said the flush is 9mm. confirmed it. agreed.'
+
+
+def test_get_app_result_consumes_unresolved_marker_with_spk_key(monkeypatch):
+    """`spk 1 ?` echo must not leave a bare `?` behind (review thread 1)."""
+    from utils.llm import conversation_processing
+
+    monkeypatch.setattr(
+        conversation_processing,
+        'get_llm',
+        lambda *_a, **_k: SimpleNamespace(
+            invoke=lambda _messages: SimpleNamespace(content='spk 1 ? said the flush is 9mm.')
+        ),
+    )
+
+    assert conversation_processing.get_app_result('raw transcript', [], _summary_app()) == 'said the flush is 9mm.'
+
+
+def test_speaker_map_binds_later_evidence_for_first_anonymous_segment(monkeypatch):
+    """A cluster first seen without identity binds via later segments (review thread 4)."""
+    from utils.conversations import transcript_for_llm
+
+    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_a, **_k: 'David')
+    people = [Person(id='p1', name='Alice')]
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            _seg('seg-1', 'hey', speaker='SPEAKER_03', is_user=False),
+            _seg('seg-2', 'hello again', speaker='SPEAKER_03', is_user=False, person_id='p1'),
+        ]
+    )
+
+    _, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation, people)
+
+    assert speaker_map == {3: 'Alice'}
+
+
+def test_calendar_guard_falls_back_to_legacy_speaker_labels_without_map():
+    """Map-less legacy transcripts keep the upstream rename behavior (review thread 3)."""
+    from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+
+    context = CalendarMeetingContext(
+        calendar_event_id='evt-1',
+        title='1:1',
+        participants=[MeetingParticipant(name='David'), MeetingParticipant(name='Ash')],
+        platform='Zoom',
+        start_time=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
+        duration_minutes=30,
+    )
+    legacy_transcript = (
+        '[segment:s1 0.000-1.000] David: look at this flush design\n'
+        '[segment:s2 1.000-2.000] Speaker 1: can it sit flush?'
+    )
+
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='conv-1',
+        transcript=legacy_transcript,
+        started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
+        timezone_name='UTC',
+        language_code='en',
+        calendar_context=context,
+        speaker_map=None,
+    )
+
+    assert 'Ash: can it sit flush?' in prefix.context
+    assert 'Speaker 1:' not in prefix.context
+
+
+def test_action_items_prompt_names_both_header_shapes():
+    """Source pin: the extraction rules cover compact AND legacy turn headers (review thread 2)."""
+    import inspect
+
+    from utils.llm import conversation_processing
+
+    source = inspect.getsource(conversation_processing)
+    assert source.count('[segment-id k] or [segment:ID start-end] turn headers') == 2
