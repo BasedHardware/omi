@@ -58,10 +58,13 @@ export async function composeGenerationPrompt(
   }
 
   const parts: string[] = [];
-  if (userText.length > 0) parts.push(userText);
+  if (isVisibleGenerationText(userText)) parts.push(userText);
   parts.push(...excerpts);
   const prompt = parts.join("\n\n");
-  if (prompt.length === 0 && (textFiles === 0 || loadedTextFiles === 0)) {
+  if (
+    !isVisibleGenerationText(prompt) &&
+    (textFiles === 0 || loadedTextFiles === 0)
+  ) {
     return { kind: "fail" };
   }
   return {

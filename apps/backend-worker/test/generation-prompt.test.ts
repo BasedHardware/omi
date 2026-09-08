@@ -372,6 +372,70 @@ describe("composeGenerationPrompt", () => {
     expect(result).toEqual({ kind: "fail" });
   });
 
+  test("fails when the user text is only whitespace and no attachment bytes load", async () => {
+    const blank = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-whitespace",
+      " \t\n"
+    );
+    await insertBound(db, {
+      id: "att-gone-whitespace",
+      accountId: "acct-a",
+      messageId: "msg-whitespace-files",
+      mimeType: "text/plain",
+    });
+    const unreadable = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-whitespace-files",
+      " \t\n"
+    );
+    expect(blank).toEqual({ kind: "fail" });
+    expect(unreadable).toEqual({ kind: "fail" });
+  });
+
+  test("whitespace-only user text still composes when a bound text file loads", async () => {
+    await insertBound(db, {
+      id: "att-whitespace-ok",
+      accountId: "acct-a",
+      messageId: "msg-whitespace-ok",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-whitespace-ok",
+      new TextEncoder().encode("visible file bytes")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-whitespace-ok",
+      " \t\n"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("visible file bytes");
+    expect(result.prompt).toContain("notes.txt");
+    expect(result.prompt).not.toContain(" \t\n");
+  });
+
+  test("keeps visible user text that still has surrounding whitespace", async () => {
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-padded",
+      "  hello  "
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toBe("  hello  ");
+  });
+
   test("text attachments without object storage are unavailable instead of dropping bytes", async () => {
     await insertBound(db, {
       id: "att-unbound",
