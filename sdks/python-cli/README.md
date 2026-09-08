@@ -283,6 +283,11 @@ The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
 
+
+### Edit goal outcome, motivation, and success criteria
+
+Use `omi goal update ID --desired-outcome TEXT --why-it-matters TEXT --success-criterion TEXT` to edit existing goal context. Repeat `--success-criterion` to replace the full list. `--clear-why-it-matters` removes motivation and `--clear-success-criteria` sends an empty list. Set and clear flags for the same field cannot be combined. Omitted fields stay unchanged.
+
 ## Development
 
 ```bash

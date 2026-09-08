@@ -102,6 +102,13 @@ def update_goal(
     typer_ctx: typer.Context,
     goal_id: str = typer.Argument(..., help="Goal ID."),
     title: Optional[str] = typer.Option(None, "--title"),
+    desired_outcome: Optional[str] = typer.Option(None, "--desired-outcome", help="Describe the desired result."),
+    why_it_matters: Optional[str] = typer.Option(None, "--why-it-matters", help="Explain why the goal matters."),
+    success_criterion: Optional[list[str]] = typer.Option(
+        None, "--success-criterion", help="Replace criteria; repeat for each."
+    ),
+    clear_why_it_matters: bool = typer.Option(False, "--clear-why-it-matters", help="Remove the goal's motivation."),
+    clear_success_criteria: bool = typer.Option(False, "--clear-success-criteria", help="Remove all success criteria."),
     target_value: Optional[float] = typer.Option(None, "--target"),
     current_value: Optional[float] = typer.Option(None, "--current"),
     min_value: Optional[float] = typer.Option(None, "--min"),
@@ -109,7 +116,23 @@ def update_goal(
     unit: Optional[str] = typer.Option(None, "--unit"),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if clear_why_it_matters and why_it_matters is not None:
+        raise UsageError(message="Conflicting options", detail="Use either --why-it-matters or --clear-why-it-matters.")
+    if clear_success_criteria and success_criterion is not None:
+        raise UsageError(
+            message="Conflicting options", detail="Use either --success-criterion or --clear-success-criteria."
+        )
     body: dict[str, object] = {}
+    if desired_outcome is not None:
+        body["desired_outcome"] = desired_outcome
+    if clear_why_it_matters:
+        body["why_it_matters"] = None
+    elif why_it_matters is not None:
+        body["why_it_matters"] = why_it_matters
+    if clear_success_criteria:
+        body["success_criteria"] = []
+    elif success_criterion is not None:
+        body["success_criteria"] = success_criterion
     if title is not None:
         body["title"] = title
     if target_value is not None:
@@ -124,7 +147,7 @@ def update_goal(
         body["unit"] = unit
     if not body:
         raise UsageError(
-            message="No fields to update", detail="Provide one of --title/--target/--current/--min/--max/--unit."
+            message="No fields to update", detail="Provide a goal field to update; see omi goal update --help."
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
