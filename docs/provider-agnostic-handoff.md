@@ -272,7 +272,9 @@ Cloud Linux after `11eb8090c1`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `56f0649059`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer says Listening for speech when NativeSnapshot has no live speech transcript. The Listening badge stays for live audio. Waiting for audio and Not capturing are unchanged. This does not invent an STT producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the compact-Home microphone honesty slice: compact Home no longer shows a raised 44×44 microphone control that looks like it can start capture. There is no start-capture producer on that surface. Listening and Not capturing status stay. This does not invent an STT or capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `6c06500d62`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home no longer shows a raised 44×44 microphone control that looks like it can start capture. There is no start-capture producer on that surface. Listening and Not capturing status stay. This does not invent an STT or capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the compact-Home mind-map Expand honesty slice: compact Home no longer says Expand on the collapsed Mind Map. That control opens Memories, matching Tasks and Recaps View All. The preview stays collapsed. This does not invent a mind-map producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

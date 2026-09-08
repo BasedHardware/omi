@@ -750,6 +750,28 @@ test('live capture without a transcript does not claim speech text', () => {
   act(() => renderer.unmount());
 });
 
+test('compact Home mind map opens Memories with View All instead of claiming Expand', () => {
+  const onExpandMindMap = jest.fn();
+  const renderer = render({onExpandMindMap});
+  expect(renderedText(renderer)).not.toContain('Expand');
+  expect(renderedText(renderer)).toContain('View All');
+  const viewAll = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel === 'View All Mind Map' &&
+      typeof node.props.onPress === 'function',
+  );
+  act(() => {
+    viewAll.props.onPress();
+  });
+  expect(onExpandMindMap).toHaveBeenCalledTimes(1);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Mind map preview',
+    ),
+  ).toBeDefined();
+  act(() => renderer.unmount());
+});
+
 test('compact Home omits a capture microphone without a start-capture producer', () => {
   const renderer = render({
     capture: {active: false, waitingForAudio: false, transcript: ''},

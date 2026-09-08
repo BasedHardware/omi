@@ -277,6 +277,7 @@ function SectionHeader({
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <Pressable
+        accessibilityLabel={`${actionLabel} ${title}`}
         accessibilityRole="button"
         onPress={action}
         style={styles.quietButton}>
@@ -504,7 +505,7 @@ export function MobileAppSurface({
         <View style={styles.section}>
           <SectionHeader
             action={onExpandMindMap}
-            actionLabel="Expand"
+            actionLabel="View All"
             title="Mind Map"
           />
           {mindMapStatus === 'ready' ? (

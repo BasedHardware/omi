@@ -62,31 +62,20 @@ afterEach(() => {
 
 test.each([
   ['Open settings', 'Settings stage'],
-  ['Expand', 'Memories stage'],
+  ['View All Mind Map', 'Memories stage'],
   ['Apps', 'Connectors stage'],
 ])(
   'mobile %s opens its real destination and can return home',
   async (label, stage) => {
     const renderer = await renderApp();
     await act(async () => {
-      if (label === 'Expand') {
-        const expand = renderer.root.findAll(
-          node => node.props.children === 'Expand',
-        )[0];
-        let button = expand.parent;
-        while (button && typeof button.props.onPress !== 'function') {
-          button = button.parent;
-        }
-        button!.props.onPress();
-      } else {
-        control(renderer, label).props.onPress();
-      }
+      control(renderer, label).props.onPress();
     });
     expect(control(renderer, stage)).toBeDefined();
     await act(async () =>
       control(
         renderer,
-        label === 'Expand' ? 'Back to Home' : 'Home',
+        label === 'View All Mind Map' ? 'Back to Home' : 'Home',
       ).props.onPress(),
     );
     expect(control(renderer, 'Ask Omi')).toBeDefined();
