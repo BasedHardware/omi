@@ -266,11 +266,12 @@ request. The file can be a JSON array of memory objects, or an object with a
 omi memory create-batch memories.json
 ```
 
-Every entry needs non-empty string `content`. Optional fields: `category`
-(known category), `visibility` (`public` or `private`, defaults to `private`),
-and `tags` (list of strings). Invalid JSON, more than 25 entries, or malformed
-entries fail before any HTTP request; the server still applies its own
-authorization and validation on the single batch call.
+Every entry needs non-empty string `content` (max 500 characters). Optional
+fields: `category` (known category), `visibility` (`public` or `private`,
+defaults to `private`), and `tags` (list of strings). Files may include a UTF-8
+BOM. Invalid JSON, more than 25 entries, or malformed entries fail before any
+HTTP request; the server still applies its own authorization and validation on
+the single batch call.
 
 ## Global flags
 
