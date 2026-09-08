@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -13,8 +16,9 @@ import 'package:omi/providers/conversation_provider.dart';
 /// (contracts/parity/README.md). Runs the repo-root fixture vectors through the
 /// REAL production rules: task bucketing (categorizeTasks, this platform's
 /// separate_overdue model), local-day conversation keys
-/// (conversationLocalDayKey, the #10198 contract), and action item wire decode
-/// (GeneratedActionItemResponse.fromJson). Day-key cases execute only when the
+/// (conversationLocalDayKey, the #10198 contract), action item wire decode
+/// (GeneratedActionItemResponse.fromJson), and conversation duration
+/// (ServerConversation.getDurationInSeconds, the #4056 contract). Day-key cases execute only when the
 /// fixture covers the runner's zone offset at that instant; offset 0 is always
 /// present so UTC CI runs every case.
 void main() {
@@ -103,6 +107,17 @@ void main() {
     }
   });
 
+  group('conversation duration (parity contract)', () {
+    final fixture = _fixture(root, 'conversation_duration.json');
+    for (final raw in fixture['cases'] as List<dynamic>) {
+      final c = raw as Map<String, dynamic>;
+      test(c['name'] as String, () {
+        final conversation = _durationConversation(c);
+        expect(conversation.getDurationInSeconds(), c['expected_seconds']);
+      });
+    }
+  });
+
   group('action item wire decode (parity contract)', () {
     final fixture = _fixture(root, 'wire_action_item.json');
     for (final raw in fixture['cases'] as List<dynamic>) {
@@ -176,3 +191,30 @@ GeneratedActionItemResponse _wireItem({DateTime? due, DateTime? created}) => Gen
       if (created != null) 'created_at': created.toUtc().toIso8601String(),
       if (due != null) 'due_at': due.toUtc().toIso8601String(),
     });
+
+/// Build the conversation through the production model so duration cases
+/// exercise the same getter the conversation list and detail header read.
+ServerConversation _durationConversation(Map<String, dynamic> c) {
+  final segments = (c['segments'] as List<dynamic>).asMap().entries.map((entry) {
+    final segment = entry.value as Map<String, dynamic>;
+    return TranscriptSegment(
+      id: 'seg-${entry.key}',
+      text: segment['text'] as String,
+      speaker: 'SPEAKER_00',
+      isUser: true,
+      personId: null,
+      start: (segment['start'] as num).toDouble(),
+      end: (segment['end'] as num).toDouble(),
+      translations: [],
+    );
+  }).toList();
+
+  return ServerConversation(
+    id: c['name'] as String,
+    createdAt: DateTime.utc(2026, 1, 1),
+    structured: Structured('Parity', 'Parity'),
+    transcriptSegments: segments,
+    startedAt: c['started_at'] == null ? null : DateTime.parse(c['started_at'] as String),
+    finishedAt: c['finished_at'] == null ? null : DateTime.parse(c['finished_at'] as String),
+  );
+}
