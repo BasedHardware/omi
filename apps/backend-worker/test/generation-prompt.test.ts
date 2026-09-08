@@ -637,15 +637,18 @@ describe("composeGenerationPrompt", () => {
       "current"
     );
     if (bounded.kind !== "ok") throw new Error("missing prompt");
-    expect(bounded.history).toHaveLength(
-      Math.floor(GENERATION_HISTORY_TEXT_BUDGET / 3000)
+    const fullTurns = Math.floor(GENERATION_HISTORY_TEXT_BUDGET / 3000);
+    const leftover = GENERATION_HISTORY_TEXT_BUDGET - fullTurns * 3000;
+    expect(bounded.history).toHaveLength(fullTurns + (leftover > 0 ? 1 : 0));
+    const used = bounded.history.reduce(
+      (sum, item) => sum + new TextEncoder().encode(item.content).byteLength,
+      0
     );
-    expect(
-      bounded.history.reduce(
-        (sum, item) => sum + new TextEncoder().encode(item.content).byteLength,
-        0
-      )
-    ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
+    expect(used).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
+    expect(used).toBeGreaterThan(fullTurns * 3000);
+    expect(bounded.history[0]?.content).toBe(
+      "界".repeat(Math.floor(leftover / 3))
+    );
   });
 
   test("keeps a UTF-8 prefix of an oversized prior turn instead of composing with empty history", async () => {
@@ -682,6 +685,59 @@ describe("composeGenerationPrompt", () => {
       new TextEncoder().encode(result.history[0]!.content).byteLength
     ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
     expect(result.history[0]?.content).not.toBe(oversized);
+  });
+
+  test("keeps a UTF-8 prefix of leftover budget that cannot fit the next full turn", async () => {
+    const euro = "€";
+    const euroBytes = new TextEncoder().encode(euro).byteLength;
+    const completeCount = Math.floor(
+      GENERATION_HISTORY_TEXT_BUDGET / euroBytes
+    );
+    const oversized = euro.repeat(completeCount + 8);
+    const recent = "recent";
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("message-older", oversized)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 2, 1, NULL)"
+      )
+      .bind("message-recent", recent)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 3, 1, NULL)"
+      )
+      .bind("message-now", "current")
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-now",
+      "current"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    const leftover =
+      GENERATION_HISTORY_TEXT_BUDGET -
+      new TextEncoder().encode(recent).byteLength;
+    const prefix = euro.repeat(Math.floor(leftover / euroBytes));
+    expect(result.history).toEqual([
+      { role: "user", content: prefix },
+      { role: "user", content: recent },
+    ]);
+    expect(prefix).not.toBe(oversized);
+    expect(prefix.length).toBeGreaterThan(0);
+    expect(
+      result.history.reduce(
+        (sum, item) => sum + new TextEncoder().encode(item.content).byteLength,
+        0
+      )
+    ).toBeLessThanOrEqual(GENERATION_HISTORY_TEXT_BUDGET);
   });
 
   test("appends a bound text/plain R2 object to the prompt", async () => {

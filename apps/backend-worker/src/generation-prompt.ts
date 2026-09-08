@@ -106,14 +106,12 @@ async function readGenerationHistory(
     if (!isVisibleGenerationText(row.text)) continue;
     const size = utf8Bytes(row.text);
     if (size > remaining) {
-      if (history.length === 0) {
-        const prefix = utf8Prefix(row.text, remaining);
-        if (isVisibleGenerationText(prefix)) {
-          history.push({
-            role: row.sender === "human" ? "user" : "assistant",
-            content: prefix,
-          });
-        }
+      const prefix = utf8Prefix(row.text, remaining);
+      if (isVisibleGenerationText(prefix)) {
+        history.push({
+          role: row.sender === "human" ? "user" : "assistant",
+          content: prefix,
+        });
       }
       break;
     }
