@@ -39,6 +39,8 @@ omi --help
 
 ## Quickstart
 
+[دليل البدء بالعربية](QUICKSTART.ar.md)
+
 ```bash
 # 1. Log in. With no flags, omi-cli asks how you want to authenticate:
 omi auth login
