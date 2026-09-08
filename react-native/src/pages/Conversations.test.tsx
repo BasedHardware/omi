@@ -628,3 +628,49 @@ test('conversation detail status is not a raw wire token', () => {
   expect(copy).toContain(conversationStatusCopy('in_progress'));
   expect(copy).not.toContain('in_progress');
 });
+
+test('a zero conversation createdAt groups as Date unavailable instead of 1970', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:epoch-one',
+    title: 'Undated recording',
+    summary: 'Missing a real start time.',
+    searchableText: 'Undated recording\nMissing a real start time.',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+    startedAt: null,
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Date unavailable');
+  expect(copy).toContain('Time unavailable');
+  expect(copy).not.toContain('1970');
+});

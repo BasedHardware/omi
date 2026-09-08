@@ -133,7 +133,11 @@ export function conversationGroupLabel(
   value: string,
   nowEpochMilliseconds: number,
 ): string {
-  const date = new Date(value);
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 'Date unavailable';
+  }
+  const date = new Date(timestamp);
   const now = new Date(nowEpochMilliseconds);
   const localDay = (item: Date) =>
     Date.UTC(item.getFullYear(), item.getMonth(), item.getDate()) / 86400000;

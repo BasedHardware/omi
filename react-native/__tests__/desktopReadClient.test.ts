@@ -741,6 +741,23 @@ test('conversation day labels prefer startedAt and keep Today/Yesterday/date', (
   );
 });
 
+test('conversation day labels treat a zero timestamp as Date unavailable', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  expect(conversationGroupLabel(new Date(0).toISOString(), now)).toBe(
+    'Date unavailable',
+  );
+  expect(conversationDayLabel(null, new Date(0).toISOString(), now)).toBe(
+    'Date unavailable',
+  );
+  expect(
+    conversationDayLabel(
+      new Date(0).toISOString(),
+      new Date(now).toISOString(),
+      now,
+    ),
+  ).toBe('Date unavailable');
+});
+
 test('clock labels keep Today as time and date older days', () => {
   const now = new Date(2026, 7, 14, 12, 0).getTime();
   const conversation = (
