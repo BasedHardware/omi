@@ -1891,6 +1891,8 @@ class ChatProvider: ObservableObject {
     lastFailedPrompt = nil
     messages.removeAll()
     resetMessagesPagination()
+    // Dropped-without-sending staged frames take their app-owned files with them.
+    RecentFrameStagingLifecycle.discardAppOwnedFiles(pendingAttachments)
     pendingAttachments.removeAll()
     pendingComposerReferences.removeAll()
     sessions.removeAll()
@@ -4038,6 +4040,9 @@ class ChatProvider: ObservableObject {
   }
 
   func removePendingAttachment(id: String) {
+    // An app-owned staged frame the user removed was never sent; its file goes
+    // with it. User-picked files (`appOwnedFileURL == nil`) are never touched.
+    RecentFrameStagingLifecycle.discardAppOwnedFile(id: id, in: pendingAttachments)
     pendingAttachments.removeAll { $0.id == id }
   }
 
@@ -4135,6 +4140,10 @@ class ChatProvider: ObservableObject {
     else { return nil }
     return str
   }
+
+  /// Send-time gate for in-flight frame stagings; see
+  /// `ChatProvider+RecentFrameStaging.swift`.
+  let recentFrameStagingGate = RecentFrameStagingGate()
 
   /// Block until all currently-uploading attachments either succeed or fail.
   /// Returns `false` if any failed — caller surfaces an error and aborts.
@@ -4807,6 +4816,9 @@ class ChatProvider: ObservableObject {
     // settles so persistence stays consistent across sessions.
     var attachmentsForMessage: [ChatAttachment] = []
     let composerReferencesForMessage = pendingComposerReferences
+    // Wait — bounded — for in-flight frame staging to land before the snapshot
+    // below decides what this message carries (picked-frame-then-send race).
+    await recentFrameStagingGate.settle()
     if !pendingAttachments.isEmpty {
       let ok = await awaitPendingUploads()
       guard
@@ -4833,6 +4845,8 @@ class ChatProvider: ObservableObject {
       attachmentsForMessage = pendingAttachments
       pendingAttachments.removeAll()
     }
+    // Deletion waits for function exit — the turn may still read `local_path`.
+    defer { RecentFrameStagingLifecycle.discardAppOwnedFiles(attachmentsForMessage) }
     // The row and the journal carry a caption (both require non-empty user text); the model is told
     // separately that the attachments are the whole message — see `modelPrompt` at the query.
     if isAttachmentOnlySend {
@@ -5064,18 +5078,17 @@ class ChatProvider: ObservableObject {
           screenContextEligibleForTurn = true
           let screenContextPayload: [String: Any]
           if screenContextReason.isExplicitScreenRequest {
-            // An explicit current-screen question gets one capture
-            // scoped to this exact turn. Never let a Rewind frame or
-            // OCR summary impersonate the image the model receives.
-            if screenRecordingGranted {
-              effectiveImageData = await Task.detached(priority: .userInitiated) {
-                ScreenCaptureManager.captureScreenData()
-              }.value
-            }
-            screenContextPayload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
-              screenRecordingGranted: screenRecordingGranted,
-              imageAttached: effectiveImageData != nil
+            // The policy decides what "my screen" is (see
+            // `ScreenContextFallbackPolicy`): on the main chat the composer is
+            // Omi's own window, so the most recent non-Omi frame stands in;
+            // everywhere else the subject is live and a turn-scoped capture
+            // wins. Never let a Rewind frame or OCR summary impersonate the
+            // image the model receives.
+            let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+              turnOwner: turnOwner
             )
+            effectiveImageData = evidence.imageData
+            screenContextPayload = evidence.payload
           } else {
             let rawScreenContextPayloadBox = await ScreenContextWorkContextBuilder.payloadBox(
               arguments: RuntimeJSONPayloadBox(["minutes": 10])
@@ -5996,6 +6009,9 @@ class ChatProvider: ObservableObject {
         // replaces the prompt with a canned answer the reader picked rather
         // than typed, and that has no business landing in their composer.
         restoreComposerAfterFailedTurn(trimmedText, turnOwner: turnOwner)
+        // The retry must ask about the same pixels: staged frames went back in
+        // the composer, not just the text. See the staging extension.
+        restoreFailedTurnAttachments(attachmentsForMessage, turnOwner: turnOwner)
         // An attachment-only turn has no retryable prompt: the send consumed the attachments, and
         // re-sending the caption alone would ask about files that are no longer there.
         lastFailedPrompt = failureNotice.retryable && !isAttachmentOnlySend ? effectivePrompt : nil

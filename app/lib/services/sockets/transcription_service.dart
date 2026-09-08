@@ -48,6 +48,7 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
     super.onboardingMode,
     super.geolocation,
     super.clientConversationId,
+    super.speechProfileRedo,
   }) : super.create(includeSpeechProfile: false);
 }
 
@@ -97,6 +98,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? clientConversationId;
 
   bool onboardingMode;
+  bool speechProfileRedo;
   Geolocation? geolocation;
 
   TranscriptSegmentSocketService.create(
@@ -108,6 +110,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
   }) {
@@ -129,6 +132,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (onboardingMode) {
       params += '&onboarding=enabled';
+    }
+
+    if (speechProfileRedo) {
+      params += '&speech_profile_redo=enabled';
     }
 
     // Enable server-side speaker auto-assignment (backward compatibility flag)
@@ -163,6 +170,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.speechProfileRedo = false,
     this.geolocation,
     this.clientConversationId,
   }) {
@@ -371,6 +379,56 @@ class TranscriptSocketServiceFactory {
     String? source,
   }) {
     return SpeechProfileTranscriptSegmentSocketService.create(sampleRate, codec, language, source: source);
+  }
+
+  /// Speech-profile (onboarding-question) socket transcribed on-device.
+  ///
+  /// Fallback for when the backend's streaming STT is unavailable. The
+  /// question flow and progress only need *some* transcript to arrive, and the
+  /// backend already accepts client-supplied `suggested_transcript` segments in
+  /// custom-STT mode (routers/listen/receiver.py) and feeds them to the
+  /// OnboardingHandler exactly like server-side STT output. Raw audio follows
+  /// the same forwarding setting as the conversation composite (a local-only
+  /// config keeps raw audio off the Omi socket; suggested transcripts still
+  /// reach the backend and keep its session clock alive); the voice print
+  /// itself is computed from the WAV the client uploads at finalize(), never
+  /// from the transcript, so a locally transcribed session yields the same
+  /// profile.
+  static TranscriptSegmentSocketService createSpeechProfileOnDevice(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language,
+    CustomSttConfig config, {
+    String? source,
+    bool speechProfileRedo = false,
+  }) {
+    final primarySocket = _createPollingSocket(sampleRate, codec, config);
+    final secondaryService = SpeechProfileTranscriptSegmentSocketService.create(
+      sampleRate,
+      codec,
+      language,
+      source: source,
+      customSttMode: true,
+      onboardingMode: true,
+      speechProfileRedo: speechProfileRedo,
+    );
+    final compositeSocket = CompositeTranscriptionSocket(
+      primarySocket: primarySocket,
+      secondarySocket: secondaryService.socket,
+      sttProvider: config.provider.name,
+      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
+    );
+    return TranscriptSegmentSocketService.withSocket(
+      sampleRate,
+      codec,
+      language,
+      compositeSocket,
+      source: source,
+      customSttMode: true,
+      sttConfigId: config.sttConfigId,
+      onboardingMode: true,
+      speechProfileRedo: speechProfileRedo,
+    );
   }
 
   /// Main entry point: Create transcription service from CustomSttConfig
