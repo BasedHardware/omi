@@ -1,6 +1,7 @@
 import { readHistory, readSettings, type Admission } from "./chat";
 import {
   conversationPage,
+  MAIN_CONVERSATION_ID,
   paginateConversations,
   readConversations,
   toLegacyConversation,
@@ -426,14 +427,18 @@ export async function handleChatHistory(
   }
   const limit = parseLimit(query.get("limit") ?? undefined);
   const olderCursor = query.get("olderCursor") ?? undefined;
-  const chatSessionId = query.get("chatSessionId") ?? undefined;
+  const requestedSession = query.get("chatSessionId") ?? undefined;
   if (
     limit === null ||
     olderCursor === "" ||
-    chatSessionId === "" ||
-    (chatSessionId !== undefined && chatSessionId.length > 128)
+    requestedSession === "" ||
+    (requestedSession !== undefined && requestedSession.length > 128)
   )
     return backendError("bad_request", "edit_request", 400);
+  const chatSessionId =
+    requestedSession === MAIN_CONVERSATION_ID.slice("chat:".length)
+      ? undefined
+      : requestedSession;
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);

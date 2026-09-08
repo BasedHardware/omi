@@ -290,6 +290,93 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("generation history treats stored chat-main as the main session", async () => {
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "main-key",
+        "acct-a",
+        "human",
+        "stored as chat-main",
+        1,
+        JSON.stringify({ chatSessionId: "chat-main" }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "named-prior",
+        "acct-a",
+        "human",
+        "named session words",
+        2,
+        JSON.stringify({ chatSessionId: "session-a" }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "current",
+        "acct-a",
+        "human",
+        "What is on main?",
+        3,
+        JSON.stringify({ chatSessionId: null }),
+        null
+      )
+      .run();
+    const fromNull = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is on main?"
+    );
+    expect(fromNull).toEqual({
+      kind: "ok",
+      prompt: "What is on main?",
+      history: [{ role: "user", content: "stored as chat-main" }],
+    });
+
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "current-key",
+        "acct-a",
+        "human",
+        "Continue on main",
+        4,
+        JSON.stringify({ chatSessionId: "chat-main" }),
+        null
+      )
+      .run();
+    const fromKey = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current-key",
+      "Continue on main"
+    );
+    expect(fromKey).toEqual({
+      kind: "ok",
+      prompt: "Continue on main",
+      history: [
+        { role: "user", content: "stored as chat-main" },
+        { role: "user", content: "What is on main?" },
+      ],
+    });
+  });
+
   test("keeps named-session history when the current payload JSON is unreadable", async () => {
     const rows = [
       ["main", "acct-a", "human", "main session words", 1, null, null, null],

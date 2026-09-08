@@ -1037,6 +1037,75 @@ describe("worker request contract", () => {
     expect(Number.isFinite(Date.parse(records[0]!.created_at))).toBe(true);
   });
 
+  test("history GET of listed chat:chat-main includes stored chatSessionId chat-main", async () => {
+    await insertChatMessage({
+      id: "main-key",
+      accountId: "test-account",
+      text: "stored as chat-main",
+      createdAt: 1_000,
+      position: 1,
+      chatSessionId: "chat-main",
+    });
+    await insertChatMessage({
+      id: "null-main",
+      accountId: "test-account",
+      text: "omitted session",
+      createdAt: 2_000,
+      position: 2,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "named",
+      accountId: "test-account",
+      text: "other session",
+      createdAt: 3_000,
+      position: 3,
+      chatSessionId: "session-alpha",
+    });
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    expect(
+      (
+        (await listed.json()) as { items: Array<{ id: string; title: string }> }
+      ).items.map((item) => item.id)
+    ).toEqual(["chat:session-alpha", MAIN_CONVERSATION_ID]);
+
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-key", "null-main"]);
+
+    const aliased = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=chat-main",
+      { headers: authenticatedHeaders }
+    );
+    expect(aliased.status).toBe(200);
+    expect(
+      (
+        (await aliased.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["main-key", "null-main"]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    expect(
+      (
+        (await named.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["named"]);
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

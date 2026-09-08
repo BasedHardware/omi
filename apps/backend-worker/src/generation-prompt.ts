@@ -190,9 +190,11 @@ export function recoveredPayloadTextKeySql(
   alias: string,
   key: "chatSessionId" | "appId"
 ): string {
-  return `(SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
+  const extracted = `(SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
     alias
   )}) WHERE key = '${key}' ORDER BY id DESC LIMIT 1)`;
+  if (key !== "chatSessionId") return extracted;
+  return `(SELECT CASE WHEN typeof(value) = 'text' AND length(CAST(value AS BLOB)) > 0 AND value != 'chat-main' THEN value END FROM (SELECT ${extracted} AS value))`;
 }
 
 function visibleStoredTextSql(alias: string): string {
