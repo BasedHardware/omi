@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from omi_cli import __version__
+from omi_cli import config as cfg
 from omi_cli.client import MAX_RETRY_ATTEMPTS
 from omi_cli.main import app, main
 
@@ -106,6 +107,20 @@ def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsy
     assert "Traceback" not in captured.err
     assert "secret" not in captured.err
     assert "private-token" not in captured.err
+
+
+@pytest.mark.parametrize("api_base", [123, False, ["https://api.omi.me"], {"url": "https://api.omi.me"}])
+def test_non_string_toml_api_base_is_structured_usage_error(authed_profile, monkeypatch, capsys, api_base):
+    config = cfg.load()
+    config.get_profile("default").api_base = api_base
+    cfg.save(config)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "memory", "list"])
+    with pytest.raises(SystemExit) as info:
+        main()
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"] == "Invalid API base URL"
 
 
 @pytest.mark.parametrize("json_mode", [False, True])

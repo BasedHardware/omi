@@ -108,7 +108,9 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
     """Run the OAuth browser flow + verify the resulting Firebase token works."""
     api_base = ctx.api_base_override or ctx.get_profile().api_base
     validate_api_base(api_base)
-    profile = oauth_auth.login_with_browser(ctx.profile_name, api_base=api_base, provider=provider)
+    profile = oauth_auth.login_with_browser(
+        ctx.profile_name, api_base=api_base, provider=provider, on_progress=ctx.renderer.info
+    )
 
     # Verify the freshly-minted Firebase ID token actually authenticates against
     # the Omi API. If it doesn't, roll back so the user isn't left holding a

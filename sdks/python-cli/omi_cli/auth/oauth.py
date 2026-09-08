@@ -31,7 +31,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 
@@ -90,6 +90,7 @@ def login_with_browser(
     profile_name: str,
     *,
     api_base: str,
+    on_progress: Callable[[str], None],
     provider: str = "google",
     open_browser: bool = True,
 ) -> Profile:
@@ -98,7 +99,8 @@ def login_with_browser(
     Returns the updated :class:`Profile`.
 
     ``open_browser=False`` is useful in headless tests; the caller is then
-    responsible for actually visiting the printed URL.
+    responsible for actually visiting the URL provided to ``on_progress``.
+    The command's renderer owns progress output and its JSON-mode policy.
     """
     if provider not in {"google", "apple"}:
         raise UsageError(
@@ -134,11 +136,11 @@ def login_with_browser(
         thread.start()
 
         try:
-            print(f"Opening browser for {provider} sign-in...")
-            print(f"If your browser does not open, visit:\n  {auth_url}")
+            on_progress(f"Opening browser for {provider} sign-in...")
+            on_progress(f"If your browser does not open, visit:\n  {auth_url}")
             if open_browser:
                 # webbrowser.open returns False on failure but is otherwise
-                # silent; we always print the URL above as a fallback.
+                # silent; the renderer supplies the URL in human output mode.
                 webbrowser.open(auth_url, new=2)
 
             if not received_event.wait(timeout=_BROWSER_TIMEOUT_SECONDS):

@@ -56,13 +56,17 @@ def validate_api_base(value: str) -> httpx.URL:
     # HTTPX accepts port zero and ports above the TCP port range. Reject these here
     # instead of retrying the resulting ConnectError as a server failure.
     try:
-        api_base: Optional[httpx.URL] = httpx.URL(value.rstrip("/"))
+        api_base: Optional[httpx.URL] = httpx.URL(value.rstrip("/")) if isinstance(value, str) else None
     except httpx.InvalidURL:
         api_base = None
     if (
         api_base is None
         or api_base.scheme not in ("http", "https")
         or not api_base.host
+        # These delimiters change how endpoint paths are appended, even when
+        # their component is empty. Percent-encoded path characters stay valid.
+        or "?" in value
+        or "#" in value
         or (api_base.port is not None and not 1 <= api_base.port <= 65535)
     ):
         # Never include a possibly credential-bearing URL in public errors.
