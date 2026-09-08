@@ -10,6 +10,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
+  - id: typescript-device-sdk-tests
+    command: ["bun", "test", "sdks/device/typescript"]
+    triggers: ["sdks/device/typescript/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Noble transport introduced in #10227 passed dashed UUID discovery filters to an undashed-UUID backend; exercise production discovery and audio delivery through a controllable adapter"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
