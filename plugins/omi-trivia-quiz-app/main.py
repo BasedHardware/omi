@@ -67,6 +67,25 @@ class SimpleTTLCache:
 
 
 trivia_cache = SimpleTTLCache(maxsize=128, ttl_seconds=86400)
+question_pool: Dict[str, List[Dict[str, Any]]] = {}
+
+
+def _get_cached_question(key: str) -> Optional[Dict[str, Any]]:
+    """Retrieve a pre-fetched question from the pool if available."""
+    pool = question_pool.get(key)
+    if pool:
+        return pool.pop(0)
+    return None
+
+
+def _store_cached_questions(key: str, questions: List[Dict[str, Any]]) -> None:
+    """Store extra fetched questions in the pool to protect against rate limits."""
+    if not questions:
+        return
+    if key not in question_pool:
+        question_pool[key] = []
+    if len(question_pool[key]) < 20:
+        question_pool[key].extend(questions)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +152,8 @@ KEYWORD_TO_CATEGORY_ID: Dict[str, int] = {
     "chemistry": 17,
     "computer": 18,
     "computers": 18,
+    "computer science": 18,
+    "cs": 18,
     "tech": 18,
     "technology": 18,
     "coding": 18,
@@ -180,15 +201,23 @@ KEYWORD_TO_CATEGORY_ID: Dict[str, int] = {
 
 
 def _resolve_category_id(query: Optional[str]) -> Optional[int]:
-    """Fuzzy resolve category name/keyword to OpenTDB category ID."""
+    """Fuzzy resolve category name/keyword to OpenTDB category ID, preferring longest match."""
     if not query:
         return None
     cleaned = query.strip().lower()
     if cleaned in KEYWORD_TO_CATEGORY_ID:
         return KEYWORD_TO_CATEGORY_ID[cleaned]
-    for kw, cat_id in KEYWORD_TO_CATEGORY_ID.items():
-        if kw in cleaned or cleaned in kw:
-            return cat_id
+
+    # Find matching keywords and choose the longest keyword match
+    matches = [
+        (kw, cat_id)
+        for kw, cat_id in KEYWORD_TO_CATEGORY_ID.items()
+        if kw in cleaned or cleaned in kw
+    ]
+    if matches:
+        matches.sort(key=lambda x: len(x[0]), reverse=True)
+        return matches[0][1]
+
     return None
 
 
@@ -218,7 +247,7 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
     message = first_error.get("msg", "invalid request")
     detail = f"{location}: {message}" if location else message
     response = ChatToolResponse(error=f"Invalid tool request: {detail}")
-    return JSONResponse(status_code=200, content=response.model_dump())
+    return JSONResponse(status_code=200, content=response.model_dump(exclude_none=True))
 
 
 # ---------------------------------------------------------------------------
@@ -266,16 +295,22 @@ def _format_trivia_question(q: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Tool Endpoints
 # ---------------------------------------------------------------------------
-@app.post("/tools/get_trivia_question", response_model=ChatToolResponse)
+@app.post("/tools/get_trivia_question", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def get_trivia_question(request: GetTriviaQuestionRequest) -> ChatToolResponse:
     """Get a multiple choice or custom trivia question with category and difficulty options."""
     client: httpx.AsyncClient = app.state.http_client
-    params: Dict[str, Any] = {"amount": 1}
 
-    if request.category:
-        cat_id = _resolve_category_id(request.category)
-        if cat_id:
-            params["category"] = cat_id
+    cat_id = _resolve_category_id(request.category) if request.category else None
+    pool_key = f"{cat_id or 'all'}:{request.difficulty or 'any'}:{request.question_type or 'any'}"
+
+    # Check question pool first to avoid redundant upstream calls
+    cached_q = _get_cached_question(pool_key)
+    if cached_q:
+        return ChatToolResponse(result=_format_trivia_question(cached_q))
+
+    params: Dict[str, Any] = {"amount": 5}
+    if cat_id:
+        params["category"] = cat_id
     if request.difficulty:
         params["difficulty"] = request.difficulty
     if request.question_type:
@@ -289,34 +324,52 @@ async def get_trivia_question(request: GetTriviaQuestionRequest) -> ChatToolResp
         data = resp.json()
 
         code = data.get("response_code", 0)
+        # Check rate-limit response code 5 before fallback
+        if code == 5:
+            return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
+
         results = data.get("results", [])
         if code == 1 or not results:
-            # Fallback without filters if too specific
-            resp = await client.get(OPENTDB_API_URL, params={"amount": 1})
+            # Fallback without category/difficulty filters, but preserve question_type
+            fallback_params: Dict[str, Any] = {"amount": 1}
+            if request.question_type:
+                fallback_params["type"] = request.question_type
+            resp = await client.get(OPENTDB_API_URL, params=fallback_params)
             if resp.status_code == 429:
                 return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
+            resp.raise_for_status()
             data = resp.json()
+            if data.get("response_code") == 5:
+                return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
             results = data.get("results", [])
 
         if not results:
             return ChatToolResponse(error="Could not retrieve a trivia question at this moment.")
 
         result_str = _format_trivia_question(results[0])
+        if len(results) > 1:
+            _store_cached_questions(pool_key, results[1:])
         return ChatToolResponse(result=result_str)
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to fetch trivia question: {exc}")
 
 
-@app.post("/tools/get_true_false_quiz", response_model=ChatToolResponse)
+@app.post("/tools/get_true_false_quiz", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def get_true_false_quiz(request: QuickTrueFalseQuizRequest) -> ChatToolResponse:
     """Get a rapid True or False quiz question for instant voice responses."""
     client: httpx.AsyncClient = app.state.http_client
-    params: Dict[str, Any] = {"amount": 1, "type": "boolean"}
 
-    if request.category:
-        cat_id = _resolve_category_id(request.category)
-        if cat_id:
-            params["category"] = cat_id
+    cat_id = _resolve_category_id(request.category) if request.category else None
+    pool_key = f"boolean:{cat_id or 'all'}:{request.difficulty or 'any'}"
+
+    # Check question pool first
+    cached_q = _get_cached_question(pool_key)
+    if cached_q:
+        return ChatToolResponse(result=_format_trivia_question(cached_q))
+
+    params: Dict[str, Any] = {"amount": 5, "type": "boolean"}
+    if cat_id:
+        params["category"] = cat_id
     if request.difficulty:
         params["difficulty"] = request.difficulty
 
@@ -327,23 +380,36 @@ async def get_true_false_quiz(request: QuickTrueFalseQuizRequest) -> ChatToolRes
         resp.raise_for_status()
         data = resp.json()
 
+        code = data.get("response_code", 0)
+        # Check rate-limit response code 5 before fallback
+        if code == 5:
+            return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
+
         results = data.get("results", [])
-        if not results:
+        if code == 1 or not results:
             # Fallback to general boolean
-            resp = await client.get(OPENTDB_API_URL, params={"amount": 1, "type": "boolean"})
+            fallback_params: Dict[str, Any] = {"amount": 1, "type": "boolean"}
+            resp = await client.get(OPENTDB_API_URL, params=fallback_params)
+            if resp.status_code == 429:
+                return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
+            resp.raise_for_status()
             data = resp.json()
+            if data.get("response_code") == 5:
+                return ChatToolResponse(error="Trivia service is busy (rate limit). Please wait a moment before trying again.")
             results = data.get("results", [])
 
         if not results:
             return ChatToolResponse(error="Could not retrieve a True/False quiz question at this moment.")
 
         result_str = _format_trivia_question(results[0])
+        if len(results) > 1:
+            _store_cached_questions(pool_key, results[1:])
         return ChatToolResponse(result=result_str)
     except Exception as exc:
         return ChatToolResponse(error=f"Failed to fetch True/False quiz: {exc}")
 
 
-@app.post("/tools/list_trivia_categories", response_model=ChatToolResponse)
+@app.post("/tools/list_trivia_categories", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def list_trivia_categories(_: ListCategoriesRequest) -> ChatToolResponse:
     """List all available trivia categories and knowledge domains."""
     cached = trivia_cache.get("categories")
@@ -378,6 +444,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "get_trivia_question",
                 "description": "Generate an interactive multiple choice trivia question with optional category and difficulty filters.",
+                "endpoint": "/tools/get_trivia_question",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -401,6 +470,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "get_true_false_quiz",
                 "description": "Get a rapid True or False quiz question for instant voice responses on Omi wearables.",
+                "endpoint": "/tools/get_true_false_quiz",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -419,6 +491,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "list_trivia_categories",
                 "description": "List all 24 available knowledge domains and trivia categories.",
+                "endpoint": "/tools/list_trivia_categories",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {},

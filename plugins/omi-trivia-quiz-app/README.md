@@ -72,8 +72,7 @@ curl -X POST http://localhost:8080/tools/get_trivia_question \
 **Sample Response:**
 ```json
 {
-  "result": "🎯 Trivia Question (Medium | Science & Nature):\n\"What is the chemical symbol for Gold?\"\n\nOptions:\nA) Ag\nB) Au\nC) Fe\nD) Cu\n\n💡 Correct Answer: B) Au",
-  "error": null
+  "result": "🎯 Trivia Question (Medium | Science & Nature):\n\"What is the chemical symbol for Gold?\"\n\nOptions:\nA) Ag\nB) Au\nC) Fe\nD) Cu\n\n💡 Correct Answer: B) Au"
 }
 ```
 
@@ -86,8 +85,7 @@ curl -X POST http://localhost:8080/tools/get_true_false_quiz \
 **Sample Response:**
 ```json
 {
-  "result": "⚡ Quick True/False Challenge (Easy | Geography):\n\"The Great Wall of China is visible from space with the naked eye.\"\n\nSay 'True' or 'False' to answer!\n\n💡 Correct Answer: False",
-  "error": null
+  "result": "⚡ Quick True/False Challenge (Easy | Geography):\n\"The Great Wall of China is visible from space with the naked eye.\"\n\nSay 'True' or 'False' to answer!\n\n💡 Correct Answer: False"
 }
 ```
 
@@ -100,8 +98,7 @@ curl -X POST http://localhost:8080/tools/list_trivia_categories \
 **Sample Response:**
 ```json
 {
-  "result": "📚 Available Trivia Categories:\n• Animals\n• Art\n• Celebrities\n• Entertainment: Books\n• Entertainment: Film\n• Entertainment: Music\n• Entertainment: Video Games\n• Geography\n• History\n• Science & Nature\n• Science: Computers & Technology\n• Sports...",
-  "error": null
+  "result": "📚 Available Trivia Categories:\n• Animals\n• Art\n• Celebrities\n• Entertainment: Books\n• Entertainment: Film\n• Entertainment: Music\n• Entertainment: Video Games\n• Geography\n• History\n• Science & Nature\n• Science: Computers & Technology\n• Sports..."
 }
 ```
 
@@ -110,7 +107,7 @@ curl -X POST http://localhost:8080/tools/list_trivia_categories \
 ## Architecture & Reliability
 
 - **Standard OpenTDB Integration**: Direct connection to the open OpenTDB REST API with full HTML entity unescaping.
-- **Smart Category Mapping**: Fuzzy keyword matcher maps natural user topics ("movies", "tech", "coding", "geo", "animals") to official category IDs.
-- **In-Memory LRU Caching**: Caches category manifests and question sets to optimize speed.
-- **Omi Chat-Tool Protocol Compliant**: Exposes `/.well-known/omi-tools.json` function manifest with JSON schema validation and structured `ChatToolResponse` error handling.
+- **Smart Category Mapping**: Fuzzy keyword matcher maps natural user topics ("movies", "tech", "computer science", "coding", "geo", "animals") to official category IDs preferring longest matches.
+- **In-Memory LRU Caching & Question Pool**: Caches category manifests and buffers pre-fetched questions in a bounded pool to ensure rapid voice responses and prevent rate-limit throttling.
+- **Omi Chat-Tool Protocol Compliant**: Exposes `/.well-known/omi-tools.json` function manifest with JSON schema validation, endpoints, method specifications, and strict `ChatToolResponse` error handling (null-excluded).
 - **Ready for Deployment**: Includes `railway.toml` (Nixpacks), `Procfile`, and `runtime.txt` (`python-3.11`).

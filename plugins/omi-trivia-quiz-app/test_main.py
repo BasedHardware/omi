@@ -15,6 +15,7 @@ from main import (
     health,
     list_trivia_categories,
     omi_tools,
+    question_pool,
     trivia_cache,
 )
 from models import (
@@ -105,6 +106,11 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(_resolve_category_id("music"), 12)
         self.assertIsNone(_resolve_category_id("UnknownCategory123"))
 
+    def test_resolve_category_id_compound_preference(self):
+        # "computer science" should match computers (18) rather than science (17)
+        self.assertEqual(_resolve_category_id("computer science"), 18)
+        self.assertEqual(_resolve_category_id("science"), 17)
+
     def test_format_multiple_choice_question(self):
         formatted = _format_trivia_question(SAMPLE_MULTIPLE)
         self.assertIn("What is the chemical symbol for Gold?", formatted)
@@ -125,6 +131,7 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         trivia_cache.clear()
+        question_pool.clear()
         self.mock_client = AsyncMock()
         app.state.http_client = self.mock_client
 
@@ -144,6 +151,11 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         self.assertIn("get_trivia_question", tool_names)
         self.assertIn("get_true_false_quiz", tool_names)
         self.assertIn("list_trivia_categories", tool_names)
+
+        for t in tools:
+            self.assertIn("endpoint", t)
+            self.assertEqual(t["method"], "POST")
+            self.assertFalse(t["auth_required"])
 
     async def test_get_trivia_question_success(self):
         mock_resp = MagicMock()
@@ -191,6 +203,58 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(resp.error)
         self.assertIn("Could not retrieve", resp.error)
 
+    async def test_opentdb_code_5_rate_limit_handled(self):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"response_code": 5, "results": []}
+        self.mock_client.get.return_value = mock_resp
+
+        req = GetTriviaQuestionRequest(category="Science")
+        resp = await get_trivia_question(req)
+        self.assertIsNotNone(resp.error)
+        self.assertIn("rate limit", resp.error)
+        # Verify fallback was NOT executed
+        self.assertEqual(self.mock_client.get.call_count, 1)
+
+    async def test_fallback_preserves_question_type(self):
+        mock_resp_empty = MagicMock()
+        mock_resp_empty.status_code = 200
+        mock_resp_empty.json.return_value = {"response_code": 1, "results": []}
+
+        mock_resp_success = MagicMock()
+        mock_resp_success.status_code = 200
+        mock_resp_success.json.return_value = {"response_code": 0, "results": [SAMPLE_MULTIPLE]}
+
+        self.mock_client.get.side_effect = [mock_resp_empty, mock_resp_success]
+
+        req = GetTriviaQuestionRequest(category="Mythology", question_type="multiple")
+        resp = await get_trivia_question(req)
+        self.assertIsNone(resp.error)
+        self.assertEqual(self.mock_client.get.call_count, 2)
+        fallback_call_params = self.mock_client.get.call_args_list[1][1]["params"]
+        self.assertEqual(fallback_call_params.get("type"), "multiple")
+
+    async def test_question_pool_buffering(self):
+        # Return 2 questions in the initial batch
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "response_code": 0,
+            "results": [SAMPLE_MULTIPLE, SAMPLE_BOOLEAN],
+        }
+        self.mock_client.get.return_value = mock_resp
+
+        req = GetTriviaQuestionRequest(category="Science")
+        # First call fetches and returns question 1, pools question 2
+        resp1 = await get_trivia_question(req)
+        self.assertIsNone(resp1.error)
+        self.assertEqual(self.mock_client.get.call_count, 1)
+
+        # Second call immediately consumes question 2 from pool without calling HTTP client
+        resp2 = await get_trivia_question(req)
+        self.assertIsNone(resp2.error)
+        self.assertEqual(self.mock_client.get.call_count, 1)
+
 
 class TestFastAPIHttp(unittest.TestCase):
     """Test HTTP routing and exception handling."""
@@ -212,14 +276,20 @@ class TestFastAPIHttp(unittest.TestCase):
     def test_manifest_http(self):
         resp = self.client.get("/.well-known/omi-tools.json")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["schema_version"], "1.0")
+        data = resp.json()
+        self.assertEqual(data["schema_version"], "1.0")
+        self.assertEqual(len(data["tools"]), 3)
+        for t in data["tools"]:
+            self.assertIn("endpoint", t)
+            self.assertEqual(t["method"], "POST")
+            self.assertFalse(t["auth_required"])
 
     def test_validation_exception_handler_returns_200_with_error(self):
         resp = self.client.post("/tools/get_trivia_question", json={"difficulty": "impossible_level"})
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("error", data)
-        self.assertIsNone(data.get("result"))
+        self.assertNotIn("result", data)
         self.assertIn("Invalid tool request", data["error"])
 
 

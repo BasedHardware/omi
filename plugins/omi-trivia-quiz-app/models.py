@@ -1,11 +1,13 @@
 """Pydantic models for Omi Open Trivia & Quiz Integration App."""
 
 from typing import Literal, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ChatToolResponse(BaseModel):
     """Standard response model for Omi chat tool endpoints."""
+
+    model_config = ConfigDict(extra="ignore")
 
     result: Optional[str] = None
     error: Optional[str] = None
@@ -20,8 +22,11 @@ class ChatToolResponse(BaseModel):
 class GetTriviaQuestionRequest(BaseModel):
     """Request model for retrieving a trivia question."""
 
+    model_config = ConfigDict(extra="ignore")
+
     category: Optional[str] = Field(
         default=None,
+        max_length=100,
         description="Optional category name or keyword (e.g. 'Science', 'History', 'Computers', 'Film', 'Geography').",
     )
     difficulty: Optional[Literal["easy", "medium", "hard"]] = Field(
@@ -37,8 +42,11 @@ class GetTriviaQuestionRequest(BaseModel):
 class QuickTrueFalseQuizRequest(BaseModel):
     """Request model for a quick True/False voice challenge."""
 
+    model_config = ConfigDict(extra="ignore")
+
     category: Optional[str] = Field(
         default=None,
+        max_length=100,
         description="Optional category keyword (e.g. 'Science', 'Animals', 'Geography', 'History').",
     )
     difficulty: Optional[Literal["easy", "medium", "hard"]] = Field(
@@ -50,4 +58,4 @@ class QuickTrueFalseQuizRequest(BaseModel):
 class ListCategoriesRequest(BaseModel):
     """Request model for listing all available trivia categories."""
 
-    pass
+    model_config = ConfigDict(extra="ignore")
