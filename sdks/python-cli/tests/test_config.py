@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -107,8 +108,8 @@ def test_config_path_json_succeeds_with_malformed_config(config_path: Path, cli_
     config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
     result = cli_runner.invoke(app, ["--json", "config", "path"])
     assert result.exit_code == 0, result.output
-    assert "path" in result.output
-    assert str(config_path) in result.output
+    payload = json.loads(result.output)
+    assert payload["path"] == str(config_path)
 
 
 def test_config_set_preserves_unknown_root_settings(config_path: Path, cli_runner) -> None:
