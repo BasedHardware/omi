@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Home chat input bar breaking apart when the paperclip menu's backing control grew to half the lane, squeezing the Ask Omi field and pushing the mic and send discs to the window edge"
+}
