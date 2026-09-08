@@ -6,9 +6,13 @@ malformed record made FastAPI raise ResponseValidationError -> HTTP 500 for the 
 
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -181,3 +185,87 @@ def test_pagination_is_clamped_before_firestore():
     high = m.call_args_list[0].kwargs
     assert high['limit'] == 1000 and high['offset'] == 0  # 99999 -> 1000, -1 -> 0
     assert m.call_args_list[1].kwargs['limit'] == 1  # 0 -> 1
+
+
+def _update_fixture():
+    due = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+    existing = {
+        'id': 'a1',
+        'description': 'Original task',
+        'completed': False,
+        'due_at': due,
+    }
+    return existing, due
+
+
+def test_developer_patch_explicit_null_clears_due_date_and_reminder():
+    existing, _ = _update_fixture()
+    updated = {**existing, 'due_at': None}
+    request = developer_module.UpdateActionItemRequest(due_at=None)
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        result = developer_module.update_action_item('a1', request, uid='uid1')
+
+    assert request.model_fields_set == {'due_at'}
+    assert update.call_args.args[2] == {'due_at': None}
+    sync.assert_called_once_with(
+        user_id='uid1',
+        action_item_id='a1',
+        description='Original task',
+        completed=False,
+        due_at=None,
+    )
+    assert result['due_at'] is None
+
+
+def test_developer_patch_omitted_due_date_preserves_existing_value():
+    existing, due = _update_fixture()
+    updated = {**existing, 'description': 'Updated task'}
+    request = developer_module.UpdateActionItemRequest(description='Updated task')
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        result = developer_module.update_action_item('a1', request, uid='uid1')
+
+    assert 'due_at' not in request.model_fields_set
+    assert update.call_args.args[2] == {'description': 'Updated task'}
+    sync.assert_not_called()
+    assert result['due_at'] == due
+
+
+def test_developer_patch_replaces_due_date_when_supplied():
+    existing, _ = _update_fixture()
+    replacement = datetime(2026, 9, 12, 12, tzinfo=timezone.utc)
+    updated = {**existing, 'due_at': replacement}
+    request = developer_module.UpdateActionItemRequest(due_at=replacement)
+
+    with (
+        patch.object(action_items_db, 'get_action_item', side_effect=[existing, updated]),
+        patch.object(action_items_db, 'update_action_item', return_value=True) as update,
+        patch.object(developer_module, 'sync_action_item_reminder') as sync,
+    ):
+        result = developer_module.update_action_item('a1', request, uid='uid1')
+
+    assert update.call_args.args[2] == {'due_at': replacement}
+    sync.assert_called_once()
+    assert sync.call_args.kwargs['due_at'] == replacement
+    assert result['due_at'] == replacement
+
+
+def test_developer_patch_rejects_empty_payload():
+    existing, _ = _update_fixture()
+    request = developer_module.UpdateActionItemRequest()
+
+    with patch.object(action_items_db, 'get_action_item', return_value=existing):
+        with pytest.raises(HTTPException) as exc:
+            developer_module.update_action_item('a1', request, uid='uid1')
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == 'At least one field must be provided'
