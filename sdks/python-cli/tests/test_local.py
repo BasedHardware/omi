@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sqlite3
 from pathlib import Path
 
 import httpx
@@ -227,7 +228,44 @@ def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, c
 
     assert result.exit_code == 0, result.output
     fallback_query = json.loads(route.calls[1].request.content)["arguments"]["query"]
-    assert "WHERE (appName LIKE '%Discord%') AND" in fallback_query
+    assert "WHERE (appName LIKE '%Discord%' ESCAPE '!') AND" in fallback_query
+
+
+@pytest.mark.parametrize("literal,decoy", [("50%", "500"), ("a_b", "axb"), ("a!b", "ab"), ("it's", "its")])
+@pytest.mark.parametrize("field", ["appName", "windowTitle", "ocrText", "app_filter"])
+def test_search_screen_fallback_matches_literal_text(
+    config_path: Path, cli_runner, literal: str, decoy: str, field: str
+) -> None:
+    _configure_local_profile(config_path)
+    with sqlite3.connect(":memory:") as db:
+        db.row_factory = sqlite3.Row
+        db.execute(
+            "CREATE TABLE screenshots (id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, isIndexed INTEGER)"
+        )
+        for row_id, value in enumerate((literal, decoy), start=1):
+            values = {"appName": "Browser", "windowTitle": "notes", "ocrText": "notes"}
+            values["appName" if field == "app_filter" else field] = value
+            db.execute(
+                "INSERT INTO screenshots VALUES (?, ?, ?, ?, ?, ?)",
+                (row_id, "2026-09-07T00:00:00Z", values["appName"], values["windowTitle"], values["ocrText"], 1),
+            )
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            if body["name"] == "search_screen_history":
+                return httpx.Response(200, json=_tool_response("No matching screen-history results"))
+            assert body["name"] == "execute_sql"
+            rows = [dict(row) for row in db.execute(body["arguments"]["query"])]
+            return httpx.Response(200, json=_tool_response({"rows": rows}))
+
+        args = ["--json", "local", "search-screen", "notes" if field == "app_filter" else literal]
+        if field == "app_filter":
+            args.extend(["--app", literal])
+        with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+            router.post("/v1/local/tool").mock(side_effect=respond)
+            result = cli_runner.invoke(app, args)
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["suggested_screenshot_ids"] == [1]
 
 
 def test_sql_routes_to_execute_sql_with_env_overrides(config_path: Path, cli_runner, monkeypatch) -> None:

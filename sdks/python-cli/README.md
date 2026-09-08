@@ -159,6 +159,11 @@ Agent screen-history workflow:
 5. Validate the file before handing it to vision tooling, for example
    `file /tmp/omi-shot.jpg`.
 
+When semantic search returns no results, JSON mode also tries a literal
+substring search across app names, window titles, and OCR text. In this
+fallback, `%` and `_` in the query or `--app` filter match those characters
+literally, rather than acting as SQL wildcards.
+
 If pixels are not available, JSON-mode errors preserve Desktop's structured
 fields such as `status_code`, `error`, `reason`, `hint`, and `screenshot_id`.
 For example, `screenshot_pending` means the frame is still in the active video
