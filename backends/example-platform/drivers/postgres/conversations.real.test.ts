@@ -650,6 +650,21 @@ realTest(
         })
       );
       await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',400,400,'session-nbsp',NULL,0,'sha256:nbsp','desktop_chat',NULL,false,'rev-nbsp','[]'::jsonb,'gen_nbsp')`,
+        [account, "44444444-4444-4444-8444-444444444444", "\u00A0"]
+      );
+      const unicodeBlank = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(ids(unicodeBlank)).toContain("chat:session-nbsp");
+      expect(unicodeBlank.items.find((item) => item.id === "chat:session-nbsp")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-nbsp",
+          title: "",
+          overview: "",
+        })
+      );
+      await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
       );
@@ -657,6 +672,7 @@ realTest(
       expect(ids(revoked)).not.toContain("chat:chat-main");
       expect(ids(revoked)).not.toContain("chat:session-alpha");
       expect(ids(revoked)).not.toContain("chat:session-blank");
+      expect(ids(revoked)).not.toContain("chat:session-nbsp");
       expect(revoked.items).toHaveLength(1);
     } finally {
       await pool.close();

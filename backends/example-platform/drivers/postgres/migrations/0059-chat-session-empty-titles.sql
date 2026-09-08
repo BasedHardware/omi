@@ -1,13 +1,16 @@
 CREATE OR REPLACE FUNCTION omi_memory.read_chat_conversation_sessions()
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,omi_memory AS $function$
-DECLARE v_account text:=nullif(current_setting('omi.account_id',true),''); v_sessions jsonb;
+DECLARE
+  v_account text:=nullif(current_setting('omi.account_id',true),'');
+  v_sessions jsonb;
+  v_ws text:=chr(9)||chr(10)||chr(11)||chr(12)||chr(13)||chr(32)||chr(160)||chr(5760)||chr(8192)||chr(8193)||chr(8194)||chr(8195)||chr(8196)||chr(8197)||chr(8198)||chr(8199)||chr(8200)||chr(8201)||chr(8202)||chr(8232)||chr(8233)||chr(8239)||chr(8287)||chr(12288)||chr(65279);
 BEGIN
   IF v_account IS NULL OR nullif(current_setting('omi.principal_id',true),'') IS NULL
     OR current_setting('omi.capability',true) IS DISTINCT FROM 'chat.read' THEN
     RAISE EXCEPTION USING ERRCODE='P1005',MESSAGE='chat_authority_denied';
   END IF;
   SELECT coalesce(jsonb_agg(to_jsonb(session) ORDER BY session."updatedAt" DESC, session.id),'[]'::jsonb)
-  INTO v_sessions
+    INTO v_sessions
   FROM (
     SELECT
       CASE
@@ -15,12 +18,12 @@ BEGIN
         ELSE 'chat:' || chat_session_id
       END AS id,
       CASE
-        WHEN char_length(btrim(title_text, E' \t\n\r'))>240 THEN left(btrim(title_text, E' \t\n\r'),237)||'...'
-        ELSE btrim(title_text, E' \t\n\r')
+        WHEN char_length(btrim(title_text, v_ws))>240 THEN left(btrim(title_text, v_ws),237)||'...'
+        ELSE btrim(title_text, v_ws)
       END AS title,
       CASE
-        WHEN char_length(btrim(last_text, E' \t\n\r'))>240 THEN left(btrim(last_text, E' \t\n\r'),237)||'...'
-        ELSE btrim(last_text, E' \t\n\r')
+        WHEN char_length(btrim(last_text, v_ws))>240 THEN left(btrim(last_text, v_ws),237)||'...'
+        ELSE btrim(last_text, v_ws)
       END AS overview,
       created_at AS "createdAt",
       updated_at AS "updatedAt",

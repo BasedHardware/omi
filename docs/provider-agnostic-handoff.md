@@ -332,7 +332,7 @@ Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
 
-Cloud Linux after `0507875749`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Cancelled chat replies and completed recording transcripts that are only whitespace say Response stopped / The transcript is empty instead of a blank body. Whitespace-only task titles now say Task title unavailable instead of a blank checkbox row. The task editor keeps the trimmed raw title so it does not save that fallback. This does not invent a task producer.
+Cloud Linux after `aaa6571320`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Whitespace-only task titles say Task title unavailable instead of a blank checkbox row. The task editor keeps the trimmed raw title. Production chat session titles now trim the same Unicode whitespace set Worker already uses, so NBSP-only sessions stay visible with empty title and overview instead of a blank-looking row. Migration 0059 is not applied to DEV from this VM. This does not invent a chat or task producer.
 
 ## Verified and pushed
 
