@@ -15,6 +15,11 @@ CHANGELOG_DIR = DESKTOP_DIR / "changelog"
 UNRELEASED_DIR = CHANGELOG_DIR / "unreleased"
 RELEASES_DIR = CHANGELOG_DIR / "releases"
 LEGACY_CHANGELOG_PATH = DESKTOP_DIR / "CHANGELOG.json"
+# Trimmed copy shipped inside the app bundle so the Updates settings section can show
+# release notes offline. The full history stays in CHANGELOG.json; only the most recent
+# releases are worth carrying in every download.
+BUNDLED_CHANGELOG_PATH = DESKTOP_DIR / "Desktop" / "Sources" / "Resources" / "changelog.json"
+BUNDLED_RELEASE_LIMIT = 25
 NONE_KIND = "none"
 
 
@@ -138,6 +143,17 @@ def legacy_changelog() -> dict[str, object]:
     }
 
 
+def bundled_changelog() -> dict[str, object]:
+    return {"releases": release_entries()[:BUNDLED_RELEASE_LIMIT]}
+
+
+def write_generated_changelogs() -> None:
+    """Keep both generated outputs in step: the full legacy file and the bundled resource."""
+
+    write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
+    write_json(BUNDLED_CHANGELOG_PATH, bundled_changelog())
+
+
 def validate() -> None:
     seen_versions: set[str] = set()
     for path in unreleased_fragment_paths():
@@ -181,8 +197,8 @@ def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, ob
             "changes": normalize_changes(existing.get("changes", []), release_path),
         }
         if write:
-            # Keep legacy CHANGELOG.json aligned without rewriting the release file.
-            write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
+            # Keep the generated changelogs aligned without rewriting the release file.
+            write_generated_changelogs()
         return normalized
 
     changes = unreleased_changes() or ["Bug fixes and improvements"]
@@ -196,7 +212,7 @@ def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, ob
         write_json(release_path, release)
         for path in fragments:
             path.unlink()
-        write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
+        write_generated_changelogs()
 
     return release
 
@@ -264,7 +280,7 @@ def main() -> int:
         elif args.command == "generate-legacy":
             data = legacy_changelog()
             if args.write:
-                write_json(LEGACY_CHANGELOG_PATH, data)
+                write_generated_changelogs()
             else:
                 print(json.dumps(data, indent=2, ensure_ascii=False))
         elif args.command == "migrate-from-legacy":

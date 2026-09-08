@@ -41,6 +41,7 @@ final class PermissionsPagePresentationTests: XCTestCase {
         .shortcuts,
         .advanced,
         .referral,
+        .updates,
         .about,
       ])
   }

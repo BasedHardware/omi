@@ -1,0 +1,74 @@
+version: 2
+name: updates-settings
+tier: 2
+description: Settings Updates section navigation, update preferences, and bundled release notes
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Updates.swift
+  - desktop/macos/Desktop/Sources/Updater/DesktopReleaseNotes.swift
+  - desktop/macos/Desktop/Sources/UpdaterViewModel.swift
+  - desktop/macos/Desktop/Sources/Updater/ReleaseNotesDisclosure.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Updates section
+    bridge.navigate:
+      target: settings
+      settingsSection: Updates
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Updates
+
+  - id: S2
+    name: Updates snapshot carries version and bundled release notes
+    bridge.action:
+      name: settings_updates_snapshot
+    expect:
+      ok: true
+      result.detail.schema: "version,build,channel,auto_check,auto_install,release_note_count,latest_release_version,latest_release_change_count,has_notes_for_running_version,visible_release_count,expanded_versions"
+
+  - id: S3
+    name: An older release opens on toggle
+    bridge.action:
+      name: settings_toggle_release_note
+      params:
+        version: "0.12.321"
+    expect:
+      ok: true
+      result.detail.expanded: "true"
+
+  - id: S4
+    name: The same release closes again
+    bridge.action:
+      name: settings_toggle_release_note
+      params:
+        version: "0.12.321"
+    expect:
+      ok: true
+      result.detail.expanded: "false"
+
+  - id: S5
+    name: Show more reveals another page of releases
+    bridge.action:
+      name: settings_show_more_release_notes
+    expect:
+      ok: true
+      result.detail.visible_release_count: "10"
+
+  - id: S6
+    name: About renders without the update controls it handed over
+    bridge.navigate:
+      target: settings
+      settingsSection: About
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: About
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

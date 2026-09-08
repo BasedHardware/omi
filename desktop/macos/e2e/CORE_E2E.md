@@ -98,6 +98,7 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | `memory-depth` | v2 | typed bridge | 2 | Memory search, tag filter, visibility toggle |
 | `quick-note` | v2 | typed bridge | 2 | Quick Note → Rewind notes |
 | `about-settings` | v2 | typed bridge | 2 | About section + version snapshot |
+| `updates-settings` | v2 | typed bridge | 2 | Updates section + bundled release-notes snapshot |
 | `notifications-settings` | v2 | typed bridge | 2 | Notifications snapshot + API update |
 | `rewind-settings` | v2 | typed bridge | 2 | Rewind retention/excluded-apps snapshot |
 | `keyboard-shortcuts` | v2 | typed bridge | 2 | Cmd+1..6 / Cmd+, navigation |

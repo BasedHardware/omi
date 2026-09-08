@@ -395,6 +395,11 @@ struct SettingsContentView: View {
   // Launch at login manager
   @ObservedObject var launchAtLoginManager = LaunchAtLoginManager.shared
 
+  // Updates: which older releases the reader has opened, and how far down the list they have asked
+  // to see. Model-owned rather than `@State` so the place survives leaving Settings, and so the
+  // automation bridge drives the same state a click does.
+  @ObservedObject var releaseNotesDisclosure = ReleaseNotesDisclosure.shared
+
   enum SettingsSection: String, CaseIterable {
     case general = "General"
     case rewind = "Rewind"
@@ -408,6 +413,7 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case referral = "Refer a Friend"
+    case updates = "Updates"
     case about = "About"
     /// The established page that had no door. It was only ever written by the sidebar the glass
     /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
@@ -656,6 +662,8 @@ struct SettingsContentView: View {
           advancedSection
         case .referral:
           referralSection
+        case .updates:
+          updatesSection
         case .about:
           aboutSection
         case .permissions:

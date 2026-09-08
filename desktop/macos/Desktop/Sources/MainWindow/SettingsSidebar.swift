@@ -203,24 +203,32 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
       section: .referral, icon: "gift", settingId: "referral.link"),
 
-    // About
+    // Updates
     SettingsSearchItem(
       name: "Software Updates", subtitle: "Check for and manage app updates",
       keywords: ["update", "auto update", "sparkle", "version", "check for updates", "check now"],
-      section: .about, icon: "info.circle", settingId: "about.updates"),
+      section: .updates, icon: "arrow.triangle.2.circlepath", settingId: "updates.status"),
     SettingsSearchItem(
-      name: "Automatic Updates", subtitle: "Check for updates automatically in the background",
-      keywords: ["auto check", "background updates", "check automatically"], section: .about,
-      icon: "info.circle", settingId: "about.autoupdates"),
+      name: "Check Automatically", subtitle: "Look for updates in the background",
+      keywords: [
+        "auto check", "automatic updates", "background updates", "check automatically",
+      ], section: .updates, icon: "arrow.triangle.2.circlepath", settingId: "updates.autocheck"),
     SettingsSearchItem(
-      name: "Auto-Install Updates",
-      subtitle: "Automatically download and install updates when available",
+      name: "Install Automatically",
+      subtitle: "Download and install updates when they are available",
       keywords: ["auto install", "automatic install", "download updates", "install updates"],
-      section: .about, icon: "info.circle", settingId: "about.autoinstall"),
+      section: .updates, icon: "arrow.triangle.2.circlepath", settingId: "updates.autoinstall"),
     SettingsSearchItem(
       name: "Omi Beta", subtitle: "Install the separate Omi Beta app beside this one",
-      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .about,
-      icon: "info.circle", settingId: "about.channel"),
+      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .updates,
+      icon: "arrow.triangle.2.circlepath", settingId: "updates.channel"),
+    SettingsSearchItem(
+      name: "What's New", subtitle: "Release notes for this build and earlier ones",
+      keywords: [
+        "changelog", "release notes", "what's new", "whats new", "history", "new features",
+      ], section: .updates, icon: "sparkles", settingId: "updates.releasenotes"),
+
+    // About
     SettingsSearchItem(
       name: "Version Info", subtitle: "Current app version and build number",
       keywords: ["version", "build", "app version", "build number"], section: .about,
@@ -390,6 +398,7 @@ enum SettingsSidebarRoutes {
     .shortcuts,
     .advanced,
     .referral,
+    .updates,
     .about,
   ]
 }
@@ -598,6 +607,7 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "cpu"
     case .referral: return "gift"
+    case .updates: return "arrow.triangle.2.circlepath"
     case .about: return "info.circle"
     case .permissions: return PermissionNavSymbol.outline
     }

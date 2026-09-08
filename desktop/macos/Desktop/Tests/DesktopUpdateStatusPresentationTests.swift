@@ -104,7 +104,8 @@ final class DesktopUpdateStatusPresentationTests: XCTestCase {
     let topBar = try read("MainWindow/DesktopTopBar.swift")
     XCTAssertTrue(topBar.contains("DesktopUpdateStatusChip"))
 
-    let settings = try read("MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift")
+    // The Settings host is the Updates section; About handed the update surfaces over to it.
+    let settings = try read("MainWindow/Pages/Settings/Sections/SettingsContentView+Updates.swift")
     XCTAssertTrue(settings.contains("DesktopUpdateStatusPresentation.kind"))
     XCTAssertTrue(settings.contains("checkActionTitle"))
   }

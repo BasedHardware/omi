@@ -554,8 +554,11 @@ extension SettingsContentView {
         VStack(spacing: OmiSpacing.lg) {
           // App info
           HStack(spacing: OmiSpacing.lg) {
-            if let logoURL = Bundle.resourceBundle.url(
-              forResource: "herologo", withExtension: "png"),
+            // Located rather than looked up by resource name, for the reason
+            // `DesktopReleaseNotesCatalog.loadBundled` documents: the flat `.process("Resources")`
+            // files sit outside the resource bundle's `resourcePath`, so `url(forResource:)`
+            // returned nil here and the mark silently never drew.
+            if let logoURL = OmiSoundAssetLocator.bundled.url(forFileName: "herologo.png"),
               let logoImage = NSImage(contentsOf: logoURL)
             {
               Image(nsImage: logoImage)
@@ -588,8 +591,7 @@ extension SettingsContentView {
 
           GlassSeparator()
 
-          // Links
-          linkRow(title: "What's New", url: AppBuild.changelogURLString)
+          // Links. Release notes are not here: the Updates section carries them, in the app.
           linkRow(title: "Visit Website", url: "https://omi.me")
           linkRow(title: "Help Center", url: "https://help.omi.me")
           Button(action: {
@@ -609,189 +611,6 @@ extension SettingsContentView {
           }
           .buttonStyle(.plain)
           linkRow(title: "Terms of Service", url: "https://omi.me/terms")
-        }
-      }
-
-      // Software Updates
-      settingsCard(settingId: "about.updates") {
-        let updateStatus = DesktopUpdateStatusPresentation.kind(
-          sessionInProgress: updaterViewModel.updateSessionInProgress,
-          updateAvailable: updaterViewModel.updateAvailable,
-          availableVersion: updaterViewModel.availableVersion,
-          restartImminent: updaterViewModel.updateRestartImminent,
-          deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
-          userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
-        )
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "arrow.triangle.2.circlepath")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(Ink.secondary)
-
-            Text("Software Updates")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(Ink.primary)
-
-            Spacer()
-
-            Button(updateStatus.checkActionTitle) {
-              updaterViewModel.checkForUpdates()
-            }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-            .disabled(!updaterViewModel.canManuallyCheckForUpdates)
-            .help(
-              updaterViewModel.canManuallyCheckForUpdates
-                ? "Check for app updates"
-                : updaterViewModel.updateSessionInProgress
-                  ? "An update is already in progress…" : "Already checking for updates…")
-          }
-
-          if updateStatus.isVisible {
-            HStack(alignment: .center, spacing: OmiSpacing.sm) {
-              if updateStatus.showsProgress {
-                ProgressView()
-                  .controlSize(.small)
-              } else {
-                Image(systemName: "arrow.down.circle.fill")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.accent)
-              }
-
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                Text(updateStatus.title)
-                  .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(Ink.primary)
-                if let detail = updateStatus.detail {
-                  Text(detail)
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-              }
-              Spacer(minLength: 0)
-            }
-            .padding(OmiSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Ink.rowFill)
-            .cornerRadius(OmiChrome.elementRadius)
-            .accessibilityIdentifier("settings-update-status")
-            .accessibilityLabel(updateStatus.accessibilityLabel)
-          }
-
-          if let lastCheck = updaterViewModel.lastUpdateCheckDate {
-            Text("Last checked: \(lastCheck, style: .relative) ago")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-
-          if let failure = updaterViewModel.lastUpdateFailure {
-            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-              HStack(alignment: .top, spacing: OmiSpacing.sm) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(SettingsInk.notice)
-
-                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                  Text("Update Needs Attention")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                    .foregroundColor(Ink.primary)
-                  Text(failure.userMessage)
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-              }
-
-              HStack(spacing: OmiSpacing.sm) {
-                if failure.isRecoverableLaunchLocation {
-                  Button("Open Applications") {
-                    NSWorkspace.shared.open(
-                      URL(fileURLWithPath: "/Applications", isDirectory: true))
-                  }
-                  .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-                }
-
-                Button("Download Latest") {
-                  openURLInDefaultBrowser(AppBuild.manualDownloadURL)
-                }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-
-                Button("Dismiss") {
-                  updaterViewModel.lastUpdateFailure = nil
-                }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              }
-            }
-            .padding(OmiSpacing.md)
-            .background(Ink.rowFill)
-            .cornerRadius(SettingsGlassMetrics.controlRadius)
-          }
-
-          GlassSeparator()
-
-          settingRow(
-            title: "Automatic Updates",
-            subtitle: "Check for updates automatically in the background",
-            settingId: "about.autoupdates"
-          ) {
-            Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
-              .toggleStyle(OmiToggleStyle())
-              .labelsHidden()
-              .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
-          }
-
-          if updaterViewModel.automaticallyChecksForUpdates {
-            settingRow(
-              title: "Auto-Install Updates",
-              subtitle: "Automatically download and install updates when available",
-              settingId: "about.autoinstall"
-            ) {
-              Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .disabled(updaterViewModel.usesManagedUpdatePolicy || AnalyticsManager.isDevBuild)
-            }
-          }
-
-          if updaterViewModel.usesManagedUpdatePolicy {
-            Text("Release builds always auto-check and auto-install updates in the background.")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          } else if AppBuild.isNamedDevelopmentBundle {
-            Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          } else if AnalyticsManager.isDevBuild {
-            Text(
-              "Development builds keep automatic installation disabled to avoid replacing the local app."
-            )
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-          }
-
-          GlassSeparator()
-
-          if !AppBuild.isBetaProductionBundle {
-            settingRow(
-              title: "Omi Beta",
-              subtitle: "Install the separate Omi Beta app. It runs beside this one.",
-              settingId: "about.channel"
-            ) {
-              Button("Get Omi Beta") {
-                openURLInDefaultBrowser(AppBuild.omiBetaInstallURL)
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-            }
-          } else {
-            settingRow(
-              title: "Omi Beta",
-              subtitle: "This app updates from the Beta feed and runs beside Omi.",
-              settingId: "about.channel"
-            ) {
-              Text("Installed")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(Ink.secondary)
-            }
-          }
         }
       }
 
