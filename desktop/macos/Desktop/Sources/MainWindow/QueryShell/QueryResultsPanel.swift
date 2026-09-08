@@ -209,7 +209,7 @@ struct QueryResultsPanel<Content: View, TopAccessory: View, Accessory: View, Foo
   private var countSentence: String {
     guard let total else { return "Counting what you've captured…" }
     if mode == .answer {
-      return "\(QueryShellCount.number(total)) captured moments available"
+      return "\(QueryShellCount.number(total)) captured moment\(total == 1 ? "" : "s") available"
     }
     return QueryShellCount.sentence(
       matching: matching, total: total, isFiltering: request.isFiltering, isSettled: corpusSettled)
