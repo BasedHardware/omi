@@ -1367,6 +1367,59 @@ describe("worker request contract", () => {
     expect(missingOutcome.status).toBe(503);
   });
 
+  test("history GET does not complete assistant rows with unreadable terminal events", async () => {
+    const id = "broken-event-assistant";
+    const createdAt = 1;
+    const message = {
+      id,
+      text: "invented answer",
+      sender: "ai" as const,
+      type: "text",
+      createdAt,
+      updatedAt: createdAt,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 0,
+      payloadHash: "sha256:test",
+      messageSource: "assistant_generation",
+      rating: null,
+      reported: false,
+      generationOutcome: "completed" as const,
+      revision: "1",
+      attachments: [],
+    };
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', 1, ?)"
+      )
+      .bind(
+        id,
+        "test-account",
+        message.text,
+        createdAt,
+        JSON.stringify(message)
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(id, "test-account", "{broken")
+      .run();
+
+    const broken = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(broken.status).toBe(503);
+    expect((await broken.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
   test("history GET keeps unknown senders instead of labeling them human", async () => {
     const unknownMessage = {
       id: "unknown-sender",

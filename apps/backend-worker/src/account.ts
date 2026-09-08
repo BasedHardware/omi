@@ -92,6 +92,17 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       accountId,
       generationId
     );
+    if (allEvents === "unreadable")
+      return Response.json(
+        {
+          error: {
+            code: "service_unavailable",
+            retryable: true,
+            action: "retry",
+          },
+        },
+        { status: 503, headers: { "cache-control": "no-store" } }
+      );
     const replay = this.selectReplay(allEvents, lastEventId);
     if (replay === "expired")
       return Response.json(
@@ -158,6 +169,11 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
     input: ChatCreate
   ): Promise<void> {
     const terminal = await terminalEvent(this.env.DB, accountId, generationId);
+    if (terminal === "unreadable") {
+      const event = await failGeneration(this.env.DB, accountId, generationId);
+      this.notifyWaiters(generationId, event);
+      return;
+    }
     if (terminal !== null) return;
 
     const composed = await composeGenerationPrompt(

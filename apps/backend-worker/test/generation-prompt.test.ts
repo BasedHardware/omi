@@ -13,6 +13,7 @@ import {
   completeGeneration,
   failGeneration,
   readPendingGeneration,
+  terminalEvent,
 } from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
 import { createD1Mock } from "./d1-mock";
@@ -1327,6 +1328,105 @@ describe("pending generation admission", () => {
     expect(next).toMatchObject({
       generationId: "gen-ok",
       input: { id: "ok-human", text: "hello", sender: "human" },
+    });
+  });
+});
+
+describe("generation event payloads", () => {
+  const readableCreate = (id: string) => ({
+    op: "create" as const,
+    opId: `op-${id}`,
+    id,
+    at: 1,
+    text: "hello",
+    sender: "human" as const,
+    journalRevision: 0,
+    attachmentIds: [] as string[],
+  });
+
+  const insertPending = async (
+    generationId: string,
+    messageId: string,
+    eventPayload: string
+  ) => {
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        messageId,
+        "acct-a",
+        `op-${messageId}`,
+        JSON.stringify(readableCreate(messageId)),
+        generationId
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT OR IGNORE INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '1', 1, ?)"
+      )
+      .bind(generationId, "acct-a", eventPayload)
+      .run();
+  };
+
+  test("terminalEvent keeps an unreadable snapshot instead of throwing", async () => {
+    await insertPending("gen-broken-event", "event-human", "{broken");
+    await expect(terminalEvent(db, "acct-a", "gen-broken-event")).resolves.toBe(
+      "unreadable"
+    );
+  });
+
+  test("terminalEvent keeps a JSON-null snapshot instead of throwing", async () => {
+    await insertPending("gen-null-event", "null-event-human", "null");
+    await expect(terminalEvent(db, "acct-a", "gen-null-event")).resolves.toBe(
+      "unreadable"
+    );
+  });
+
+  test("terminalEvent keeps a done event missing its message instead of throwing", async () => {
+    await insertPending(
+      "gen-done-missing",
+      "done-missing-human",
+      JSON.stringify({ id: "1", kind: "snapshot", text: "" })
+    );
+    await db
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        "gen-done-missing",
+        "acct-a",
+        JSON.stringify({ id: "2", kind: "done" })
+      )
+      .run();
+    await expect(terminalEvent(db, "acct-a", "gen-done-missing")).resolves.toBe(
+      "unreadable"
+    );
+  });
+
+  test("failing a pending generation with an unreadable snapshot unblocks the next generation", async () => {
+    await insertPending("gen-broken-event", "event-human", "{broken");
+    await insertPending(
+      "gen-ok-event",
+      "ok-event-human",
+      JSON.stringify({ id: "1", kind: "snapshot", text: "" })
+    );
+    await expect(readPendingGeneration(db, "acct-a")).resolves.toMatchObject({
+      generationId: "gen-broken-event",
+      input: { id: "event-human" },
+    });
+    await expect(terminalEvent(db, "acct-a", "gen-broken-event")).resolves.toBe(
+      "unreadable"
+    );
+    const failed = await failGeneration(db, "acct-a", "gen-broken-event");
+    expect(failed).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    await expect(readPendingGeneration(db, "acct-a")).resolves.toMatchObject({
+      generationId: "gen-ok-event",
+      input: { id: "ok-event-human" },
     });
   });
 });

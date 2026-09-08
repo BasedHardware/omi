@@ -285,7 +285,7 @@ export async function cancelGeneration(
   const hasGen = await hasGeneration(db, accountId, generationId);
   if (!hasGen) return "not_found";
   const terminal = await terminalEvent(db, accountId, generationId);
-  if (terminal !== null) return "terminal";
+  if (terminal === "unreadable" || terminal !== null) return "terminal";
   const event: GenerationEvent = {
     id: "2",
     kind: "cancelled",
@@ -441,7 +441,7 @@ export async function readGenerationEvents(
   db: D1Database,
   accountId: string,
   generationId: string
-): Promise<GenerationEvent[]> {
+): Promise<GenerationEvent[] | "unreadable"> {
   const result = await db
     .prepare(
       "SELECT payload FROM chat_generation_events WHERE generation_id = ? AND account_id = ? ORDER BY ordinal"
@@ -449,12 +449,19 @@ export async function readGenerationEvents(
     .bind(generationId, accountId)
     .all<{ payload: string }>();
 
-  return result.results.map((row) => {
+  const events: GenerationEvent[] = [];
+  for (const row of result.results) {
     const event = parseEvent(row.payload);
-    return event.kind === "done"
-      ? { ...event, message: generationMessageSync(event) }
-      : event;
-  });
+    if (event === null) return "unreadable";
+    if (event.kind === "done") {
+      const message = generationMessageSync(event);
+      if (message === null) return "unreadable";
+      events.push({ ...event, message });
+    } else {
+      events.push(event);
+    }
+  }
+  return events;
 }
 
 export async function hasGeneration(
@@ -475,8 +482,9 @@ export async function terminalEvent(
   db: D1Database,
   accountId: string,
   generationId: string
-): Promise<GenerationEvent | null> {
+): Promise<GenerationEvent | null | "unreadable"> {
   const events = await readGenerationEvents(db, accountId, generationId);
+  if (events === "unreadable") return "unreadable";
   return events.find((event) => isTerminal(event)) ?? null;
 }
 
@@ -581,10 +589,9 @@ async function projectHistoryMessage(
     ? await hydrateColumnMessage(db, accountId, parsed.message)
     : parsed.message;
   if (message.sender === "ai") {
-    const outcome = historyOutcomeFromTerminal(
-      await readGenerationEvents(db, accountId, row.id),
-      message
-    );
+    const events = await readGenerationEvents(db, accountId, row.id);
+    if (events === "unreadable") return null;
+    const outcome = historyOutcomeFromTerminal(events, message);
     return outcome === null ? null : { ...message, generationOutcome: outcome };
   }
   if (message.sender === "human") {
@@ -791,18 +798,31 @@ function parseStoredMessage(
   };
 }
 
-function parseEvent(payload: string): GenerationEvent {
-  const event = JSON.parse(payload) as
-    | GenerationEvent
-    | { id: string; kind: string };
-  return event.kind === "accepted"
-    ? { id: event.id, kind: "snapshot", text: "" }
-    : (event as GenerationEvent);
+function parseEvent(payload: string): GenerationEvent | null {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
+    const event = parsed as GenerationEvent | { id: string; kind: string };
+    if (typeof event.id !== "string" || typeof event.kind !== "string") {
+      return null;
+    }
+    return event.kind === "accepted"
+      ? { id: event.id, kind: "snapshot", text: "" }
+      : (event as GenerationEvent);
+  } catch {
+    return null;
+  }
 }
 
 function generationMessageSync(
   event: GenerationEvent
-): ChatCompletedAssistantMessage {
+): ChatCompletedAssistantMessage | null {
   if (
     event.kind === "done" &&
     event.message !== null &&
@@ -810,7 +830,7 @@ function generationMessageSync(
   ) {
     return event.message;
   }
-  throw new Error("done event missing message");
+  return null;
 }
 
 function recordId(value: string): ChatMessage["id"] {
