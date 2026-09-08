@@ -288,29 +288,26 @@ describe("device session request validators", () => {
     const path = `/v1/device-sessions/${session.id}/transcribe`;
     expect(
       (
-        await fetchWorker(
-          `/v1/device-sessions/${session.id}/audio`,
-          {
-            method: "POST",
-            headers: authenticatedHeaders,
-            body: JSON.stringify({
-              chunks: [
-                {
-                  chunkIndex: 0,
-                  bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
-                },
-              ],
-            }),
-          }
-        )
+        await fetchWorker(`/v1/device-sessions/${session.id}/audio`, {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify({
+            chunks: [
+              {
+                chunkIndex: 0,
+                bytesBase64: btoa(String.fromCharCode(0, 0, 0, 128, 129)),
+              },
+            ],
+          }),
+        })
       ).status
     ).toBe(200);
     expect(
       (
-        await fetchWorker(
-          `/v1/device-sessions/${session.id}/complete`,
-          { method: "POST", headers: authenticatedHeaders }
-        )
+        await fetchWorker(`/v1/device-sessions/${session.id}/complete`, {
+          method: "POST",
+          headers: authenticatedHeaders,
+        })
       ).status
     ).toBe(200);
     const transcribe = await fetchWorker(
