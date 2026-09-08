@@ -1,3 +1,5 @@
 /target
 **/*.rs.bk
 .DS_Store
+
+.cargo/config.toml
