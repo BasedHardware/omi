@@ -118,8 +118,8 @@ const parseConversationSession = (value: unknown): ChatConversationSessionItem =
     || !sessionId.startsWith("chat:")
     || sessionId.length <= "chat:".length
     || sessionId.slice("chat:".length).length > 128
-    || typeof row.title !== "string" || row.title.length === 0 || row.title.length > 240
-    || typeof row.overview !== "string" || row.overview.length === 0 || row.overview.length > 240
+    || typeof row.title !== "string" || row.title.length > 240
+    || typeof row.overview !== "string" || row.overview.length > 240
     || createdAt === null || updatedAt === null || startedAt === null
     || updatedAt < createdAt || startedAt !== createdAt
     || (finishedAt !== null && finishedAt < createdAt)

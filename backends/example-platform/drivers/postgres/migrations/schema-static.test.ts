@@ -1253,5 +1253,9 @@ describe("static PostgreSQL schema contract", () => {
     const unionSql = migrationSql.find((migration) => migration.version === 58)!.sql;
     expect(unionSql).toContain("length(last_id) BETWEEN 1 AND 256 AND last_id ~ '^[!-~]+$'");
     expect(unionSql).toContain("length(p_last_id) NOT BETWEEN 1 AND 256 OR p_last_id !~ '^[!-~]+$'");
+    const emptyChatTitleSql = migrationSql.find((migration) => migration.version === 59)!.sql;
+    expect(emptyChatTitleSql).not.toContain("THEN 'Chat'");
+    expect(emptyChatTitleSql).toContain("ELSE btrim(title_text)");
+    expect(emptyChatTitleSql).toContain("ELSE btrim(last_text)");
   });
 });

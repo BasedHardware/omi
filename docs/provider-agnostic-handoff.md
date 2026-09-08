@@ -330,7 +330,9 @@ Cloud Linux after `515c856151`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. An unknown adapter whose lastEvent is Bluetooth is unavailable no longer says Bluetooth status unknown. Home and Devices say Bluetooth unavailable, matching the error-color status dot already used for that lastEvent. Android radio-off still says Bluetooth off. Powered-on empty lists still say No Omi device was discovered. Distinct LE-scanner-unavailable and web recording-unavailable copy stay. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer.
 
-Cloud Linux after the empty recording title slice: Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
+Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
+
+Cloud Linux after the empty chat title slice: Worker and production chat sessions without a published title or overview no longer invent Chat. Empty titles keep Conversation title unavailable for in-progress and completed chats. Empty overviews keep Conversation summary unavailable. Migration 0059 is in the checksummed manifest and is not applied to DEV from this VM. This does not invent a chat producer.
 
 ## Verified and pushed
 

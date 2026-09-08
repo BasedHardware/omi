@@ -35,7 +35,7 @@ and conversation-list composition of granted `chat:` sessions, including named
 sessions only after history GET can serve them. Docker is
 required for that real PostgreSQL 18.4 gate. These tests use isolated synthetic
 identities; they do not activate a deployed user or prove live generation.
-Do not apply migrations 55-57 or deploy this entry until the existing operator
+Do not apply migrations 55-59 or deploy this entry until the existing operator
 migration sequence can run against based-hardware-dev. A process built from this
 manifest will not become ready against a database that still has only
 migrations 1–54.

@@ -283,13 +283,11 @@ function boundedDisplayText(bytes: number[]): string {
   const text = new TextDecoder().decode(new Uint8Array(bytes), {
     stream: true,
   });
-  if (text.length === 0) return "Chat";
   return text.length > 240 ? `${text.slice(0, 237)}...` : text;
 }
 
 function displayText(text: string): string {
   const trimmed = text.trim();
-  if (trimmed.length === 0) return "Chat";
   return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
 }
 

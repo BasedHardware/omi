@@ -590,11 +590,29 @@ describe("D1 chat projects an honest conversation list", () => {
     });
     expect(rows[1]).toMatchObject({
       id: MAIN_CONVERSATION_ID,
-      title: "Chat",
+      title: "",
       overview: "Fallback overview",
       createdAt: 400,
       updatedAt: 440,
       finishedAt: null,
+      status: "in_progress",
+    });
+  });
+
+  test("empty chat titles stay visible without inventing a Chat title", async () => {
+    const accountId = "empty-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("empty-chat-title-1", accountId, " \t\n", 1, 1, "{broken")
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "",
+      overview: "",
+      source: "chat",
       status: "in_progress",
     });
   });

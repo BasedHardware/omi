@@ -632,9 +632,23 @@ realTest(
       );
       const namedPage = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
       expect(ids(namedPage)).toEqual(["chat:session-alpha"]);
-      const allNamed = (await (await call()).json()) as { items: Array<{ id: string }> };
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,E' \\t\\n','human','text',500,500,'session-blank',NULL,0,'sha256:blank','desktop_chat',NULL,false,'rev-blank','[]'::jsonb,'gen_blank')`,
+        [account, "33333333-3333-4333-8333-333333333333"]
+      );
+      const allNamed = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
       expect(ids(allNamed)).toContain("chat:chat-main");
       expect(ids(allNamed)).toContain("chat:session-alpha");
+      expect(ids(allNamed)).toContain("chat:session-blank");
+      expect(allNamed.items.find((item) => item.id === "chat:session-blank")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-blank",
+          title: "",
+          overview: "",
+        })
+      );
       await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
@@ -642,6 +656,7 @@ realTest(
       const revoked = (await (await call("?limit=1")).json()) as { items: Array<{ id: string }> };
       expect(ids(revoked)).not.toContain("chat:chat-main");
       expect(ids(revoked)).not.toContain("chat:session-alpha");
+      expect(ids(revoked)).not.toContain("chat:session-blank");
       expect(revoked.items).toHaveLength(1);
     } finally {
       await pool.close();

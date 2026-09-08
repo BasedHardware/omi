@@ -263,6 +263,53 @@ test("granted empty chat conversation sessions stay an empty list", async () => 
   )).resolves.toEqual([]);
 });
 
+test("granted chat sessions with empty titles stay visible without inventing Chat", async () => {
+  const session = {
+    id: "chat:chat-main",
+    title: "",
+    overview: "",
+    createdAt: 1000,
+    updatedAt: 2000,
+    startedAt: 1000,
+    finishedAt: null,
+    source: "chat",
+    status: "in_progress",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: null,
+  };
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{ sessions: [session] }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).resolves.toEqual([session]);
+});
+
 test("granted named chat sessions parse beside chat:chat-main", async () => {
   const session = (id: string) => ({
     id,
