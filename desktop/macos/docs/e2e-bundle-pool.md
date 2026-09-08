@@ -56,6 +56,11 @@ For each slot:
    ./scripts/omi-e2e-pool release --slot 1
    ```
 
+If `check` says the slot is not answering on its port right after a grant, the
+app's own Quit and Reopen restarted it without its launch arguments and the
+bridge landed on 47777. `./scripts/omi-e2e-pool relaunch --slot 1` reopens it on
+the slot's port.
+
 Recurring: macOS 15 and later periodically re-ask whether an app may keep
 recording the screen. `check` reports that as `screen_recording=stale`; one
 click clears it.
