@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -33,12 +35,21 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 }
 
 type wsTranscriber struct {
-	conn  *websocket.Conn
-	ready bool
+	conn            *websocket.Conn
+	ready           bool
+	writeMu         sync.Mutex
+	stopped         bool
+	stopOnce        sync.Once
+	stopErr         error
+	closeMessage    []byte
+	readDone        <-chan error
+	shutdownTimeout time.Duration
 }
 
 func (t *wsTranscriber) AppendPCM(pcm []byte) error {
-	if t.conn == nil {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
+	if t.conn == nil || t.stopped {
 		return fmt.Errorf("not connected")
 	}
 	if !t.ready {
@@ -48,11 +59,36 @@ func (t *wsTranscriber) AppendPCM(pcm []byte) error {
 }
 
 func (t *wsTranscriber) Stop() error {
-	if t.conn == nil {
-		return nil
-	}
-	_ = t.conn.WriteMessage(websocket.TextMessage, []byte("finalize"))
-	return t.conn.Close()
+	t.stopOnce.Do(func() {
+		if t.conn == nil {
+			return
+		}
+		defer t.conn.Close()
+		t.writeMu.Lock()
+		t.stopped = true
+		_ = t.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		err := t.conn.WriteMessage(websocket.TextMessage, t.closeMessage)
+		t.writeMu.Unlock()
+		if err != nil {
+			t.stopErr = fmt.Errorf("send stream shutdown: %w", err)
+			return
+		}
+		if t.readDone == nil {
+			return
+		}
+
+		timer := time.NewTimer(t.shutdownTimeout)
+		defer timer.Stop()
+		select {
+		case err := <-t.readDone:
+			if err != nil && !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				t.stopErr = fmt.Errorf("finish stream shutdown: %w", err)
+			}
+		case <-timer.C:
+			t.stopErr = fmt.Errorf("timed out waiting for final transcription")
+		}
+	})
+	return t.stopErr
 }
 
 func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
@@ -72,16 +108,20 @@ func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn, ready: true}
-	go readDeepgram(conn, onTranscript)
+	done := make(chan error, 1)
+	t := &wsTranscriber{
+		conn: conn, ready: true, closeMessage: []byte(`{"type":"CloseStream"}`),
+		readDone: done, shutdownTimeout: 5 * time.Second,
+	}
+	go func() { done <- readDeepgram(conn, onTranscript) }()
 	return t, nil
 }
 
-func readDeepgram(conn *websocket.Conn, onTranscript Handler) {
+func readDeepgram(conn *websocket.Conn, onTranscript Handler) error {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			return
+			return err
 		}
 		var msg map[string]any
 		if json.Unmarshal(data, &msg) != nil {
@@ -115,7 +155,7 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn, ready: false}
+	t := &wsTranscriber{conn: conn, ready: false, closeMessage: []byte("finalize"), shutdownTimeout: 5 * time.Second}
 	// wait ready in background and stream
 	go func() {
 		for {
