@@ -800,6 +800,59 @@ describe("worker request contract", () => {
     expect(parseTaskPageJson(tasksBody)).not.toBeNull();
   });
 
+  test("tasks GET does not omit a neighboring row when provenance JSON is unreadable", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', '[]', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:readable", "test-account", "readable task")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', ?, 2, 0, 2, 2, NULL)"
+      )
+      .bind(
+        "task:broken-provenance",
+        "test-account",
+        "broken provenance",
+        "{broken"
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/tasks?limit=10", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
+  test("tasks GET does not advertise a page when provenance is JSON null", async () => {
+    await d1Mock
+      .prepare(
+        "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, 0, NULL, NULL, NULL, 'assistant', 'null', 1, 0, 1, 1, NULL)"
+      )
+      .bind("task:null-provenance", "test-account", "null provenance")
+      .run();
+
+    const response = await fetchWorker("/v1/tasks?limit=10", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
   test("conversation and task reads fail closed when D1 is unbound", async () => {
     const missingDb = { ...env, DB: undefined };
     const unavailable = {

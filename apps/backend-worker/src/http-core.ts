@@ -842,7 +842,10 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
   // Match conversations/memories: empty cursor / invalid limit are bad requests.
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
-  return json(await readTasks(db, context.get("accountId"), limit, cursor));
+  const page = await readTasks(db, context.get("accountId"), limit, cursor);
+  if (page === "unavailable")
+    return backendError("service_unavailable", "retry", 503, true);
+  return json(page);
 }
 
 export async function handleTaskWrite(context: CoreContext): Promise<Response> {

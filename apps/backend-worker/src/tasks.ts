@@ -35,7 +35,7 @@ export async function readTasks(
   accountId: string,
   limit: number,
   cursor: string | undefined
-): Promise<TaskRead.Page> {
+): Promise<TaskRead.Page | "unavailable"> {
   const statement = db.prepare(
     "SELECT id, description, completed, completed_at AS completedAt, due_at AS dueAt, owner, source, provenance, sort_order AS sortOrder, indent_level AS indentLevel, created_at AS createdAt, updated_at AS updatedAt, revision FROM tasks WHERE account_id = ? AND (? IS NULL OR id > ?) ORDER BY id LIMIT ?"
   );
@@ -49,7 +49,12 @@ export async function readTasks(
   const rows = result.results;
   const hasMore = rows.length > limit;
   const pageRows = rows.slice(0, limit);
-  const items = pageRows.map((row) => toTaskItem(row));
+  const items: TaskRead.Item[] = [];
+  for (const row of pageRows) {
+    const item = toTaskItem(row);
+    if (item === null) return "unavailable";
+    items.push(item);
+  }
   const nextCursor = hasMore ? pageRows[pageRows.length - 1]?.id ?? null : null;
 
   return {
@@ -78,8 +83,19 @@ export async function readTasks(
   } as TaskRead.Page;
 }
 
-function toTaskItem(row: StoredTask): TaskRead.Item {
-  const provenance = JSON.parse(row.provenance) as string[];
+function toTaskItem(row: StoredTask): TaskRead.Item | null {
+  let provenance: unknown;
+  try {
+    provenance = JSON.parse(row.provenance);
+  } catch {
+    return null;
+  }
+  if (
+    !Array.isArray(provenance) ||
+    !provenance.every((entry) => typeof entry === "string")
+  ) {
+    return null;
+  }
   const item: Record<string, unknown> = {};
   item["id"] = row.id;
   item["description"] = row.description;
