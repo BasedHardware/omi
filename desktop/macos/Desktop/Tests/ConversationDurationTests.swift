@@ -156,6 +156,18 @@ final class ConversationDurationTests: XCTestCase {
     XCTAssertEqual(conversation.durationInSeconds, 0)
   }
 
+  func testAFiniteOutOfRangeEndClampsToMaxIntInsteadOfTrapping() throws {
+    // isFinite alone does not bound the value: a malformed persisted segment
+    // can carry a finite end beyond Int.max, where Int(Double) would trap.
+    let conversation = conversation(
+      segments: segments([(text: "corrupt", start: 0, end: .greatestFiniteMagnitude)]),
+      startedAt: sessionOrigin,
+      finishedAt: wallWindowEnd
+    )
+
+    XCTAssertEqual(conversation.durationInSeconds, Int.max)
+  }
+
   func testSegmentsThatAllFailValidationFallBackToTheWallWindow() throws {
     let conversation = conversation(
       segments: segments([(text: "  ", start: 0, end: 8)]),

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from utils.observability.fallback import record_fallback
@@ -70,10 +70,21 @@ def _wall_duration_seconds(conversation: Any) -> Optional[float]:
     finished_at = _value(conversation, 'finished_at')
     if not isinstance(started_at, datetime) or not isinstance(finished_at, datetime):
         return None
+    # A naive timestamp on either side of the subtraction raises TypeError
+    # against an aware one (naive Firestore reads vs aware model defaults), so
+    # normalize both to UTC before measuring the wall window.
+    started_at = _as_utc(started_at)
+    finished_at = _as_utc(finished_at)
     try:
         return max(0.0, (finished_at - started_at).total_seconds())
     except TypeError:
         return None
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def conversation_duration_seconds(conversation: Any) -> Optional[float]:

@@ -24,7 +24,9 @@ and background processing.
   dual microphone/system-audio transcripts cannot double-count speech.
 - `duration.py` owns the single conversation-duration rule shared with the
   Flutter and macOS clients: the transcript span (largest validated segment
-  `end`), falling back to the wall window only for transcript-free records.
+  `end`), falling back to the wall window when no segment survives validation —
+  whether the record is transcript-free or its segments are all malformed
+  (the malformed-doc branch records a fallback so ops can see the degradation).
   `started_at` is the streaming-session origin, so no caller may recompute
   `finished_at - started_at` as a user-visible or policy duration.
 

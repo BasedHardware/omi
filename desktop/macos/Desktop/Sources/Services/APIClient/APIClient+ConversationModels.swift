@@ -406,7 +406,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   /// Returns duration in seconds: the transcript span when the record carries
-  /// transcript segments, the wall window only when it does not.
+  /// usable transcript segments, the wall window when it does not (including
+  /// records whose segments all fail validation).
   ///
   /// `started_at` is the live-socket streaming-session origin, not the moment
   /// this conversation's speech began, so `finished_at - started_at` over-counts
@@ -420,7 +421,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   /// so those rows still report the wall window — the same answer mobile gives.
   var durationInSeconds: Int {
     if let span = transcriptSpanSeconds {
-      return Int(span)
+      // A finite segment end can still exceed Int.max (a malformed persisted
+      // segment), where Int(Double) would trap and crash the client.
+      return Int(min(max(span, 0), Double(Int.max)))
     }
     guard let start = startedAt, let end = finishedAt else { return 0 }
     return max(0, Int(end.timeIntervalSince(start)))

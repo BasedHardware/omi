@@ -109,6 +109,22 @@ class TestWallWindowFallback:
         assert conversation_duration_seconds(_conversation(started_at=None)) is None
         assert conversation_duration_seconds(_conversation(finished_at=None)) is None
 
+    def test_mixed_naive_and_aware_timestamps_still_measure_the_wall_window(self):
+        """Naive minus aware raises TypeError; normalize naive reads as UTC."""
+        conversation = _conversation(
+            started_at=START.replace(tzinfo=None),  # naive, as a raw Firestore read
+            finished_at=START + timedelta(seconds=45),
+        )
+
+        assert conversation_duration_seconds(conversation) == 45.0
+
+        conversation = _conversation(
+            started_at=START,
+            finished_at=(START + timedelta(seconds=45)).replace(tzinfo=None),
+        )
+
+        assert conversation_duration_seconds(conversation) == 45.0
+
     def test_segments_that_all_fail_validation_fall_back_and_record_a_fallback(self, monkeypatch):
         """Wall duration is a degraded input here, so ops must see it."""
         import utils.conversations.duration as duration_module
