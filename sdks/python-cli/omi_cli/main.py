@@ -57,11 +57,19 @@ app = typer.Typer(
 class AppContext:
     """Per-invocation state attached to the Typer context (``ctx.obj``)."""
 
-    profile_name: str
+    profile_override: Optional[str]
     api_base_override: Optional[str]
     renderer: Renderer
     verbose: bool
     _config: Optional[cfg.Config] = field(default=None, init=False)
+    _profile_name: Optional[str] = field(default=None, init=False)
+
+    @property
+    def profile_name(self) -> str:
+        """Resolve configuration only when a command needs a profile."""
+        if self._profile_name is None:
+            self._profile_name = cfg.resolve_profile_name(self.profile_override, self.load_config())
+        return self._profile_name
 
     def load_config(self) -> cfg.Config:
         if self._config is None:
@@ -133,14 +141,11 @@ def _root(
     ),
 ) -> None:
     """Root callback: parse global flags, build per-invocation context."""
-    config = cfg.load()
-    profile_name = cfg.resolve_profile_name(profile, config)
-
     renderer = Renderer(json_mode=json_output, no_color=no_color, verbose=verbose)
     global _LAST_RENDERER
     _LAST_RENDERER = renderer
     ctx.obj = AppContext(
-        profile_name=profile_name,
+        profile_override=profile,
         api_base_override=api_base,
         renderer=renderer,
         verbose=verbose,

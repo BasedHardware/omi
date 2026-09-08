@@ -129,6 +129,10 @@ omi config profile list
 omi config profile delete old-account --yes
 ```
 
+`omi version` and `omi config path` do not parse the configuration file, so
+they remain available when a malformed TOML file needs repair. Commands that
+read or modify configuration still reject malformed files.
+
 ## Local Omi Desktop API
 
 `omi local` talks to a running Omi Desktop local API. Configure the active

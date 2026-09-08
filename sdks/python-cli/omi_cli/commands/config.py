@@ -54,11 +54,11 @@ def show(typer_ctx: typer.Context) -> None:
 @app.command("path", help="Print the on-disk config path.")
 def path(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
-    config = ctx.load_config()
+    config_path = cfg.default_config_path()
     if ctx.renderer.json_mode:
-        ctx.renderer.emit({"path": str(config.path)})
+        ctx.renderer.emit({"path": str(config_path)})
     else:
-        typer.echo(str(config.path))
+        typer.echo(str(config_path))
 
 
 _SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
