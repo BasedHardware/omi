@@ -145,6 +145,7 @@ def test_login_with_browser_rejects_unknown_provider(config_path) -> None:
             "default",
             api_base="https://api.test.omi.local",
             provider="microsoft",  # unsupported
+            on_progress=lambda message: None,
             open_browser=False,
         )
 

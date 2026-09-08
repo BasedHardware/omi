@@ -251,6 +251,34 @@ omi
 5  not found (404)
 ```
 
+For requests through the shared Omi API client, including post-login credential
+verification, connection failures, timeouts, and transport protocol errors are
+retried automatically. If all attempts fail, the CLI exits with code `3` and
+emits a safe error message on stderr (JSON when `--json` is set), without raw
+transport exception details. This guarantee does not cover separate OAuth HTTP
+requests (token exchange, refresh, or API-key minting) or local companion API
+requests.
+
+If post-login verification encounters a transport or usage error after saving
+the new credential, the error explicitly reports that it is stored but
+unverified. JSON errors include
+`credential_stored: true` and `credential_verified: false`; the transport failure
+still exits with code `3`. Run `omi auth whoami` when connectivity is restored
+to verify the stored credential. Browser login has already created a developer
+API key, and an earlier key for this machine may have been replaced.
+
+The shared client requires a valid absolute `http://` or `https://` API base URL,
+stored as a string, without raw whitespace, embedded credentials, a query or fragment, and with
+any explicit port in the range `1`–`65535` (port `0` is reserved). Path prefixes
+and IPv6 hosts are supported. An explicitly empty `--api-base` is invalid;
+it does not fall back to the stored or environment URL. Spaces within path
+prefixes must be percent-encoded as `%20`.
+Invalid API base configuration is reported as a usage error (exit `1`) before
+the client attempts a request or refreshes credentials.
+Browser-login progress goes through the renderer: stderr for human output and
+suppressed in JSON mode, including when later credential verification fails.
+Fallback login URLs are printed literally, preserving IPv6 address brackets.
+
 ## For agents
 
 The CLI is built so an LLM can use it without a wrapper:

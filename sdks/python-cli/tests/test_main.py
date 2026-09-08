@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import json
+import sys
+import time
+
+import httpx
+import pytest
 
 from omi_cli import __version__
-from omi_cli.main import app
+from omi_cli import config as cfg
+from omi_cli.client import MAX_RETRY_ATTEMPTS
+from omi_cli.main import app, main
 
 
 def test_version_flag(cli_runner) -> None:
@@ -55,3 +62,131 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
     result = cli_runner.invoke(app, ["--json", "memory", "list"])
     assert result.exit_code == 0
     assert result.stdout.strip() == "[]"
+
+
+@pytest.mark.parametrize("source", ["flag", "env"])
+@pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "ftp://user:secret@example.invalid/?token=private-token",
+        "http://user:secret@127.0.0.1:0/?token=private-token",
+        "http://user:secret@127.0.0.1:99999/?token=private-token",
+        "https://user:secret@example.invalid/api",
+        "https://api.omi.me ",
+    ],
+)
+def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsys, source, json_mode, api_base) -> None:
+    argv = ["omi", "--no-color", *(["--json"] if json_mode else [])]
+    if source == "flag":
+        argv.extend(["--api-base", api_base])
+    else:
+        monkeypatch.setenv("OMI_API_BASE", api_base)
+    argv.extend(["memory", "list"])
+    monkeypatch.setattr(sys, "argv", argv)
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("Invalid API configuration must not issue HTTP requests or retry")
+
+    monkeypatch.setattr(httpx.Client, "request", unexpected_call)
+    monkeypatch.setattr(time, "sleep", unexpected_call)
+
+    with pytest.raises(SystemExit) as info:
+        main()
+
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    if json_mode:
+        assert json.loads(captured.err) == {
+            "error": "Invalid API base URL",
+            "detail": "Use a valid absolute http:// or https:// URL for the Omi API.",
+        }
+    else:
+        assert "Invalid API base URL" in captured.err
+        assert "Use a valid absolute http:// or https:// URL for the Omi API." in captured.err
+    assert "unexpected error" not in captured.err
+    assert "Traceback" not in captured.err
+    assert "secret" not in captured.err
+    assert "private-token" not in captured.err
+
+
+@pytest.mark.parametrize("env_base", [None, "https://example.invalid"])
+def test_empty_api_base_flag_does_not_fall_back(authed_profile, config_path, monkeypatch, capsys, env_base):
+    if env_base is not None:
+        monkeypatch.setenv("OMI_API_BASE", env_base)
+    original_config = config_path.read_bytes()
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "--api-base", "", "memory", "list"])
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("An explicit empty base must fail before HTTP construction")
+
+    monkeypatch.setattr(httpx, "Client", unexpected_call)
+    with pytest.raises(SystemExit) as info:
+        main()
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"] == "Invalid API base URL"
+    assert config_path.read_bytes() == original_config
+
+
+@pytest.mark.parametrize("api_base", [123, False, ["https://api.omi.me"], {"url": "https://api.omi.me"}])
+def test_non_string_toml_api_base_is_structured_usage_error(authed_profile, monkeypatch, capsys, api_base):
+    config = cfg.load()
+    config.get_profile("default").api_base = api_base
+    cfg.save(config)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "memory", "list"])
+    with pytest.raises(SystemExit) as info:
+        main()
+    captured = capsys.readouterr()
+    assert info.value.code == 1
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"] == "Invalid API base URL"
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.parametrize(
+    "error_type, expected_message, expected_detail",
+    [
+        (
+            httpx.ConnectError,
+            "Connection failed",
+            "Could not reach the Omi API after multiple attempts. Check your connection and try again.",
+        ),
+        (httpx.ReadTimeout, "Request timed out", "The Omi API request timed out after multiple attempts."),
+        (
+            httpx.RemoteProtocolError,
+            "Protocol error",
+            "The Omi API request encountered a protocol error after multiple attempts.",
+        ),
+    ],
+)
+def test_main_transport_failure_preserves_error_contract(
+    authed_profile, respx_mock, monkeypatch, capsys, json_mode, error_type, expected_message, expected_detail
+) -> None:
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=error_type("request failed at https://user:secret@example.invalid/?token=private-token")
+    )
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    monkeypatch.setattr(sys, "argv", ["omi", "--no-color", *(["--json"] if json_mode else []), "memory", "list"])
+
+    with pytest.raises(SystemExit) as info:
+        main()
+
+    captured = capsys.readouterr()
+    assert info.value.code == 3
+    assert route.call_count == MAX_RETRY_ATTEMPTS
+    assert captured.out == ""
+    if json_mode:
+        assert json.loads(captured.err) == {
+            "error": expected_message,
+            "detail": expected_detail,
+        }
+    else:
+        assert expected_message in captured.err
+        assert expected_detail in captured.err
+    assert "unexpected error" not in captured.err
+    assert "Traceback" not in captured.err
+    assert "secret" not in captured.err
+    assert "private-token" not in captured.err
