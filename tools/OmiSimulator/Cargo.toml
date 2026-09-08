@@ -10,11 +10,13 @@ name = "omi-simulator"
 path = "src/main.rs"
 
 [dependencies]
-# Local Crepuscularity checkout (UI framework — not an Omi API).
-# Docs: https://crepuscularity.tsc.hk  ·  repo: tschk/crepuscularity
-crepuscularity-gpui = { path = "/Users/undivisible/projects/crepuscularity/crates/crepuscularity-gpui" }
-gpui = { path = "/Users/undivisible/.cargo/git/checkouts/gpui-ce-866ba02453e968cb/c738623/crates/gpui", default-features = false, features = ["font-kit"] }
-gpui_platform = { path = "/Users/undivisible/.cargo/git/checkouts/gpui-ce-866ba02453e968cb/c738623/crates/gpui_platform", features = ["font-kit"] }
+# Crepuscularity UI framework (https://crepuscularity.tsc.hk · tschk/crepuscularity).
+# Not an Omi API / CDN / firmware host.
+# pin/gpui-ce-c738623 pins transitive gpui-ce to c738623 (tip submodule is broken).
+crepuscularity-gpui = { git = "https://github.com/tschk/crepuscularity", rev = "afaabfc9306fd66da70071dce091274d310c551e" }
+
+# view! macro resolves `gpui::` — same rev as crepuscularity pin.
+gpui = { git = "https://github.com/gpui-ce/gpui-ce", rev = "c738623ffbcec2aeddc44a645cc6b74646d5cf97", package = "gpui", default-features = false, features = ["font-kit"] }
 
 ble-peripheral-rust = "0.2"
 uuid = "1"

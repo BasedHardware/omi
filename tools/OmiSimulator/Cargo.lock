@@ -1392,6 +1392,7 @@ dependencies = [
 [[package]]
 name = "crepuscularity-core"
 version = "0.5.0"
+source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
 dependencies = [
  "notify",
  "serde_json",
@@ -1404,6 +1405,7 @@ dependencies = [
 [[package]]
 name = "crepuscularity-gpui"
 version = "0.5.9"
+source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
 dependencies = [
  "crepuscularity-core",
  "crepuscularity-runtime",
@@ -1416,6 +1418,7 @@ dependencies = [
 [[package]]
 name = "crepuscularity-runtime"
 version = "0.4.19"
+source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
 dependencies = [
  "crepuscularity-core",
  "gpui",
@@ -1429,6 +1432,7 @@ dependencies = [
 [[package]]
 name = "crepuscularity_macros"
 version = "0.5.12"
+source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
 dependencies = [
  "crepuscularity-core",
  "proc-macro2",
@@ -2449,6 +2453,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2531,6 +2536,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_util"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "anyhow",
  "log",
@@ -2540,6 +2546,7 @@ dependencies = [
 [[package]]
 name = "gpui_collections"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "gpui_ce_util",
  "indexmap",
@@ -2549,6 +2556,7 @@ dependencies = [
 [[package]]
 name = "gpui_derive_refineable"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2558,6 +2566,7 @@ dependencies = [
 [[package]]
 name = "gpui_linux"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2608,6 +2617,7 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2651,12 +2661,12 @@ dependencies = [
  "smallvec",
  "strum 0.27.2",
  "uuid",
- "zed-font-kit",
 ]
 
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2667,6 +2677,7 @@ dependencies = [
 [[package]]
 name = "gpui_media"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -2681,6 +2692,7 @@ dependencies = [
 [[package]]
 name = "gpui_platform"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "console_error_panic_hook",
  "gpui",
@@ -2693,6 +2705,7 @@ dependencies = [
 [[package]]
 name = "gpui_refineable"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "gpui_derive_refineable",
 ]
@@ -2700,6 +2713,7 @@ dependencies = [
 [[package]]
 name = "gpui_scheduler"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "async-task",
  "backtrace",
@@ -2714,6 +2728,7 @@ dependencies = [
 [[package]]
 name = "gpui_shared_string"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "schemars",
  "serde",
@@ -2723,6 +2738,7 @@ dependencies = [
 [[package]]
 name = "gpui_sum_tree"
 version = "0.2.2"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "heapless",
  "log",
@@ -2733,6 +2749,7 @@ dependencies = [
 [[package]]
 name = "gpui_web"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -2754,6 +2771,7 @@ dependencies = [
 [[package]]
 name = "gpui_wgpu"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2783,6 +2801,7 @@ dependencies = [
 [[package]]
 name = "gpui_windows"
 version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -4405,7 +4424,6 @@ dependencies = [
  "crepuscularity-gpui",
  "env_logger",
  "gpui",
- "gpui_platform",
  "log",
  "tokio",
  "uuid",
