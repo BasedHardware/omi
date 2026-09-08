@@ -210,7 +210,7 @@ def refresh(typer_ctx: typer.Context) -> None:
         raise UsageError(
             message="Nothing to refresh",
             detail=(
-                f"Profile '{escape(profile.name)}' uses API-key auth — there is no token to refresh. "
+                f"Profile '{profile.name}' uses API-key auth — there is no token to refresh. "
                 "Rotate keys in the Omi web app if needed."
             ),
         )
@@ -222,5 +222,5 @@ def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover —
     if not profile.is_authenticated():
         raise UsageError(
             message="Not authenticated",
-            detail=f"Profile '{escape(profile.name)}' has no credentials. Run `omi auth login`.",
+            detail=f"Profile '{profile.name}' has no credentials. Run `omi auth login`.",
         )
