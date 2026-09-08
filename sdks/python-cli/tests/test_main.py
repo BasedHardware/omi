@@ -146,3 +146,27 @@ def test_main_transport_failure_preserves_error_contract(
     assert "Traceback" not in captured.err
     assert "secret" not in captured.err
     assert "private-token" not in captured.err
+
+
+def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch, tmp_path) -> None:
+    """Issue #12998: `python -m omi_cli` must route through omi_cli.main.main()
+    so the documented --json error contract survives module invocation."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    package_root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ, OMI_API_KEY="not-a-real-key")
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [package_root, env.get("PYTHONPATH", "")]))
+    result = subprocess.run(
+        [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(tmp_path),
+        check=False,
+    )
+    assert result.returncode == 1
+    payload = json.loads(result.stderr)
+    assert "error" in payload
