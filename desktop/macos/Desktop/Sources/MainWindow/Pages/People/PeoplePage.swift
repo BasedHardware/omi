@@ -200,10 +200,10 @@ struct PeoplePage: View {
           Text(isRefreshing ? "Refreshing" : "Refresh")
             .scaledFont(size: OmiType.caption, weight: .medium)
         }
-        .foregroundColor(isRefreshing ? Ink.secondary : Ink.surface)
+        .foregroundStyle(GlassShell.controlLabel(isProminent: !isRefreshing))
         .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.xs)
-        .background(Capsule().fill(isRefreshing ? Ink.rowFillHover : Ink.primary))
+        .frame(height: QueryShellLayout.chipHeight)
+        .glassChip(isActive: isRefreshing)
       }
       .buttonStyle(.plain)
       .disabled(isRefreshing)

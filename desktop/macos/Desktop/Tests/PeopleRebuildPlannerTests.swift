@@ -75,3 +75,20 @@ final class PeopleRebuildPlannerTests: XCTestCase {
     XCTAssertEqual(PeopleRebuildSummary(failure: "Couldn't load conversations").message, "Couldn't load conversations")
   }
 }
+
+extension PeopleRebuildPlannerTests {
+  /// The dev backend never builds the aggregate artifact; the one cached part begins at its
+  /// first chunk, 30–60 s after the conversation started. The synthesized span carries that.
+  func testASinglePartIsPlacedAtItsFirstChunkNotAtTheConversationStart() throws {
+    let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let file = CapturePlaybackFile(id: "part", signedURL: URL(fileURLWithPath: "/tmp/part.wav"), duration: 120)
+    let artifact = try XCTUnwrap(
+      PeopleRebuildPlanner.singlePartArtifact(
+        file: file, firstChunkTimestamp: 1_800_000_033, conversationStartedAt: startedAt))
+    XCTAssertEqual(try XCTUnwrap(artifact.artifactOffset(forWallOffset: 40)), 7, accuracy: 1e-6)
+    XCTAssertNil(artifact.artifactOffset(forWallOffset: 10), "speech before the first chunk was never captured")
+    XCTAssertNil(
+      PeopleRebuildPlanner.singlePartArtifact(file: file, firstChunkTimestamp: nil, conversationStartedAt: startedAt),
+      "without a chunk timestamp the part cannot be placed and must not be guessed")
+  }
+}

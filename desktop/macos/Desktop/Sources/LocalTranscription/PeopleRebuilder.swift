@@ -54,6 +54,25 @@ enum PeopleRebuildPlanner {
     return result
   }
 
+  /// A single cached part placed on the conversation's wall clock: it begins at its first chunk,
+  /// which lands 30–60 s after `startedAt` on real captures, so treating media time as
+  /// transcript time would cut the wrong moments.
+  static func singlePartArtifact(
+    file: CapturePlaybackFile,
+    firstChunkTimestamp: TimeInterval?,
+    conversationStartedAt: Date?
+  ) -> CapturePlaybackArtifact? {
+    guard let firstChunkTimestamp, let conversationStartedAt else { return nil }
+    let wallOffset = firstChunkTimestamp - conversationStartedAt.timeIntervalSince1970
+    guard wallOffset >= -1, file.duration > 0 else { return nil }
+    return CapturePlaybackArtifact(
+      signedURL: file.signedURL,
+      duration: file.duration,
+      spans: [
+        CaptureAudioURLSpan(fileID: file.id, wallOffset: max(0, wallOffset), artifactOffset: 0, length: file.duration)
+      ])
+  }
+
   static func merge(_ local: [String: PersonActivity], _ remote: [String: PersonActivity]) -> [String: PersonActivity] {
     var merged = local
     for (personId, activity) in remote {
@@ -90,6 +109,9 @@ struct PeopleRebuildSummary: Equatable, Sendable {
   var withAudio = 0
   var voicesRebuilt = 0
   var clipsSaved = 0
+  /// Conversations whose audio the backend is still preparing; a later Refresh picks them up.
+  var audioPending = 0
+  var audioLocked = 0
   var activity: [String: PersonActivity] = [:]
   var failure: String?
 
@@ -100,6 +122,8 @@ struct PeopleRebuildSummary: Equatable, Sendable {
     parts.append(
       voicesRebuilt == 0 ? "no voices rebuilt" : "\(voicesRebuilt) voice\(voicesRebuilt == 1 ? "" : "s") rebuilt")
     if clipsSaved > 0 { parts.append("\(clipsSaved) clip\(clipsSaved == 1 ? "" : "s") saved") }
+    if audioPending > 0 { parts.append("\(audioPending) still preparing audio") }
+    if audioLocked > 0 { parts.append("\(audioLocked) locked") }
     return parts.joined(separator: " · ")
   }
 }
@@ -110,7 +134,10 @@ struct PeopleRebuildSummary: Equatable, Sendable {
 actor PeopleRebuilder {
   static let shared = PeopleRebuilder()
 
-  static let conversationLimit = 100
+  /// Page size for the backend list; pages are walked until one comes back short.
+  static let pageSize = 100
+  /// Upper bound so a very long history stays a bounded job.
+  static let maxConversations = 2000
   static let clipsPerVoice = 3
 
   private var isRunning = false
@@ -127,13 +154,24 @@ actor PeopleRebuilder {
     var state = PeopleRebuildProgress(message: "Loading conversations…")
     progress(state)
 
-    let conversations: [ServerConversation]
+    var conversations: [ServerConversation] = []
     do {
-      conversations = try await APIClient.shared.getConversations(limit: Self.conversationLimit)
+      var offset = 0
+      while conversations.count < Self.maxConversations {
+        let page = try await APIClient.shared.getConversations(limit: Self.pageSize, offset: offset)
+        conversations.append(contentsOf: page)
+        offset += page.count
+        state.total = conversations.count
+        state.message = "Loading conversations… \(conversations.count)"
+        progress(state)
+        if page.count < Self.pageSize { break }
+      }
     } catch {
       logError("PeopleRebuilder: could not load conversations", error: error)
-      summary.failure = "Couldn't load conversations"
-      return summary
+      guard !conversations.isEmpty else {
+        summary.failure = "Couldn't load conversations"
+        return summary
+      }
     }
     state.total = conversations.count
     summary.conversations = conversations.count
@@ -143,20 +181,44 @@ actor PeopleRebuilder {
     var voices: [String: RebuiltVoice] = [:]
     var seen: [(segments: [TranscriptSegment], date: Date)] = []
 
-    for conversation in conversations {
+    for listed in conversations {
       state.scanned += 1
       state.message = "Checking \(state.scanned) of \(state.total)…"
       progress(state)
 
-      let segments = await transcriptSegments(of: conversation)
+      // The list omits audio metadata (and sometimes the transcript); the detail has both.
+      let conversation = await detail(of: listed)
+      let segments = conversation.transcriptSegments
       seen.append((segments, conversation.startedAt ?? conversation.createdAt))
 
-      guard canEmbed, !conversation.isLocked,
-        !conversation.audioFiles.isEmpty || conversation.conversationAudio != nil,
-        segments.contains(where: { $0.isUser || $0.personId != nil })
-      else { continue }
-      guard case .readyAggregate(let artifact) = await LiveCapturePlaybackProvider().resolvePlayback(for: conversation)
-      else { continue }
+      guard canEmbed, segments.contains(where: { $0.isUser || $0.personId != nil }) else { continue }
+      guard !conversation.isLocked else {
+        summary.audioLocked += 1
+        continue
+      }
+      guard !conversation.audioFiles.isEmpty || conversation.conversationAudio != nil else { continue }
+
+      let artifact: CapturePlaybackArtifact
+      switch await LiveCapturePlaybackProvider().resolvePlayback(for: conversation) {
+      case .readyAggregate(let ready):
+        artifact = ready
+      case .fileFallback(let file):
+        guard
+          let placed = PeopleRebuildPlanner.singlePartArtifact(
+            file: file,
+            firstChunkTimestamp: conversation.audioFiles.first(where: { $0.id == file.id })?.firstChunkTimestamp,
+            conversationStartedAt: conversation.startedAt)
+        else { continue }
+        artifact = placed
+      case .pending:
+        summary.audioPending += 1
+        continue
+      case .locked:
+        summary.audioLocked += 1
+        continue
+      case .unavailable, .noAudio:
+        continue
+      }
       let cuts = PeopleRebuildPlanner.cuts(segments: segments, artifact: artifact)
       guard !cuts.isEmpty else { continue }
       state.withAudio += 1
@@ -204,12 +266,9 @@ actor PeopleRebuilder {
     return summary
   }
 
-  private func transcriptSegments(of conversation: ServerConversation) async -> [TranscriptSegment] {
-    if conversation.transcriptSegmentsIncluded || !conversation.transcriptSegments.isEmpty {
-      return conversation.transcriptSegments
-    }
-    guard let detail = try? await APIClient.shared.getConversation(id: conversation.id) else { return [] }
-    return detail.transcriptSegments
+  private func detail(of listed: ServerConversation) async -> ServerConversation {
+    guard let detail = try? await APIClient.shared.getConversation(id: listed.id) else { return listed }
+    return detail
   }
 
   /// Fetch a signed audio URL to a temp file and decode it to 16 kHz mono. The file is deleted

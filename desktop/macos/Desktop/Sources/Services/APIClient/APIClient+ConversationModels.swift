@@ -101,10 +101,20 @@ enum TranscriptPresenceState: Equatable {
 struct CaptureAudioFile: Codable, Equatable, Identifiable {
   let id: String
   let duration: TimeInterval
+  /// Epoch seconds of the file's first captured chunk. A per-part file starts there, not at
+  /// the conversation's `startedAt`, so this is what places its media time on the wall clock.
+  let firstChunkTimestamp: TimeInterval?
 
   init(_ wire: OmiAPI.AudioFile) {
     id = wire.id
     duration = wire.duration
+    firstChunkTimestamp = wire.chunkTimestamps.min()
+  }
+
+  init(id: String, duration: TimeInterval, firstChunkTimestamp: TimeInterval? = nil) {
+    self.id = id
+    self.duration = duration
+    self.firstChunkTimestamp = firstChunkTimestamp
   }
 }
 
