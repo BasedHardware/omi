@@ -6,6 +6,7 @@ import {
   chatClockLabel,
   chatMessageDisplayText,
   chatSenderCopy,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -84,7 +85,7 @@ export function ChatConversationHistory({
                     {`${sender} · ${body}`}
                   </Text>
                   {message.generationOutcome === 'cancelled' &&
-                  message.text.trim() !== '' ? (
+                  visibleDisplayText(message.text) !== '' ? (
                     <Text style={styles.conversationDetailField}>
                       Response stopped
                     </Text>

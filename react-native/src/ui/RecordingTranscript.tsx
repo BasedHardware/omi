@@ -1,5 +1,6 @@
 import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
+import {visibleDisplayText} from '../desktopReadClient';
 import {useRecordingTranscript} from '../recordingTranscript';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -41,7 +42,7 @@ export function RecordingTranscript({
             </Text>
           )}
           <Text selectable style={styles.conversationTranscriptText}>
-            {result.value.text.trim() === ''
+            {visibleDisplayText(result.value.text) === ''
               ? 'The transcript is empty.'
               : result.value.text}
           </Text>

@@ -94,6 +94,13 @@ test('a completed whitespace-only transcript says empty instead of a blank body'
   expect(textOf(renderer)).not.toMatch(/ \t\n/);
 });
 
+test('a completed NEXT LINE-only transcript says empty instead of a blank body', async () => {
+  mockRequest.mockResolvedValue(response('session-one', 'completed', '\u0085'));
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('The transcript is empty.');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
 test.each(['queued', 'running'])(
   'shows %s state truthfully and resumes a completed result',
   async state => {

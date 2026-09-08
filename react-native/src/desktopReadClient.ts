@@ -77,7 +77,7 @@ export function conversationStatusCopy(status: string): string {
 }
 
 export function accountWireCopy(value: string, unavailable: string): string {
-  const trimmed = value.trim();
+  const trimmed = visibleDisplayText(value);
   if (trimmed === '') {
     return unavailable;
   }
@@ -111,7 +111,7 @@ export function connectionIdentityCopy(
   }
   return (
     [identity.displayName, identity.email]
-      .map(part => part.trim())
+      .map(part => visibleDisplayText(part))
       .filter(part => part !== '')
       .join(' · ') || 'Identity unavailable for this connection.'
   );
@@ -156,7 +156,7 @@ export function developerWebhookRowCopy(webhook: {
   enabled: boolean | null;
   url: string | null;
 }): string {
-  const url = webhook.url?.trim() ?? '';
+  const url = visibleDisplayText(webhook.url ?? '');
   return [developerWebhookStatusCopy(webhook.enabled), url !== '' ? url : null]
     .filter(item => item !== null)
     .join(' · ');
@@ -179,7 +179,7 @@ export function appDisplaySource(app: {
   category: string;
   description: string;
 }): string {
-  const author = app.author.trim();
+  const author = visibleDisplayText(app.author);
   if (author !== '') {
     return author;
   }
@@ -187,7 +187,7 @@ export function appDisplaySource(app: {
   if (category !== '') {
     return category;
   }
-  const description = app.description.trim();
+  const description = visibleDisplayText(app.description);
   return description !== '' ? description : 'App details unavailable';
 }
 
@@ -263,7 +263,7 @@ export function memoryCitationCopy(citations: readonly string[]): string {
 export function memorySynthesisCopy(item: {
   provenance: {synthesisVersion: string | null};
 }): string | null {
-  const version = item.provenance.synthesisVersion?.trim() ?? '';
+  const version = visibleDisplayText(item.provenance.synthesisVersion ?? '');
   return version !== '' ? 'Synthesized memory' : null;
 }
 

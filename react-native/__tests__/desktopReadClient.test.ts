@@ -631,6 +631,7 @@ test('conversation status copy is not a raw wire token', () => {
   expect(conversationStatusCopy('')).toBe('Status unavailable');
   expect(conversationStatusCopy(' \t\n')).toBe('Status unavailable');
   expect(conversationStatusCopy('\u00A0')).toBe('Status unavailable');
+  expect(conversationStatusCopy('\u0085')).toBe('Status unavailable');
   expect(conversationStatusCopy('queued')).toBe('queued');
   expect(conversationStatusCopy('  queued  ')).toBe('queued');
 });
@@ -641,8 +642,10 @@ test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionStatusCopy('past_due')).toBe('Past due');
   expect(subscriptionPlanCopy('')).toBe('Plan unavailable');
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
+  expect(subscriptionPlanCopy('\u0085')).toBe('Plan unavailable');
   expect(dataProtectionCopy('standard')).toBe('Standard');
   expect(dataProtectionCopy('')).toBe('Data protection unavailable');
+  expect(dataProtectionCopy('\u0085')).toBe('Data protection unavailable');
 });
 
 test('developer webhook titles are not raw API keys', () => {
@@ -674,6 +677,9 @@ test('developer webhook rows omit empty or whitespace URLs', () => {
   expect(developerWebhookRowCopy({enabled: false, url: null})).toBe('Disabled');
   expect(developerWebhookRowCopy({enabled: true, url: ''})).toBe('Enabled');
   expect(developerWebhookRowCopy({enabled: true, url: ' \t\n'})).toBe(
+    'Enabled',
+  );
+  expect(developerWebhookRowCopy({enabled: true, url: '\u0085'})).toBe(
     'Enabled',
   );
   expect(developerWebhookRowCopy({enabled: null, url: '\u00A0'})).toBe(
@@ -709,6 +715,9 @@ test('whitespace-only connection identity stays unavailable', () => {
   expect(connectionIdentityCopy({displayName: ' \t', email: '\n'})).toBe(
     'Identity unavailable for this connection.',
   );
+  expect(connectionIdentityCopy({displayName: '\u0085', email: '\u0085'})).toBe(
+    'Identity unavailable for this connection.',
+  );
   expect(
     connectionIdentityCopy({displayName: '  Local identity  ', email: ''}),
   ).toBe('Local identity');
@@ -732,6 +741,13 @@ test('empty app source stays visible instead of a blank meta line', () => {
   );
   expect(
     appDisplaySource({author: ' \t\n', category: ' \t', description: '\u00A0'}),
+  ).toBe('App details unavailable');
+  expect(
+    appDisplaySource({
+      author: '\u0085',
+      category: '\u0085',
+      description: '\u0085',
+    }),
   ).toBe('App details unavailable');
   expect(
     appDisplaySource({
@@ -930,6 +946,9 @@ test('memory citation copy matches the citation count', () => {
   ).toBeNull();
   expect(
     memorySynthesisCopy({provenance: {synthesisVersion: ' \t\n'}}),
+  ).toBeNull();
+  expect(
+    memorySynthesisCopy({provenance: {synthesisVersion: '\u0085'}}),
   ).toBeNull();
   expect(memorySynthesisCopy({provenance: {synthesisVersion: '1'}})).toBe(
     'Synthesized memory',

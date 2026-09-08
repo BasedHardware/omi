@@ -1083,6 +1083,43 @@ test('a cancelled whitespace-only chat message says Response stopped instead of 
   });
 });
 
+test('a cancelled NEXT LINE-only chat message says Response stopped instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled-next-line',
+        text: '\u0085',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Response stopped');
+  expect(copies).not.toContain('\u0085');
+  expect(copies.filter(copy => copy === 'Response stopped')).toHaveLength(1);
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an empty chat bubble keeps history attachment names instead of Message text unavailable', () => {
   const renderer = render(
     <ChatMessageRow
