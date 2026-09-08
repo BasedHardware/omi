@@ -7,6 +7,7 @@ import {
   conversationGroupLabel,
   conversationStatusCopy,
   dataProtectionCopy,
+  developerWebhookRowCopy,
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
   appCategoryCopy,
@@ -654,6 +655,26 @@ test('developer webhook status copy does not say unknown for a missing enablemen
   expect(developerWebhookStatusCopy(true)).toBe('Enabled');
   expect(developerWebhookStatusCopy(false)).toBe('Disabled');
   expect(developerWebhookStatusCopy(null)).toBe('Status unavailable');
+});
+
+test('developer webhook rows omit empty or whitespace URLs', () => {
+  expect(
+    developerWebhookRowCopy({
+      enabled: true,
+      url: 'https://example.test/conversation',
+    }),
+  ).toBe('Enabled · https://example.test/conversation');
+  expect(developerWebhookRowCopy({enabled: false, url: null})).toBe('Disabled');
+  expect(developerWebhookRowCopy({enabled: true, url: ''})).toBe('Enabled');
+  expect(developerWebhookRowCopy({enabled: true, url: ' \t\n'})).toBe(
+    'Enabled',
+  );
+  expect(developerWebhookRowCopy({enabled: null, url: '\u00A0'})).toBe(
+    'Status unavailable',
+  );
+  expect(
+    developerWebhookRowCopy({enabled: true, url: '  https://example.test/a  '}),
+  ).toBe('Enabled · https://example.test/a');
 });
 
 test('whitespace-only account fields stay unset instead of a blank row', () => {

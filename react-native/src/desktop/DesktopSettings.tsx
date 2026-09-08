@@ -14,7 +14,7 @@ import {
 import {
   dataProtectionCopy,
   desktopReadErrorCopy,
-  developerWebhookStatusCopy,
+  developerWebhookRowCopy,
   developerWebhookTypeCopy,
   accountFieldCopy,
   subscriptionPlanCopy,
@@ -738,9 +738,7 @@ export function DesktopSettings({
       ) : (
         account.webhooks.map(webhook => (
           <Row
-            copy={[developerWebhookStatusCopy(webhook.enabled), webhook.url]
-              .filter(item => item !== null)
-              .join(' · ')}
+            copy={developerWebhookRowCopy(webhook)}
             key={webhook.type}
             title={developerWebhookTypeCopy(webhook.type)}
           />

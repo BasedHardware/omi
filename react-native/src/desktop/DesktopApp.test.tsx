@@ -2400,6 +2400,51 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('realtime_transcript');
 });
 
+test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: [
+      {type: 'memory_created', enabled: true, url: ' \t\n'},
+      {
+        type: 'day_summary',
+        enabled: false,
+        url: '  https://example.test/day  ',
+      },
+    ],
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Disabled');
+  expect(tree).toContain('https://example.test/day');
+  expect(tree).not.toContain(' \t\n');
+});
+
 test('desktop Tasks does not claim editing unavailable over a failed task read', () => {
   const renderer = renderDesktop({
     outcomes: {

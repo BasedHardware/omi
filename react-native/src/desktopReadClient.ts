@@ -148,6 +148,16 @@ export function developerWebhookStatusCopy(enabled: boolean | null): string {
   return enabled ? 'Enabled' : 'Disabled';
 }
 
+export function developerWebhookRowCopy(webhook: {
+  enabled: boolean | null;
+  url: string | null;
+}): string {
+  const url = webhook.url?.trim() ?? '';
+  return [developerWebhookStatusCopy(webhook.enabled), url !== '' ? url : null]
+    .filter(item => item !== null)
+    .join(' · ');
+}
+
 export function appCategoryCopy(category: string): string {
   return accountWireCopy(category, '');
 }

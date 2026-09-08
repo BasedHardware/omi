@@ -985,6 +985,34 @@ test('Settings developer webhook titles are not raw API keys', async () => {
   expect(tree).not.toContain('Status unknown');
 });
 
+test('Settings developer webhook URLs omit empty or whitespace values', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: {enabled: true, url: ' \t\n'},
+          day_summary: {enabled: false, url: '  https://example.test/day  '},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Enabled');
+  expect(tree).toContain('Disabled');
+  expect(tree).toContain('https://example.test/day');
+  expect(tree).not.toContain(' \t\n');
+});
+
 test('Apps category labels are not raw wire tokens', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

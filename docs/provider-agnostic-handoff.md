@@ -340,6 +340,8 @@ Cloud Linux after `6d343472cb`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `12e3ec6a29`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Conversation detail status no longer leaves a blank value when the wire status is empty or whitespace. Those rows say Status unavailable. Known statuses stay mapped. Unknown statuses such as queued stay visible. This does not invent a conversation producer.
 
+Cloud Linux after `4b45f4e3c4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Developer webhook rows no longer leave a blank URL after Enabled or Disabled when the stored URL is empty or whitespace. Those URLs are omitted. Reported URLs stay. Status unavailable stays for a missing enablement bit. This does not invent a webhook producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.
