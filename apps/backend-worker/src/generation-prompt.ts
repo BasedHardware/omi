@@ -132,14 +132,15 @@ async function readTextExcerpt(
     });
     if (object === null) return { kind: "missing" };
     const bytes = new Uint8Array(await object.arrayBuffer());
-    if (bytes.byteLength === 0 || bytes.includes(0)) return { kind: "empty" };
+    if (bytes.byteLength === 0) return { kind: "empty" };
+    if (bytes.includes(0)) return { kind: "missing" };
     try {
       return {
         kind: "text",
         value: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       };
     } catch {
-      return { kind: "empty" };
+      return { kind: "missing" };
     }
   } catch {
     return { kind: "missing" };

@@ -818,6 +818,50 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).not.toContain("notes.txt");
   });
 
+  test("fails when a bound text object contains NUL bytes instead of dropping it from a visible prompt", async () => {
+    await insertBound(db, {
+      id: "att-nul",
+      accountId: "acct-a",
+      messageId: "msg-nul",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-nul",
+      new Uint8Array([0x68, 0x69, 0x00, 0x21])
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-nul",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("fails when a bound text object is invalid UTF-8 instead of dropping it from a visible prompt", async () => {
+    await insertBound(db, {
+      id: "att-bad-utf8",
+      accountId: "acct-a",
+      messageId: "msg-bad-utf8",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-bad-utf8",
+      new Uint8Array([0xff, 0xfe])
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-bad-utf8",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
   test("fails when the user text is only whitespace and no attachment bytes load", async () => {
     const blank = await composeGenerationPrompt(
       db,
