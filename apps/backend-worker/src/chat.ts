@@ -593,23 +593,21 @@ function parseStoredMessage(row: StoredMessage): ChatMessage | null {
     try {
       const parsed = JSON.parse(row.payload) as unknown;
       if (
-        parsed === null ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed)
-      )
-        return null;
-      const message = parsed as ChatMessage;
-      if (
-        message.sender !== row.sender ||
-        message.id !== row.id ||
-        message.text !== row.text
+        parsed !== null &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed)
       ) {
-        return null;
+        const message = parsed as ChatMessage;
+        if (
+          message.sender !== row.sender ||
+          message.id !== row.id ||
+          message.text !== row.text
+        ) {
+          return null;
+        }
+        return message;
       }
-      return message;
-    } catch {
-      return null;
-    }
+    } catch {}
   }
   let id: ChatMessage["id"];
   try {

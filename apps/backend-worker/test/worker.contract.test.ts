@@ -1434,6 +1434,61 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET keeps neighboring rows when one payload is unreadable JSON", async () => {
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "broken-payload",
+        "test-account",
+        "stored beside unreadable json",
+        2,
+        2,
+        "{broken"
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'unknown', ?, NULL, ?, ?)"
+      )
+      .bind(
+        "null-payload-json",
+        "test-account",
+        "stored beside json null",
+        3,
+        3,
+        "null"
+      )
+      .run();
+
+    const response = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as unknown;
+    const envelope = wireToChatHistoryEnvelope(body);
+    expect(envelope).not.toBeNull();
+    expect(envelope!.messages.map((message) => message.sender)).toEqual([
+      "human",
+      "human",
+      "unknown",
+    ]);
+    expect(envelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+      "stored beside unreadable json",
+      "stored beside json null",
+    ]);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",
