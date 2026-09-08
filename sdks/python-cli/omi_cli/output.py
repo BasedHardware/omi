@@ -20,7 +20,6 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from rich.console import Console
-from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -146,12 +145,16 @@ class Renderer:
             sys.stderr.write(json.dumps(payload) + "\n")
             sys.stderr.flush()
         else:
-            line = f"[red]✗[/red] {message}"
+            # Error text can include server responses and user input. Apply
+            # our decoration to Text spans, without parsing that data as markup.
+            line = Text()
+            line.append("✗", style="red")
+            line.append(f" {message}")
             if detail:
-                line += f"\n  [dim]{detail}[/dim]"
+                line.append(f"\n  {detail}", style="dim")
             if extra:
                 for key, value in extra.items():
-                    line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
+                    line.append(f"\n  {key}: {_stringify(value)}", style="dim")
             self._stderr.print(line)
 
     def debug(self, message: str) -> None:

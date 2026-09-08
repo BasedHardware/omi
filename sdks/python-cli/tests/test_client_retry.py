@@ -106,6 +106,29 @@ def test_401_maps_to_auth_error(authed_profile, respx_mock) -> None:
             client.get("/v1/dev/user/memories")
 
 
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_cli_auth_error_with_markup_preserves_exit_code(
+    authed_profile, respx_mock, monkeypatch, capsys, json_mode
+) -> None:
+    import json
+
+    from omi_cli.main import main
+
+    detail = "Invalid key [/bold] :warning:"
+    respx_mock.get("/v1/dev/user/memories").respond(401, json={"detail": detail})
+    args = ["--json"] if json_mode else ["--no-color"]
+    monkeypatch.setattr("sys.argv", ["omi", *args, "memory", "list"])
+    with pytest.raises(SystemExit) as info:
+        main()
+    assert info.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    if json_mode:
+        assert json.loads(captured.err)["detail"] == detail
+    else:
+        assert detail in captured.err
+
+
 def test_403_maps_to_auth_error(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/memories").respond(
         403, json={"detail": "Insufficient permissions. Required scope: memories:write"}
