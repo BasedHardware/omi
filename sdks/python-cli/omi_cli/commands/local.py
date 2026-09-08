@@ -233,7 +233,7 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
         if source:
             shutil.copyfile(source, output)
         else:
-            output.write_text(result)
+            output.write_text(result, encoding="utf-8")
         return output
 
     if isinstance(result, Mapping):
@@ -251,10 +251,10 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
 
         content = result.get("content")
         if isinstance(content, str):
-            output.write_text(content)
+            output.write_text(content, encoding="utf-8")
             return output
 
-    output.write_text(json.dumps(result, indent=2, sort_keys=False))
+    output.write_text(json.dumps(result, indent=2, sort_keys=False), encoding="utf-8")
     return output
 
 
