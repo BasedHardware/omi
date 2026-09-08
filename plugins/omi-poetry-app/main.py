@@ -7,6 +7,7 @@ Requires zero external authentication or API keys.
 
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+import logging
 import random
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -24,6 +25,8 @@ from models import (
     ListPoetsRequest,
     SearchPoemsByAuthorRequest,
 )
+
+logger = logging.getLogger("omi-poetry-app")
 
 POETRYDB_API_URL = "https://poetrydb.org"
 REQUEST_TIMEOUT_SECONDS = 15.0
@@ -160,12 +163,14 @@ async def get_random_poem(request: GetRandomPoemRequest) -> ChatToolResponse:
         candidate = matching[0] if matching else data[0]
         return ChatToolResponse(result=_format_poem(candidate, max_lines=max_lines))
     except httpx.HTTPStatusError as exc:
+        logger.warning("Upstream HTTPStatusError in get_random_poem: %s", exc)
         if exc.response.status_code == 404:
             author_msg = f" for author '{request.author}'" if request.author else ""
             return ChatToolResponse(error=f"No poems found{author_msg}.")
         return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to retrieve poem: {exc}")
+        logger.error("Unexpected error in get_random_poem: %s", exc, exc_info=True)
+        return ChatToolResponse(error="Failed to retrieve poem. Please try again.")
 
 
 @app.post("/tools/search_poems_by_author", response_model=ChatToolResponse, response_model_exclude_none=True)
@@ -206,11 +211,13 @@ async def search_poems_by_author(request: SearchPoemsByAuthorRequest) -> ChatToo
 
         return ChatToolResponse(result="\n".join(output_parts))
     except httpx.HTTPStatusError as exc:
+        logger.warning("Upstream HTTPStatusError in search_poems_by_author: %s", exc)
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"No poems found for poet '{request.author}'. Use list_poets to see available authors.")
         return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to search poems by author '{request.author}': {exc}")
+        logger.error("Unexpected error in search_poems_by_author: %s", exc, exc_info=True)
+        return ChatToolResponse(error=f"Failed to search poems by author '{request.author}'. Please try again.")
 
 
 @app.post("/tools/get_poem_by_title", response_model=ChatToolResponse, response_model_exclude_none=True)
@@ -245,11 +252,13 @@ async def get_poem_by_title(request: GetPoemByTitleRequest) -> ChatToolResponse:
 
         return ChatToolResponse(result=_format_poem(cached))
     except httpx.HTTPStatusError as exc:
+        logger.warning("Upstream HTTPStatusError in get_poem_by_title: %s", exc)
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"Poem titled '{request.title}' not found in the public domain library.")
         return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to get poem '{request.title}': {exc}")
+        logger.error("Unexpected error in get_poem_by_title: %s", exc, exc_info=True)
+        return ChatToolResponse(error=f"Failed to get poem '{request.title}'. Please try again.")
 
 
 @app.post("/tools/list_poets", response_model=ChatToolResponse, response_model_exclude_none=True)
@@ -286,9 +295,11 @@ async def list_poets(request: ListPoetsRequest) -> ChatToolResponse:
 
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
+        logger.warning("Upstream HTTPStatusError in list_poets: %s", exc)
         return ChatToolResponse(error=f"Upstream poetry service error: HTTP {exc.response.status_code}")
     except Exception as exc:
-        return ChatToolResponse(error=f"Failed to list poets: {exc}")
+        logger.error("Unexpected error in list_poets: %s", exc, exc_info=True)
+        return ChatToolResponse(error="Failed to list poets. Please try again.")
 
 
 # ---------------------------------------------------------------------------
