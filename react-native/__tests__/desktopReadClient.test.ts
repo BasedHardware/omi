@@ -10,6 +10,7 @@ import {
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
   appCategoryCopy,
+  appDisplaySource,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -651,6 +652,36 @@ test('app category copy is not a raw wire token', () => {
   expect(appCategoryCopy('productivity')).toBe('Productivity');
   expect(appCategoryCopy('health-fitness')).toBe('Health fitness');
   expect(appCategoryCopy('')).toBe('');
+});
+
+test('empty app source stays visible instead of a blank meta line', () => {
+  expect(appDisplaySource({author: '', category: '', description: ''})).toBe(
+    'App details unavailable',
+  );
+  expect(
+    appDisplaySource({author: ' \t\n', category: ' \t', description: '\u00A0'}),
+  ).toBe('App details unavailable');
+  expect(
+    appDisplaySource({
+      author: '  Omi  ',
+      category: 'productivity',
+      description: 'Calendar sync',
+    }),
+  ).toBe('Omi');
+  expect(
+    appDisplaySource({
+      author: '',
+      category: 'productivity',
+      description: 'Calendar sync',
+    }),
+  ).toBe('Productivity');
+  expect(
+    appDisplaySource({
+      author: '',
+      category: '',
+      description: '  Calendar sync  ',
+    }),
+  ).toBe('Calendar sync');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

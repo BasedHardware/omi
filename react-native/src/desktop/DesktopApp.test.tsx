@@ -1315,6 +1315,7 @@ test('nested non-retryable Apps enabled failures keep catalogue tiles without cl
   const tree = renderedText(renderer);
   expect(tree).toContain(desktopAppsUnavailableCopy);
   expect(tree).toContain('Owned app');
+  expect(tree).toContain('App details unavailable');
   expect(tree).not.toContain('Not connected');
   expect(tree).not.toContain('Installed');
 });
@@ -1356,6 +1357,7 @@ test('successful empty Apps enabled reads still report catalogue tiles as not co
   const tree = renderedText(renderer);
   expect(tree).toContain('Owned app');
   expect(tree).toContain('Not connected');
+  expect(tree).toContain('App details unavailable');
   expect(tree).not.toContain(desktopAppsUnavailableCopy);
 });
 

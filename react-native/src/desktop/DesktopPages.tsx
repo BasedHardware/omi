@@ -3,7 +3,7 @@ import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
-  appCategoryCopy,
+  appDisplaySource,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -241,16 +241,6 @@ function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
   return 'Not connected';
 }
 
-function cloudAppSource(app: CloudApp): string {
-  if (app.author.length > 0) {
-    return app.author;
-  }
-  if (app.category.length > 0) {
-    return appCategoryCopy(app.category);
-  }
-  return app.description;
-}
-
 function tilesFromCatalog(
   apps: CloudApp[],
   installKnown: boolean,
@@ -259,7 +249,7 @@ function tilesFromCatalog(
     Icon: Puzzle,
     id: app.id,
     name: app.name,
-    source: cloudAppSource(app),
+    source: appDisplaySource(app),
     status: cloudAppStatus(app, installKnown),
   }));
 }

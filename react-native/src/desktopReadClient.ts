@@ -129,6 +129,23 @@ export function appCategoryCopy(category: string): string {
   return accountWireCopy(category, '');
 }
 
+export function appDisplaySource(app: {
+  author: string;
+  category: string;
+  description: string;
+}): string {
+  const author = app.author.trim();
+  if (author !== '') {
+    return author;
+  }
+  const category = appCategoryCopy(app.category);
+  if (category !== '') {
+    return category;
+  }
+  const description = app.description.trim();
+  return description !== '' ? description : 'App details unavailable';
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

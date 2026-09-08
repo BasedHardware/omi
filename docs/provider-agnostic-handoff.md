@@ -332,7 +332,7 @@ Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
 
-Cloud Linux after `aaa6571320`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Whitespace-only task titles say Task title unavailable instead of a blank checkbox row. The task editor keeps the trimmed raw title. Production chat session titles now trim the same Unicode whitespace set Worker already uses, so NBSP-only sessions stay visible with empty title and overview instead of a blank-looking row. Migration 0059 is not applied to DEV from this VM. This does not invent a chat or task producer.
+Cloud Linux after `9d783cdadc`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Production chat session titles trim the same Unicode whitespace set Worker already uses, so NBSP-only sessions stay visible with empty title and overview instead of a blank-looking row. Migration 0059 is not applied to DEV from this VM. The macOS Apps gallery no longer leaves a blank source line when author, category, and description are empty or whitespace. That line says App details unavailable. Connectors still omits empty description and meta parts after trim. This does not invent an Apps catalogue producer.
 
 ## Verified and pushed
 

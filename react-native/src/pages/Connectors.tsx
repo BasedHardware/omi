@@ -31,9 +31,11 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 
 function appRowMeta(app: CloudApp, installKnown: boolean): string {
+  const category = appCategoryCopy(app.category);
+  const author = app.author.trim();
   return [
-    app.category.length > 0 ? appCategoryCopy(app.category) : null,
-    app.author.length > 0 ? app.author : null,
+    category !== '' ? category : null,
+    author !== '' ? author : null,
     installKnown ? (app.enabled ? 'Installed' : 'Not installed') : null,
   ]
     .filter(item => item !== null)
@@ -252,9 +254,9 @@ export function ConnectorsPage({
                       style={styles.cloudRow}>
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{app.name}</Text>
-                        {app.description.length > 0 && (
+                        {app.description.trim().length > 0 && (
                           <Text numberOfLines={2} style={styles.cloudRowMeta}>
-                            {app.description}
+                            {app.description.trim()}
                           </Text>
                         )}
                         {meta.length > 0 && (

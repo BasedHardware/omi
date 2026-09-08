@@ -582,6 +582,45 @@ test('successful empty Apps enabled reads still report catalogue apps as not ins
   expect(labelsOf(renderer)).toContain('Install Owned app');
 });
 
+test('whitespace-only Apps description does not leave a blank catalogue subtitle', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            description: ' \t\n',
+            enabled: false,
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  const blankCopy = renderer.root.findAllByType(Text).filter(node => {
+    const child = node.props.children;
+    return typeof child === 'string' && child.length > 0 && child.trim() === '';
+  });
+  expect(blankCopy).toHaveLength(0);
+});
+
 test('nested non-retryable Apps enable writes latch Install', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {
