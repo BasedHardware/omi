@@ -28,7 +28,10 @@ jest.mock('../src/omiNative', () => ({
   },
 }));
 
-import {useOnboarding} from '../src/app/useOnboarding';
+import {
+  SESSION_UNREACHABLE_COPY,
+  useOnboarding,
+} from '../src/app/useOnboarding';
 
 function Harness({
   macDesktop,
@@ -149,9 +152,7 @@ test('an unreachable startup probe keeps Welcome with an unreachable error', asy
   const hook = await renderOnboarding(true);
 
   expect(hook.latest().onboardingRequired).toBe(true);
-  expect(hook.latest().authError).toBe(
-    "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
-  );
+  expect(hook.latest().authError).toBe(SESSION_UNREACHABLE_COPY);
 });
 
 test('a recovered startup probe clears the unreachable error', async () => {
@@ -159,9 +160,7 @@ test('a recovered startup probe clears the unreachable error', async () => {
   mockAuth.hasCloudSession.mockRejectedValueOnce(new Error('offline'));
 
   const hook = await renderOnboarding(true);
-  expect(hook.latest().authError).toBe(
-    "Couldn't reach Omi to check your session. Try Sign in again when you are online.",
-  );
+  expect(hook.latest().authError).toBe(SESSION_UNREACHABLE_COPY);
 
   mockAuth.hasCloudSession.mockResolvedValue(true);
   await hook.update(false);

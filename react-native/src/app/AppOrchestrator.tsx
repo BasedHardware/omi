@@ -59,6 +59,7 @@ import {DeviceSession, homeConnectionStatus} from './DeviceSession';
 import {useDesktopReads} from './useDesktopReads';
 import {useTaskMutations} from './useTaskMutations';
 import {useOnboarding} from './useOnboarding';
+import {usePostSetupHomeCue} from './usePostSetupHomeCue';
 import {useNativeDevices} from './useNativeDevices';
 import {useReduceMotion} from './useReduceMotion';
 import {omiDotColor} from '../ui/OmiAvatar';
@@ -183,6 +184,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   } = useDesktopReads({
     enabled: onboardingRequired === false,
   });
+  const postSetupHomeCue = usePostSetupHomeCue(onboardingRequired, readsPhase);
+
   const taskMutations = useTaskMutations({
     enabled: onboardingRequired === false,
     outcome: readOutcomes?.tasks ?? null,
@@ -1058,6 +1061,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           outcomes={readOutcomes}
           reads={reads}
+          postSetupHomeCue={postSetupHomeCue}
           readsPhase={readsPhase}
           session={
             onboardingRequired === null

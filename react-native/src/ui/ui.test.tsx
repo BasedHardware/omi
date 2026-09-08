@@ -381,6 +381,43 @@ describe('Onboarding chrome', () => {
     expect(output).not.toContain('Claude');
   });
 
+  test('unreachable session error is distinct from clean signed-out Welcome', () => {
+    mockPlatformOS = 'macos';
+    const unreachable =
+      "Couldn't reach Omi to check your session. Try Sign in again when you are online.";
+    const clean = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    expect(JSON.stringify(clean.toJSON())).toContain('Welcome to Omi');
+    expect(
+      clean.root.findAll(
+        node => node.props.accessibilityLabel === 'Session unreachable',
+      ),
+    ).toHaveLength(0);
+    expect(
+      clean.root.findAll(
+        node => node.props.accessibilityLabel === 'Sign-in error',
+      ),
+    ).toHaveLength(0);
+
+    const offline = render(
+      <Onboarding
+        error={unreachable}
+        onSignIn={() => undefined}
+        signingIn={false}
+      />,
+    );
+    const error = offline.root.find(
+      node => node.props.accessibilityLabel === 'Session unreachable',
+    );
+    expect(String(error.props.children)).toBe(unreachable);
+    expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
+      '#ff3b30',
+    );
+    expect(JSON.stringify(offline.toJSON())).toContain('Welcome to Omi');
+    expect(JSON.stringify(offline.toJSON())).toContain('Sign in');
+  });
+
   test('macOS onboarding renders dark ink on the light native window', () => {
     mockPlatformOS = 'macos';
     const renderer = render(
