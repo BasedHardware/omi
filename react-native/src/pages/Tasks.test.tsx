@@ -76,6 +76,32 @@ test('task page remains read-only without write authority', () => {
   expect(copy).toContain('Task editing is unavailable for this connection.');
 });
 
+test('a whitespace-only task title stays visible instead of a blank row', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: ' \t\n'}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Task title unavailable');
+  expect(copy).not.toContain(' \t\n');
+  act(() => renderer.unmount());
+});
+
 test('task page edits and toggles only through handlers with pending and error recovery', () => {
   const onTaskToggle = jest.fn();
   const onTaskEdit = jest.fn();

@@ -9,6 +9,7 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   projectionClockLabel,
+  taskDisplayTitle,
   type ConversationProjection,
   type DesktopReadProjection,
   type MemoryProjection,
@@ -62,7 +63,7 @@ export const ReadRow = memo(function ReadRow({
             ? conversationDisplayTitle(item)
             : item.kind === 'memory'
             ? memoryDisplayTitle(item)
-            : item.title}
+            : taskDisplayTitle(item)}
         </Text>
         <Text numberOfLines={1} style={styles.rowMeta}>
           {meta.filter(part => part !== '').join(' · ')}
@@ -120,7 +121,7 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
         style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
       />
       <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
-        {item.title}
+        {taskDisplayTitle(item)}
       </Text>
     </View>
   );

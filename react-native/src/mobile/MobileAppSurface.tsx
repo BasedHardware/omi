@@ -22,7 +22,10 @@ import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
-import {desktopBackendUnavailableCopy} from '../desktopReadClient';
+import {
+  desktopBackendUnavailableCopy,
+  taskDisplayTitle,
+} from '../desktopReadClient';
 import {
   mobileColor,
   mobileRadius,
@@ -170,7 +173,7 @@ const TaskRow = memo(function TaskRow({
             : task.completed
             ? 'Completed'
             : 'Task'
-        } ${task.title}`}
+        } ${taskDisplayTitle(task)}`}
         accessibilityRole={onToggle ? 'checkbox' : 'text'}
         accessibilityState={{
           checked: task.completed,
@@ -184,13 +187,13 @@ const TaskRow = memo(function TaskRow({
           style={[styles.checkbox, task.completed && styles.checkboxDone]}
         />
         <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-          {task.title}
+          {taskDisplayTitle(task)}
         </Text>
       </Pressable>
       {onEdit && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit ${task.title}`}
+          accessibilityLabel={`Edit ${taskDisplayTitle(task)}`}
           disabled={busy}
           onPress={() => onEdit(task.id)}
           style={styles.taskEdit}>
@@ -351,7 +354,7 @@ export function MobileAppSurface({
         {writesAvailable && onTaskEdit && selectedTask && (
           <TaskEditor
             id={selectedTask.id}
-            title={selectedTask.title}
+            title={selectedTask.title.trim()}
             busy={busyTaskId !== null}
             failed={taskMutationError !== null}
             onSave={onTaskEdit}

@@ -7,6 +7,7 @@ import {
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
+  taskDisplayTitle,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
@@ -152,12 +153,12 @@ export function TasksPage({
                   }
                   accessibilityLabel={
                     writesAvailable
-                      ? `${item.completed ? 'Reopen' : 'Complete'} task: ${
-                          item.title
-                        }`
+                      ? `${
+                          item.completed ? 'Reopen' : 'Complete'
+                        } task: ${taskDisplayTitle(item)}`
                       : item.completed
-                      ? `Completed task: ${item.title}`
-                      : `Task: ${item.title}`
+                      ? `Completed task: ${taskDisplayTitle(item)}`
+                      : `Task: ${taskDisplayTitle(item)}`
                   }
                   accessibilityState={{
                     checked: item.completed,
@@ -181,7 +182,7 @@ export function TasksPage({
                 {writesAvailable && onTaskEdit && item.revision !== null && (
                   <FocusPressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Edit task: ${item.title}`}
+                    accessibilityLabel={`Edit task: ${taskDisplayTitle(item)}`}
                     disabled={busyTaskId !== null}
                     accessibilityState={{disabled: busyTaskId !== null}}
                     onPress={() => setEditingId(item.id)}
@@ -193,7 +194,7 @@ export function TasksPage({
               {editingId === item.id && writesAvailable && onTaskEdit && (
                 <TaskEditor
                   id={item.id}
-                  title={item.title}
+                  title={item.title.trim()}
                   busy={busyTaskId !== null}
                   failed={taskMutationError !== null}
                   onSave={onTaskEdit}

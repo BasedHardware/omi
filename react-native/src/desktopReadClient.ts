@@ -188,6 +188,11 @@ export function taskDisplaySummary(item: {
   return `Due ${formatTaskDue(item.dueAt)}`;
 }
 
+export function taskDisplayTitle(item: {title: string}): string {
+  const title = item.title.trim();
+  return title !== '' ? title : 'Task title unavailable';
+}
+
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
   const body = parsed.body.trim();

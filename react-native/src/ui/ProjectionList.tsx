@@ -12,6 +12,7 @@ import {
   memoryCitationCopy,
   memoryDisplayTitle,
   taskDisplaySummary,
+  taskDisplayTitle,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import {styles} from './styles';
@@ -23,7 +24,7 @@ function displayTitle(item: DesktopReadProjection): string {
   if (item.kind === 'conversation') {
     return conversationDisplayTitle(item);
   }
-  return item.title;
+  return taskDisplayTitle(item);
 }
 
 function displaySummary(item: DesktopReadProjection): string {

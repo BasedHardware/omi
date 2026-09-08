@@ -39,6 +39,7 @@ import {
   subscriptionPlanCopy,
   subscriptionStatusCopy,
   taskDisplaySummary,
+  taskDisplayTitle,
   taskGroup,
   timelineGroups,
 } from '../src/desktopReadClient';
@@ -740,6 +741,13 @@ test('task due copy uses a calendar date instead of a raw epoch', () => {
     'Date unavailable',
   );
   expect(taskGroup(0, Date.now())).toBe('Later');
+});
+
+test('empty task titles stay visible instead of a blank row', () => {
+  expect(taskDisplayTitle({title: ''})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: ' \t\n'})).toBe('Task title unavailable');
+  expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
+  expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
 });
 
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {

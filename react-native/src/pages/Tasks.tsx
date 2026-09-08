@@ -12,6 +12,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
   formatTaskDue,
+  taskDisplayTitle,
   taskGroup,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -175,7 +176,7 @@ export function TasksPage({
                               : task.completed
                               ? 'Completed'
                               : 'Task'
-                          } ${task.title}`}
+                          } ${taskDisplayTitle(task)}`}
                           accessibilityRole={
                             writesAvailable && onTaskToggle
                               ? 'checkbox'
@@ -209,10 +210,10 @@ export function TasksPage({
                         <FocusPressable
                           accessibilityLabel={
                             task.completed
-                              ? `Completed task: ${task.title}`
+                              ? `Completed task: ${taskDisplayTitle(task)}`
                               : writesAvailable && onTaskEdit
-                              ? `Open task: ${task.title}`
-                              : `Task: ${task.title}`
+                              ? `Open task: ${taskDisplayTitle(task)}`
+                              : `Task: ${taskDisplayTitle(task)}`
                           }
                           accessibilityRole="button"
                           accessibilityState={{selected}}
@@ -223,7 +224,7 @@ export function TasksPage({
                               styles.taskDescription,
                               task.completed && styles.taskDescriptionDone,
                             ]}>
-                            {task.title}
+                            {taskDisplayTitle(task)}
                           </Text>
                           <Text style={styles.taskDue}>
                             {task.completed
@@ -235,7 +236,7 @@ export function TasksPage({
                       {selected && writesAvailable && onTaskEdit && (
                         <TaskEditor
                           id={task.id}
-                          title={task.title}
+                          title={task.title.trim()}
                           busy={busyTaskId !== null}
                           failed={taskMutationError !== null}
                           onSave={onTaskEdit}
