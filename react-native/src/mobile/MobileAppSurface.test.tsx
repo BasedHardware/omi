@@ -729,3 +729,13 @@ test('mobile waiting-for-audio state never claims Listening before the first pac
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
   act(() => renderer.unmount());
 });
+
+test('idle capture does not claim Paused when nothing is recording', () => {
+  const renderer = render({
+    capture: {active: false, waitingForAudio: false, transcript: ''},
+  });
+  expect(renderedText(renderer)).toContain('Not capturing');
+  expect(renderedText(renderer)).not.toContain('Paused');
+  expect(renderedText(renderer)).not.toContain('Capture is paused');
+  act(() => renderer.unmount());
+});

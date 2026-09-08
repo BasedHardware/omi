@@ -266,7 +266,9 @@ Cloud Linux after `db63e9a1fc`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `38df088b80`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Rewind no longer keeps a disabled Start capture control when ScreenCaptureKit is unavailable on this connection. Status copy stays: Capture is available in the native Mac app. Start and Stop stay when capture is available. This does not invent a ScreenCaptureKit producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the Apple scan-timeout honesty slice: an empty Devices list no longer keeps Scanning for Omi devices after the scan has finished. Apple iOS/macOS scan timeout now matches Android with No Omi devices found, and the empty-list hint maps leftover Scanning copy to No Omi device was discovered unless a scan is still busy. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `95c658d3b5`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. An empty Devices list no longer keeps Scanning for Omi devices after the scan has finished. Apple iOS/macOS scan timeout now matches Android with No Omi devices found, and the empty-list hint maps leftover Scanning copy to No Omi device was discovered unless a scan is still busy. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the idle-capture honesty slice: compact Home no longer says Paused or Capture is paused when nothing is recording. Idle capture says Not capturing. Waiting for audio still never claims Listening, and Listening stays while audio is live. This does not invent an STT or capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

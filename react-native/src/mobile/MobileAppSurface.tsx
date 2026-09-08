@@ -386,7 +386,7 @@ export function MobileAppSurface({
                   ? capture.waitingForAudio
                     ? 'Waiting for audio'
                     : 'Listening'
-                  : 'Paused'}
+                  : 'Not capturing'}
               </Text>
               <View
                 style={[
@@ -402,7 +402,7 @@ export function MobileAppSurface({
                   ? capture.waitingForAudio
                     ? 'Your Omi is connected. Waiting for audio…'
                     : 'Listening for speech…'
-                  : 'Capture is paused')}
+                  : 'Not capturing')}
             </Text>
             <View style={styles.microphoneButton}>
               <Mic color={mobileColor.text} size={18} />
