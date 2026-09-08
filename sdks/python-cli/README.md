@@ -314,7 +314,9 @@ Pass plain strings; callers do not add markup or escape data themselves.
 
 For contributors, use `ctx.renderer.emit(result)` for data and
 `ctx.renderer.success(message)` for status. Successful commands with no data
-inherit the JSON `null` result from the root completion callback. Use
+inherit the JSON `null` result from the root completion callback. An integer
+command return preserves its exit status; a nonzero return does not emit a
+successful `null` result. Use
 `ctx.renderer.confirm(message, yes=confirm)` for confirmation, and raise a
 `CliError` for an expected failure. Lower-level helpers use `current_renderer()`
 for progress and debug output. Add behavior cases to `tests/test_public_contract.py`;

@@ -14,7 +14,7 @@ import os
 import runpy
 import sys
 from contextlib import redirect_stderr, redirect_stdout
-from importlib.metadata import distribution
+from importlib.metadata import PackageNotFoundError, distribution
 from io import StringIO
 from pathlib import Path
 from typing import Iterator, NamedTuple
@@ -93,6 +93,17 @@ def public_cli(request, monkeypatch, config_path):
     actual __main__ module for ``python -m``. Calling the bare Typer app would
     bypass the public error handler and hide entrypoint regressions.
     """
+    entry = None
+    if request.param == "console":
+        try:
+            entry = next(
+                ep for ep in distribution("omi-cli").entry_points if ep.group == "console_scripts" and ep.name == "omi"
+            )
+        except (PackageNotFoundError, StopIteration):
+            pytest.fail(
+                "Public console checks require the installed omi entry point. Run: python -m pip install -e '.[dev]'",
+                pytrace=False,
+            )
 
     def invoke(args, *, input_text="", tty=False):
         stdout, stderr, stdin = StringIO(), StringIO(), StringIO(input_text)
@@ -103,12 +114,7 @@ def public_cli(request, monkeypatch, config_path):
             invocation.setattr(sys, "stdin", stdin)
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 try:
-                    if request.param == "console":
-                        entry = next(
-                            ep
-                            for ep in distribution("omi-cli").entry_points
-                            if ep.group == "console_scripts" and ep.name == "omi"
-                        )
+                    if entry is not None:
                         entry.load()()
                     else:
                         runpy.run_module("omi_cli", run_name="__main__")

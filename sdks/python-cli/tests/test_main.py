@@ -164,8 +164,18 @@ def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch,
     from pathlib import Path
 
     package_root = str(Path(__file__).resolve().parents[1])
+    # Install a network tripwire in the child without replacing its real -m
+    # entrypoint. A future validation regression must not contact the live API.
+    (tmp_path / "sitecustomize.py").write_text(
+        "import socket\n"
+        "def reject_network(*args, **kwargs):\n"
+        "    raise RuntimeError('Unexpected network access in module-entry test')\n"
+        "socket.getaddrinfo = reject_network\n"
+        "socket.socket.connect = reject_network\n"
+        "socket.socket.connect_ex = reject_network\n"
+    )
     env = dict(os.environ, OMI_API_KEY="not-a-real-key")
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, [package_root, env.get("PYTHONPATH", "")]))
+    env["PYTHONPATH"] = os.pathsep.join([str(tmp_path), package_root])
     result = subprocess.run(
         [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
         capture_output=True,
@@ -173,7 +183,9 @@ def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch,
         env=env,
         cwd=str(tmp_path),
         check=False,
+        timeout=15,
     )
     assert result.returncode == 1
+    assert result.stdout == ""
     payload = json.loads(result.stderr)
-    assert "error" in payload
+    assert payload["error"] == "That doesn't look like an Omi developer key"

@@ -169,6 +169,29 @@ def test_new_status_only_command_inherits_the_contract(public_cli, json_mode):
         assert LITERAL in result.stderr
 
 
+@pytest.mark.parametrize("exit_code", [0, 5])
+def test_returned_exit_code_survives_success_completion(public_cli, json_mode, exit_code):
+    original_commands = list(app.registered_commands)
+
+    @app.command("output-contract-return")
+    def command(ctx: typer.Context) -> int:
+        if exit_code:
+            ctx.obj.renderer.error("Requested failure")
+        return exit_code
+
+    try:
+        result = public_cli(arguments(json_mode, "output-contract-return"))
+    finally:
+        app.registered_commands[:] = original_commands
+
+    if exit_code:
+        assert_error(result, exit_code, json_mode, "Requested failure")
+    else:
+        assert result.exit_code == 0, result
+        assert result.stderr == ""
+        assert result.stdout == ("null\n" if json_mode else "")
+
+
 @pytest.mark.parametrize("json_mode", [False, True])
 def test_empty_delete_response_is_one_result(public_cli, json_mode, authed_profile, respx_mock):
     route = respx_mock.delete("/v1/dev/user/memories/record-1").respond(204)

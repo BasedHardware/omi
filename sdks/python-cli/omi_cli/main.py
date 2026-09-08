@@ -41,9 +41,11 @@ from omi_cli.output import Renderer, current_renderer
 
 
 @click.pass_context
-def _finish_output(ctx: click.Context, /, result: object, **options: object) -> None:
+def _finish_output(ctx: click.Context, /, result: object, **options: object) -> object:
     """Every successfully completed command owes JSON callers one result."""
-    ctx.obj.renderer.finish()
+    if not isinstance(result, int) or result == 0:
+        ctx.obj.renderer.finish()
+    return result
 
 
 app = typer.Typer(
