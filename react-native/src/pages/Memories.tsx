@@ -13,6 +13,7 @@ import {
   loadMemories,
   memoryDisplayBody,
   memoryDisplayTitle,
+  memoryCitationCopy,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type MemoryProjection,
@@ -142,9 +143,7 @@ export function MemoriesPage({
             {formatMemoryDate(item.timestamp)}
           </Text>
           <Text style={styles.memoryCitationCount}>
-            {item.citations.length === 1
-              ? '1 citation'
-              : `${item.citations.length} citations`}
+            {memoryCitationCopy(item.citations)}
           </Text>
         </View>
         <Text style={styles.memoryBody}>{memoryDisplayBody(item)}</Text>

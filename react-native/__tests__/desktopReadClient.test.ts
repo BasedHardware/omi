@@ -25,6 +25,7 @@ import {
   loadTasks,
   memoryDisplayBody,
   memoryDisplayTitle,
+  memoryCitationCopy,
   parseMemoryText,
   chatClockLabel,
   projectionClockLabel,
@@ -617,6 +618,12 @@ test('empty memory text stays visible instead of a blank row', () => {
   expect(memoryDisplayTitle({title: 'A walk.', summary: 'A walk.'})).toBe(
     'A walk.',
   );
+});
+
+test('memory citation copy matches the citation count', () => {
+  expect(memoryCitationCopy([])).toBe('0 citations');
+  expect(memoryCitationCopy(['citation-v1:launch'])).toBe('1 citation');
+  expect(memoryCitationCopy(['a', 'b'])).toBe('2 citations');
 });
 
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {

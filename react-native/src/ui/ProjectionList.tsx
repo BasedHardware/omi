@@ -9,6 +9,7 @@ import {
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  memoryCitationCopy,
   memoryDisplayTitle,
   type DesktopReadProjection,
 } from '../desktopReadClient';
@@ -26,7 +27,7 @@ function displayTitle(item: DesktopReadProjection): string {
 
 function displaySummary(item: DesktopReadProjection): string {
   if (item.kind === 'memory') {
-    return 'Synthesized memory with source citations';
+    return memoryCitationCopy(item.citations);
   }
   if (item.kind === 'conversation') {
     return conversationDisplaySummary(item);

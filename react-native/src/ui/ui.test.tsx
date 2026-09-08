@@ -1085,7 +1085,8 @@ test('wide Home search rows keep empty memory text visible', () => {
   );
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Memory text unavailable');
-  expect(tree).toContain('Synthesized memory with source citations');
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('Synthesized memory with source citations');
 });
 
 test('wide Home search rows strip namespaced memory prefixes', () => {
@@ -1113,4 +1114,33 @@ test('wide Home search rows strip namespaced memory prefixes', () => {
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('qa_memory (observed 2026-07-30T12:00:00.000Z).');
   expect(tree).not.toContain('entity:qa:000008');
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toContain('Synthesized memory with source citations');
+});
+
+test('wide Home search rows report a single memory citation', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-one-citation-home-search',
+        title: 'Prefers concise release notes',
+        summary: 'Release notes should lead with the outcome.',
+        searchableText:
+          'Prefers concise release notes\nRelease notes should lead with the outcome.',
+        citations: ['citation-v1:launch'],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: 'a',
+          outputDigest: 'b',
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('Synthesized memory with source citations');
 });

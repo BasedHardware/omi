@@ -64,6 +64,12 @@ export function memoryDisplayBody(item: {
   return visibleMemoryText(item.summary !== '' ? item.summary : item.title);
 }
 
+export function memoryCitationCopy(citations: readonly string[]): string {
+  return citations.length === 1
+    ? '1 citation'
+    : `${citations.length} citations`;
+}
+
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
   return parsed.body !== '' ? parsed.body : 'Memory text unavailable';

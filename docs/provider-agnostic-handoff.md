@@ -214,7 +214,9 @@ Cloud Linux after `f22887dbb2`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `615bebc93f`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation list rows and detail Started/Finished no longer show month and day without a year. Today stays time-only; Yesterday and older days use the same Today/Yesterday/date grouping as compact Daily Recaps, macOS Home, and chat history. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the task due-date year slice: Tasks page due dates no longer omit the year, so a last-year overdue due in Today cannot look like this year. UTC day boundaries stay. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `fe4ef470a4`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Tasks page due dates no longer omit the year, so a last-year overdue due in Today cannot look like this year. UTC day boundaries stay. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the memory citation-count slice: wide Home search and Home currents no longer claim "Synthesized memory with source citations" over an empty citation list. Those rows use the same 0/1/N citation copy as the Memories page. This does not invent a memory producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 
