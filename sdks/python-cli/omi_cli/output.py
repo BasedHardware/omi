@@ -145,9 +145,9 @@ class Renderer:
             sys.stderr.write(json.dumps(payload) + "\n")
             sys.stderr.flush()
         else:
-            line = f"[red]✗[/red] {message}"
+            line = f"[red]✗[/red] {escape(message)}"
             if detail:
-                line += f"\n  [dim]{detail}[/dim]"
+                line += f"\n  [dim]{escape(detail)}[/dim]"
             if extra:
                 for key, value in extra.items():
                     line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
