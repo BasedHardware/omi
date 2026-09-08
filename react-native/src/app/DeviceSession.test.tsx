@@ -193,10 +193,40 @@ test('powered-on Home status does not claim a dropped Omi session', () => {
   expect(
     homeConnectionStatus({
       ...snapshot,
+      lastEvent: 'Bluetooth adapter not checked',
+    }).label,
+  ).toBe('Omi not connected');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
       bluetooth: 'poweredOff',
       devices: [],
     }).label,
   ).toBe('Bluetooth off');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
+      bluetooth: 'unknown',
+      devices: [],
+      lastEvent: 'Bluetooth adapter not checked',
+    }).label,
+  ).toBe('Checking Bluetooth…');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
+      bluetooth: 'unknown',
+      devices: [],
+      lastEvent: 'Bluetooth adapter not checked',
+    }).color,
+  ).toBe('#b4ad9f');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
+      bluetooth: 'unknown',
+      devices: [],
+      lastEvent: 'Bluetooth is unavailable',
+    }).label,
+  ).toBe('Bluetooth status unknown');
 });
 
 test('connected audio status waits for an actual packet without changing capture ownership', () => {
@@ -300,6 +330,8 @@ test.each([
   ],
   ['Bluetooth is unavailable', 'Bluetooth status unknown', 'unknown'],
   ['Bluetooth is unavailable', 'Bluetooth off', 'poweredOff'],
+  ['Bluetooth adapter not checked', 'Checking Bluetooth…', 'unknown'],
+  ['Bluetooth adapter not checked', 'Bluetooth off', 'poweredOff'],
 ] as const)(
   'empty device list maps Bluetooth lastEvent %s',
   async (lastEvent, expected, bluetooth) => {
@@ -332,6 +364,7 @@ test.each([
     expect(output).not.toContain('Bluetooth is not powered on');
     expect(output).not.toContain('Bluetooth permission is required');
     expect(output).not.toContain('Bluetooth is unavailable');
+    expect(output).not.toContain('Bluetooth adapter not checked');
     await act(async () => renderer.unmount());
   },
 );

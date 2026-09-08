@@ -7,7 +7,7 @@ import {
 import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
-import {bluetoothStatusLabel, emptyDeviceListHint} from './bluetooth';
+import {bluetoothSessionLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
@@ -38,13 +38,14 @@ export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
     };
   }
   if (connectedDevice === null) {
+    const label =
+      snapshot.bluetooth === 'poweredOn'
+        ? 'Omi not connected'
+        : bluetoothSessionLabel(snapshot);
     return {
       connectedDevice: null,
-      label:
-        snapshot.bluetooth === 'poweredOn'
-          ? 'Omi not connected'
-          : bluetoothStatusLabel(snapshot.bluetooth),
-      color: '#d9826f',
+      label,
+      color: label === 'Checking Bluetooth…' ? '#b4ad9f' : '#d9826f',
     };
   }
   return {
@@ -240,9 +241,7 @@ export function DeviceSession({
               Devices
             </Text>
             <Text style={[styles.deviceState, styles.homeDeviceState]}>
-              {nativeSnapshot === null
-                ? 'Checking Bluetooth…'
-                : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
+              {bluetoothSessionLabel(nativeSnapshot)}
             </Text>
           </View>
         </View>
@@ -250,9 +249,7 @@ export function DeviceSession({
         <View>
           <Text style={styles.sectionLabel}>Devices</Text>
           <Text style={styles.deviceState}>
-            {nativeSnapshot === null
-              ? 'Checking Bluetooth…'
-              : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
+            {bluetoothSessionLabel(nativeSnapshot)}
           </Text>
         </View>
       )}

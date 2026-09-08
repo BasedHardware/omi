@@ -5,6 +5,25 @@ const bluetoothWireEventTokens = new Set([
   'unknown',
 ]);
 
+export function bluetoothAdapterUnchecked(
+  event: string | null | undefined,
+): boolean {
+  return event?.trim() === 'Bluetooth adapter not checked';
+}
+
+export function bluetoothSessionLabel(
+  snapshot: {bluetooth: string; lastEvent?: string | null} | null,
+): string {
+  if (
+    snapshot === null ||
+    (bluetoothAdapterUnchecked(snapshot.lastEvent) &&
+      snapshot.bluetooth === 'unknown')
+  ) {
+    return 'Checking Bluetooth…';
+  }
+  return bluetoothStatusLabel(snapshot.bluetooth);
+}
+
 export function bluetoothStatusLabel(state: string): string {
   switch (state) {
     case 'poweredOn':
@@ -52,6 +71,11 @@ export function emptyDeviceListHint(
   }
   if (trimmed === 'Bluetooth is unavailable') {
     return emptyDeviceListHint('', bluetooth, scanBusy);
+  }
+  if (trimmed === 'Bluetooth adapter not checked') {
+    return bluetooth === 'unknown'
+      ? 'Checking Bluetooth…'
+      : emptyDeviceListHint('', bluetooth, scanBusy);
   }
   if (trimmed === '' || wireToken !== null) {
     return bluetoothStatusLabel(wireToken ?? bluetooth);

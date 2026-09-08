@@ -23,6 +23,13 @@ test.each([
   ['Bluetooth is unavailable', 'unknown', 'Bluetooth status unknown'],
   ['Bluetooth is unavailable', 'poweredOff', 'Bluetooth off'],
   ['Bluetooth is unavailable', 'poweredOn', 'No Omi device was discovered.'],
+  ['Bluetooth adapter not checked', 'unknown', 'Checking Bluetooth…'],
+  [
+    'Bluetooth adapter not checked',
+    'poweredOn',
+    'No Omi device was discovered.',
+  ],
+  ['Bluetooth adapter not checked', 'poweredOff', 'Bluetooth off'],
   [
     'Bluetooth LE scanner is unavailable',
     'poweredOn',
