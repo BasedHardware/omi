@@ -3,6 +3,47 @@ import XCTest
 @testable import Omi_Computer
 
 final class NotchVoiceMorphMarkTests: XCTestCase {
+  func testLockedNotchControlIsPersistentAndActionable() {
+    XCTAssertEqual(NotchVoiceControlPresentation.title(isLocked: true), "SEND")
+    XCTAssertEqual(NotchVoiceControlPresentation.iconName(isLocked: true), "lock.fill")
+    XCTAssertEqual(
+      NotchVoiceControlPresentation.accessibilityLabel(isLocked: true),
+      "Send voice message"
+    )
+    XCTAssertEqual(
+      NotchVoiceControlPresentation.accessibilityValue(isLocked: true),
+      "Locked"
+    )
+    XCTAssertEqual(
+      NotchVoiceControlPresentation.stateLabel(isLocked: true),
+      "Locked listening"
+    )
+    XCTAssertTrue(
+      NotchVoiceControlPresentation.accessibilityHint(isLocked: true).contains("stop listening")
+    )
+    XCTAssertGreaterThan(NotchVoiceControlPresentation.activeSideWidth, 42)
+  }
+
+  func testHoldNotchControlExplainsReleaseAndSend() {
+    XCTAssertEqual(NotchVoiceControlPresentation.title(isLocked: false), "SEND")
+    XCTAssertEqual(NotchVoiceControlPresentation.iconName(isLocked: false), "mic.fill")
+    XCTAssertEqual(
+      NotchVoiceControlPresentation.accessibilityLabel(isLocked: false),
+      "Send voice message"
+    )
+    XCTAssertTrue(
+      NotchVoiceControlPresentation.accessibilityHint(isLocked: false).contains("release the shortcut")
+    )
+  }
+
+  @MainActor
+  func testVoiceControlWidthMatchesNotchWindowSizingPolicy() {
+    XCTAssertEqual(
+      FloatingControlBarWindow.notchVoiceSideWidth,
+      NotchVoiceControlPresentation.activeSideWidth
+    )
+  }
+
   func testListeningStateOwnsTheMorphTarget() {
     XCTAssertEqual(NotchVoiceMorphGeometry.targetProgress(isListening: false), 0)
     XCTAssertEqual(NotchVoiceMorphGeometry.targetProgress(isListening: true), 1)

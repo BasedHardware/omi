@@ -90,7 +90,8 @@ def set_value(
         cfg.Profile(name=profile.name, local_token=value).masked_local_token() if key == "local_token" else value
     )
     ctx.renderer.success(
-        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} on profile [bold]{escape(profile.name)}[/bold]."
+        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} "
+        f"on profile [bold]{escape(profile.name)}[/bold]."
     )
 
 

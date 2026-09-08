@@ -417,6 +417,7 @@ def execute_checks(
     pr_body_file: Path,
     target_base: str | None = None,
     skip_changelog: bool = False,
+    keep_going: bool = False,
 ) -> int:
     failures: list[str] = []
     for check in checks:
@@ -437,7 +438,8 @@ def execute_checks(
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
         if returncode:
             failures.append(check.id)
-            break
+            if not keep_going:
+                break
     if failures:
         print(f"Manifest checks failed: {', '.join(failures)}", file=sys.stderr)
         return 1
@@ -459,6 +461,11 @@ def parse_args() -> argparse.Namespace:
         help="Exclude checks declared as requiring pull-request metadata.",
     )
     parser.add_argument("--skip-changelog", action="store_true")
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Run only selected checks that consume PR metadata and report all their failures.",
+    )
     parser.add_argument(
         "--check-id",
         action="append",
@@ -489,6 +496,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.metadata_only and (args.skip_pr_body_checks or args.check_id):
+        print("FAIL: --metadata-only cannot combine with --skip-pr-body-checks or --check-id", file=sys.stderr)
+        return 2
     root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
     manifest_path = (args.manifest or root / ".github/checks-manifest.yaml").resolve()
     try:
@@ -539,6 +549,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"FAIL: could not select manifest checks: {exc}", file=sys.stderr)
         return 2
+    if args.metadata_only:
+        selections = [selection for selection in selections if selection.check.requires_pr_body]
     checks = [selection.check for selection in selections]
     if args.output == "json":
         print(
@@ -590,6 +602,7 @@ def main() -> int:
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,
+            keep_going=args.metadata_only,
         )
 
 

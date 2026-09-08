@@ -39,13 +39,15 @@ expect_launcher_failure_before_stop() {
 clear_target_env() {
     unset OMI_JIT_QA_TARGET OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE
     unset OMI_JIT_QA_CLOUD_RECEIPT_PATH OMI_JIT_QA_CLOUD_PYTHON_URL OMI_JIT_QA_CLOUD_DESKTOP_URL
-    unset FIREBASE_API_KEY
+    unset FIREBASE_API_KEY OMI_FORCE_BUCKET_CANDIDATES OMI_FORCE_BUCKET_WORKSTREAMS
     unset OMI_SKIP_BACKEND OMI_SKIP_TUNNEL
     unset OMI_SKIP_REWIND_SEED OMI_FORCE_REWIND_SEED
 }
 
 clear_target_env
 export OMI_JIT_QA_TARGET=local-dev-gcp
+export OMI_FORCE_BUCKET_CANDIDATES=1
+export OMI_FORCE_BUCKET_WORKSTREAMS=1
 omi_preflight_jit_qa_launch_request omi-jit-qa "" 0 false
 omi_prepare_jit_qa_target omi-jit-qa com.omi.omi-jit-qa 0 initial
 test "$OMI_PYTHON_API_URL" = "http://127.0.0.1:18080"
@@ -55,6 +57,8 @@ test "$OMI_ENV_STAGE" = dev
 test "$FIREBASE_API_KEY" = "$OMI_JIT_QA_FIREBASE_API_KEY"
 test "$OMI_SKIP_BACKEND" = 1
 test "$OMI_SKIP_TUNNEL" = 1
+test "$OMI_FORCE_BUCKET_CANDIDATES" = 0
+test "$OMI_FORCE_BUCKET_WORKSTREAMS" = 0
 test "$OMI_SKIP_REWIND_SEED" = 1
 
 local_env="$(mktemp)"
@@ -98,7 +102,10 @@ printf '%s\n' \
 expect_failure omi_preflight_jit_qa_config_file "$duplicate_config"
 
 printf '%s\n' 'OMI_PYTHON_API_URL=https://api.omi.me' 'OMI_AUTH_API_URL=https://api.omi.me' > "$local_env"
+printf 'OMI_FORCE_BUCKET_CANDIDATES=1\nOMI_FORCE_BUCKET_WORKSTREAMS=1\n' >> "$local_env"
 omi_write_jit_qa_bundle_env "$local_env"
+omi_jit_qa_assert_env_value "$local_env" OMI_FORCE_BUCKET_CANDIDATES 0
+omi_jit_qa_assert_env_value "$local_env" OMI_FORCE_BUCKET_WORKSTREAMS 0
 grep -Fqx 'OMI_PYTHON_API_URL=http://127.0.0.1:18080' "$local_env"
 grep -Fqx 'OMI_DESKTOP_API_URL=http://127.0.0.1:18081' "$local_env"
 grep -Fqx 'OMI_AUTH_API_URL=http://127.0.0.1:18080' "$local_env"
@@ -305,7 +312,8 @@ if [ "$(grep -c 'omi_write_jit_qa_bundle_env' "$ROOT/run.sh")" -lt 2 ]; then
     echo "FAIL: both full and fast bundle paths must rewrite the exact JIT QA tuple" >&2
     exit 1
 fi
-for launch_key in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE; do
+for launch_key in OMI_PYTHON_API_URL OMI_DESKTOP_API_URL OMI_AUTH_API_URL OMI_ENV_STAGE \
+    OMI_FORCE_BUCKET_CANDIDATES OMI_FORCE_BUCKET_WORKSTREAMS; do
     if ! grep -q -- "--env \"${launch_key}=\$${launch_key}\"" "$ROOT/run.sh"; then
         echo "FAIL: open launch does not forward $launch_key" >&2
         exit 1

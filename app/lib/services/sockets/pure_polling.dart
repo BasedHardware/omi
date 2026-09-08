@@ -69,6 +69,7 @@ class PurePollingSocket implements IPureSocket {
 
   final List<Uint8List> _audioFrames = [];
   bool _isProcessing = false;
+  int _connectionGeneration = 0;
   double _audioOffsetSeconds = 0;
 
   // Local buffering state, exposed so the recording UI can
@@ -140,6 +141,7 @@ class PurePollingSocket implements IPureSocket {
     }
 
     _isProcessing = true;
+    final generation = _connectionGeneration;
 
     final frames = List<Uint8List>.from(_audioFrames);
     _audioFrames.clear();
@@ -167,7 +169,11 @@ class PurePollingSocket implements IPureSocket {
 
     final serviceId = config.serviceId ?? 'Polling';
     try {
+      // Providers own deadlines and resource cleanup. Timing out only this
+      // Future would release the processing flag while recognition is still
+      // running, allowing the next flush to submit the same audio again.
       final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
+      if (generation != _connectionGeneration) return;
       _bufferingSince = null;
       _consecutiveFailures = 0;
       if (result != null && result.isNotEmpty) {
@@ -181,6 +187,7 @@ class PurePollingSocket implements IPureSocket {
         }
       }
     } catch (e, trace) {
+      if (generation != _connectionGeneration) return;
       CustomSttLogService.instance.error(serviceId, 'Transcription error: $e');
       DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {'service_id': serviceId});
       _consecutiveFailures++;
@@ -233,6 +240,7 @@ class PurePollingSocket implements IPureSocket {
       await _flushBuffer();
     }
 
+    _connectionGeneration++;
     _status = PurePollingStatus.disconnected;
     CustomSttLogService.instance.info(config.serviceId ?? 'Polling', 'Disconnected');
     onClosed();

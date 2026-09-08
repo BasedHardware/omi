@@ -3222,5 +3222,15 @@
     "chatBlockUnavailable": "لم يعد متاحًا",
     "chatBlockRecommendedNextSteps": "الخطوات التالية الموصى بها",
     "couldNotLoadMemories": "تعذر تحميل الذكريات",
-    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة"
+    "couldNotLoadKnowledgeGraph": "تعذر تحميل الرسم البياني للمعرفة",
+    "speechProfileOwnerTitle": "الملف الصوتي لـ {name}",
+    "play": "تشغيل",
+    "redo": "إعادة",
+    "answerWithYourVoice": "أجب بصوتك:",
+    "speechProfileTopicLocation": "أين تعيش؟",
+    "speechProfileTopicWork": "ما طبيعة عملك؟",
+    "speechProfileTopicGoal": "ما هدفك على المدى الطويل؟",
+    "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
+    "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
+    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل"
 }

@@ -1874,9 +1874,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openSettings => 'Άνοιγμα Ρυθμίσεων';
 
   @override
-  String get wantDifferentName => 'Θέλετε να αποκαλείστε διαφορετικά;';
-
-  @override
   String get whatsYourName => 'Πώς σε λένε;';
 
   @override
@@ -2058,7 +2055,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryDeleted => 'Η ανάμνηση διαγράφηκε.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'Ένα μέρος του ιστορικού αναμνήσεων δεν είναι διαθέσιμο. Εμφανίζεται το ιστορικό που έχει ληφθεί μέχρι τώρα.';
 
   @override
   String get undo => 'Αναίρεση';
@@ -9984,10 +9982,33 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Φωνητικό προφίλ: $name';
+  }
+
+  @override
+  String get play => 'Αναπαραγωγή';
+
+  @override
+  String get redo => 'Νέα εγγραφή';
+
+  @override
+  String get answerWithYourVoice => 'Απαντήστε με τη φωνή σας:';
+
+  @override
+  String get speechProfileTopicLocation => 'Πού μένετε;';
+
+  @override
+  String get speechProfileTopicWork => 'Με τι ασχολείστε επαγγελματικά;';
+
+  @override
+  String get speechProfileTopicGoal => 'Ποιος είναι ο μακροπρόθεσμος στόχος σας;';
+
+  @override
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Πατήστε + για να ξεκινήσετε την εγγραφή';
 
   @override
   String get chatBlockTask => 'Εργασία';
@@ -10024,4 +10045,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'Δεν ήταν δυνατή η φόρτωση του γραφήματος γνώσης';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Η μετατροπή ομιλίας σε κείμενο δεν είναι διαθέσιμη αυτή τη στιγμή. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και τις ρυθμίσεις αναγνώρισης ομιλίας της συσκευής σας και δοκιμάστε ξανά.';
 }

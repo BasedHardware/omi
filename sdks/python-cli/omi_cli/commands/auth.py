@@ -134,19 +134,31 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
 
 
 def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
-    """Validate, persist, and verify a dev API key."""
-    profile = api_key_auth.login_with_api_key(ctx.profile_name, api_key, api_base=ctx.api_base_override)
+    """Verify a candidate dev API key before replacing stored credentials."""
+    cleaned_key = api_key_auth.validate_api_key_format(api_key)
+    profile = cfg.Profile(
+        name=ctx.profile_name,
+        auth_method="api_key",
+        api_key=cleaned_key,
+        api_base=ctx.api_base_override or ctx.load_config().get_profile(ctx.profile_name).api_base,
+    )
+    verification_warning = None
 
     # Sanity check on a tolerant endpoint — see the original launch PR's
-    # rationale. AuthError → roll back; other CliError → warn and keep.
+    # rationale. AuthError leaves disk unchanged; other CliError warns and keeps.
     try:
         with OmiClient(profile, verbose=ctx.verbose) as client:
             client.get("/v1/dev/user/memories", params={"limit": 1})
-    except AuthError as exc:
-        clear_credentials(ctx.profile_name)
-        raise exc
+    except AuthError:
+        raise
     except CliError as exc:
-        ctx.renderer.warn(f"Could not verify the key right now ({escape(exc.message)}). It is stored — try again shortly.")
+        verification_warning = (
+            f"Could not verify the key right now ({escape(exc.message)}). It is stored — try again shortly."
+        )
+
+    profile = api_key_auth.login_with_api_key(ctx.profile_name, cleaned_key, api_base=ctx.api_base_override)
+    if verification_warning:
+        ctx.renderer.warn(verification_warning)
 
     ctx.renderer.success(
         f"Logged in as profile [bold]{escape(profile.name)}[/bold] ({escape(profile.masked_credential())})."
