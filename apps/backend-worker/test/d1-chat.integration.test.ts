@@ -8,6 +8,7 @@ import {
   readConversations,
   paginateConversations,
 } from "../src/conversations";
+import { terminalEvent } from "../src/chat";
 import handler from "../src/index";
 
 const chatSchema = [
@@ -1027,7 +1028,7 @@ describe("generation reads bound attachment bytes", () => {
     expect(captured[0]).toContain("plain file contents");
   });
 
-  test("foreign-account and missing R2 text do not leak into the prompt", async () => {
+  test("missing bound text fails generation instead of dropping bytes or leaking foreign files", async () => {
     await insertAttachment({
       id: "d1-att-foreign-text",
       accountId: "other-account",
@@ -1060,6 +1061,9 @@ describe("generation reads bound attachment bytes", () => {
       }),
     });
     expect(admitted.status).toBe(201);
+    const admittedBody = (await admitted.json()) as {
+      generation: { id: string };
+    };
 
     const captured: string[] = [];
     const stub = env.ACCOUNTS.getByName("test-account");
@@ -1084,7 +1088,14 @@ describe("generation reads bound attachment bytes", () => {
       });
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
-    expect(captured).toEqual(["hello without file"]);
-    expect(captured[0]).not.toContain("foreign-secret-bytes");
+    expect(captured).toEqual([]);
+    expect(captured.join("")).not.toContain("foreign-secret-bytes");
+    expect(
+      await terminalEvent(env.DB, "test-account", admittedBody.generation.id)
+    ).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
   });
 });
