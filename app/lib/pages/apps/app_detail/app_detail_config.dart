@@ -1,6 +1,7 @@
 import 'package:omi/backend/schema/app.dart';
 
-/// Returns true when [updated] differs from [current] in fields shown on the app detail page.
+/// Returns true when [updated] differs from [current] in name, description, or
+/// user-visible/editable external integration URL fields shown on the app detail page.
 bool hasAppDetailConfigChanged(App current, App updated) {
   if (current.name != updated.name) return true;
   if (current.description != updated.description) return true;

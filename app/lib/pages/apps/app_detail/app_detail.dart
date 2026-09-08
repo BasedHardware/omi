@@ -62,6 +62,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
+  int _setupCheckGeneration = 0;
+  int _markdownLoadGeneration = 0;
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
@@ -95,16 +97,44 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
-    if (app.externalIntegration == null) return;
+    if (app.externalIntegration == null) {
+      _setupCheckGeneration++;
+      return;
+    }
     // TODO: move check to backend
-    isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
-      if (mounted) {
-        setState(() => setupCompleted = value);
+    final generation = ++_setupCheckGeneration;
+    final requestedUrl = app.externalIntegration!.setupCompletedUrl;
+    isAppSetupCompleted(requestedUrl).then((value) {
+      if (!mounted) return;
+      if (generation != _setupCheckGeneration) return;
+      if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
 
-        if (autoInstallIfCompleted && value && !app.enabled) {
-          _tryAutoInstallAfterSetup();
-        }
+      setState(() => setupCompleted = value);
+
+      if (autoInstallIfCompleted && value && !app.enabled) {
+        _tryAutoInstallAfterSetup();
       }
+    });
+  }
+
+  void _loadSetupInstructionsMarkdown() {
+    final generation = ++_markdownLoadGeneration;
+    final path = app.externalIntegration?.setupInstructionsFilePath;
+    if (path == null || path.isEmpty || !path.contains('raw.githubusercontent.com')) {
+      return;
+    }
+
+    final appId = app.id;
+    getAppMarkdown(path).then((value) {
+      if (!mounted) return;
+      if (generation != _markdownLoadGeneration) return;
+      if (app.externalIntegration?.setupInstructionsFilePath != path) return;
+
+      value = value.replaceAll(
+        '](assets/',
+        '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/$appId/assets/',
+      );
+      setState(() => instructionsMarkdown = value);
     });
   }
 
@@ -227,17 +257,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
-      if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
-        if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
-          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
-            if (mounted) setState(() => instructionsMarkdown = value);
-          });
-        }
-      }
+      _loadSetupInstructionsMarkdown();
     }
 
     super.initState();
@@ -265,20 +285,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   void _onExternalIntegrationUpdated() {
-    if (!app.worksExternally()) return;
-    checkSetupCompleted();
-    final path = app.externalIntegration?.setupInstructionsFilePath;
-    if (path?.isNotEmpty == true && path!.contains('raw.githubusercontent.com')) {
-      getAppMarkdown(path).then((value) {
-        value = value.replaceAll(
-          '](assets/',
-          '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-        );
-        if (mounted) {
-          setState(() => instructionsMarkdown = value);
-        }
-      });
+    if (!app.worksExternally()) {
+      _setupCheckGeneration++;
+      _markdownLoadGeneration++;
+      return;
     }
+    checkSetupCompleted();
+    _loadSetupInstructionsMarkdown();
   }
 
   void _applyProviderAppUpdate(App updatedApp) {
