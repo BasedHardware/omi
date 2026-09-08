@@ -1238,6 +1238,44 @@ test('a cancelled chat message with text still says Response stopped', () => {
   });
 });
 
+test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-unknown',
+        text: 'stored without a known sender',
+        sender: 'unknown',
+        createdAt: Date.now(),
+        generationOutcome: null,
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Sender unavailable');
+  expect(copies).toContain('stored without a known sender');
+  expect(copies).not.toContain('You');
+  expect(copies).not.toContain('Omi');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('wide Home search rows keep untitled processing conversations visible', () => {
   const renderer = render(
     <ProjectionRow

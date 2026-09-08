@@ -1,7 +1,11 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
-import {chatClockLabel, chatMessageDisplayText} from '../desktopReadClient';
+import {
+  chatClockLabel,
+  chatMessageDisplayText,
+  chatSenderCopy,
+} from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
 
@@ -80,6 +84,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
           message.text.trim() !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>
           )}
+        {message.sender === 'unknown' && (
+          <Text style={styles.cancelledLabel}>
+            {chatSenderCopy(message.sender)}
+          </Text>
+        )}
         <Text
           style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
           {chatClockLabel(message.createdAt, Date.now()) || 'Time unavailable'}
