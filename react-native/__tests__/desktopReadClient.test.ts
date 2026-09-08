@@ -816,6 +816,53 @@ test('empty chat bodies stay visible instead of a blank bubble', () => {
   ).toBe('Response failed. Try again.');
 });
 
+test('empty chat bodies still show attachment names from history', () => {
+  expect(
+    chatMessageDisplayText({
+      text: ' \t\n',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('notes.txt');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: ' \t\n',
+        },
+      ],
+    }),
+  ).toBe('Attachment name unavailable');
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('Hello\nnotes.txt');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'cancelled',
+      attachments: [
+        {
+          displayName: 'notes.txt',
+        },
+      ],
+    }),
+  ).toBe('Response stopped');
+});
+
 test('unknown chat senders stay visible instead of failing the history page', () => {
   expect(chatSenderCopy('human')).toBe('You');
   expect(chatSenderCopy('ai')).toBe('Omi');

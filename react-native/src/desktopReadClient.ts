@@ -187,11 +187,16 @@ export function appDisplaySource(app: {
   return description !== '' ? description : 'App details unavailable';
 }
 
+export function chatAttachmentDisplayName(name: string): string {
+  return accountFieldCopy(name, 'Attachment name unavailable');
+}
+
 export function chatMessageDisplayText(
   message: {
     text: string;
     generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
     generationRetryable?: boolean;
+    attachments?: readonly {displayName: string}[];
   },
   cancelledEmptyCopy = 'Response stopped',
 ): string {
@@ -201,11 +206,19 @@ export function chatMessageDisplayText(
       : 'Response failed.';
   }
   const text = message.text.trim();
+  const attachmentLines = (message.attachments ?? []).map(attachment =>
+    chatAttachmentDisplayName(attachment.displayName),
+  );
   if (text !== '') {
-    return text;
+    return attachmentLines.length > 0
+      ? `${text}\n${attachmentLines.join('\n')}`
+      : text;
   }
   if (message.generationOutcome === 'cancelled') {
     return cancelledEmptyCopy;
+  }
+  if (attachmentLines.length > 0) {
+    return attachmentLines.join('\n');
   }
   return 'Message text unavailable';
 }

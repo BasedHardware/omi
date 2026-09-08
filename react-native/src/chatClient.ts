@@ -10,6 +10,13 @@ import {
   wireToChatHistoryEnvelope,
 } from '@omi-core/adapters-platform/dist/chat';
 
+export type ChatMessageAttachment = {
+  id: string;
+  displayName: string;
+  mediaType: string;
+  sizeBytes: number;
+};
+
 export type ChatMessage = {
   id: string;
   text: string;
@@ -19,6 +26,7 @@ export type ChatMessage = {
   generationId?: string;
   generationRetryable?: boolean;
   localOnly?: boolean;
+  attachments?: ChatMessageAttachment[];
 };
 
 export type ChatHistoryPage = {
@@ -216,6 +224,16 @@ function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
     sender: message.sender,
     createdAt: message.createdAt,
     generationOutcome: message.generationOutcome,
+    ...(message.attachments.length > 0
+      ? {
+          attachments: message.attachments.map(attachment => ({
+            id: attachment.id,
+            displayName: attachment.displayName,
+            mediaType: attachment.mediaType,
+            sizeBytes: attachment.sizeBytes,
+          })),
+        }
+      : {}),
   };
 }
 

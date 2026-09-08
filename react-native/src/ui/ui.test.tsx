@@ -1083,6 +1083,51 @@ test('a cancelled whitespace-only chat message says Response stopped instead of 
   });
 });
 
+test('an empty chat bubble keeps history attachment names instead of Message text unavailable', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-human-attachment',
+        text: ' \t\n',
+        sender: 'human',
+        createdAt: Date.now(),
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-notes',
+            displayName: 'notes.txt',
+            mediaType: 'text/plain',
+            sizeBytes: 12,
+          },
+        ],
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('notes.txt');
+  expect(copies).not.toContain('Message text unavailable');
+  expect(copies).not.toContain(' \t\n');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('a whitespace-only human chat message says Message text unavailable instead of a blank bubble', () => {
   const renderer = render(
     <ChatMessageRow

@@ -38,7 +38,7 @@ function wireMessage(message: ChatMessage) {
     rating: null,
     reported: false,
     revision: '1',
-    attachments: [],
+    attachments: message.attachments ?? [],
   };
 }
 
@@ -138,6 +138,63 @@ test('keeps unknown chat senders instead of failing history', async () => {
   ).resolves.toEqual([
     expect.objectContaining({id: 'human-1', sender: 'human'}),
     expect.objectContaining({id: 'empty-1', sender: 'unknown', text: 'kept'}),
+  ]);
+});
+
+test('keeps chat history attachments instead of dropping file names', async () => {
+  const human = {
+    id: 'human-att',
+    text: '',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(
+      backendFor(
+        JSON.stringify({
+          messages: [
+            {
+              ...wireMessage(human),
+              attachments: [
+                {
+                  id: 'att-1',
+                  displayName: 'notes.txt',
+                  mediaType: 'text/plain',
+                  sizeBytes: 12,
+                  contentReference: null,
+                },
+              ],
+            },
+          ],
+          page: {olderCursor: null, hasOlder: false},
+          capabilities,
+        }),
+      ),
+    ),
+  ).resolves.toEqual([
+    expect.objectContaining({
+      id: 'human-att',
+      text: '',
+      attachments: [
+        expect.objectContaining({
+          id: 'att-1',
+          displayName: 'notes.txt',
+          mediaType: 'text/plain',
+          sizeBytes: 12,
+        }),
+      ],
+    }),
   ]);
 });
 

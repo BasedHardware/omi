@@ -30,6 +30,13 @@ function historyResponse(
     sender: 'human' | 'ai' | 'unknown';
     createdAt?: number;
     generationOutcome?: 'completed' | 'cancelled' | null;
+    attachments?: Array<{
+      id: string;
+      displayName: string;
+      mediaType: string;
+      sizeBytes: number;
+      contentReference: string | null;
+    }>;
   }>,
   page: {olderCursor: string | null; hasOlder: boolean} = {
     olderCursor: null,
@@ -56,7 +63,7 @@ function historyResponse(
         rating: null,
         reported: false,
         revision: '1',
-        attachments: [],
+        attachments: message.attachments ?? [],
       })),
       page,
       capabilities: {
@@ -718,6 +725,39 @@ test('a whitespace-only conversation-detail chat message says Message text unava
   expect(textOf(renderer)).toContain('You · Message text unavailable');
   expect(textOf(renderer)).toContain('Omi · Message text unavailable');
   expect(textOf(renderer)).not.toContain('Response stopped');
+});
+
+test('conversation-detail history keeps attachment names on empty message text', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'human-attachment',
+        text: ' \t\n',
+        sender: 'human',
+        generationOutcome: null,
+        attachments: [
+          {
+            id: 'att-notes',
+            displayName: 'notes.txt',
+            mediaType: 'text/plain',
+            sizeBytes: 12,
+            contentReference: null,
+          },
+        ],
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · notes.txt');
+  expect(textOf(renderer)).not.toContain('You · Message text unavailable');
 });
 
 test('an unknown conversation-detail chat sender stays visible instead of hiding the thread', async () => {
