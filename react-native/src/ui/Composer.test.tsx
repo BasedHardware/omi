@@ -41,6 +41,13 @@ test('composer stays askable when send is available', () => {
     renderer.root.find(node => node.props.accessibilityLabel === 'Send message')
       .props.disabled,
   ).toBe(true);
+  const liveInputStyle =
+    typeof input.props.style === 'function'
+      ? input.props.style({pressed: false})
+      : input.props.style;
+  expect(JSON.stringify([liveInputStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
 });
 
 test('composer does not keep an Ask anything door when send is unusable', () => {
@@ -55,4 +62,11 @@ test('composer does not keep an Ask anything door when send is unusable', () => 
       node => node.props.accessibilityLabel === 'Send message unavailable',
     ).props.disabled,
   ).toBe(true);
+  const inputStyle =
+    typeof input.props.style === 'function'
+      ? input.props.style({pressed: false})
+      : input.props.style;
+  expect([inputStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
 });

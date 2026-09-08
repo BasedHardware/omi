@@ -57,7 +57,10 @@ export function Composer({
           }
           placeholderTextColor="#888888"
           ref={composerRef}
-          style={styles.composerInput}
+          style={[
+            styles.composerInput,
+            sendBlocked && styles.composerInputUnavailable,
+          ]}
           value={draft}
         />
         <View style={styles.composerActions}>

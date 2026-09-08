@@ -749,7 +749,10 @@ export function MobileAppSurface({
             }
             placeholderTextColor={mobileColor.textSubtle}
             returnKeyType="send"
-            style={styles.askInput}
+            style={[
+              styles.askInput,
+              askUnavailable && styles.askInputUnavailable,
+            ]}
             value={askValue}
           />
           <Pressable
@@ -1035,6 +1038,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: mobileSpace.md,
   },
+  askInputUnavailable: {opacity: 0.35},
   askButton: {
     alignItems: 'center',
     backgroundColor: mobileColor.accent,

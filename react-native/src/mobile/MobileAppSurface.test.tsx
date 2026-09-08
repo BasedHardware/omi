@@ -125,6 +125,13 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
   );
   expect(ask.props.editable).toBe(false);
   expect(ask.props.onSubmitEditing).toBeUndefined();
+  const askStyle =
+    typeof ask.props.style === 'function'
+      ? ask.props.style({pressed: false})
+      : ask.props.style;
+  expect([askStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
   const live = render();
   const liveSend = live.root.find(
     node => node.props.accessibilityLabel === 'Send to Omi',
@@ -135,6 +142,17 @@ test('an unavailable write door disables Ask instead of leaving it sendable', ()
       ? liveSend.props.style({pressed: false})
       : liveSend.props.style;
   expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  const liveAsk = live.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(liveAsk.props.editable).toBe(true);
+  const liveAskStyle =
+    typeof liveAsk.props.style === 'function'
+      ? liveAsk.props.style({pressed: false})
+      : liveAsk.props.style;
+  expect(JSON.stringify([liveAskStyle].flat(Infinity))).not.toContain(
     '"opacity":0.35',
   );
   act(() => {

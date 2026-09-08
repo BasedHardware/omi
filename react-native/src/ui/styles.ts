@@ -967,6 +967,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
+  composerInputUnavailable: {opacity: 0.35},
   composerActions: {alignItems: 'center', flexDirection: 'row'},
   iconButton: {
     alignItems: 'center',
