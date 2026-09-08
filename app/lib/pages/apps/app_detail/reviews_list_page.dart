@@ -7,9 +7,10 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/app_detail/reviews_section.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -127,7 +128,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(context.l10n.failedToSendReply(e.toString())),
+                                content: Text(context.l10n.failedToSendReply(readableError(e))),
                                 backgroundColor: Colors.red,
                               ),
                             );

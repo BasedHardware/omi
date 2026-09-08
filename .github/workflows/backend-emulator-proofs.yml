@@ -1,0 +1,96 @@
+name: Backend Emulator Proofs
+
+# The canonical-memory and JIT emulator proofs, which nothing ran automatically
+# before 2026-08-30. They cover crash recovery, deletion races, generation
+# contention, day rollover, overlapping runners and writer cutover against a
+# real Firestore emulator -- the classes that fakes cannot reach and that a
+# green deploy does not reveal.
+#
+# The daily-sweep crash-replay proof sat red on main from the day #12084
+# introduced it until #12403 repaired it, undetected, while
+# .github/failure-classes/FC-daily-memory-sweep-fence.json listed it as that
+# class's canonical prevention artifact.
+#
+# This lane is not in branch protection, so it reports without blocking. Promote
+# it to a required check once it has a stable green history.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/utils/memory/**'
+      - 'backend/database/**'
+      - 'backend/models/memory_apply.py'
+      - 'backend/models/product_memory.py'
+      - 'backend/scripts/*_emulator_test.py'
+      - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/pylock.toml'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/backend-emulator-proofs.yml'
+  pull_request:
+    paths:
+      - 'backend/utils/memory/**'
+      - 'backend/database/**'
+      - 'backend/models/memory_apply.py'
+      - 'backend/models/product_memory.py'
+      - 'backend/scripts/*_emulator_test.py'
+      - 'backend/scripts/run-emulator-proofs.sh'
+      - 'backend/pylock.toml'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/backend-emulator-proofs.yml'
+
+concurrency:
+  group: backend-emulator-proofs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator-proofs:
+    name: Backend emulator proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      # The Firestore emulator is a Java process. The runner's default JDK is
+      # not guaranteed, so pin one rather than inherit whatever the image ships.
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools@15
+
+      # emulators:exec starts the emulator, exports FIRESTORE_EMULATOR_HOST from
+      # firebase.json (127.0.0.1:8085), runs the command, and shuts down -- so a
+      # failing proof cannot leave a stray emulator holding the port.
+      - name: Run emulator proofs
+        run: |
+          firebase emulators:exec \
+            --only firestore \
+            --project demo-omi-jit-qa \
+            'bash backend/scripts/run-emulator-proofs.sh'

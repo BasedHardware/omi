@@ -240,6 +240,93 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
+  func testHubWarmTimeoutDuringRecordingReplacementDoesNotFallbackToOmni() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("in-flight-replacement")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    XCTAssertEqual(model.turn?.phase, .recording)
+    XCTAssertTrue(model.turn?.deadlines.contains(.hubWarm) == true)
+
+    let timedOut = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm))
+
+    XCTAssertEqual(timedOut.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(timedOut.model.turn?.phase, .recording)
+    if case .replacing = timedOut.model.turn?.providerConnection {
+    } else {
+      XCTFail("replacement must stay in flight after hub_warm during recording")
+    }
+    XCTAssertFalse(
+      timedOut.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+    XCTAssertTrue(timedOut.model.turn?.deadlines.contains(.bargeInReplacement) == true)
+  }
+
+  func testReplacementReadyAfterHubWarmWhileRecordingAdmitsLivePath() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let replacementResponseID = VoiceResponseID("ready-after-warm")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm)).model
+
+    let ready = reduce(
+      model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID,
+        responseID: replacementResponseID))
+
+    XCTAssertEqual(ready.model.staleEventCount, 0)
+    XCTAssertEqual(ready.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(ready.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(ready.model.turn?.route, .hubWarmWait)
+    XCTAssertNotEqual(ready.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(ready.model.turn?.phase, .recording)
+    XCTAssertTrue(ready.model.turn?.deadlines.contains(.hubWarm) == true)
+  }
+
+  func testSelectedVoiceFallbackDrainKeepsPlayingOwner() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let lease = VoiceOutputLease(
+      id: VoiceLeaseID(), turnID: turnID, lane: .selectedVoiceFallback)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: lease)).model
+
+    let drained = reduce(playing, .deadlineFired(turnID: turnID, deadline: .playbackDrain))
+
+    XCTAssertEqual(drained.model.turn?.phase, .playing(.selectedVoiceFallback))
+    XCTAssertEqual(drained.model.turn?.activeLease?.id, playing.turn?.activeLease?.id)
+    XCTAssertNil(drained.model.turn?.terminalReason)
+    XCTAssertTrue(drained.model.turn?.deadlines.contains(.playbackDrain) == true)
+    XCTAssertTrue(
+      drained.effects.contains(
+        .scheduleDeadline(
+          turnID: turnID,
+          deadline: .playbackDrain,
+          after: reducer.deadlines.playbackDrain)))
+  }
+
   func testBargeInReplacementUsesTheBoundedReconnectWindow() {
     XCTAssertEqual(reducer.deadlines.bargeInReplacement, 3)
     XCTAssertEqual(reducer.deadlines.providerReconnect, 3)
@@ -1978,6 +2065,36 @@ final class VoiceTurnReducerTests: XCTestCase {
     let cleared = reduce(model, .deadlineFired(turnID: turnID, deadline: .hintVisibility))
 
     XCTAssertEqual(cleared.model.turn?.projection.hint, "")
+  }
+
+  func testDictationRecognizedMarksTheProjectionUntilTheTurnEnds() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    XCTAssertFalse(model.turn?.projection.isDictating == true)
+
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+    // Presentation only: still listening, nothing routed or terminated.
+    XCTAssertTrue(model.turn?.projection.isListening == true)
+    XCTAssertEqual(model.turn?.phase, .recording)
+
+    model = reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true, "the flag survives key-up while the paste is prepared")
+
+    let ended = reduce(model, .cancel(turnID: turnID, reason: .cancelled)).model
+    XCTAssertFalse(ended.turn?.projection.isDictating == true)
+  }
+
+  func testClearPresentationResetsDictationTint() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+
+    let cleared = reduce(model, .clearPresentation(turnID: turnID))
+
+    XCTAssertEqual(cleared.model.turn?.projection, .idle)
+    XCTAssertEqual(cleared.model.turn?.phase, .recording)
   }
 
   func testTerminalHintDeadlineClearsHintWithoutResurrectingTurn() {

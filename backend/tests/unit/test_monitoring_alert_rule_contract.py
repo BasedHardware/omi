@@ -174,6 +174,18 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
+def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-queue-oldest-ready']
+        assert len(rule['uid']) < 40
+        expr = rule['data'][0]['model']['expr']
+        assert 'omi_queue_oldest_ready_age_seconds' in expr
+        assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
+        assert '21600' in expr
+        assert rule['noDataState'] == 'Alerting'
+        assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
+
+
 def test_grafana_alert_rules_have_safe_human_impact_metadata():
     """Every operator notification explains human impact without raw error output."""
     for export_name, rules in _all_rule_exports().items():
@@ -378,11 +390,15 @@ def test_journey_signal_dead_alert_treats_missing_evidence_as_the_failure():
         assert "omi_journey_accepted_total" in expression, export_name
         assert "llm_gateway_requests_total" in expression, export_name
         assert rule["noDataState"] == "Alerting", export_name
-        assert rule["labels"]["severity"] == "critical"
-        # chat_response is emitted from Cloud Run, which Prometheus does not
-        # scrape. Including it before an ingestion path exists would page
-        # permanently and train operators to mute the rule.
-        assert "chat_response" not in expression, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        # chat_response arrives through the Cloud Run metrics bridge, verified
+        # live at ~28MB / 52,662 omi_ series per prod scrape (#12146). Its
+        # liveness arm is gated on the chat-agent lane so quiet hours do not
+        # page: that lane measured min 9, p01 15, p05 23 requests/hour over
+        # 7 production days, so > 20/1h only demands liveness at above-p05
+        # chat demand.
+        assert 'journey="chat_response"' in expression, export_name
+        assert 'lane_id="omi:auto:chat-agent"' in expression, export_name
 
 
 def test_silent_failure_alerts_link_the_shared_runbook():
@@ -405,9 +421,81 @@ def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
     """
     for export_name, rules in _all_rule_exports().items():
         rule = rules[CHAT_TRAFFIC_ZERO_RULE]
-        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [5], export_name
-        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["type"] == "lt"
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["type"] == "lt", export_name
         assert 'lane_id="omi:auto:chat-agent"' in rule["data"][0]["model"]["expr"]
+
+
+# 2026-08-30 capture-finalization outage: success stayed at 0% for hours
+# (failure ~360/h, stale ~290/h, accepted ~750/h, oldest job ~5.9 days, dead
+# letters ~2.5k/day) while every listen/pusher critical stayed Normal because
+# they only watch LB traffic, ready pods, WS counts, and 5xx rates. Warning
+# journey rules existed (#11991) but nothing page-class watched the user
+# outcome. These rules page on that exact fingerprint.
+PAGE_CLASS_JOURNEY_RULES = {
+    "omi-journey-capture-success-critical": ("speech-processing", "NoData", "$A >= 20 && $B < 0.90"),
+    "omi-journey-pusher-success-critical": ("live-transcription", "NoData", "$A >= 20 && $B < 0.90"),
+    "omi-journey-chat-success-critical": ("ai-chat", "NoData", "$A >= 20 && $B < 0.90"),
+    "omi-journey-capture-settle-gap": ("speech-processing", "NoData", "$A >= 100 && $B > 50"),
+    "omi-capture-oldest-nonterminal": ("speech-processing", "Alerting", None),
+    "omi-capture-dead-letter-surge": ("speech-processing", "Alerting", None),
+}
+
+
+def test_memory_admission_failure_pages_on_the_first_bounded_runtime_error():
+    """A systemic memory fence/config error has no safe nonzero rate."""
+    uid = "omi-capture-finalization-memory-fence"
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[uid]
+        query = rule["data"][0]["model"]["expr"]
+        assert 'omi_capture_finalization_failures_total{reason=~"memory_fence|memory_config"}' in query, export_name
+        assert "[5m]" in query and "or vector(0)" in query, export_name
+        assert rule["for"] == "0s", export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "user-experience", export_name
+        assert rule["noDataState"] == "Alerting", export_name
+        assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+
+
+def test_page_class_journey_rules_cover_the_capture_outage_fingerprint():
+    """Every Core Features journey tile has a page-class rule behind it."""
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (component, no_data, gate) in PAGE_CLASS_JOURNEY_RULES.items():
+            rule = rules[uid]  # missing from an export fails the lookup
+            assert rule["labels"]["severity"] == "critical", f"{export_name}:{uid}"
+            assert rule["labels"]["instatus_component"] == component, f"{export_name}:{uid}"
+            assert rule["labels"]["impact"] == "user-experience", f"{export_name}:{uid}"
+            assert rule["noDataState"] == no_data, f"{export_name}:{uid}"
+            assert rule["for"] in {"10m", "15m"}, f"{export_name}:{uid}"
+            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
+            math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+            if gate is not None:
+                assert math_nodes == [gate], f"{export_name}:{uid}"
+            else:
+                assert not math_nodes, f"{export_name}:{uid}"
+
+
+def test_page_class_success_rules_pair_numerator_and_denominator_from_one_emitter():
+    """A success ratio is only meaningful when both sides come from the same counter."""
+    for export_name, rules in _all_rule_exports().items():
+        for uid, journey in (
+            ("omi-journey-capture-success-critical", "capture_finalization"),
+            ("omi-journey-pusher-success-critical", "pusher_session"),
+            ("omi-journey-chat-success-critical", "chat_response"),
+        ):
+            exprs = [d["model"]["expr"] for d in rules[uid]["data"] if d["model"].get("expr")]
+            assert all(
+                f'omi_journey_terminal_total{{journey="{journey}"' in e for e in exprs[1:]
+            ), f"{export_name}:{uid}"
+            assert f'omi_journey_accepted_total{{journey="{journey}"}}' in exprs[0], f"{export_name}:{uid}"
+
+
+def test_finalization_queue_rules_read_the_replicated_series_correctly():
+    """The age gauge aggregates with max; the dead-letter counter with increase."""
+    for export_name, rules in _all_rule_exports().items():
+        age_expr = rules["omi-capture-oldest-nonterminal"]["data"][0]["model"]["expr"]
+        assert age_expr == "max(listen_finalization_oldest_nonterminal_age_seconds)", export_name
+        dead_expr = rules["omi-capture-dead-letter-surge"]["data"][0]["model"]["expr"]
+        assert dead_expr == "sum(increase(listen_finalization_dead_letter_total[1h]))", export_name
 
 
 RESILIENCE_DASHBOARD = MONITORING / "dashboards/omi-services/resilience-fallbacks.json"
@@ -445,15 +533,11 @@ JOURNEY_SELECTOR = re.compile(r'journey="([a-z_]+)"')
 JOURNEY_METRIC_PREFIXES = ("omi_journey_", "omi_client_journey_")
 # A journey may be exempt from liveness coverage only while its counter provably
 # cannot arrive. Each entry needs a reason and must be deleted in the same change
-# that makes the counter reachable.
-LIVENESS_EXEMPT_JOURNEYS = {
-    "chat_response": (
-        "Emitted by backend/routers/chat.py from the Cloud Run backend service. Prometheus "
-        "scrapes GKE pods only, so this counter reads zero and including it in the liveness "
-        "rule would page permanently. Remove this exemption in the change that gives Cloud "
-        "Run services a metrics ingestion path, and add the journey to the liveness rule."
-    ),
-}
+# that makes the counter reachable. chat_response was the last exemption: its
+# counter now arrives through the verified Cloud Run metrics bridge (#11998,
+# #12146 measured a live ~28MB / 52,662-series prod scrape), and the liveness
+# rule covers it with a chat-agent-lane traffic gate.
+LIVENESS_EXEMPT_JOURNEYS: dict[str, str] = {}
 
 
 def _journeys_alerted_on(rules: dict[str, dict]) -> dict[str, set[str]]:
@@ -540,3 +624,27 @@ def test_no_alert_applies_a_counter_function_to_a_stackdriver_gauge():
         "these UIDs were fixed or removed -- delete them from COUNTER_FN_ON_GAUGE_DEBT so the "
         "ratchet keeps tightening: " + ", ".join(sorted(stale))
     )
+
+
+START_FAIL_RULE = "omi-cr-start-fail"
+
+
+def test_cloud_run_instance_start_fail_alert_is_zero_baseline_logging_count():
+    """2026-09-01: minScale kept /health green while new Cloud Run instances failed to start."""
+    for rules in _all_rule_exports().values():
+        rule = rules[START_FAIL_RULE]
+        assert rule["title"] == "Cloud Run - instance start failures"
+        assert rule["noDataState"] == "OK"
+        assert rule["execErrState"] == "OK"
+        assert rule["for"] == "5m"
+        assert rule["labels"]["severity"] == "critical"
+        assert rule["labels"]["instatus_component"] == "api"
+        assert rule["labels"]["impact"] == "product"
+        query = rule["data"][0]
+        assert query["datasourceUid"] == "deuxlwt1d569sb"
+        text = query["model"]["queryText"]
+        assert "STARTUP TCP probe failed" in text
+        assert "instance could not start successfully" in text
+        assert query["model"]["projectId"] == "based-hardware"
+        threshold = rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"]
+        assert threshold == [0]

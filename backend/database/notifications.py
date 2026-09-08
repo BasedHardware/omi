@@ -94,6 +94,20 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
+def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
+    """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
+
+    ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
+    registration. A desktop-only owner never registers a token, so their document never carried
+    the field — and ``get_users_for_daily_summary`` selects users *by* it, so the daily-summary
+    cron never saw them. Mobile stays authoritative: a zone already present is never replaced here.
+    """
+    if get_user_time_zone(uid):
+        return False
+    db.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    return True
+
+
 # **************************************
 # *** Daily Summary Time Preferences ***
 # **************************************
@@ -336,10 +350,9 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
                 if legacy_token and legacy_token not in tokens:
                     tokens.append(str(legacy_token))
 
-                # Skip users with no tokens
-                if not tokens:
-                    continue
-
+                # Tokenless users still get a record written. Generation is not
+                # push delivery: a desktop-only owner has no FCM token and must
+                # not be dropped here.
                 time_zone = user_data.get('time_zone')
                 chunk_users.append((uid, tokens, time_zone))
 

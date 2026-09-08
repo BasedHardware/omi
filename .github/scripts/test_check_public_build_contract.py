@@ -248,6 +248,72 @@ jobs:
                     with self.assertRaisesRegex(ValueError, "runtime binding groups cannot overlap"):
                         self.target()
 
+    def test_parses_remove_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["STALE_PLAINTEXT"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertEqual(self.target().deployment.remove_runtime_env_vars, ("STALE_PLAINTEXT",))
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_runtime_env_vars(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "reviewed.example"}
+        contract["targets"]["fake"]["deployment"]["remove_runtime_env_vars"] = ["FAKE_RUNTIME_CONFIG"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "remove_runtime_env_vars cannot overlap"):
+            self.target()
+
+    def test_rejects_remove_runtime_env_vars_overlap_with_preserve_runtime_secrets(self) -> None:
+        contract = fixture_contract()
+        deployment = contract["targets"]["fake"]["deployment"]
+        deployment["preserve_runtime_secrets"] = ["FAKE_PRESERVED_SECRET"]
+        deployment["fallback_runtime_secrets"] = {"FAKE_PRESERVED_SECRET": "fallback-fake-preserved-secret:latest"}
+        deployment["remove_runtime_env_vars"] = ["FAKE_PRESERVED_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(
+            ValueError, "remove_runtime_env_vars cannot overlap.*preserve_runtime_secrets"
+        ):
+            self.target()
+
+    def test_shared_flags_list_applies_to_every_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = ["--memory=2Gi"]
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("development"), ("--memory=2Gi",))
+        self.assertEqual(deployment.flags_for("prod"), ("--memory=2Gi",))
+
+    def test_per_environment_flags_object_resolves_for_the_requested_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {
+            "prod": ["--ingress=internal-and-cloud-load-balancing"],
+            "development": [],
+        }
+        self.write_json("config/public-build-contract.json", contract)
+        deployment = self.target().deployment
+
+        self.assertEqual(deployment.flags_for("prod"), ("--ingress=internal-and-cloud-load-balancing",))
+        self.assertEqual(deployment.flags_for("development"), ())
+
+    def test_rejects_flags_for_an_unknown_environment(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["flags"] = {"staging": ["--memory=2Gi"]}
+        self.write_json("config/public-build-contract.json", contract)
+
+        with self.assertRaisesRegex(ValueError, "unknown environment 'staging'"):
+            self.target()
+
     def test_rejects_runtime_env_values_that_cannot_be_rendered_as_action_input(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["runtime_env_vars"] = {"FAKE_RUNTIME_CONFIG": "one,two"}
@@ -1075,6 +1141,371 @@ jobs:
             SMOKE.sanitized_browser_smoke_reason(SMOKE.BrowserSmokeError("secret=not-for-logs")),
             "unspecified browser smoke failure",
         )
+
+    def test_acceptance_command_renders_sha_placeholder(self) -> None:
+        command = (
+            "python3",
+            ".github/scripts/smoke_public_build_browser.py",
+            "--target",
+            "frontend",
+            "--base-url",
+            "{base_url}",
+            "--expect-sha",
+            "{sha}",
+        )
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                command,
+                base_url="https://h.omi.me",
+                sha="deadbeefcafebabe",
+            ),
+            (
+                "python3",
+                ".github/scripts/smoke_public_build_browser.py",
+                "--target",
+                "frontend",
+                "--base-url",
+                "https://h.omi.me",
+                "--expect-sha",
+                "deadbeefcafebabe",
+            ),
+        )
+        without_sha = command[:-2]
+        self.assertEqual(
+            STATIC.render_acceptance_command(without_sha, base_url="https://h.omi.me", sha="ignored"),
+            without_sha[:5] + ("https://h.omi.me",),
+        )
+
+    def test_acceptance_document_matches_marker_and_sha(self) -> None:
+        document = (
+            '<span data-omi-public-build-canary="frontend:ready" ' 'data-omi-public-build-sha="abc123" hidden></span>'
+        )
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready"))
+        self.assertTrue(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="abc123"))
+        self.assertFalse(SMOKE.acceptance_document_matches(document, marker="frontend:ready", expect_sha="other"))
+        self.assertFalse(
+            SMOKE.acceptance_document_matches(
+                '<span data-omi-public-build-canary="frontend:pending" data-omi-public-build-sha="abc123">',
+                marker="frontend:ready",
+                expect_sha="abc123",
+            )
+        )
+
+    def test_browser_smoke_rejects_a_mismatched_sha_and_accepts_a_matching_one(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
+        self.write_json("config/public-build-contract.json", contract)
+        original = SMOKE.render_candidate
+        SMOKE.render_candidate = (
+            lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="aaaa" />'
+        )
+        try:
+            with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                    expect_sha="bbbb",
+                )
+            self.assertEqual(str(caught.exception), "client public-build sha did not match")
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                expect_sha="aaaa",
+            )
+        finally:
+            SMOKE.render_candidate = original
+        self.assertIn("client public-build sha did not match", SMOKE.SAFE_BROWSER_SMOKE_REASONS)
+
+
+class AcceptanceRouteFixture(unittest.TestCase):
+    """Restricted ingress hides the tagged candidate URL; the route must say so."""
+
+    RESTRICTED = "internal-and-cloud-load-balancing"
+
+    def load(self, contract: dict):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "public-build-contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            return STATIC.load_contract(path)
+
+    def with_public_urls(self, public_urls: dict) -> dict:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["public_urls"] = public_urls
+        return contract
+
+    def test_open_ingress_smokes_the_tagged_candidate(self) -> None:
+        target = self.load(fixture_contract()).targets["fake"]
+        for ingress in ("", "all", " all "):
+            route = STATIC.acceptance_route(target, environment="prod", ingress=ingress)
+            self.assertEqual(route, STATIC.AcceptanceRoute(route="candidate_url", public_url=""))
+
+    def test_restricted_ingress_uses_the_declared_public_url(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        route = STATIC.acceptance_route(target, environment="prod", ingress=self.RESTRICTED)
+        self.assertEqual(route, STATIC.AcceptanceRoute(route="public_url", public_url="https://fake.example"))
+
+    def test_restricted_ingress_without_a_public_url_names_the_ingress(self) -> None:
+        target = self.load(self.with_public_urls({"prod": "https://fake.example"})).targets["fake"]
+        with self.assertRaises(ValueError) as caught:
+            STATIC.acceptance_route(target, environment="development", ingress=self.RESTRICTED)
+        self.assertIn(self.RESTRICTED, str(caught.exception))
+        self.assertIn("development", str(caught.exception))
+
+    def test_public_urls_must_be_https_for_known_environments(self) -> None:
+        for public_urls in (
+            {"staging": "https://fake.example"},
+            {"prod": "http://fake.example"},
+            {"prod": "https://fake.example/"},
+            ["https://fake.example"],
+        ):
+            with self.subTest(public_urls=public_urls):
+                with self.assertRaises(ValueError):
+                    self.load(self.with_public_urls(public_urls))
+
+    def test_serving_revision_prefers_the_largest_traffic_share(self) -> None:
+        document = {
+            "status": {
+                "traffic": [
+                    {"revisionName": "svc-old", "percent": 30},
+                    {"revisionName": "svc-live", "percent": 70},
+                    {"revisionName": "svc-candidate", "tag": "public-x", "percent": 0},
+                    {"latestRevision": True},
+                ]
+            }
+        }
+        self.assertEqual(STATIC.serving_revision(document), "svc-live")
+        self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
+        self.assertEqual(STATIC.serving_revision({}), "")
+
+    def test_shipped_frontend_contract_declares_its_balancer_hostname(self) -> None:
+        # h.omi.me fronts the `frontend` service, whose contract restricts ingress
+        # to the balancer; without this URL no prod frontend candidate can ever be accepted.
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertEqual(
+            target.deployment.flags_for("prod"),
+            ("--ingress=internal-and-cloud-load-balancing",),
+        )
+        self.assertEqual(target.deployment.flags_for("development"), ())
+        self.assertEqual(target.deployment.remove_runtime_env_vars, ("OPENAI_API_KEY",))
+        self.assertEqual(target.deployment.runtime_secrets["DD_API_KEY"], "DD_API_KEY:latest")
+        self.assertEqual(target.candidate_acceptance.public_urls.get("prod"), "https://h.omi.me")
+
+    def test_shipped_frontend_contract_declares_expect_sha(self) -> None:
+        target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["frontend"]
+        self.assertIn("--expect-sha", target.candidate_acceptance.command)
+        self.assertIn("{sha}", target.candidate_acceptance.command)
+        self.assertEqual(
+            STATIC.render_acceptance_command(
+                target.candidate_acceptance.command,
+                base_url="https://h.omi.me",
+                sha="0123456789abcdef0123456789abcdef01234567",
+            )[-2:],
+            ("--expect-sha", "0123456789abcdef0123456789abcdef01234567"),
+        )
+
+
+class RuntimeServiceAccountPreflightTests(unittest.TestCase):
+    SA = "frontend-invoker@fake-project.iam.gserviceaccount.com"
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory(prefix="omi-public-build-sa-")
+        self.root = Path(self.temp_dir.name)
+        contract_path = self.root / "config/public-build-contract.json"
+        contract_path.parent.mkdir(parents=True)
+        contract_path.write_text(json.dumps(fixture_contract()), encoding="utf-8")
+        self.target = STATIC.load_contract(contract_path).targets["fake"]
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _stub_describe(self, *, describe):
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def fake_gcloud(arguments):
+            if arguments[:3] == ["iam", "service-accounts", "describe"]:
+                return describe(arguments)
+            raise AssertionError(arguments)
+
+        RUNTIME_PREFLIGHT._gcloud_json = fake_gcloud
+        return original
+
+    def test_skips_service_account_checks_when_none_is_supplied(self) -> None:
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_service_account(service_account="", project_id="fake-project"), [])
+
+    def test_runtime_preflight_accepts_an_existing_service_account_the_deployer_can_act_as(self) -> None:
+        describe_calls: list[list[str]] = []
+        iam_calls: list[dict] = []
+        original_gcloud = self._stub_describe(
+            describe=lambda arguments: describe_calls.append(list(arguments)) or {"email": self.SA}
+        )
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**kwargs):
+            iam_calls.append(kwargs)
+            return {"permissions": ["iam.serviceAccounts.actAs"]}
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            self.assertEqual(
+                RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project"),
+                [],
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(describe_calls[0][:4], ["iam", "service-accounts", "describe", self.SA])
+        self.assertEqual(iam_calls[0]["service_account"], self.SA)
+        self.assertEqual(iam_calls[0]["project_id"], "fake-project")
+        self.assertEqual(iam_calls[0]["permissions"], ("iam.serviceAccounts.actAs",))
+
+    def test_runtime_preflight_rejects_a_missing_service_account(self) -> None:
+        original_gcloud = RUNTIME_PREFLIGHT._gcloud_json
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+        iam_called = False
+
+        def missing(_arguments):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
+
+        def fake_iam(**_kwargs):
+            nonlocal iam_called
+            iam_called = True
+            raise AssertionError("testIamPermissions must not run when describe fails")
+
+        RUNTIME_PREFLIGHT._gcloud_json = missing
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertFalse(iam_called)
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("does not exist", errors[0])
+
+    def test_runtime_preflight_rejects_missing_act_as_permission(self) -> None:
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**_kwargs):
+            return {}
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(
+            errors,
+            [f"{self.SA}: deployer is missing permission iam.serviceAccounts.actAs"],
+        )
+
+    def test_runtime_preflight_rejects_act_as_probe_http_failure(self) -> None:
+        original_gcloud = self._stub_describe(describe=lambda _arguments: {"email": self.SA})
+        original_iam = RUNTIME_PREFLIGHT._test_service_account_iam_permissions
+
+        def fake_iam(**_kwargs):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("IAM testIamPermissions HTTP 401", category="unknown")
+
+        RUNTIME_PREFLIGHT._test_service_account_iam_permissions = fake_iam
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_service_account(service_account=self.SA, project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original_gcloud
+            RUNTIME_PREFLIGHT._test_service_account_iam_permissions = original_iam
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn(self.SA, errors[0])
+        self.assertIn("cannot test iam.serviceAccounts.actAs", errors[0])
+        self.assertIn("HTTP 401", errors[0])
+
+    def test_test_iam_permissions_posts_to_iam_rest_without_exposing_the_token(self) -> None:
+        token = "super-secret-token-value"
+        captured: dict[str, object] = {}
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b'{"permissions":["iam.serviceAccounts.actAs"]}'
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            captured["method"] = request.get_method()
+            captured["body"] = request.data
+            captured["authorization"] = request.get_header("Authorization")
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = lambda: token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            result = RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                service_account=self.SA,
+                project_id="fake-project",
+                permissions=("iam.serviceAccounts.actAs",),
+            )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertEqual(result, {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["timeout"], 30)
+        self.assertEqual(
+            captured["url"],
+            "https://iam.googleapis.com/v1/projects/fake-project/serviceAccounts/"
+            "frontend-invoker%40fake-project.iam.gserviceaccount.com:testIamPermissions",
+        )
+        self.assertEqual(json.loads(captured["body"]), {"permissions": ["iam.serviceAccounts.actAs"]})
+        self.assertEqual(captured["authorization"], f"Bearer {token}")
+        self.assertNotIn(token, captured["url"])
+
+    def test_test_iam_permissions_token_failure_does_not_call_http(self) -> None:
+        original_token = RUNTIME_PREFLIGHT._gcloud_access_token
+        original_urlopen = RUNTIME_PREFLIGHT.urllib.request.urlopen
+        http_called = False
+
+        def fake_token():
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError(
+                "gcloud auth print-access-token failed",
+                category="unauthenticated",
+            )
+
+        def fake_urlopen(*_args, **_kwargs):
+            nonlocal http_called
+            http_called = True
+            raise AssertionError("must not HTTP after token failure")
+
+        RUNTIME_PREFLIGHT._gcloud_access_token = fake_token
+        RUNTIME_PREFLIGHT.urllib.request.urlopen = fake_urlopen
+        try:
+            with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as caught:
+                RUNTIME_PREFLIGHT._test_service_account_iam_permissions(
+                    service_account=self.SA,
+                    project_id="fake-project",
+                    permissions=("iam.serviceAccounts.actAs",),
+                )
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_access_token = original_token
+            RUNTIME_PREFLIGHT.urllib.request.urlopen = original_urlopen
+
+        self.assertFalse(http_called)
+        self.assertIn("print-access-token failed", str(caught.exception))
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
@@ -79,7 +80,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       Logger.debug('Error handling Ray-Ban Meta onboarding: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(readableError(e))), backgroundColor: Colors.red),
       );
     }
   }
@@ -119,7 +120,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       Logger.debug('Error handling Apple Watch onboarding: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorConnectingAppleWatch(e.toString())), backgroundColor: Colors.red),
+        SnackBar(content: Text(context.l10n.errorConnectingAppleWatch(readableError(e))), backgroundColor: Colors.red),
       );
     }
   }

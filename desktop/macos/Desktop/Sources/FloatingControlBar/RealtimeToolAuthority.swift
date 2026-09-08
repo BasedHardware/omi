@@ -47,12 +47,131 @@ enum RealtimeExternalRunTerminalPolicy {
     case .tooShort, .silentRejected, .cancelled, .ownerChanged, .interruptedByBargeIn,
       .explicitInterrupt, .cleanup:
       return .cancelled
-    case .permissionDenied, .captureFailed, .transcriptionFailed, .providerFailed,
-      .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
+    case .permissionDenied, .captureFailed, .captureNotReady, .transcriptionFailed,
+      .providerFailed, .noNetwork, .providerNoResponse, .hubWarmTimeout, .deferredCommitTimeout,
       .bargeInReplacementTimeout, .toolTimeout, .playbackFailed, .journalFailed:
       return .failed
     }
   }
+}
+
+/// Journal status as a total function of the reducer's terminal reason and the
+/// turn's full-answer delivery state.
+///
+/// The journal is the model's only memory across push-to-talk presses, and the
+/// kernel prompt calls it canonical. A turn that was cut off — barge-in, provider
+/// error, timeout — must therefore not be recorded as a completed answer: the
+/// model reads its own half-sentence back as finished work and re-asks or moves on.
+///
+/// The inverse lie is just as corrosive: a reply whose audio fully drained before
+/// the user spoke again was heard in full, and journaling it `.failed` teaches the
+/// model its own delivered answer was cut off — so it re-delivers or "corrects"
+/// that answer turns later, out of context (measured on 2026-09-04: three fully
+/// spoken replies in one session journaled `interrupted_by_barge_in` failures,
+/// followed by exactly that recurrence). A barge-in after playback drained is an
+/// interruption of the *silence*, not of the answer, and journals `.completed`.
+///
+/// Delivery also gates `.success` itself: a turn the reducer terminalized without
+/// any full-answer playback draining never delivered its answer, and journals
+/// `.failed` (#12743: the 12:45 potion answer was sealed `.completed` while only
+/// "Let me verify." was ever spoken). The turn-done funnel writes while playback
+/// is still pending — that optimistic `.completed` is corrected by the reducer's
+/// terminal through `VoiceJournalSealedRowRevisionPolicy`, never by reading
+/// "still draining" as "never played".
+///
+/// `KernelJournalTurnStatus` has no `cancelled` case, so every non-delivered
+/// non-success reason maps to `.failed` and the precise reason travels in
+/// `metadata.terminalReason`. That distinction matters for measurement (a barge-in
+/// is not a defect), never for whether the turn may claim completion.
+enum VoiceTurnJournalStatusPolicy {
+  /// What the writer knows about full-answer playback delivery when it computes
+  /// the assistant row's status.
+  enum AnswerDelivery {
+    /// Playback had not resolved yet. The turn-done funnel journals at
+    /// provider-response-finish, while local playback is usually still
+    /// draining — "not yet drained" must never be read as "never played", so a
+    /// `.success` row stays optimistically `.completed` here and the reducer's
+    /// terminal revises it if the answer never reaches the user.
+    case pending
+    case delivered
+    case notDelivered
+  }
+
+  static func status(for reason: VoiceTurnTerminalReason) -> KernelJournalTurnStatus {
+    status(for: reason, delivery: .pending)
+  }
+
+  static func status(
+    for reason: VoiceTurnTerminalReason,
+    answerDelivered: Bool
+  ) -> KernelJournalTurnStatus {
+    status(for: reason, delivery: answerDelivered ? .delivered : .notDelivered)
+  }
+
+  static func status(
+    for reason: VoiceTurnTerminalReason,
+    delivery: AnswerDelivery
+  ) -> KernelJournalTurnStatus {
+    switch reason {
+    case .success:
+      // A turn the reducer terminalized `.success` without any full-answer
+      // playback draining never delivered its answer; the journal must not
+      // teach the model the user heard an answer they never did (#12743).
+      return delivery == .notDelivered ? .failed : .completed
+    case .interruptedByBargeIn, .explicitInterrupt:
+      return delivery == .delivered ? .completed : .failed
+    case .tooShort, .silentRejected, .cancelled, .ownerChanged,
+      .cleanup, .permissionDenied, .captureFailed, .captureNotReady,
+      .transcriptionFailed, .providerFailed, .noNetwork, .providerNoResponse, .hubWarmTimeout,
+      .deferredCommitTimeout, .bargeInReplacementTimeout, .toolTimeout, .playbackFailed,
+      .journalFailed:
+      return .failed
+    }
+  }
+}
+
+/// Whether the reducer's terminal may revise an assistant row the turn-done
+/// funnel already sealed `.completed`.
+///
+/// The funnel journals at provider-response-finish — before the reducer's
+/// playback fence resolves — so a `.success` row is optimistic by design. When
+/// the reducer later terminalizes without having delivered the answer (playback
+/// failed, a barge-in cut the reply before it drained, or `.success` with no
+/// full-answer playback at all), the sealed row must stop claiming a completed
+/// answer: the journal is the model's only memory, and a completed row for an
+/// unheard answer is how later turns believe the user was answered (#12743).
+///
+/// Delivered outcomes never revise: a barge-in after playback drained
+/// interrupts the silence, not the answer (#12730 semantics), and a later
+/// journal failure must not rewrite a delivered response as missing. Reasons
+/// outside the delivery set either never reach a sealed row (capture-time
+/// journaling already carries their outcome) or must not be reinterpreted
+/// after the fact.
+enum VoiceJournalSealedRowRevisionPolicy {
+  struct Revision: Equatable {
+    let status: KernelJournalTurnStatus
+    let terminalReason: String
+  }
+
+  static func revision(
+    forTerminalReason reason: VoiceTurnTerminalReason,
+    answerDelivered: Bool,
+    sealedCompletedRowExists: Bool
+  ) -> Revision? {
+    guard sealedCompletedRowExists, revisableReasons.contains(reason) else { return nil }
+    guard
+      VoiceTurnJournalStatusPolicy.status(for: reason, answerDelivered: answerDelivered)
+        == .failed
+    else { return nil }
+    // The reducer terminal said `.success` while the answer never drained;
+    // "success" would be a false truncation cause on a failed row.
+    let terminalReason = reason == .success ? "answer_not_delivered" : reason.rawValue
+    return Revision(status: .failed, terminalReason: terminalReason)
+  }
+
+  private static let revisableReasons: Set<VoiceTurnTerminalReason> = [
+    .success, .interruptedByBargeIn, .explicitInterrupt, .playbackFailed,
+  ]
 }
 
 enum RealtimeExternalRunPromptPolicy {

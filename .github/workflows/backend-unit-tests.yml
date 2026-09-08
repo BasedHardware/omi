@@ -155,3 +155,12 @@ jobs:
           else
             bash scripts/run-unit-ci.sh --all
           fi
+
+      # `run-unit-ci.sh` runs `not integration and not slow`, which is correct
+      # for PR latency but meant every `slow`-marked codebase guardrail in the
+      # repository executed nowhere. This step runs exactly those, unselected
+      # and unconditional: a guardrail whose job is to notice a change nobody
+      # anticipated cannot be gated on the change set that triggered the run.
+      - name: Run slow-marked backend guardrails
+        working-directory: backend
+        run: PYTHON=.venv/bin/python bash scripts/run-slow-guardrails-ci.sh

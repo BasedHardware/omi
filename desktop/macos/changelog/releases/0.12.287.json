@@ -1,0 +1,7 @@
+{
+  "version": "0.12.287",
+  "date": "2026-09-04",
+  "changes": [
+    "Improved ChatGPT and Claude memory imports so mixed-format exports stay complete and partial saves are clearly reported"
+  ]
+}

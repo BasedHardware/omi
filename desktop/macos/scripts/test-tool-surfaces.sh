@@ -70,7 +70,14 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
   # The full runtime suite is the authoritative gate. A hand-picked list left
   # new execution-policy, persistence, transport, and routing regressions
   # compiled but never executed in CI.
-  "$NODE22" node_modules/vitest/vitest.mjs run
+  # Plain bash arrays over "${arr[@]}" break under macOS's system bash 3.2
+  # (`set -u` treats an empty array's expansion as unbound), so branch instead
+  # of building an args array.
+  if [[ -n "${VITEST_MAX_WORKERS:-}" ]]; then
+    "$NODE22" node_modules/vitest/vitest.mjs run --maxWorkers="$VITEST_MAX_WORKERS"
+  else
+    "$NODE22" node_modules/vitest/vitest.mjs run
+  fi
 )
 
 ensure_npm_deps "$DESKTOP_DIR/pi-mono-extension"

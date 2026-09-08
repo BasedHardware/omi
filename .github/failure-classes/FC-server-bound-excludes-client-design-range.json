@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-server-bound-excludes-client-design-range",
+  "violated_contract": "A server-side validation bound on first-party client input must cover the full range that client is designed to produce. The onboarding recorder buffers up to its own 150s cap while the upload endpoint rejected anything over 120s, so a legitimately produced recording was refused as invalid input; the two constants lived on opposite sides of the wire with nothing tying them together, and the client then mapped the rejection to a misleading 'too short' message.",
+  "canonical_prevention": "When a server validates a quantity a first-party client caps independently, set the server bound from the client's designed maximum plus headroom, name the client constant at the server check site, and land a regression test that drives the validated path at the client's maximum. Watch the rejection rate of the endpoint after changing either constant.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/speech_profile.py",
+    "app/lib/providers/speech_profile_provider.dart"
+  ],
+  "status": "open"
+}

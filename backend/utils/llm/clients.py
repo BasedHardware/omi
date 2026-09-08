@@ -38,7 +38,7 @@ from utils.llm.model_config import (
     _active_profile_name,
     _byok_profile,
     _byok_profile_name,
-    get_default_config,
+    feature_request_timeout,
     get_active_profile,
     get_active_profile_name,
     get_all_configured_features,
@@ -81,6 +81,7 @@ try:
         feature_auto_lane_id,
         invoke_gemini_embedding_gateway,
         invoke_openai_embeddings_gateway,
+        is_gateway_route_absent,
         raise_if_gateway_feature_mode_blocks_direct_model_surface,
         should_route_chat_agent_through_gateway,
         should_route_features_through_gateway,
@@ -103,6 +104,9 @@ except ImportError as exc:
 
     def raise_if_gateway_feature_mode_blocks_direct_model_surface(_surface: str) -> None:
         return None
+
+    def is_gateway_route_absent(_error: object) -> bool:
+        return False
 
     def invoke_openai_embeddings_gateway(*_args, **_kwargs):
         raise RuntimeError('Omi gateway embeddings client is unavailable')
@@ -236,6 +240,41 @@ def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic
     return anthropic_client._default_client()
 
 
+_gateway_embeddings_route_absent_warned = False
+
+
+def _warn_gateway_embeddings_route_absent(operation: str) -> None:
+    """Report gateway/backend deploy skew: one metric per degrade, one log per process.
+
+    The fallback telemetry fires on every degrade (``backend/AGENTS.md`` rule
+    10 / ``docs/agents/fallback-telemetry.md``: a branch that changes mode MUST
+    call ``record_fallback``), because ``omi_fallback_total`` is how operators
+    see how much embeddings traffic and ledger spend is bypassing the gateway
+    while the skew lasts. The narrative ERROR log stays once per process: the
+    condition holds until the gateway is redeployed, the callers behind it run
+    thousands of embeddings an hour, and the gateway's own access log keeps
+    counting the 404s, so nothing is lost by not repeating ourselves there.
+    """
+    global _gateway_embeddings_route_absent_warned
+    record_fallback(
+        component='llm_gateway',
+        from_mode='gateway_embeddings',
+        to_mode='direct_embeddings',
+        reason='capability_mismatch',
+        outcome='degraded',
+        log=logger,
+    )
+    if _gateway_embeddings_route_absent_warned:
+        return
+    _gateway_embeddings_route_absent_warned = True
+    logger.error(
+        'LLM gateway serves no /v1/embeddings route: the deployed gateway predates this backend. '
+        'Falling back to direct embeddings; gateway ledger accounting is lost for embeddings until '
+        'the gateway is redeployed. operation=%s',
+        operation,
+    )
+
+
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
@@ -309,6 +348,22 @@ class _OpenAIEmbeddingsProxy:
             return True
         return self._is_key_failure(error)
 
+    def _reraise_unless_route_absent(self, error: Exception, operation: str) -> None:
+        """Swallow only "this gateway has no embeddings route" so the caller
+        falls through to the direct path; re-raise everything else.
+
+        A gateway deployed before this backend 404s the route, and embeddings
+        are load-bearing for memory and vector search -- without this, that
+        skew fails every conversation finalization instead of costing us the
+        gateway ledger row. This is the same availability-over-accounting
+        trade ``_gateway_mode`` already makes for a misconfigured rollout,
+        applied to the one skew it could not see: a healthy gateway that is
+        simply older than its client.
+        """
+        if not is_gateway_route_absent(error):
+            raise error
+        _warn_gateway_embeddings_route_absent(operation)
+
     def _gateway_embed_texts(self, texts: List[str]) -> List[List[float]]:
         byok = get_byok_key('openai')
         try:
@@ -339,7 +394,10 @@ class _OpenAIEmbeddingsProxy:
 
     def embed_query(self, text: str) -> List[float]:
         if self._gateway_mode():
-            return self._gateway_embed_texts([text])[0]
+            try:
+                return self._gateway_embed_texts([text])[0]
+            except Exception as e:
+                self._reraise_unless_route_absent(e, 'embed_query')
         inst = self._resolve()
         try:
             return inst.embed_query(text)
@@ -353,7 +411,10 @@ class _OpenAIEmbeddingsProxy:
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         if self._gateway_mode():
-            return self._gateway_embed_texts(texts)
+            try:
+                return self._gateway_embed_texts(texts)
+            except Exception as e:
+                self._reraise_unless_route_absent(e, 'embed_documents')
         inst = self._resolve()
         try:
             return inst.embed_documents(texts)
@@ -367,7 +428,10 @@ class _OpenAIEmbeddingsProxy:
 
     async def aembed_query(self, text: str) -> List[float]:
         if self._gateway_mode():
-            return (await self._agateway_embed_texts([text]))[0]
+            try:
+                return (await self._agateway_embed_texts([text]))[0]
+            except Exception as e:
+                self._reraise_unless_route_absent(e, 'aembed_query')
         inst = self._resolve()
         try:
             return await inst.aembed_query(text)
@@ -381,7 +445,10 @@ class _OpenAIEmbeddingsProxy:
 
     async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
         if self._gateway_mode():
-            return await self._agateway_embed_texts(texts)
+            try:
+                return await self._agateway_embed_texts(texts)
+            except Exception as e:
+                self._reraise_unless_route_absent(e, 'aembed_documents')
         inst = self._resolve()
         try:
             return await inst.aembed_documents(texts)
@@ -580,6 +647,12 @@ def get_llm(
     get_model(feature) to get the model string and the provider-specific client.
     """
     gateway_feature_mode = should_route_features_through_gateway()
+    # Chat-agent has its own kill switch. FEATURE_MODE=gateway plus
+    # CHAT_AGENT_ROUTE=direct must stay on direct OpenAI/Luna, not the gateway lane
+    # and not a leftover Anthropic Messages client.
+    route_through_gateway = (
+        should_route_chat_agent_through_gateway() if feature == 'chat_agent' else gateway_feature_mode
+    )
 
     if is_anthropic_only_feature(feature) and not gateway_feature_mode:
         raise ValueError(
@@ -589,6 +662,13 @@ def get_llm(
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
+
+    if request_timeout is None:
+        # The deadline is a property of the feature, not of the call site: a feature that
+        # summarizes a whole conversation while a user waits cannot answer inside the
+        # background gateway transport deadline. Three separate call-site fixes proved that
+        # leaving this to each caller loses the user's summary (see model_config).
+        request_timeout = feature_request_timeout(feature)
 
     model, provider = _get_model_config(feature)
     # The feature lane (feature_auto_lane_id) is pinned to the feature's
@@ -674,12 +754,21 @@ def get_llm(
     # VertexGeminiProvider._reject_byok() — Gemini BYOK must use the direct
     # OpenAI-compatible client, not the gateway lane.
     gateway_accepts_byok = effective_provider != "gemini"
-    if byok_key and gateway_feature_mode and effective_provider == lane_provider and gateway_accepts_byok:
+    if byok_key and route_through_gateway and effective_provider == lane_provider and gateway_accepts_byok:
+        # A BYOK user's request runs the same feature prompt on the same lane, so it needs the
+        # same deadline as the omi-managed branch below; without this it silently kept the
+        # background transport deadline.
+        byok_gateway_options: Dict[str, Any] = {}
+        if request_timeout is not None:
+            byok_gateway_options["request_timeout"] = request_timeout
+        if max_retries is not None:
+            byok_gateway_options["max_retries"] = max_retries
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,
             api_key=byok_key,
             streaming=streaming,
+            options=byok_gateway_options or None,
             feature=feature,
         )
     elif byok_key:
@@ -689,7 +778,7 @@ def get_llm(
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
-    elif gateway_feature_mode:
+    elif route_through_gateway:
         gateway_options = {}
         if request_timeout is not None:
             gateway_options["request_timeout"] = request_timeout
@@ -875,7 +964,12 @@ def gemini_embed_query(text: str) -> List[float]:
     """
     byok_key = get_byok_key('gemini')
     if _embeddings_gateway_mode() and not byok_key:
-        return invoke_gemini_embedding_gateway(text, task_type='RETRIEVAL_QUERY')
+        try:
+            return invoke_gemini_embedding_gateway(text, task_type='RETRIEVAL_QUERY')
+        except Exception as e:
+            if not is_gateway_route_absent(e):
+                raise
+            _warn_gateway_embeddings_route_absent('gemini_embed_query')
     api_key = byok_key or os.environ.get('GEMINI_API_KEY', '')
     url = 'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent'
     payload = {

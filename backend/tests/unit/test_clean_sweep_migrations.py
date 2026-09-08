@@ -11,7 +11,6 @@ Covers round 2:
 - utils/app_integrations.py: requests → httpx for GitHub docs
 - utils/stt/speaker_embedding.py: requests → httpx for embedding API
 - utils/stt/vad.py: requests → httpx for hosted VAD
-- utils/stt/speech_profile.py: requests → httpx for speech profile matching
 - utils/conversations/location.py: requests → httpx for Google Maps geocoding
 
 Covers round 3:
@@ -21,7 +20,6 @@ Covers round 3:
 - routers/mcp.py: threading.Thread → postprocess_executor for persona update
 - routers/wrapped.py: threading.Thread → llm_executor for wrapped generation
 - utils/chat.py: threading.Thread → storage_executor for file cleanup
-- utils/conversations/postprocess_conversation.py: threading.Thread → storage_executor
 - utils/other/notifications.py: threading.Thread → critical_executor for webhooks
 - utils/other/storage.py: ad-hoc ThreadPoolExecutor → storage_executor
 - utils/retrieval/tools/calendar_tools.py: requests → httpx, time.sleep → asyncio.sleep
@@ -225,19 +223,6 @@ class TestVadHttpxMigration:
         assert 'threading.Thread(' not in src
 
 
-class TestSpeechProfileHttpxMigration:
-    """Verify speech_profile sync functions use httpx, not requests."""
-
-    def test_speech_profile_uses_httpx(self):
-        src = _read_source('utils/stt/speech_profile.py')
-        assert 'import httpx' in src
-        assert 'import requests' not in src
-
-    def test_speech_profile_uses_httpx_post(self):
-        src = _read_source('utils/stt/speech_profile.py')
-        assert 'httpx.post(' in src
-
-
 class TestLocationHttpxMigration:
     """Verify location geocoding uses httpx, not requests."""
 
@@ -324,18 +309,6 @@ class TestChatUtilsExecutorMigration:
         assert 'time.sleep(480)' not in src
         assert 'DeferredDeleter' in storage_src
         assert 'def schedule_syncing_temporal_file_deletion' in storage_src
-
-
-class TestPostprocessExecutorMigration:
-    """Verify postprocess_conversation uses storage_executor for audio cleanup."""
-
-    def test_no_threading_thread(self):
-        src = _read_source('utils/conversations/postprocess_conversation.py')
-        assert 'threading.Thread' not in src
-
-    def test_uses_storage_executor(self):
-        src = _read_source('utils/conversations/postprocess_conversation.py')
-        assert 'storage_executor.submit(' in src
 
 
 class TestNotificationsExecutorMigration:

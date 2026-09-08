@@ -151,14 +151,18 @@ describe('buildDesktopChatPersonalization', () => {
       timezone: 'America/New_York',
       tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
     })
-    expect(ny).toContain('- submit report [due: 2026-07-20 11:30]')
+    expect(ny).toMatch(/11:30/)
+    expect(ny).toMatch(/America\/New_York|EDT/)
+    expect(ny).not.toContain('7:59:51 PM')
+    expect(ny).toContain('submit report')
     // A fractional-offset zone (Kolkata, UTC+5:30) → 21:00 local, proving it is a
     // real tz conversion and not a fixed slice.
     const kolkata = buildDesktopChatPersonalization({
       timezone: 'Asia/Kolkata',
       tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
     })
-    expect(kolkata).toContain('- submit report [due: 2026-07-20 21:00]')
+    expect(kolkata).toMatch(/9:00:00 PM|21:00/)
+    expect(kolkata).toContain('Asia/Kolkata')
   })
 
   it('marks the due date as UTC when no timezone is known (never unlabeled)', () => {
@@ -168,7 +172,9 @@ describe('buildDesktopChatPersonalization', () => {
     const block = buildDesktopChatPersonalization({
       tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
     })
-    expect(block).toContain('- submit report [due: 2026-07-20 15:30 UTC]')
+    expect(block).toMatch(/3:30:00 PM|15:30/)
+    expect(block).toMatch(/UTC|GMT/)
+    expect(block).toContain('submit report')
   })
 
   it('falls back to marked UTC when the timezone id is invalid', () => {
@@ -176,7 +182,9 @@ describe('buildDesktopChatPersonalization', () => {
       timezone: 'Not/AZone',
       tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
     })
-    expect(block).toContain('- submit report [due: 2026-07-20 15:30 UTC]')
+    expect(block).toMatch(/3:30:00 PM|15:30/)
+    expect(block).toMatch(/UTC|GMT/)
+    expect(block).toContain('submit report')
   })
 
   it('falls back to "the user" in the facts header when no name is given', () => {

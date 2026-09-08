@@ -151,6 +151,48 @@ class TestUploadProfileWavDecodeGuard:
         mock_vad.assert_called_once_with("_temp/test-uid/speech_profile.wav", return_segments=True)
         mock_upload.assert_not_called()
 
+    def test_onboarding_length_recording_accepted(self):
+        """Regression: the app's onboarding recorder buffers up to 150s of audio
+        (maxDuration in app/lib/providers/speech_profile_provider.dart). The old
+        120s server cap rejected ~28% of prod speech-profile uploads with
+        'Audio duration is invalid'. Durations up to 180s must be accepted."""
+        for duration in (121, 150, 180):
+            fake_file = _fake_upload_file(b"long recording")
+
+            with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
+                mod, "AudioSegment"
+            ) as mock_aseg, patch.object(mod, "apply_vad_for_speech_profile"), patch.object(
+                mod, "av"
+            ) as mock_av, patch.object(
+                mod, "upload_profile_audio", return_value="https://example.com/profile.wav"
+            ) as mock_upload, patch.object(
+                mod, "extract_embedding"
+            ):
+                mock_os.makedirs.return_value = None
+                mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=duration)
+                mock_av.open.return_value.__enter__.return_value.duration = None
+
+                result = mod.upload_profile(fake_file, uid="test-uid")
+
+            assert result == {"url": "https://example.com/profile.wav"}, f"{duration}s upload was rejected"
+            mock_upload.assert_called_once()
+
+    def test_over_180s_recording_still_rejected(self):
+        fake_file = _fake_upload_file(b"way too long")
+
+        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
+            mod, "AudioSegment"
+        ) as mock_aseg, patch.object(mod, "upload_profile_audio") as mock_upload:
+            mock_os.makedirs.return_value = None
+            mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=181)
+
+            with pytest.raises(HTTPException) as exc_info:
+                mod.upload_profile(fake_file, uid="test-uid")
+
+        assert exc_info.value.status_code == 400
+        assert "duration is invalid" in exc_info.value.detail
+        mock_upload.assert_not_called()
+
     def test_batch_skips_empty_vad_without_uploading(self):
         class ImmediateThread:
             def __init__(self, target, args):

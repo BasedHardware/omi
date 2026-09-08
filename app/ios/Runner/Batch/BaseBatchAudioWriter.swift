@@ -19,6 +19,7 @@ class BaseBatchAudioWriter {
     let queue: DispatchQueue
     private let tag: String
     private let recoveryPrefix: String
+    private let writeData: (FileHandle, Data) throws -> Void
 
     // Active-file state (only touched on `queue`).
     private var fileHandle: FileHandle?
@@ -39,10 +40,14 @@ class BaseBatchAudioWriter {
     /// the phone-mic writer runs on the controller's audio queue so encode+write
     /// stay on a single queue and `audioQueue.sync {}` genuinely drains pending
     /// writes. When nil (the BLE subclasses) the writer creates its own.
-    init(tag: String, queueLabel: String, recoveryPrefix: String, queue: DispatchQueue? = nil) {
+    init(
+        tag: String, queueLabel: String, recoveryPrefix: String, queue: DispatchQueue? = nil,
+        writeData: @escaping (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) }
+    ) {
         self.tag = tag
         self.queue = queue ?? DispatchQueue(label: queueLabel)
         self.recoveryPrefix = recoveryPrefix
+        self.writeData = writeData
     }
 
     /// Whether a part file is currently open (only meaningful on `queue`).
@@ -99,6 +104,7 @@ class BaseBatchAudioWriter {
         currentBytes = Int64(end)
         currentFrames = 0
         lastFsyncMs = nowMs
+        onOpenedLocked(url)
         NSLog("[\(tag)] opened \(fileName)")
         return true
     }
@@ -110,9 +116,12 @@ class BaseBatchAudioWriter {
         do {
             for frame in frames {
                 var len = UInt32(frame.count).littleEndian
-                let header = Data(bytes: &len, count: 4)
-                try fh.write(contentsOf: header)
-                try fh.write(contentsOf: frame)
+                // Keep the existing per-frame commit boundary while issuing one
+                // write for bytes already available. Never buffer across callbacks.
+                var record = Data(capacity: 4 + frame.count)
+                withUnsafeBytes(of: &len) { record.append(contentsOf: $0) }
+                record.append(frame)
+                try writeData(fh, record)
                 currentBytes += Int64(4 + frame.count)
                 currentFrames += 1
             }
@@ -178,6 +187,7 @@ class BaseBatchAudioWriter {
                     NSLog("[\(tag)] close fsync failed — leaving \(part.lastPathComponent) unfinalized")
                 } else {
                     try? FileManager.default.removeItem(at: part) // nothing written — drop the placeholder
+                    removeRecordingGeolocationSidecars(forPartURL: part)
                 }
             }
             fileHandle = nil
@@ -191,6 +201,53 @@ class BaseBatchAudioWriter {
 
     /// Hook for subclasses to reset their gap/session tracking when a file closes.
     func onClosedLocked() {}
+
+    /// Hook for recording-owned metadata that must be copied beside a new file.
+    func onOpenedLocked(_ partURL: URL) {}
+
+    /// Extract the validated geolocation object from a native Flutter preference.
+    /// Every native sink uses this shared bound and JSON-shape check before
+    /// creating a private sidecar.
+    func recordingGeolocationJSON(fromDefaultsKey key: String) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: key),
+              let data = raw.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let geolocation = json["geolocation"],
+              JSONSerialization.isValidJSONObject(geolocation),
+              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation) else { return nil }
+        return String(data: geolocationData, encoding: .utf8)
+    }
+
+    /// Persist a bounded recording-owned location snapshot beside the audio file.
+    /// The sidecar is written atomically so a native crash cannot leave a partial
+    /// JSON file for the Dart scanner to ingest. True confirms a saved/existing
+    /// snapshot; false lets callers retry missing metadata or a failed write.
+    /// The existing-snapshot check deliberately runs before input validation: a
+    /// reopened recording keeps its original location even when the current
+    /// preference is missing or has become invalid.
+    @discardableResult
+    func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) -> Bool {
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        // A same-name part file can be reopened after a native restart. Its
+        // location belongs to that recording, so never replace an existing
+        // snapshot with the next session's config.
+        if FileManager.default.fileExists(atPath: sidecarURL.path) { return true }
+        guard let rawGeolocation,
+              let data = rawGeolocation.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return false }
+        do {
+            try data.write(to: sidecarURL, options: .atomic)
+            return true
+        } catch {
+            // Location is optional: never interrupt or discard audio capture.
+            NSLog("[\(tag)] failed to persist bounded recording location sidecar: \(type(of: error))")
+            return false
+        }
+    }
 
     /// Notify Dart that a file finalized, so the recordings list rescans without
     /// waiting for a BLE disconnect.
@@ -218,8 +275,17 @@ class BaseBatchAudioWriter {
                 NSLog("[\(tag)] recovered stale batch file -> \(finalURL.lastPathComponent)")
             } else {
                 try? FileManager.default.removeItem(at: url)
+                removeRecordingGeolocationSidecars(forPartURL: url)
             }
         }
+    }
+
+    private func removeRecordingGeolocationSidecars(forPartURL partURL: URL) {
+        let audioURL = partURL.deletingPathExtension()
+        guard !FileManager.default.fileExists(atPath: audioURL.path) else { return }
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        try? FileManager.default.removeItem(at: sidecarURL)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: sidecarURL.path + ".part"))
     }
 
     // MARK: - Helpers

@@ -35,6 +35,8 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+**Headless, with full permissions:** a fresh named bundle has no TCC grants and no agent can click the dialogs. Lease a pre-authorized pool slot instead — `./scripts/omi-e2e-pool acquire && eval "$(./scripts/omi-e2e-pool env)"` then `./run.sh --yolo --fast-only`; `./scripts/omi-e2e-pool check` fails fast on a missing grant; `release` when done. `run.sh` refuses to build a slot you do not hold. Setup and lease semantics: [`../docs/e2e-bundle-pool.md`](../docs/e2e-bundle-pool.md).
+
 ### 2a. Desktop core E2E harness (tiered)
 Primary entry for the desktop confidence ladder: `scripts/desktop-core-harness.sh` (see `e2e/CORE_E2E.md`).
 ```bash

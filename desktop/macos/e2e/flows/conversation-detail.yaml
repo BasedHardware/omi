@@ -4,6 +4,8 @@ tier: 2
 description: Hermetic conversation detail open, dark screenshot prototype, and full-width transcript pane
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationProcessingBanner.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift

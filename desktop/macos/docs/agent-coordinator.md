@@ -1,6 +1,6 @@
 # Desktop Agent Coordinator
 
-This document locks the Phase 0 boundary for the macOS Desktop Agent Coordinator. It extends the local agent control-plane model described in [Agent Control Plane](../../../docs/doc/developer/agent-control-plane.mdx) and follows the desktop development constraints in [desktop/macos/AGENTS.md](../AGENTS.md).
+This document locks the Phase 0 boundary for the macOS Desktop Agent Coordinator. It extends the local agent control-plane model described in [Agent Control Plane](../../../.github/agent-docs/agent-control-plane.mdx) and follows the desktop development constraints in [desktop/macos/AGENTS.md](../AGENTS.md).
 
 ## Scope
 

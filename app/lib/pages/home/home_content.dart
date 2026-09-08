@@ -5,23 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
-import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -81,7 +74,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             HapticFeedback.mediumImpact();
             await Future.wait([convoProvider.getInitialConversations(), _loadSummaries()]);
           },
-          color: Colors.deepPurpleAccent,
+          color: Colors.black,
           backgroundColor: Colors.white,
           child: CustomScrollView(
             controller: _scrollController,
@@ -154,15 +147,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink())
               else
                 // For new users (< 3 non-discarded convos): hide the conversations
-                // preview AND the mind map. The 3 "get started" tiles fill the
-                // remaining vertical space and sit centered between Today/Daily
-                // Recaps above and the floating chat bar below.
+                // preview AND the mind map. A quiet placeholder fills the space;
+                // the + button beside the chat bar is the recording entry point.
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
                     // Bottom padding leaves room for the floating chat bar.
                     padding: const EdgeInsets.only(bottom: 160),
-                    child: Center(child: _buildGetStartedOptions(context)),
+                    child: Center(
+                      child: Text(
+                        context.l10n.tapPlusToStartRecording,
+                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -174,120 +171,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   int _nonDiscardedConversationCount(ConversationProvider provider) {
     return provider.conversations.where((c) => !c.discarded).length;
-  }
-
-  // The capturing page only renders transcript/photos that are already
-  // streaming in — it does not start the mic itself. So opening it without
-  // first kicking off phone-mic recording leaves the user stuck on the
-  // "waiting for transcript or photos" placeholder forever. Mirror the
-  // proven start path (battery_info_widget._startRecording).
-  Future<void> _startPhoneRecording(BuildContext context) async {
-    // No haptic here — the option() wrapper already fires lightImpact() on tap;
-    // a mediumImpact() on top of it double-vibrates on a single tap.
-    final captureProvider = context.read<CaptureProvider>();
-    if (captureProvider.recordingState == RecordingState.initialising) return;
-    if (captureProvider.recordingState != RecordingState.record) {
-      await captureProvider.streamRecording();
-      PlatformManager.instance.analytics.phoneMicRecordingStarted();
-    }
-    // A phone-mic Transcribe Later (batch) session has no live transcript — the
-    // conversations-list batch card is its surface, so skip the capturing page
-    // (same as BLE batch). Surface the auto offline fallback once.
-    if (captureProvider.isPhoneMicBatchRecording) {
-      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
-        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
-      }
-      return;
-    }
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
-      ),
-    );
-  }
-
-  Widget _buildGetStartedOptions(BuildContext context) {
-    Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
-      return GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.45),
-                    blurRadius: 28,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 32),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: 120,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final phoneOption = option(
-      icon: Icons.mic_rounded,
-      label: 'Record with Phone',
-      onTap: () => _startPhoneRecording(context),
-    );
-    final callOption = option(
-      icon: Icons.phone_in_talk_rounded,
-      label: 'Record Call',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
-      },
-    );
-    final deviceOption = option(
-      icon: Icons.bluetooth_searching_rounded,
-      label: 'Connect Device',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSelectionPage()));
-      },
-    );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
-      child: Column(
-        children: [
-          // Top of the triangle: Record with Phone (the simplest path).
-          phoneOption,
-          const SizedBox(height: 22),
-          // Bottom of the triangle: the other two side by side.
-          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [callOption, deviceOption]),
-        ],
-      ),
-    );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll, String? buttonLabel}) {
@@ -431,8 +314,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 showAppBar: false,
                 showShareButton: false,
                 trackOpenEvent: false,
-                autoRebuildIfEmpty: false,
-                hideRebuildButtonWhenEmpty: true,
                 initialZoom: 0.6,
               ),
             ),

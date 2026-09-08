@@ -60,6 +60,7 @@ final class BetaDogfoodRolloutTests: XCTestCase {
       (SystemCalendarMeetingContextFeature.flagName, SystemCalendarMeetingContextFeature.killSwitchFlagName),
       (OnDeviceMeetingIdentityFeature.flagName, OnDeviceMeetingIdentityFeature.killSwitchFlagName),
       (ScreenActivityLosslessSyncFeature.flagName, ScreenActivityLosslessSyncFeature.killSwitchFlagName),
+      (InterjectFeature.flagName, InterjectFeature.killSwitchFlagName),
     ]
     for (flag, kill) in features {
       XCTAssertFalse(flag.isEmpty)

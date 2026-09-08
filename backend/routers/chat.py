@@ -58,14 +58,17 @@ from utils.chat import (
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
+from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
-from config.stt_provider_policy import STTServingSurface
+from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
+from utils.chat_rating_triage import extract_rating_triage_fields
+from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
@@ -83,15 +86,18 @@ from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
+from utils.chat_followup import followup_content_blocks
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import resolve_client_kind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
+    MAX_SESSION_DURATION_S,
     compute_pcm_duration_ms,
     read_wav_duration_ms,
     try_consume_budget,
-    check_budget,
+    try_reserve_session_budget,
+    settle_reserved_duration,
     record_actual_duration,
 )
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -526,8 +532,9 @@ def send_message(
 
         memories_id = extract_memory_ids(memories) if memories else []
 
+        ai_message_id = str(uuid.uuid4())
         ai_message = Message(
-            id=str(uuid.uuid4()),
+            id=ai_message_id,
             text=response,
             created_at=datetime.now(timezone.utc),
             sender='ai',
@@ -539,6 +546,14 @@ def send_message(
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
             evidence=evidence,
+            # One grounded next question, as a chip the client can tap. Empty for
+            # any turn that failed or has nothing to go one hop further into.
+            content_blocks=followup_content_blocks(
+                ai_message_id,
+                callback_data.get('followup'),
+                visible_text=response,
+                failed=bool(callback_data.get('error')),
+            ),
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -862,12 +877,14 @@ def create_voice_message_stream(
         # Daily budget check (first file only — matches actual DG usage).
         # A quota rejection is not an STT attempt and therefore is not an
         # invalid-input or provider-outcome metric.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         first_wav = wav_paths[0]
         duration_ms = read_wav_duration_ms(first_wav)
-        if duration_ms is not None:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        budget_duration_ms = duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, budget_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
     except TranscriptionFailure as failure:
         _record_preparation_failure(failure)
         _cleanup_temp_voice_wavs(paths + wav_paths, uid)
@@ -1165,15 +1182,15 @@ async def transcribe_voice_message(
 
         # Daily budget check (sum all files). This is not a provider outcome,
         # so do it before recording an accepted transcription attempt.
+        # An unreadable duration must not skip the budget check (STT still
+        # runs on it) — charge the worst case instead of charging nothing.
         total_duration_ms = 0
         for wav_path in wav_paths:
             duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
-            if duration_ms is not None:
-                total_duration_ms += duration_ms
-        if total_duration_ms > 0:
-            allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
-            if not allowed:
-                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+            total_duration_ms += duration_ms if duration_ms is not None else MAX_SESSION_DURATION_S * 1000
+        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+        if not allowed:
+            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
@@ -1251,6 +1268,24 @@ async def transcribe_voice_message(
         other_file_paths.clear()
 
 
+class _PTTStreamSession:
+    """PTT transcribe-stream state exposed as the shared ``LiveSTTSession``.
+
+    ``send_live_stt_audio`` and ``terminate_live_stt_session`` operate on this
+    protocol, so the PTT surface shares listen's failover-aware send path and
+    terminal handling instead of carrying its own copy. Only the terminal path
+    writes to it; the endpoint's closure state stays authoritative and adopts
+    the verdict (``_mark_stt_terminal``) right after the shared call returns.
+    """
+
+    def __init__(self) -> None:
+        self.active = True
+        self.close_code: Optional[int] = None
+        self.stt_terminal_failure = False
+        self.live_transcription_attempt: Optional[object] = None
+        self.client_live_transcription_attempt: Optional[object] = None
+
+
 @router.websocket("/v2/voice-message/transcribe-stream")
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
@@ -1282,7 +1317,22 @@ async def transcribe_voice_message_stream(
     Server sends: JSON arrays of transcript segments
         [{"speaker": "SPEAKER_00", "start": 0.0, "end": 1.5, "text": "Hello world",
           "is_user": false, "person_id": null}]
+        A recoverable mid-session provider death fails over to the next
+        provider in the chain transparently. When the chain is exhausted the
+        client first receives a service-status event
+        ({"type": "service_status", "status": "stt_failed", ...}) and then a
+        WebSocket close 1011 — the same terminal contract as /v4/listen.
     """
+    # Lazy: a module-level live_failure import circularly loads
+    # observability.transcription while chat tests import this module.
+    from utils.stt.live_failure import (
+        MAX_STT_FAILOVERS,
+        live_stt_socket_is_dead,
+        live_stt_upstream_failure,
+        send_live_stt_audio,
+        terminate_live_stt_session,
+    )
+
     await websocket.accept()
 
     # Paywalled desktop users — close before opening a provider connection for
@@ -1326,16 +1376,10 @@ async def transcribe_voice_message_stream(
     except Exception:
         pass  # Fail-open, consistent with Redis rate limiting elsewhere
 
-    # Daily budget check — reject if already exhausted before opening a provider connection.
-    budget_remaining_ms = None  # None = fail-open (no enforcement)
-    try:
-        has_budget, used_ms, remaining_ms = check_budget(uid)
-        if not has_budget:
-            await websocket.close(code=1008, reason='Daily transcription budget exhausted')
-            return
-        budget_remaining_ms = remaining_ms
-    except Exception:
-        pass  # Fail-open
+    # Daily budget reservation is taken inside the session try/finally so every
+    # exit path (including STT connect failure) can settle/refund.
+    budget_remaining_ms = None  # None = fail-open (no mid-session enforcement)
+    budget_reserved_ms = 0
 
     websocket_active = True
     dg_socket = None
@@ -1352,6 +1396,9 @@ async def transcribe_voice_message_stream(
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
+    # Providers that already died for this session; the failover chain excludes
+    # them so a rebuild never lands on the provider that just failed.
+    stt_failed_providers: set[str] = set()
 
     journey_attempt = ClientJourneyAttempt(
         'realtime_voice',
@@ -1360,6 +1407,10 @@ async def transcribe_voice_message_stream(
             user_agent=websocket.headers.get('user-agent'),
         ),
     )
+    ptt_session = _PTTStreamSession()
+    # The shared terminal path fails this attempt with 'provider_error' itself;
+    # ClientJourneyAttempt is one-shot, so the finally block cannot double-fail.
+    ptt_session.client_live_transcription_attempt = journey_attempt
     stt_service, stt_language, stt_model = get_stt_service_for_language(language, surface=STTServingSurface.PTT)
     if stt_service is None or stt_language is None or stt_model is None:
         journey_attempt.fail('dependency_unavailable')
@@ -1414,41 +1465,176 @@ async def transcribe_voice_message_stream(
                 websocket_active = False
                 break
 
-    async def close_stt_failure() -> None:
-        """Expose an unusable live-STT session before the caller drops audio."""
+    def serving_provider() -> Optional[str]:
+        """Provider actually serving this stream, read at use time.
+
+        The connect-time fallback and the mid-session failover can both hand
+        the session to a different provider, so a value snapshotted before the
+        socket exists attributes the wrong provider's failure (#11306).
+        """
+        return getattr(stt_service, 'value', stt_service)
+
+    def _mark_stt_terminal() -> None:
+        """Adopt a terminal live-STT verdict in this endpoint's closure state."""
         nonlocal websocket_active, stt_send_failed
         if stt_send_failed:
             return
         stt_send_failed = True
         websocket_active = False
-        journey_attempt.fail('provider_error')
         logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
-        try:
-            await websocket.close(code=1011, reason='Transcription service unavailable')
-        except Exception:
-            pass
 
-    async def send_stt_audio_or_close(audio: bytes) -> bool:
-        """Require the provider to accept audio before its caller discards it."""
+    async def close_stt_failure(reason: str = 'connection_lost') -> None:
+        """Expose an unusable live-STT session before the caller drops audio."""
         if stt_send_failed:
+            return
+        _mark_stt_terminal()
+        # The shared terminal fails the journey attempt, sends the terminal
+        # service-status event, and closes 1011 — the listen wire contract.
+        await terminate_live_stt_session(
+            websocket,
+            ptt_session,
+            failure=live_stt_upstream_failure(serving_provider()),
+            reason=reason,
+            platform=x_app_platform,
+        )
+
+    async def failover_stt_socket() -> bool:
+        """Swap a dead provider socket for the next one in the PTT chain.
+
+        Same shape as listen's ``_failover_stt_socket``: the send path observes
+        a provider death on the very next chunk — Modulate/Velma accepts the
+        upgrade and only then dies on the first audio send — so a recoverable
+        death must rebuild the socket instead of ending the session with 1011.
+        The PTT surface has no separate death-monitor task, so this single
+        receive loop is the only caller and no failover lock is needed.
+        """
+        nonlocal dg_socket, stt_service, stt_language, stt_model
+        if dg_socket is not None and not live_stt_socket_is_dead(dg_socket):
+            return True
+        if stt_send_failed or not websocket_active:
+            return False
+        dead_provider = provider_for_service(stt_service)
+        if dead_provider:
+            stt_failed_providers.add(dead_provider)
+        if len(stt_failed_providers) > MAX_STT_FAILOVERS:
+            return False
+        service, next_language, next_model = get_stt_service_for_language(
+            language, surface=STTServingSurface.PTT, exclude=frozenset(stt_failed_providers)
+        )
+        if service is None or provider_for_service(service) in stt_failed_providers:
+            # The second check also covers a selector that ignores ``exclude``
+            # and re-offers a provider this session already marked dead.
             return False
         try:
-            accepted = dg_socket is not None and not dg_socket.is_connection_dead and dg_socket.send(audio) is True
+            if service == STTService.parakeet:
+                # A provider is never offered its own failure as a fallback, so
+                # the Modulate leg is omitted once it has died for this session.
+                socket, actual_service = await connect_stt_socket_with_fallback(
+                    primary_service=STTService.parakeet,
+                    connect_primary=lambda: process_audio_parakeet(
+                        stream_transcript,
+                        language=next_language,
+                        sample_rate=sample_rate,
+                        channels=channels,
+                        model=next_model,
+                        keywords=context_keywords,
+                        is_active=lambda: websocket_active,
+                    ),
+                    connect_modulate=(
+                        None
+                        if MODULATE_PROVIDER in stt_failed_providers
+                        else lambda: process_audio_modulate(stream_transcript, sample_rate, next_language)
+                    ),
+                )
+            elif service == STTService.modulate:
+                socket = await process_audio_modulate(stream_transcript, sample_rate, next_language)
+                actual_service = STTService.modulate
+            else:
+                return False
         except Exception:
-            accepted = False
-        if accepted:
-            return True
+            logger.exception('transcribe-stream: STT failover connect raised')
+            return False
+        if socket is None:
+            return False
+        # A provider can accept the upgrade and reject the stream ~150ms later;
+        # treating that as a heal would report recovery for a session that is
+        # already dead again.
+        if not await fallback_socket_is_serving(socket):
+            close_rejected_socket(socket)
+            return False
+        if actual_service == STTService.modulate:
+            next_model = 'velma-2'
+        previous_socket = dg_socket
+        dg_socket = socket
+        stt_service, stt_language, stt_model = actual_service, next_language, next_model
+        record_fallback(
+            component='stt_live_session',
+            from_mode=dead_provider or 'unknown',
+            to_mode=actual_service.value,
+            reason='connection_lost',
+            outcome='recovered',
+        )
+        logger.info(f'STT failover mid-session: {dead_provider} -> {actual_service.value}')
+        if previous_socket is not None:
+            try:
+                previous_socket.finish()
+            except Exception:
+                logger.warning('transcribe-stream: failed to close the dead STT socket before failover')
+        return True
 
-        await close_stt_failure()
+    async def send_stt_audio_or_close(audio: bytes) -> bool:
+        """Require the provider to accept audio before its caller discards it.
+
+        A recoverable send-path death fails over to the next provider and the
+        chunk is retried against the replacement socket instead of being
+        dropped — the chunk stays the caller's until a socket accepted it.
+        """
+        if stt_send_failed:
+            return False
+        # Bounded retry, not a single attempt: ``failover_stt_socket`` enforces
+        # MAX_STT_FAILOVERS, so the bound here is a backstop, not the limit.
+        for _ in range(MAX_STT_FAILOVERS + 2):
+            sent = await send_live_stt_audio(
+                websocket,
+                ptt_session,
+                stt_socket=dg_socket,
+                audio=audio,
+                provider=serving_provider(),
+                platform=x_app_platform,
+                attempt_failover=failover_stt_socket,
+            )
+            if sent:
+                return True
+            if ptt_session.stt_terminal_failure:
+                # The shared terminal already failed the journey attempt and
+                # closed the client; adopt its verdict in the PTT state.
+                _mark_stt_terminal()
+                return False
+            # The failover swapped the socket; retry the chunk against it.
+        await close_stt_failure('send_failed')
         return False
 
     def record_stt_usage_once() -> None:
-        """Record accepted provider audio only after a terminal provider drain."""
+        """Settle the connect-time reservation after a successful provider drain."""
         nonlocal usage_recorded
-        if usage_recorded or accepted_audio_bytes <= 0 or bytes_per_second <= 0:
+        if usage_recorded or bytes_per_second <= 0:
             return
-        actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
-        record_actual_duration(uid, actual_duration_ms)
+        actual_duration_ms = (
+            compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels) if accepted_audio_bytes > 0 else 0
+        )
+        if budget_reserved_ms > 0:
+            settle_reserved_duration(uid, budget_reserved_ms, actual_duration_ms)
+        elif actual_duration_ms > 0:
+            # Fail-open path never reserved; keep force-record tracking.
+            record_actual_duration(uid, actual_duration_ms)
+        usage_recorded = True
+
+    def refund_reservation_once() -> None:
+        """Release an unused reservation when the session never drained successfully."""
+        nonlocal usage_recorded
+        if usage_recorded or budget_reserved_ms <= 0:
+            return
+        settle_reserved_duration(uid, budget_reserved_ms, 0)
         usage_recorded = True
 
     async def drain_stt_or_close() -> bool:
@@ -1470,6 +1656,22 @@ async def transcribe_voice_message_stream(
         return True
 
     try:
+        # Atomically reserve up to one session before opening a provider.
+        # Probe-only check_budget + force-record at end lets concurrent WS
+        # sessions each freeze the same remaining slice and overspend.
+        try:
+            allowed, reserved_ms, _used_ms, _remaining_ms = try_reserve_session_budget(
+                uid, MAX_SESSION_DURATION_S * 1000
+            )
+            if not allowed:
+                await websocket.close(code=1008, reason='Daily transcription budget exhausted')
+                return
+            if reserved_ms > 0:
+                budget_reserved_ms = reserved_ms
+                budget_remaining_ms = reserved_ms
+        except Exception:
+            pass  # Fail-open
+
         if stt_service == STTService.parakeet:
             dg_socket, stt_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.parakeet,
@@ -1601,6 +1803,9 @@ async def transcribe_voice_message_stream(
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
             record_stt_usage_once()
+        else:
+            # Provider never drained successfully — refund the connect-time reservation.
+            refund_reservation_once()
 
         if dg_socket and not stt_drained:
             try:
@@ -1842,17 +2047,38 @@ def create_initial_message_v1(
 def rate_message(
     message_id: str,
     data: RateMessageRequest,
+    x_app_platform: str | None = Header(None, alias='X-App-Platform'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.rating
 
-    # Update rating on the message document
-    chat_db.update_message_rating(uid, message_id, rating)
-
-    # Also store in analytics collection
+    snapshot = chat_db.update_message_rating(uid, message_id, rating) or {}
     value = rating if rating is not None else 0
-    set_chat_message_rating_score(uid, message_id, value, platform='mobile')
+    platform = (x_app_platform or '').strip().lower()
+    if platform not in ('desktop', 'mobile'):
+        platform = 'desktop'
+    triage = extract_rating_triage_fields(snapshot)
+    reason = data.reason.value if data.reason else None
+    set_chat_message_rating_score(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        platform=platform,
+        notification_kind=triage.get('notification_kind'),
+        app_id=triage.get('app_id'),
+    )
+
+    # Unified feedback ledger — the daily thumbs-down report reads from here.
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=reason,
+        comment=data.comment,
+        platform=platform,
+    )
 
     # Try to submit feedback to LangSmith
     try:

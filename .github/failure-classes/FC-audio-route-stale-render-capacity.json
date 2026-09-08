@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-audio-route-stale-render-capacity",
+  "violated_contract": "A realtime playback graph rebuilt after an audio route or sample-rate change must accept every render slice size macOS can request; a nominally running engine with a stale lower frame ceiling is not live playback.",
+  "canonical_prevention": "Configure every non-I/O unit in the streaming PCM graph for the documented 4096-frame render capacity before resources are allocated, and reapply that capacity whenever the graph is rebuilt.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/StreamingPCMPlaybackQueueTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/StreamingPCMPlayer.swift"
+  ],
+  "status": "open"
+}

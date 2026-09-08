@@ -136,6 +136,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchMemories: stub = "Your dog's name is Rex."
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
+    case .readConversationEvidence: stub = "Evidence body: visible text from the captured turn."
+    case .searchConversationEvidence: stub = "Found 1 matching evidence item."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
     case .checkPermissionStatus: stub = "Screen Recording: not granted."
     case .requestPermission: stub = "Screen Recording permission request opened."
@@ -148,16 +150,20 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .inspectAgentArtifacts:
       stub =
         "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
+    case .readToolOutput: stub = "Bounded saved tool output excerpt."
+    case .searchToolOutput: stub = "Found 1 matching saved-output line."
     case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
+    case .createContextReminder: stub = "I'll remind you next time you're in Pricing Engine."
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
+    case .recordInterjectFeedback: stub = #"{"ok":true}"#
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }

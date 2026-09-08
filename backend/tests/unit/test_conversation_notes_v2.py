@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import re
+import json
 
 import pytest
 
@@ -64,13 +66,14 @@ def test_structured_additions_are_backward_compatible():
     assert old.action_items[0].due_certainty is None
 
 
-def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypatch):
+@pytest.mark.parametrize('marked_source', [True, False])
+def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypatch, marked_source):
     from utils.llm import conversation_processing
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
 
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-123',
-        transcript=_long_transcript(),
+        transcript=_long_transcript() if marked_source else re.sub(r'\[segment:[^]]+\] ', '', _long_transcript()),
         started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
         timezone_name='America/New_York',
         language_code='en',
@@ -81,15 +84,21 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     class Model:
         def invoke(self, messages):
             captured['messages'] = messages
-            return SimpleNamespace(content='''{
-                  "title":"Ash and David Discuss Agent Infrastructure",
+            content = '''{
+                  "title":"Speaker 1 and Ash Discuss Agent Infrastructure",
                   "overview":"compatibility",
                   "emoji":"🔐",
                   "category":"technology",
-                  "sections":[{"heading":"Agent operations","body_markdown":"Ash runs ~12 long-running agents.","source_segment_ids":["s1"]}],
+                  "sections":[{"heading":"Agent operations","body_markdown":"- Ash runs ~12 long-running agents.\\n- The team proposed a review; it has not started.","source_segment_ids":["s1"]}],
                   "action_items":[{"description":"Send Fulcrum dinner invite","owner_name":"David","context":"Tentative NYC lunch or dinner with Ash.","due_at":"2026-09-08T12:00:00","due_certainty":"tentative","capture_owner":"user","source_segment_ids":["s9"]}],
                   "events":[]
-                }''')
+                }'''
+            if not marked_source:
+                payload = json.loads(content)
+                for item in payload['sections'] + payload['action_items']:
+                    item['source_segment_ids'] = []
+                content = json.dumps(payload)
+            return SimpleNamespace(content=content)
 
     def fake_get_llm(_feature, **kwargs):
         captured['kwargs'] = kwargs
@@ -106,8 +115,13 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
         task_intelligence_capture=True,
     )
 
-    assert result.overview == '## Agent operations\n\nAsh runs ~12 long-running agents.'
+    assert result.overview == (
+        '## Agent operations\n\n- Ash runs ~12 long-running agents.\n'
+        '- The team proposed a review; it has not started.'
+    )
+    assert re.search(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b', result.title) is None
     assert result.events == []
+    assert result.sections[0].source_segment_ids == (['s1'] if marked_source else [])
     assert result.action_items[0].owner_name == 'David'
     assert result.action_items[0].due_certainty == 'tentative'
     assert captured['kwargs']['cache_key'] == 'omi-conv-conv-123'
@@ -116,7 +130,17 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert 'Never normalize or "correct" an uncertain name from general knowledge' in instructions
     assert 'participant email domain corroborates' in instructions
     assert 'fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra"' in instructions
+    assert 'NEVER emit diarization placeholders' in instructions
+    assert 'whether or not calendar' in instructions
     assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
+    # Prompt-contract assertions only: live source replay, not this mock, measures model fidelity.
+    assert "'- ' bullets in plain, readable sentences" in instructions
+    assert 'Keep past anecdotes, current plans, and unrelated threads separate' in instructions
+    assert 'Do not complete clipped amounts' in instructions
+    assert 'return empty source_segment_ids lists. Never invent IDs.' in instructions
+    assert 'not quotas' in instructions
+    assert 'COVERAGE BEATS BREVITY' not in instructions
+    assert 'terse fragments, not sentences' not in instructions
 
 
 def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
@@ -200,3 +224,87 @@ def test_action_item_new_fields_round_trip():
         due_certainty='tentative',
     )
     assert ActionItem.model_validate_json(item.model_dump_json()) == item
+
+
+def test_notes_without_calendar_context_strip_speaker_placeholders():
+    from utils.llm.conversation_processing import sanitize_structured_speaker_placeholders
+
+    leftover = re.compile(r'(?i)\b(?:speaker[ _]\d+|SPEAKER_\d+)\b')
+    structured = Structured.model_validate(
+        {
+            'title': 'Speaker 1 Reviews Budget',
+            'overview': 'Speaker 1 said the budget is late.',
+            'emoji': '💬',
+            'category': 'work',
+            'sections': [
+                {
+                    'heading': 'Budget',
+                    'body_markdown': '- Speaker 1: budget is late\n- SPEAKER_00 agreed',
+                    'source_segment_ids': ['s1'],
+                }
+            ],
+            'action_items': [
+                {
+                    'description': 'Follow up with Speaker 1',
+                    'owner_name': 'Speaker 1',
+                    'source_segment_ids': ['s1'],
+                }
+            ],
+            'events': [],
+        }
+    )
+    sanitize_structured_speaker_placeholders(structured)
+
+    assert leftover.search(structured.title) is None
+    assert leftover.search(structured.overview) is None
+    assert leftover.search(structured.sections[0].body_markdown) is None
+    assert leftover.search(structured.action_items[0].description) is None
+    assert structured.action_items[0].owner_name is None
+
+
+def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
+    from utils.conversations.meeting_context import context_from_screen_activity
+    from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
+
+    context = context_from_screen_activity(
+        [
+            {
+                'appName': 'Telegram',
+                'windowTitle': 'Alice Chen',
+                'ocrText': 'Mute\nEnd Call\nVideo',
+            }
+        ],
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 18, 14, 30, tzinfo=timezone.utc),
+    )
+    assert context is not None
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='conv-telegram',
+        transcript='Speaker 1: the flight is at noon\n',
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        timezone_name='America/New_York',
+        language_code='en',
+        calendar_context=context,
+    )
+    assert 'Alice Chen' in prefix.context
+    assert 'Speaker 1:' not in prefix.context
+
+
+@pytest.mark.parametrize('gateway_enabled', [False, True])
+def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatch, gateway_enabled):
+    from utils.llm import conversation_prompt_prefix
+    from utils.llm.model_config import get_model_config
+    from llm_gateway.gateway.config_loader import load_gateway_config
+
+    monkeypatch.setattr(conversation_prompt_prefix, 'should_route_features_through_gateway', lambda: gateway_enabled)
+    if gateway_enabled:
+        routes = load_gateway_config(prod_mode=True).route_artifacts
+        notes = routes['route.conv_structure.model_config.001']
+        memory = routes['route.memory_l1.model_config.001']
+        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.provider_options['reasoning_effort'] == 'low'
+        assert memory.primary.model == 'gpt-5.6-luna'
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
+    else:
+        assert get_model_config('conv_structure') == get_model_config('memory_l1')
+        assert conversation_prompt_prefix.shared_conversation_cache_supported() is True

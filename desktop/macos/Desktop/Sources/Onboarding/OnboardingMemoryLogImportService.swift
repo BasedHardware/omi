@@ -55,6 +55,19 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
 actor OnboardingMemoryLogImportService {
   static let shared = OnboardingMemoryLogImportService()
 
+  enum ImportFailure: String, Sendable {
+    case authentication = "extract_auth_failed"
+    case planRequired = "extract_plan_required"
+    case rateLimited = "extract_rate_limited"
+    case network = "extract_network_failed"
+    case timeout = "extract_timeout"
+    case server = "extract_backend_5xx"
+    case invalidResponse = "extract_invalid_response"
+    case requestRejected = "extract_backend_4xx"
+    case saveFailed = "save_failed"
+    case fixtureUnavailable = "fixture_unavailable"
+  }
+
   struct ExtractedMemoryLog: Sendable {
     let memories: [String]
     let profileSummary: String
@@ -64,9 +77,9 @@ actor OnboardingMemoryLogImportService {
   /// user can fix by pasting the right content) from "the import itself
   /// broke" (LLM/parse/save failure worth retrying as-is).
   enum ImportOutcome: Sendable {
-    case imported(memories: Int, profileSummary: String)
+    case imported(memories: Int, failed: Int, profileSummary: String)
     case noDurableMemories
-    case failed
+    case failed(ImportFailure)
   }
 
   func importMemoryLog(
@@ -80,9 +93,15 @@ actor OnboardingMemoryLogImportService {
     let extracted: ExtractedMemoryLog
     if let extractedFixture {
       guard AppBuild.isNonProduction else {
-        return .failed
+        return .failed(.fixtureUnavailable)
       }
       extracted = extractedFixture
+    } else if let taggedMemories = Self.extractTaggedMemories(from: trimmed) {
+      // Omi's export prompt asks ChatGPT/Claude to produce one explicitly tagged,
+      // durable memory per line. That output is already the final memory shape, so
+      // importing it locally avoids an unnecessary provider call and keeps the
+      // documented paste flow working during an extraction-service outage.
+      extracted = ExtractedMemoryLog(memories: taggedMemories, profileSummary: "")
     } else {
       do {
         let response = try await APIClient.shared.extractMemoryLog(
@@ -92,8 +111,11 @@ actor OnboardingMemoryLogImportService {
           memories: response.memories,
           profileSummary: response.profile)
       } catch {
-        log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
-        return .failed
+        let failure = Self.failure(for: error)
+        log(
+          "OnboardingMemoryLogImportService: \(source.displayName) extraction failed [\(failure.rawValue)]"
+        )
+        return .failed(failure)
       }
     }
 
@@ -134,8 +156,89 @@ actor OnboardingMemoryLogImportService {
     }
 
     guard saveResult.saved > 0 else {
-      return .failed
+      return .failed(.saveFailed)
     }
-    return .imported(memories: saveResult.saved, profileSummary: extracted.profileSummary)
+    return .imported(
+      memories: saveResult.saved,
+      failed: saveResult.failed,
+      profileSummary: extracted.profileSummary)
+  }
+
+  /// Parses the explicit one-memory-per-line format requested by Omi's own
+  /// ChatGPT/Claude export prompt. Returns nil when the paste is unstructured so
+  /// the managed extractor remains the fallback; an empty tagged item is ignored.
+  static func extractTaggedMemories(from rawText: String) -> [String]? {
+    let pattern =
+      #"^\s*(?:(?:[-*•]|\d+[.)])\s+)?\[((?:\d{4}-\d{2}-\d{2})|recent|earlier|long-term|unknown)\]\s*(.+?)\s*$"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+      return nil
+    }
+
+    var memories: [String] = []
+    var seen: Set<String> = []
+    for rawLine in rawText.components(separatedBy: .newlines) {
+      let trimmedLine = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedLine.isEmpty, !trimmedLine.hasPrefix("```") else { continue }
+
+      let range = NSRange(rawLine.startIndex..<rawLine.endIndex, in: rawLine)
+      guard
+        let match = regex.firstMatch(in: rawLine, range: range),
+        let tagRange = Range(match.range(at: 1), in: rawLine),
+        let contentRange = Range(match.range(at: 2), in: rawLine)
+      else {
+        // A mixed-format paste is not safe to import locally: silently ignoring
+        // its untagged lines could lose durable memories. Let the managed
+        // extractor interpret the complete paste instead.
+        return nil
+      }
+
+      let tag = String(rawLine[tagRange]).lowercased()
+      let content = String(rawLine[contentRange])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !content.isEmpty else { continue }
+
+      let boundedContent = String(content.prefix(2_000))
+      let memory = tag == "unknown" ? boundedContent : "[\(tag)] \(boundedContent)"
+      let dedupeKey = memory.lowercased().split(whereSeparator: \Character.isWhitespace).joined(
+        separator: " ")
+      guard seen.insert(dedupeKey).inserted else { continue }
+      memories.append(memory)
+      if memories.count == 200 { break }
+    }
+
+    return memories.isEmpty ? nil : memories
+  }
+
+  static func failure(for error: Error) -> ImportFailure {
+    if let authError = error as? AuthError {
+      switch authError {
+      case .timeout: return .timeout
+      default: return .authentication
+      }
+    }
+    if let urlError = error as? URLError {
+      return urlError.code == .timedOut ? .timeout : .network
+    }
+    if let apiError = error as? APIError {
+      switch apiError {
+      case .unauthorized:
+        return .authentication
+      case .httpError(let statusCode, _):
+        switch statusCode {
+        case 401, 403: return .authentication
+        case 402: return .planRequired
+        case 408: return .timeout
+        case 429: return .rateLimited
+        case 500...599: return .server
+        default: return .requestRejected
+        }
+      case .invalidResponse, .decodingError:
+        return .invalidResponse
+      default:
+        return .requestRejected
+      }
+    }
+    if error is DecodingError { return .invalidResponse }
+    return .invalidResponse
   }
 }

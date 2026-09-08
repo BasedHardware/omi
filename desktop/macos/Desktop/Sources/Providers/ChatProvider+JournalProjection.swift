@@ -20,6 +20,12 @@ extension ChatProvider {
     let voiceCompanion = expected.realtimeVoiceCompanion()
     var updatedMessages = messages
     var divergences: Set<JournalProjectionDivergence> = []
+    // Whether any row will differ from what is published. A refresh after a
+    // streaming write echoes a row the live projection already has (and is
+    // ahead of), and publishing an identical transcript re-ran every observer
+    // of `messages` — a second full transcript pass per journal round trip,
+    // for nothing the reader could see.
+    var changed = false
 
     for turn in turns {
       let isCanonicalChatSurface =
@@ -65,25 +71,51 @@ extension ChatProvider {
         && projected.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         && projected.contentBlocks.isEmpty
         && projected.resources.isEmpty
+      func replace(at index: Int) {
+        let merged = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        guard !merged.isProjectionEquivalent(to: updatedMessages[index]) else { return }
+        updatedMessages[index] = merged
+        changed = true
+      }
       if isEmptyTerminalPlaceholder {
+        let countBefore = updatedMessages.count
         updatedMessages.removeAll { $0.id == projected.id }
+        if updatedMessages.count != countBefore { changed = true }
       } else if let index = updatedMessages.firstIndex(where: { $0.id == projected.id }) {
-        updatedMessages[index] = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        replace(at: index)
       } else if let continuityKey = projected.clientTurnId,
         let index = updatedMessages.firstIndex(where: {
           $0.clientTurnId == continuityKey && $0.sender == projected.sender
         })
       {
-        updatedMessages[index] = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
+        replace(at: index)
       } else {
         updatedMessages.append(projected)
+        changed = true
       }
     }
 
+    // Citation inheritance is a projection over the whole transcript rather
+    // than part of any single row replacement: a refresh can echo every row
+    // it read unchanged and still owe a restored follow-up the chips it
+    // borrows from an earlier turn. The publication gate therefore sits
+    // behind the citation projection, and what inheritance bound counts as a
+    // change worth publishing.
     let orderBeforeCanonicalSort = updatedMessages.map(\.id)
     updatedMessages.sort {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
       return $0.createdAt < $1.createdAt
+    }
+    Self.inheritCitationsAcrossTurns(&updatedMessages)
+    if !changed,
+      Self.citationBlockIdentifiers(of: updatedMessages)
+        != Self.citationBlockIdentifiers(of: messages)
+    {
+      changed = true
+    }
+    guard changed else {
+      flushPendingMessageRatings()
+      return
     }
     if updatedMessages.map(\.id) != orderBeforeCanonicalSort {
       divergences.insert(.ordering)
@@ -103,6 +135,23 @@ extension ChatProvider {
 
   func projectJournalTurn(_ turn: KernelJournalTurn) {
     projectJournalTurns([turn])
+  }
+
+  /// A settled follow-up that cites a number it never retrieved itself is
+  /// pointing at an earlier turn's list (`ChatCitationMarkup.inheritedReferences`).
+  /// The binding is a projection over the journal, not a row written to it: the
+  /// references it borrows were already persisted on the turn that earned them,
+  /// and re-deriving them here is what lets restored history open the same
+  /// source the reader could open live.
+  static func inheritCitationsAcrossTurns(_ messages: inout [ChatMessage]) {
+    for index in messages.indices where messages[index].sender == .ai && !messages[index].isStreaming {
+      let inherited = ChatCitationMarkup.inheritedReferences(
+        citedIn: messages[index],
+        resolved: messages[index].inlineCitationReferences,
+        earlierTurns: Array(messages[..<index]))
+      guard !inherited.isEmpty else { continue }
+      messages[index].persistCitedReferences(from: inherited)
+    }
   }
 
   /// Local memories/conversations/tasks used to bind kind-only labels such as `[memory]` when the
@@ -161,20 +210,34 @@ extension ChatProvider {
       durableToolReferences,
       ChatCitationProvenanceRegistry.references(
         fromToolCallBlocks: messages[index].contentBlocks))
-    messages[index].applyAuthoritativeTerminalAnswer(queryText)
+    // The authoritative answer replaces every streamed projection, so the raw
+    // accumulator this turn was built from has no further reader.
+    streamingBuffer.finishStreaming(messageId: messageId)
+    // The streamed projection applied sentence spacing to every flush; the
+    // terminal answer must honor the same contract or a joined agent handoff
+    // ("…handle it.Capture the…") that was only ever visible as fixed would
+    // reappear the moment the turn settles — and be persisted that way.
+    let normalizedTerminalText = Self.normalizeAssistantSentenceSpacing(queryText)
+    messages[index].applyAuthoritativeTerminalAnswer(normalizedTerminalText)
     messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,
       requestedSources: requestedSources,
       retrievedReferences: turnReferences,
-      fallbackText: queryText)
+      fallbackText: normalizedTerminalText)
     messages[index].isStreaming = false
+    // A number this turn never assigned is one the reader was shown a turn ago.
+    let inheritedReferences = ChatCitationMarkup.inheritedReferences(
+      citedIn: messages[index],
+      resolved: turnReferences,
+      earlierTurns: Array(messages[..<index]))
+    let bindableReferences = turnReferences + inheritedReferences
     let bindBase: [ChatCitationReference]
     if messages[index].hasKindOnlyCitationMarkers {
       bindBase = ChatCitationReference.appendingLookup(
         await kindCitationLookupReferences(),
-        to: turnReferences)
+        to: bindableReferences)
     } else {
-      bindBase = turnReferences
+      bindBase = bindableReferences
     }
     await applyKindOnlyCitationBinding(to: messageId, base: bindBase)
     guard let current = messages.first(where: { $0.id == messageId }) else { return queryText }
@@ -298,6 +361,17 @@ extension ChatProvider {
       formatter: ISO8601DateFormatter())
   }
 
+  /// Every citation block's identity across the transcript, in order — the
+  /// signal that the citation projection moved without any journal row doing.
+  private static func citationBlockIdentifiers(of messages: [ChatMessage]) -> [String] {
+    messages.flatMap { message in
+      message.contentBlocks.compactMap { block -> String? in
+        guard case .citation(let id, _) = block else { return nil }
+        return id
+      }
+    }
+  }
+
   /// Compare only journal-owned values. The comparison may inspect content in
   /// process, but telemetry receives the bounded divergence kind only.
   private static func journalOwnedValueDiffers(
@@ -314,5 +388,108 @@ extension ChatProvider {
         != ChatContentBlockCodec.comparisonData(existing.contentBlocks)
       || projected.attachments != existing.attachments
       || projected.resources != existing.resources
+  }
+}
+
+extension ChatProvider {
+  /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
+  /// two identical messages with distinct turn IDs are distinct journal rows.
+  /// Some `ChatMessage` fields live only in the in-memory row and are never
+  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
+  /// reconstruct them and a journal projection can never be their authority:
+  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
+  /// completion, rendered in the message footer), `notificationScreenshot`,
+  /// and in-memory kind-only citation rewrites until the journal catches up.
+  /// Replacing a row wholesale with the projection would drop them, so carry
+  /// them forward from the row being replaced. A field the projection *does*
+  /// carry (non-nil) wins, so this stays correct if the journal schema later
+  /// starts persisting one of them.
+  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
+    var merged = projected
+    // A journal echo of a row this client is still streaming is the snapshot
+    // it wrote a round trip ago; the live projection has moved on since. Taking
+    // the echo's text put the visible answer a few words back on every write
+    // and forward again on the next flush — the stutter the reader saw. The
+    // journal stays the durable authority: a terminal or kernel-owned row is
+    // never streaming and is taken whole, and a streaming echo that has more
+    // than the live row (a restore from another writer) still wins.
+    if existing.isStreaming, projected.isStreaming, existing.text.utf8.count >= projected.text.utf8.count {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
+    if merged.rating == nil { merged.rating = existing.rating }
+    if let replayed = merged.metadata {
+      if let persisted = existing.metadata {
+        // The journal replay reconstructs only the metadata the kernel
+        // persists — today the served-model attribution — while the in-memory
+        // row carries the rest of the completion evidence. A nil test here
+        // would let an echo erase all of it. Merge field-by-field: the replay
+        // wins a field it observably carries; the row keeps every field the
+        // replay left at its default.
+        merged.metadata = Self.mergingCompletionMetadata(persisted, fromReplay: replayed)
+      }
+    } else {
+      merged.metadata = existing.metadata
+    }
+    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
+    // Kind-only binding rewrites markers and appends citation blocks in memory.
+    // A stale journal echo still has `[memory]` and no citation blocks; keep the
+    // already-bound row so chips do not vanish between hydrate and the next bind.
+    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
+    return merged
+  }
+
+  /// The replayed metadata wins every field it observably carries (anything
+  /// off its default — a journal replay only fills what the kernel writes);
+  /// every other field keeps the in-memory row's value.
+  private static func mergingCompletionMetadata(
+    _ persisted: MessageMetadata, fromReplay replayed: MessageMetadata
+  ) -> MessageMetadata {
+    var merged = replayed
+    if !merged.hasScreenshot { merged.hasScreenshot = persisted.hasScreenshot }
+    if merged.screenshotSizeBytes == nil { merged.screenshotSizeBytes = persisted.screenshotSizeBytes }
+    if merged.toolNames.isEmpty { merged.toolNames = persisted.toolNames }
+    if merged.sqlRowsReturned == 0 { merged.sqlRowsReturned = persisted.sqlRowsReturned }
+    if merged.sqlQueryCount == 0 { merged.sqlQueryCount = persisted.sqlQueryCount }
+    if merged.sourceOutcomes.isEmpty { merged.sourceOutcomes = persisted.sourceOutcomes }
+    if merged.retainedTurnCount == 0 { merged.retainedTurnCount = persisted.retainedTurnCount }
+    if merged.totalTurnCount == 0 { merged.totalTurnCount = persisted.totalTurnCount }
+    if merged.omittedTurnCount == 0 { merged.omittedTurnCount = persisted.omittedTurnCount }
+    if merged.offeredToolCount == 0 { merged.offeredToolCount = persisted.offeredToolCount }
+    if merged.adapterId.isEmpty { merged.adapterId = persisted.adapterId }
+    if merged.credentialScopeLabel.isEmpty { merged.credentialScopeLabel = persisted.credentialScopeLabel }
+    if merged.modelsUsed.isEmpty { merged.modelsUsed = persisted.modelsUsed }
+    if merged.screenContext == nil { merged.screenContext = persisted.screenContext }
+    return merged
+  }
+}
+
+extension ChatMessage {
+  /// Whether publishing `self` in place of `other` would change anything a
+  /// reader or a persisted projection could observe. Every stored field is
+  /// compared; `Citation` has no equality of its own, so its identities stand
+  /// in for it.
+  func isProjectionEquivalent(to other: ChatMessage) -> Bool {
+    id == other.id
+      && clientTurnId == other.clientTurnId
+      && text == other.text
+      && createdAt == other.createdAt
+      && sender == other.sender
+      && isStreaming == other.isStreaming
+      && rating == other.rating
+      && isSynced == other.isSynced
+      && citations.map(\.id) == other.citations.map(\.id)
+      && contentBlocks == other.contentBlocks
+      && metadata == other.metadata
+      && notificationContext == other.notificationContext
+      && notificationScreenshot == other.notificationScreenshot
+      && attachments == other.attachments
+      && resources == other.resources
+      && turnOwner == other.turnOwner
+      && journalStatus == other.journalStatus
+      && hidesEmptyStreamingPlaceholder == other.hidesEmptyStreamingPlaceholder
   }
 }

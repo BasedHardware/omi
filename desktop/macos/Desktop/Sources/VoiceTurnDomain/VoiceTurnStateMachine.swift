@@ -130,6 +130,10 @@ package enum VoiceTurnRoute: Equatable, Sendable {
   case omniSTT
   case deepgramBatch
   case deepgramLive
+  /// Transcribed entirely on-device. Chosen when there is no network path at
+  /// all, so a dictation still types instead of waiting out a hub warm deadline
+  /// it can never satisfy.
+  case onDeviceASR
 }
 
 package enum VoiceContextOutcome: Equatable, Sendable {
@@ -200,6 +204,18 @@ package struct VoiceOutputSnapshot: Equatable, Sendable {
   }
 }
 
+package enum VoicePlaybackStopAdmission: Equatable, Sendable {
+  case apply
+  case alreadyComplete
+  case stale
+}
+
+package enum VoicePlaybackDrainAdmission: Equatable, Sendable {
+  case failClosed
+  case alreadyComplete
+  case keepPlaying
+}
+
 package enum VoiceOutputHandoffPolicy {
   package static func fillerCanYield(
     active: VoiceOutputLease,
@@ -207,6 +223,34 @@ package enum VoiceOutputHandoffPolicy {
     turnID: VoiceTurnID
   ) -> Bool {
     active.turnID == turnID && active.lane == .filler && incomingLane != .filler
+  }
+
+  /// A fallback TTS stop for the active turn is never stale, even when the
+  /// service already released or rotated the exact lease id.
+  package static func playbackStopAdmission(
+    activeLease: VoiceOutputLease?,
+    requestedLeaseID: VoiceLeaseID?,
+    activeTurnID: VoiceTurnID?
+  ) -> VoicePlaybackStopAdmission {
+    guard let requestedLeaseID else { return .apply }
+    if activeLease?.id == requestedLeaseID { return .apply }
+    if activeLease == nil { return .alreadyComplete }
+    if let activeTurnID, activeLease?.turnID == activeTurnID {
+      return .apply
+    }
+    return .stale
+  }
+
+  /// Native realtime uses PCM progress to refresh the watchdog, so silence is
+  /// fail-closed. A still-owned fallback lease is a live owner, not a hang.
+  package static func playbackDrainAdmission(
+    phase: VoiceTurnPhase,
+    activeLease: VoiceOutputLease?
+  ) -> VoicePlaybackDrainAdmission {
+    guard case .playing = phase else { return .alreadyComplete }
+    guard let activeLease else { return .alreadyComplete }
+    if activeLease.lane == .nativeRealtime { return .failClosed }
+    return .keepPlaying
   }
 }
 
@@ -219,8 +263,17 @@ package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable 
   case interruptedByBargeIn = "interrupted_by_barge_in"
   case permissionDenied = "permission_denied"
   case captureFailed = "capture_failed"
+  /// The press was long enough to speak into, but the microphone capture only
+  /// became operational near the end of it (or not at all). Distinct from
+  /// `captureFailed`, which is a capture start that errored, and from
+  /// `tooShort`, which blames the user for latency they did not cause.
+  case captureNotReady = "capture_not_ready"
   case transcriptionFailed = "transcription_failed"
   case providerFailed = "provider_failed"
+  /// The turn was recorded with no network path and was not a dictation:
+  /// nothing offline can answer it. Distinct from `providerFailed`, which
+  /// blames a provider that was reached.
+  case noNetwork = "no_network"
   case providerNoResponse = "provider_no_response"
   case hubWarmTimeout = "hub_warm_timeout"
   case deferredCommitTimeout = "deferred_commit_timeout"
@@ -285,6 +338,9 @@ package struct VoiceTurnUIProjection: Equatable, Sendable {
   package var isThinking = false
   package var isResponseWaiting = false
   package var isResponseActive = false
+  /// The turn has been recognised as a dictation ("type …"): its speech is
+  /// going to be pasted, not answered. Presentation only.
+  package var isDictating = false
 
   package static let idle = VoiceTurnUIProjection()
 }
@@ -308,12 +364,16 @@ package enum VoiceTurnUICopy {
       return "Hold longer to record"
     case .captureFailed:
       return "Microphone unavailable — try again"
+    case .captureNotReady:
+      return "Microphone wasn't ready — retrying, hold again"
     case .transcriptionFailed:
       return "Couldn't transcribe that — try again"
     case .journalFailed:
       return "Couldn't save that reply — try again"
     case .providerFailed, .providerNoResponse, .deferredCommitTimeout:
       return "Couldn't get a voice reply — try again"
+    case .noNetwork:
+      return "No network — say “type …” to dictate offline"
     case .bargeInReplacementTimeout:
       return "Previous reply was interrupted — try again"
     case .toolTimeout:
@@ -568,6 +628,9 @@ enum VoiceTurnEvent: Equatable, Sendable {
   case journalFailed(turnID: VoiceTurnID, identity: VoiceEffectIdentity, message: String)
   case transcriptChanged(turnID: VoiceTurnID, text: String)
   case hintChanged(turnID: VoiceTurnID, text: String)
+  /// Voice typing claimed the turn. Presentation only: the notch shows the
+  /// hold is a dictation; nothing about routing or I/O changes here.
+  case dictationRecognized(turnID: VoiceTurnID)
   case responseWaitingChanged(turnID: VoiceTurnID, active: Bool)
   case responseActiveChanged(turnID: VoiceTurnID, active: Bool)
   case debugPresentationChanged(
@@ -616,7 +679,8 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .transcriptionFinalizationCompleted(let turnID),
       .journalAccepted(let turnID, _),
       .journalFailed(let turnID, _, _),
-      .hintChanged(let turnID, _), .responseWaitingChanged(let turnID, _),
+      .hintChanged(let turnID, _), .dictationRecognized(let turnID),
+      .responseWaitingChanged(let turnID, _),
       .responseActiveChanged(let turnID, _), .debugPresentationChanged(let turnID, _),
       .clearPresentation(let turnID),
       .deadlineFired(let turnID, _),
@@ -675,6 +739,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .journalFailed: return "journal_failed"
     case .transcriptChanged: return "transcript_changed"
     case .hintChanged: return "hint_changed"
+    case .dictationRecognized: return "dictation_recognized"
     case .responseWaitingChanged: return "response_waiting_changed"
     case .responseActiveChanged: return "response_active_changed"
     case .debugPresentationChanged: return "debug_presentation_changed"
@@ -1008,6 +1073,10 @@ package struct VoiceTurnFact: Sendable {
 
   package static func hintChanged(turnID: VoiceTurnID, text: String) -> Self {
     Self(.hintChanged(turnID: turnID, text: text))
+  }
+
+  package static func dictationRecognized(turnID: VoiceTurnID) -> Self {
+    Self(.dictationRecognized(turnID: turnID))
   }
 
   package static func responseWaitingChanged(turnID: VoiceTurnID, active: Bool) -> Self {
@@ -1493,6 +1562,12 @@ struct VoiceTurnReducer {
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
       bindProviderReadyHubRoute(sessionID: sessionID, in: &model)
+      // A hubWarm fire during recording+replacing consumes the deadline so
+      // replacement can still be admitted. Restore the manager-owned warm
+      // rescue now that the socket is ready.
+      if model.turn?.route == .hubWarmWait, model.turn?.deadlines.contains(.hubWarm) != true {
+        schedule(.hubWarm, after: deadlines.hubWarm, in: &model, effects: &effects)
+      }
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
@@ -1899,6 +1974,9 @@ struct VoiceTurnReducer {
         schedule(.hintVisibility, after: deadlines.hintVisibility, in: &model, effects: &effects)
       }
 
+    case .dictationRecognized:
+      model.turn?.projection.isDictating = true
+
     case .responseWaitingChanged(_, let active):
       model.turn?.projection.isResponseWaiting = active
       model.turn?.projection.isThinking = active
@@ -1930,6 +2008,7 @@ struct VoiceTurnReducer {
       model.turn?.projection.isThinking = false
       model.turn?.projection.isResponseWaiting = false
       model.turn?.projection.isResponseActive = false
+      model.turn?.projection.isDictating = false
       cancel(.hintVisibility, in: &model, effects: &effects)
 
     case .deadlineFired(_, let deadline):
@@ -1956,6 +2035,12 @@ struct VoiceTurnReducer {
       case .captureStart:
         terminate(&model, reason: .captureFailed, effects: &effects)
       case .hubWarm:
+        if shouldDeferHubWarmFallback(turn) {
+          // Replacement is still connecting while the user holds. Do not
+          // commit omni; keep `.replacing` so provider_replacement_ready stays
+          // admissible. bargeInReplacement remains the omni fence.
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
         // A replacement may still be connecting when the bounded warm window
         // expires. Once batch STT owns the turn, a late provider-ready callback
         // must not restore the hub route or replay the same capture there.
@@ -2001,7 +2086,30 @@ struct VoiceTurnReducer {
           in: &model,
           effects: &effects)
       case .playbackDrain:
-        terminate(&model, reason: .playbackFailed, effects: &effects)
+        switch VoiceOutputHandoffPolicy.playbackDrainAdmission(
+          phase: turn.phase,
+          activeLease: turn.activeLease
+        ) {
+        case .alreadyComplete:
+          model.turn?.activeLease = nil
+          model.turn?.projection.isResponseActive = false
+          if completionFencesSatisfied(model.turn) {
+            terminate(&model, reason: .success, effects: &effects)
+          } else if model.turn?.providerFinished == true {
+            model.turn?.phase = .awaitingJournal
+            model.turn?.projection.isThinking = true
+            model.turn?.projection.isResponseWaiting = false
+          } else {
+            model.turn?.phase = .awaitingResponse
+            model.turn?.projection.isResponseWaiting = true
+            schedule(
+              .providerResponse, after: deadlines.providerResponse, in: &model, effects: &effects)
+          }
+        case .keepPlaying:
+          schedule(.playbackDrain, after: deadlines.playbackDrain, in: &model, effects: &effects)
+        case .failClosed:
+          terminate(&model, reason: .playbackFailed, effects: &effects)
+        }
       case .providerReconnect:
         guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
           terminate(&model, reason: .providerFailed, effects: &effects)
@@ -2110,6 +2218,14 @@ struct VoiceTurnReducer {
   /// response projection during connection churn.
   private func shouldProjectProviderConnectionAsAwaitingResponse(_ turn: VoiceTurn) -> Bool {
     acceptsProviderOutput(turn.phase) || turn.hubCommitPending
+  }
+
+  /// A barge-in replacement that is still connecting during recording must not
+  /// treat the generic one-second warm hint as a committed omni fallback.
+  private func shouldDeferHubWarmFallback(_ turn: VoiceTurn) -> Bool {
+    guard turn.phase.isRecording else { return false }
+    if case .replacing = turn.providerConnection { return true }
+    return false
   }
 
   /// Binds a freshly ready provider session to the hub route without stealing a

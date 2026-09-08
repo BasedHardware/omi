@@ -88,3 +88,30 @@ def test_memory_response_builders_apply_public_projection():
     assert b"memory_tier" not in listed.body
     assert b"memory_only" not in batch.body
     assert b"created_count" in batch.body
+
+
+def test_canonical_api_payload_omits_belief_fields_when_flag_off(monkeypatch):
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
+    payload = memory_api_payload(_memory(), MemoryApiExposure.CANONICAL)
+    assert "currency" not in payload
+    assert "currency_band" not in payload
+    assert "as_of" not in payload
+    assert "half_life_days" not in payload
+    assert "belief_class" not in payload
+
+
+def test_canonical_api_payload_exposes_belief_fields_when_flag_on(monkeypatch):
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    now = datetime(2026, 7, 2, tzinfo=timezone.utc)
+    memory = _memory()
+    memory.currency = 0.5
+    memory.currency_band = "fading"
+    memory.as_of = now
+    memory.half_life_days = 30
+    memory.belief_class = "state"
+    payload = memory_api_payload(memory, MemoryApiExposure.CANONICAL)
+    assert payload["currency"] == 0.5
+    assert payload["currency_band"] == "fading"
+    assert payload["as_of"] == now
+    assert payload["half_life_days"] == 30
+    assert payload["belief_class"] == "state"

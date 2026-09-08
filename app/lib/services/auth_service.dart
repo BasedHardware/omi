@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
@@ -474,9 +473,6 @@ class AuthService {
     }
   }
 
-  // Method channel for direct deep link delivery (fallback for app_links)
-  static const _deepLinkChannel = MethodChannel('com.omi/deep_links');
-
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
@@ -524,28 +520,11 @@ class AuthService {
         },
       );
 
-      // Also listen via direct method channel (fallback)
-      _deepLinkChannel.setMethodCallHandler((call) async {
-        if (call.method == 'onDeepLink') {
-          final urlString = call.arguments as String;
-          Logger.debug('Received callback URI via method channel: $urlString');
-          final uri = Uri.parse(urlString);
-          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              _deepLinkChannel.setMethodCallHandler(null);
-              completer.complete(urlString);
-            }
-          }
-        }
-      });
-
       // Now launch the URL
       final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         linkSubscription.cancel();
-        _deepLinkChannel.setMethodCallHandler(null);
         throw Exception('Failed to launch authentication URL');
       }
 
@@ -553,7 +532,6 @@ class AuthService {
         const Duration(minutes: 5),
         onTimeout: () {
           linkSubscription.cancel();
-          _deepLinkChannel.setMethodCallHandler(null);
           throw Exception('Authentication timeout');
         },
       );

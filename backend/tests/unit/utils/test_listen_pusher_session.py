@@ -1,11 +1,14 @@
 import asyncio
 import json
+import logging
 import struct
 
 import pytest
 
 from utils.listen_pusher_session import (
     FINALIZATION_IN_FLIGHT_ERROR,
+    FINALIZATION_RESULT_PROTOCOL,
+    FINALIZATION_STALE_GENERATION_ERROR,
     TARGET_SAMPLE_RATE,
     ListenPusherSession,
     ListenPusherSessionConfig,
@@ -63,6 +66,18 @@ def in_flight_response_201(conversation_id: str):
     payload = json.dumps(
         {"conversation_id": conversation_id, "error": FINALIZATION_IN_FLIGHT_ERROR, "terminal": False}
     ).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
+def stale_generation_response_201(conversation_id: str, dispatch_generation=None, terminal: bool = False):
+    payload = {
+        "conversation_id": conversation_id,
+        "error": FINALIZATION_STALE_GENERATION_ERROR,
+        "terminal": terminal,
+    }
+    if dispatch_generation is not None:
+        payload["dispatch_generation"] = dispatch_generation
+    payload = json.dumps(payload).encode("utf-8")
     return struct.pack("<I", 201) + payload
 
 
@@ -195,6 +210,7 @@ async def test_finalization_job_identity_survives_pusher_reconnect():
             'byok_keys': {'openai': 'key'},
             'finalization_job_id': 'job-1',
             'dispatch_generation': 3,
+            'finalization_result_protocol': FINALIZATION_RESULT_PROTOCOL,
         },
         {
             'conversation_id': 'conv-1',
@@ -202,6 +218,7 @@ async def test_finalization_job_identity_survives_pusher_reconnect():
             'byok_keys': {'openai': 'key'},
             'finalization_job_id': 'job-1',
             'dispatch_generation': 3,
+            'finalization_result_protocol': FINALIZATION_RESULT_PROTOCOL,
         },
     ]
 
@@ -387,6 +404,34 @@ async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
 
 
 @pytest.mark.anyio
+async def test_will_retry_finalization_error_logs_warning_not_error(caplog):
+    # The will-retry branch is healthy in-flight work by the session's own
+    # accounting (the pending entry is re-armed for bounded retry); logging
+    # it at ERROR paged on-call for traffic that self-heals (2026-09-05:
+    # 40-50 ERROR/30min for 2h against ~250-270 healthy processing/30min,
+    # 0-17 terminal). Severity is the fault-origin signal — same boundary
+    # as the WS-auth reclassification (FC-request-input-rejection-escapes-
+    # as-server-fault). The terminal branch keeps ERROR (companion test).
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        active_ref = {"active": True}
+        ws = FakePusherWebSocket(incoming=[error_response_201("conv-1")])
+        ws.on_recv = lambda: active_ref.update(active=False)
+        session = make_session(ws=ws, active_ref=active_ref)
+        await session.connect()
+        await session.request_conversation_processing("conv-1", "job-1", 2)
+
+        await session.pusher_receive()
+
+    records = [r for r in caplog.records if r.getMessage().startswith("Conversation processing failed")]
+    assert records, "expected a will-retry failure record"
+    assert all(
+        r.levelno == logging.WARNING for r in records
+    ), "the will-retry finalization branch must log at WARNING, not ERROR"
+    # WARNING must not mean dropped: the request stays armed for bounded retry.
+    assert session.pending_conversation_requests['conv-1']['retries'] == 1
+
+
+@pytest.mark.anyio
 async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
     # `job_leased` means a concurrent dispatch of the same job is finalizing
     # normally. Treating it as a failure re-requested it immediately, and each
@@ -409,9 +454,9 @@ async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
 
 
 @pytest.mark.anyio
-async def test_incoming_terminal_finalization_error_stops_retrying():
+async def test_stale_finalization_generation_drops_live_request_for_durable_replay():
     active_ref = {"active": True}
-    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 2)])
     ws.on_recv = lambda: active_ref.update(active=False)
     session = make_session(ws=ws, active_ref=active_ref)
     await session.connect()
@@ -419,11 +464,88 @@ async def test_incoming_terminal_finalization_error_stops_retrying():
 
     await session.pusher_receive()
 
+    # The reconciler owns the newer dispatch generation; a live retry of 2
+    # can never claim it and must not consume the session's retry burst.
+    assert session.pending_conversation_requests == {}
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_delayed_stale_finalization_response_does_not_drop_newer_pending_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 1)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    assert session.pending_conversation_requests["conv-1"]["dispatch_generation"] == 2
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_legacy_pusher_stale_response_without_generation_preserves_newer_pending_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    # A pre-v2 pusher cannot identify which pending generation it rejected.
+    assert session.pending_conversation_requests["conv-1"]["dispatch_generation"] == 2
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_stale_generation_one_drops_pending_job_with_omitted_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 1)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1")
+
+    await session.pusher_receive()
+
+    # The wire serializer defaults an omitted generation to 1, so the stale
+    # response must match that effective generation and drop the request.
+    assert session.pending_conversation_requests == {}
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+    assert frame_json(finalization_frames[0])["dispatch_generation"] == 1
+
+
+@pytest.mark.anyio
+async def test_incoming_terminal_finalization_error_stops_retrying(caplog):
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        await session.pusher_receive()
+
     # A dead-lettered job can never succeed: re-requesting it would retry the
     # same failing finalization for the whole life of the session.
     assert session.pending_conversation_requests == {}
     finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
     assert len(finalization_frames) == 1
+    # The terminal branch is the genuine fault signal: it stays at ERROR.
+    terminal_records = [
+        r for r in caplog.records if r.getMessage().startswith("Conversation processing failed terminally")
+    ]
+    assert terminal_records, "expected a terminal failure record"
+    assert all(r.levelno == logging.ERROR for r in terminal_records)
 
 
 @pytest.mark.anyio

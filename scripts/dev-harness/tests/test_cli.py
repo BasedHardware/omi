@@ -67,6 +67,10 @@ def test_real_check_lists_provider_credentials(monkeypatch: pytest.MonkeyPatch, 
     assert any("DEEPGRAM_API_KEY" in item for item in missing)
 
 
+def _fake_java(returncode: int, stderr: str = "") -> object:
+    return lambda *_args, **_kwargs: subprocess.CompletedProcess([], returncode, stderr=stderr)
+
+
 def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     """macOS ships /usr/bin/java as a stub that is always on PATH but has no JVM behind it.
 
@@ -74,16 +78,25 @@ def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.Monke
     ~135s later as an unexplained firestore/auth health-check timeout.
     """
     monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
-    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 1))
+    monkeypatch.setattr(cli.subprocess, "run", _fake_java(1))
 
-    assert cli._java_runtime_present() is False
+    assert cli._java_major_version() is None
 
 
-def test_java_present_when_the_binary_reports_a_version(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_java_reports_its_major_version(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
-    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0))
+    monkeypatch.setattr(
+        cli.subprocess, "run", _fake_java(0, 'openjdk version "21.0.12.1" 2026-08-18\n')
+    )
 
-    assert cli._java_runtime_present() is True
+    assert cli._java_major_version() == 21
+
+
+def test_legacy_java_1_8_version_line_reports_major_8(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
+    monkeypatch.setattr(cli.subprocess, "run", _fake_java(0, 'java version "1.8.0_191"\n'))
+
+    assert cli._java_major_version() == 8
 
 
 def test_missing_java_runtime_is_reported_as_a_prerequisite(
@@ -91,12 +104,71 @@ def test_missing_java_runtime_is_reported_as_a_prerequisite(
 ) -> None:
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    monkeypatch.setattr(cli, "_java_runtime_present", lambda: False)
+    monkeypatch.setattr(cli, "_java_major_version", lambda: None)
     cfg = config.load_config(REPO_ROOT)
 
     missing, _warnings = cli.prerequisite_report(cfg)
 
     assert any("java runtime" in item for item in missing)
+
+
+def test_pre_21_java_is_reported_as_a_prerequisite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """firebase-tools rejects JDKs before 21, so the harness must too — not at
+    emulator start (45s/90s health-check timeout) but in the prereq report.
+    """
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_java_major_version", lambda: 17)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("too old" in item and "17" in item and "Java 21" in item for item in missing)
+
+
+def test_minimum_node_major_reads_the_pinned_firebase_tools_engines_range() -> None:
+    assert cli._minimum_node_major_for_firebase_tools(REPO_ROOT) == 20
+
+
+def test_node_major_version_parses_the_node_version_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0, stdout="v18.19.0\n"),
+    )
+
+    assert cli._node_major_version() == 18
+
+
+def test_old_node_on_path_is_reported_as_a_prerequisite(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A contributor with Node 16/18 on PATH passes the bare `_which("node")` check today,
+
+    then only hits an opaque failure once the Firestore emulator tries to start under
+    npx-launched firebase-tools, which requires Node >= 20.
+    """
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(cli, "_node_major_version", lambda: 18)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("node >= 20" in item and "v18" in item for item in missing)
+
+
+def test_current_node_on_path_is_not_reported_as_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(cli, "_node_major_version", lambda: 22)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert not any(item.startswith("node >=") for item in missing)
 
 
 def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
@@ -108,12 +180,21 @@ def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
     blocks forever and the failure presents as a health-check timeout instead.
     """
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    monkeypatch.setattr(cli, "_which", lambda name: None if name == "firebase" else f"/usr/bin/{name}")
     cfg = config.load_config(REPO_ROOT, create_layout=True)
 
     command = cli._firebase_command(cfg)
 
-    assert command[:3] == ["npx", "--yes", "firebase-tools"]
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
+
+
+def test_firebase_command_ignores_global_cli_and_uses_repo_pin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda name: "/opt/homebrew/bin/firebase" if name == "firebase" else None)
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    command = cli._firebase_command(cfg)
+
+    assert command[:5] == ["npx", "--prefix", str(REPO_ROOT), "--yes", "firebase-tools@15.22.0"]
 
 
 def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

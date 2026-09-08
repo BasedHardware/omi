@@ -6,13 +6,15 @@ import logging
 import os
 import random
 import re
+from datetime import datetime, timezone
 from typing import Any, Optional, List, Dict, Literal, Tuple
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import Response, HTMLResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
+from desktop_download_page import download_landing_html
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
 from database.desktop_update_channels import (
     admit_qualified_beta_manifest,
@@ -76,13 +78,74 @@ class ClearCacheResponse(BaseModel):
     message: str = Field(description='Human-readable confirmation.')
 
 
+_SERVING_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+class DesktopBackendServingObservation(BaseModel):
+    """Live desktop-backend identity observed at pointer transition time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    release_sha: Optional[str] = None
+    release_channel: Optional[str] = None
+    chat_contract_version: Optional[str] = None
+    health_url: str = Field(min_length=1)
+
+    @field_validator("release_sha")
+    @classmethod
+    def _desktop_release_sha(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or _SERVING_SHA_RE.fullmatch(value):
+            return value
+        raise ValueError("release_sha must be 40 lowercase hex or null")
+
+
+class ApiBackendServingObservation(BaseModel):
+    """Live shared Python backend identity observed at pointer transition time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    release_sha: Optional[str] = None
+    health_url: str = Field(min_length=1)
+
+    @field_validator("release_sha")
+    @classmethod
+    def _api_release_sha(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or _SERVING_SHA_RE.fullmatch(value):
+            return value
+        raise ValueError("release_sha must be 40 lowercase hex or null")
+
+
+class ServingBackendsObservation(BaseModel):
+    """Provenance for the backends that were serving when a pointer moved."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    desktop_backend: DesktopBackendServingObservation
+    api_backend: ApiBackendServingObservation
+    captured_at: str = Field(min_length=1)
+
+    @field_validator("captured_at")
+    @classmethod
+    def _captured_at_utc(cls, value: str) -> str:
+        try:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("captured_at must be ISO-8601 UTC") from exc
+        if moment.tzinfo is None or moment.utcoffset() is None:
+            raise ValueError("captured_at must be ISO-8601 UTC")
+        return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class DesktopChannelPromotionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     platform: str = Field(pattern="^(macos|windows|linux)$")
     channel: str = Field(pattern="^(beta|stable)$")
     release_id: str
     expected_generation: Optional[int] = Field(default=None, ge=0)
     expected_current_release_id: Optional[str] = None
     operation: Literal["promote", "repoint"] = "promote"
+    serving_backends: Optional[ServingBackendsObservation] = None
 
 
 class BetaCandidatePromotionRequest(BaseModel):
@@ -606,100 +669,6 @@ def _pick_windows_update_feed_entry(entries: List[Dict], channel: str) -> Option
     return None
 
 
-def _download_landing_html(
-    dmg_url: str, channel: str = "stable", version: str = "", platform: str = "macos", notice: str = ""
-) -> str:
-    """Generate an HTML landing page that auto-triggers the installer download."""
-    channel_label = "Beta " if channel == "beta" else ""
-    version_display = f"v{version}" if version else ""
-    notice_html = f'<p class="notice">{notice}</p>' if notice else ""
-    os_name = "Windows" if platform == "windows" else "macOS"
-    if platform == "windows":
-        install_steps = (
-            "1. Open the downloaded installer (omi-setup.exe)<br>"
-            "2. If Windows SmartScreen appears, click <b>More info</b> &rarr; <b>Run anyway</b><br>"
-            "3. Follow the setup wizard and launch Omi"
-        )
-    else:
-        install_steps = (
-            "1. Open the downloaded .dmg file<br>"
-            "2. Drag Omi to your Applications folder<br>"
-            "3. Launch Omi from Applications"
-        )
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Download Omi {channel_label}for {os_name}</title>
-    <meta http-equiv="refresh" content="2;url={dmg_url}">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-               background: #0a0a0a; color: #fff; display: flex; align-items: center;
-               justify-content: center; min-height: 100vh; text-align: center; }}
-        .container {{ max-width: 960px; padding: 40px 24px; }}
-        h1 {{ font-size: 28px; font-weight: 600; margin-bottom: 12px; }}
-        .version {{ color: #555; font-size: 14px; margin-bottom: 24px; }}
-        .subtitle {{ color: #888; font-size: 16px; margin-bottom: 32px; }}
-        .status {{ width: 40px; height: 40px; margin: 0 auto 24px; position: relative; }}
-        .spinner {{ width: 40px; height: 40px; border: 3px solid #333; border-top-color: #fff;
-                    border-radius: 50%; animation: spin 0.8s linear infinite; }}
-        .checkmark {{ display: none; font-size: 36px; color: #4ade80; }}
-        .done .spinner {{ display: none; }}
-        .done .checkmark {{ display: block; }}
-        .done .subtitle {{ color: #4ade80; }}
-        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
-        .notice {{ color: #fbbf24; font-size: 14px; margin-bottom: 24px; }}
-        .download-link {{ color: #6C8FFF; text-decoration: none; font-size: 15px; }}
-        .download-link:hover {{ text-decoration: underline; }}
-        .video-container {{ margin-top: 32px; border-radius: 12px; overflow: hidden;
-                            background: #151515; display: none; }}
-        .video-container video {{ width: 100%; display: block; }}
-        .video-label {{ color: #888; font-size: 13px; padding: 12px 16px; text-align: center; }}
-        .steps {{ color: #888; font-size: 13px; margin-top: 20px; line-height: 1.8; text-align: left;
-                  background: #151515; border-radius: 12px; padding: 20px 24px; }}
-        .steps b {{ color: #ccc; }}
-        .discord {{ margin-top: 24px; font-size: 14px; color: #888; }}
-        .discord a {{ color: #5865F2; text-decoration: none; }}
-        .discord a:hover {{ text-decoration: underline; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Downloading Omi {channel_label}for {os_name}</h1>
-        <p class="version">{version_display}</p>
-        {notice_html}
-        <p class="subtitle" id="status-text">Your download should start automatically&hellip;</p>
-        <div class="status" id="status-icon">
-            <div class="spinner"></div>
-            <div class="checkmark">&#10003;</div>
-        </div>
-        <p><a class="download-link" href="{dmg_url}">Click here if the download doesn&rsquo;t start</a></p>
-        <div class="video-container" id="demo-video">
-            <video autoplay muted loop playsinline>
-                <source src="https://storage.googleapis.com/omi_macos_updates/omi-demo.mp4" type="video/mp4">
-            </video>
-            <p class="video-label">See how Omi works</p>
-        </div>
-        <div class="steps">
-            <b>Installation steps:</b><br>
-            {install_steps}
-        </div>
-        <p class="discord">Need help? Join our <a href="https://discord.com/invite/8MP3b9ymvx">Discord community</a></p>
-    </div>
-    <script>
-        setTimeout(function() {{
-            window.location.href = "{dmg_url}";
-            document.getElementById("status-icon").classList.add("done");
-            document.getElementById("status-text").textContent = "Download started!";
-            document.getElementById("demo-video").style.display = "block";
-        }}, 2000);
-    </script>
-</body>
-</html>"""
-
-
 def _preview_download_landing_html(manifest: Dict[str, Any]) -> str:
     """Render a public preview landing page from already-validated metadata.
 
@@ -958,7 +927,7 @@ async def download_latest_desktop_release(
             if installer_url:
                 version = entry["version_info"]["version"]
                 return HTMLResponse(
-                    content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
+                    content=download_landing_html(installer_url, channel=channel, version=version, platform=platform)
                 )
         raise HTTPException(status_code=404, detail=f"No installer found for platform {platform}, channel: {channel}")
 
@@ -968,7 +937,7 @@ async def download_latest_desktop_release(
     entry, installer_url = picked
     version = entry["version_info"]["version"]
     return HTMLResponse(
-        content=_download_landing_html(installer_url, channel=channel, version=version, platform=platform)
+        content=download_landing_html(installer_url, channel=channel, version=version, platform=platform)
     )
 
 
@@ -1077,7 +1046,7 @@ async def download_windows_desktop_release(
             f"No {channel} build is published right now &mdash; serving the latest {served_channel} release instead."
         )
     return HTMLResponse(
-        content=_download_landing_html(
+        content=download_landing_html(
             installer_url,
             channel=served_channel,
             version=entry["version_info"]["version"],
@@ -1370,6 +1339,9 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             expected_generation=request.expected_generation,
             expected_current_release_id=request.expected_current_release_id,
             operation=request.operation,
+            serving_backends=(
+                None if request.serving_backends is None else request.serving_backends.model_dump(mode="json")
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -812,10 +812,10 @@ export type OmiBridgeApi = {
    *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
   checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
-  // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
-  // and the ids; progress streams via onMemoriesDeleteProgress.
+  // reload; paced + backed-off). Renderer supplies a fresh token and the ids;
+  // the API base is main-owned config and progress streams via
+  // onMemoriesDeleteProgress.
   memoriesBulkDelete: (args: {
-    baseURL: string
     token: string
     ids: string[]
   }) => Promise<{ deleted: number; failed: number; firstError?: string }>
@@ -1037,6 +1037,8 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   /** Display source containing the foreground window, with cursor/primary fallbacks. */
   rewindCaptureSourceId: () => Promise<string | null>
+  /** Whether Rewind can actually get a screen source right now, and why not. */
+  rewindCaptureDiagnostics: () => Promise<RewindCaptureDiagnostics>
   rewindSaveFrame: (
     data: Uint8Array,
     sourceId: string
@@ -1649,7 +1651,10 @@ export type MainChatEvent =
   /** The run has been accepted and assigned a runId — the first event of a turn.
    *  Carries the runId so the caller can later cancel it via mainChatCancel. */
   | { type: 'accepted'; requestId: string; runId: string }
-  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  /** The managed-cloud adapter wrote the provider command successfully.
+   *  Pre-dispatch owner/binding/session/concurrency failures never emit this. */
+  | { type: 'hosted_request_started'; requestId: string; runId: string }
+  /** A non-dispatch run-lifecycle marker for status UI. */
   | { type: 'status'; requestId: string; runId: string; message: string }
   /** An assistant text chunk; accumulate in order to render the streaming reply. */
   | { type: 'text_delta'; requestId: string; runId: string; text: string }
@@ -2129,6 +2134,19 @@ export type RewindSettings = {
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
   captureQuality: RewindCaptureQuality
+}
+
+/** Whether Rewind can actually get a screen source, and why not — see
+ *  main/rewind/sourceId.ts's getRewindCaptureDiagnostics. Read once on mount
+ *  (mirrors DbRecoveryStatus's "what happened at startup" shape): the
+ *  underlying fetch is cached for the process lifetime, so this is a stable
+ *  launch-time fact, not something that needs a push channel. */
+export type RewindCaptureDiagnostics = {
+  available: boolean
+  reason: string | null
+  /** Linux-only: the dominant real-world cause is a missing/misconfigured
+   *  Wayland desktop-portal ScreenCast backend for the running compositor. */
+  likelyMissingLinuxPortal: boolean
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.

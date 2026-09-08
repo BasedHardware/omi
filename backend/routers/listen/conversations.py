@@ -14,8 +14,10 @@ from models.message_event import ConversationEvent, ConversationSessionEvent, La
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
@@ -39,6 +41,20 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # Per-session recovery bound: spreads a large backlog across sessions instead of
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
+
+
+def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
+    """The onboarding-provenance marker consumed by the daily memory sweep
+    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    onboarding-admission decision (``host.onboarding_session_id``), not
+    ``OnboardingHandler.session_id``: the handler mints its own fallback id
+    whenever none is supplied (utils/onboarding.py), so a Settings speech-
+    profile redo — which runs the same question handler but intentionally
+    clears the runtime's admission id — must not be re-tagged as onboarding
+    provenance just because the handler picked an id for itself.
+    """
+    session_id = getattr(host, 'onboarding_session_id', None)
+    return session_id if isinstance(session_id, str) and len(session_id) >= 16 else None
 
 
 class LiveConversationController:
@@ -145,6 +161,14 @@ class LiveConversationController:
             return True
         return route == 'noop'
 
+    def _should_report_no_audio_teardown(self) -> bool:
+        """Multi-channel session (phone calls today) that never sent a first audio byte."""
+
+        return bool(
+            getattr(self.host, 'is_multi_channel', False)
+            and getattr(self.host.state, 'first_audio_byte_timestamp', None) is None
+        )
+
     async def process_conversation(self, conversation_id: str) -> bool:
         data = await self.host.persistence.call(
             conversations_db.get_conversation,
@@ -159,6 +183,9 @@ class LiveConversationController:
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )
+        # Snapshot before the fenced delete: the outcome is only truthful if the
+        # delete actually wins the race to content, so emit after `deleted`.
+        was_no_audio_session = self._should_report_no_audio_teardown()
         deleted = await self.host.persistence.call(
             lifecycle_service.delete_empty_recording_conversation,
             self.host.request.uid,
@@ -166,6 +193,20 @@ class LiveConversationController:
             recording_session_id,
         )
         if deleted:
+            if was_no_audio_session:
+                # A phone_call that stayed silent for its whole duration must be
+                # distinguishable from a call that was never transcribed at all;
+                # the empty-conversation deletion itself is unchanged.
+                logger.warning(
+                    'Listen session tore down with no audio received source=%s platform=%s',
+                    self.host.request.source,
+                    self.host.client_device_context.platform,
+                )
+                record_listen_audio_outcome(
+                    source=self.host.request.source,
+                    outcome='no_audio_teardown',
+                    platform=self.host.client_device_context.platform,
+                )
             return True
         latest = await self.host.persistence.call(
             conversations_db.get_conversation,
@@ -231,10 +272,9 @@ class LiveConversationController:
             if action == RecordingSessionReconnectAction.resume_current:
                 self.host.state.current_conversation_id = conversation_id
                 # Persist the custom-STT marker on resume so a conversation that
-                # started under normal STT but continues under custom STT (or vice
-                # versa) cannot bypass the Omi-paid LLM cost gate: once any session
-                # was custom-STT, the conversation must not run Omi-paid enrichment
-                # without an LLM BYOK key.
+                # started under normal STT but continues under custom STT keeps
+                # accurate provenance: once any session was custom-STT, the
+                # conversation is marked as such.
                 if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
                     await self.host.persistence.call(
                         conversations_db.update_conversation,
@@ -256,12 +296,11 @@ class LiveConversationController:
 
         context = self.host.client_device_context
         external_data = {'conversation_role': request.conversation_role}
-        onboarding_handler = getattr(self.host, 'onboarding_handler', None)
-        onboarding_session_id = getattr(onboarding_handler, 'session_id', None)
-        if isinstance(onboarding_session_id, str) and len(onboarding_session_id) >= 16:
-            # This marker is generated by the server-side onboarding handler;
-            # request.source and request.onboarding_mode are client input and
-            # are intentionally not used as provenance.
+        onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
+        if onboarding_session_id:
+            # This marker reflects the backend's own onboarding-admission
+            # decision; request.source and request.onboarding_mode are client
+            # input and are intentionally not used as provenance.
             external_data['onboarding_session_id'] = onboarding_session_id
         conversation = Conversation(
             id=conversation_id,
@@ -280,11 +319,15 @@ class LiveConversationController:
             client_device_id=context.client_device_id,
             client_platform=context.platform,
             external_data=external_data,
+            geolocation=request.geolocation,
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
             request.uid,
-            conversation.model_dump(),
+            # The modeled field's None default is omitted, never stamped:
+            # persist is merge=True, so a dumped None would become an
+            # explicit Firestore key on every fresh recording.
+            omit_null_processing_state(conversation.model_dump()),
             idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
         )
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
@@ -307,6 +350,18 @@ class LiveConversationController:
             await self.create_new_in_progress_conversation()
             return None
         if self.host.client_conversation_id:
+            await self.create_new_in_progress_conversation()
+            return None
+        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
+            # A speech-profile recording (onboarding step or Settings redo) is its
+            # own conversation. Attaching to a still-open one from a previous
+            # attempt makes combine_segments() merge the new speech into that
+            # conversation's last segment, and the client then shows the words
+            # from last time as soon as the user starts talking again.
+            # Admission, not the raw request flag, owns this decision: the
+            # runtime refuses onboarding provenance for completed accounts, and
+            # an unadmitted onboarding claim must keep the ordinary session's
+            # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
         existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)

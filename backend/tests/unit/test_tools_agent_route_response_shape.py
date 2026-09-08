@@ -109,6 +109,7 @@ def _install_route_stubs(monkeypatch):
 
     client_mod = types.ModuleType('database._client')
     client_mod.get_firestore_client = MagicMock()
+    client_mod.document_id_from_seed = MagicMock(return_value='test-document-id')
     monkeypatch.setitem(sys.modules, 'database._client', client_mod)
 
     executors_mod = types.ModuleType('utils.executors')

@@ -5,7 +5,6 @@ description: Hermetic dashboard goals create + snapshot via bridge actions
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+CanonicalGoals.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/GoalsWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/GoalsHistoryPage.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalGenerationService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantProtocol.swift

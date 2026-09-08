@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import redis_db
-from llm_gateway.gateway.accounting import vertex_usage_from_response
+from llm_gateway.gateway.accounting import ProviderResponseMetadata, vertex_usage_from_response
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -26,6 +26,7 @@ from utils.http_client import (
 )
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm import desktop_gemini_gateway
+from utils.llm.managed_spend_ledger import DESKTOP_PROXY_CALLER, ManagedAttempt, schedule_managed_attempt
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -34,8 +35,9 @@ from utils.llm.desktop_llm_stub import (
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.managed_compute import Decision, authorize_managed_compute
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_desktop_trial_paywalled
+from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
 
 router = APIRouter()
 
@@ -111,6 +113,14 @@ _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
 _ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
 _ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
+# Provider routes this proxy calls itself. Company-paid traffic that hops the
+# gateway (`llm_gateway`) is already in the ledger under the gateway's own row,
+# so only these direct routes write one here; anything else (stub, unselected)
+# was never a provider attempt.
+_DIRECT_LEDGER_ROUTES = frozenset({'vertex_ai', 'ai_studio', 'ai_studio_byok'})
+# The ledger's provider name for Gemini on every route, matching the gateway's
+# rate cards (`provider: gemini`), so one query covers gateway and direct rows.
+_LEDGER_PROVIDER = 'gemini'
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
@@ -195,6 +205,14 @@ class ProxyTelemetry:
         self.shape = PayloadShape('unknown', 'unknown', 'unknown')
         self.started = time.monotonic()
         self.completed = False
+        # Ledger attribution only. Never written to the log event above. One
+        # invocation per request; one attempt per provider dispatch.
+        self.uid: str | None = None
+        self.payer = 'omi'
+        self.invocation_id = str(uuid4())
+        self.attempts = 0
+        self._pending_attempt: str | None = None
+        self.provider_metadata: ProviderResponseMetadata | None = None
 
     def set_route(self, route: UpstreamRoute) -> None:
         self.provider = route.provider
@@ -208,6 +226,8 @@ class ProxyTelemetry:
             self.traffic_type = metadata.traffic_type
         if metadata.usage is None:
             return
+        # Streaming chunks carry cumulative counts; the latest block wins.
+        self.provider_metadata = metadata
         usage = metadata.usage
         self.prompt_token_count = usage.prompt_tokens
         self.candidates_token_count = usage.output_tokens
@@ -275,6 +295,60 @@ class ProxyTelemetry:
         # URLs, headers, tokens, raw exceptions, and upstream response bodies.
         sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
         sys.stdout.flush()
+        self.record_attempt(*_canonical_outcome(outcome))
+
+    def note_dispatch(self, route: UpstreamRoute) -> None:
+        """A provider request is about to leave for `route`. Only these become ledger rows.
+
+        Anything that fails before a dispatch (validation, credentials, routing)
+        was never a provider attempt and writes nothing.
+        """
+        if route.provider not in _DIRECT_LEDGER_ROUTES:
+            return
+        self.attempts += 1
+        self._pending_attempt = route.provider
+        self.provider_metadata = None
+
+    def record_attempt(self, outcome: str, error_class: str) -> None:
+        """Close the pending provider attempt with one ledger row, best-effort.
+
+        Overflow recovery calls this for each attempt that failed before moving
+        to the next route; `complete()` closes the last one. Gateway-routed and
+        stub traffic never dispatch here (the gateway writes its own row).
+        """
+        route = self._pending_attempt
+        self._pending_attempt = None
+        if route is None or not self.uid:
+            return
+        schedule_managed_attempt(
+            ManagedAttempt(
+                request_id=self.request_id,
+                caller=DESKTOP_PROXY_CALLER,
+                user_uid=self.uid,
+                feature=desktop_gemini_gateway.DESKTOP_GATEWAY_FEATURE,
+                api_surface=f'gemini_{self.action}' if self.action in _ALLOWED_ACTIONS else 'gemini_unknown',
+                payer=self.payer,
+                provider=_LEDGER_PROVIDER,
+                configured_model=self.model,
+                outcome=outcome,
+                error_class=error_class,
+                route_artifact_id=f'{DESKTOP_PROXY_CALLER}.{route}',
+                metadata=self.provider_metadata,
+                invocation_id=self.invocation_id,
+                ordinal=self.attempts,
+                retry_ordinal=self.attempts,
+                fallback_reason='overflow_recovery' if self.attempts > 1 else None,
+            )
+        )
+
+
+def _canonical_outcome(outcome: str) -> tuple[str, str]:
+    """Telemetry outcomes → the ledger's `success | error | cancelled` with the detail as error_class."""
+    if outcome == 'success':
+        return 'success', 'none'
+    if outcome == 'client_cancelled':
+        return 'cancelled', 'client_cancelled'
+    return 'error', outcome
 
 
 def _safe_revision(value: object) -> str:
@@ -957,12 +1031,23 @@ def _stream_error_event(*, code: str, phase: str, telemetry: ProxyTelemetry) -> 
 class _StreamingUsageObserver:
     """Incrementally inspect SSE data fields without retaining response content."""
 
+    # A single SSE event larger than this is not a usage event; stop observing
+    # the response rather than retaining provider content or re-scanning it.
+    MAX_EVENT_BYTES = 1024 * 1024
+
     def __init__(self, telemetry: ProxyTelemetry) -> None:
         self.telemetry = telemetry
         self.buffer = bytearray()
+        self.disabled = False
 
     def feed(self, chunk: bytes) -> None:
+        if self.disabled:
+            return
         self.buffer.extend(chunk)
+        if len(self.buffer) > self.MAX_EVENT_BYTES:
+            self.buffer = bytearray()
+            self.disabled = True
+            return
         self.buffer = bytearray(bytes(self.buffer).replace(b'\r\n', b'\n'))
         while b'\n\n' in self.buffer:
             event, _, remainder = self.buffer.partition(b'\n\n')
@@ -970,6 +1055,8 @@ class _StreamingUsageObserver:
             self._observe_event(bytes(event))
 
     def finish(self) -> None:
+        if self.disabled:
+            return
         if self.buffer:
             self._observe_event(bytes(self.buffer))
             self.buffer.clear()
@@ -1006,6 +1093,7 @@ async def _stream_provider(
         await _acquire_provider_slot(semaphore)
         try:
             telemetry.phase = 'connect'
+            telemetry.note_dispatch(attempt_route)
             context = client.stream(
                 'POST',
                 attempt_route.url,
@@ -1045,6 +1133,8 @@ async def _stream_provider(
             exhausted = _overflow_triggered(upstream.status_code, upstream.text)
             if capacity == ptr.REQUEST_TYPE_DEDICATED and not unavailable:
                 _record_pt_target_observation(not exhausted)
+            # This dispatch is over; record it before recovery routing can fail.
+            telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             if not pending and query is not None:
                 for overflow_model, overflow_capacity in _recovery_plan(
                     attempt_model, upstream.status_code, upstream.text
@@ -1181,6 +1271,15 @@ def _proxy_client_kind(request: Request) -> ClientKind:
     return resolve_client_kind_from_headers(request.headers)
 
 
+def _attempt_error_class(status_code: int, body: str) -> str:
+    """Why a direct provider attempt failed, for the ledger's bounded error_class."""
+    if ptr.is_model_unavailable(status_code, body):
+        return 'model_unavailable'
+    if _overflow_triggered(status_code, body):
+        return 'provider_capacity'
+    return _proxy_issue_class(status_code)
+
+
 def _proxy_issue_class(status_code: int) -> str:
     if status_code in {408, 504}:
         return 'upstream_timeout'
@@ -1286,6 +1385,8 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
 
 async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: str) -> Response:
     telemetry = ProxyTelemetry(request, streaming=streaming)
+    telemetry.uid = uid
+    telemetry.payer = 'byok' if get_byok_key('gemini') else 'omi'
     try:
         body = await _read_request_body(request)
         telemetry.shape = _payload_shape(body)
@@ -1371,6 +1472,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                 await _acquire_provider_slot(semaphore)
                 try:
                     telemetry.phase = 'connect'
+                    telemetry.note_dispatch(attempt_route)
                     return await client.post(
                         attempt_route.url,
                         params=attempt_route.params,
@@ -1387,6 +1489,9 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             if recovery:
                 query = dict(request.query_params)
                 for overflow_model, capacity in recovery:
+                    # The attempt that just came back full or unavailable is
+                    # its own ledger row before anything else can fail.
+                    telemetry.record_attempt('error', _attempt_error_class(response.status_code, response.text))
                     overflow_path = f'models/{overflow_model}:{action}'
                     overflow_route = await _upstream(
                         overflow_path, overflow_model, action, query, request_type=capacity
@@ -1518,11 +1623,57 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
     return uid
 
 
+# Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
+# screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
+# Gemini BYOK key satisfies authorize_managed_compute. embedContent stays ungated
+# here (TBD-4 / S24). desktop_proactivity completions are the JIT/context-bucket
+# lane and are intentionally not gated in this shard — a blanket 402 there would
+# kill the ambient nano triage (S24) and the shipped completion lane
+# (test_legacy_clients_are_not_gated_by_jit_rollout).
+_PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+_PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
+
+
+def _plan_gate_detail(decision: Decision) -> dict[str, str]:
+    plan_type = decision.plan.value if decision.plan is not None else 'basic'
+    return {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+
+
+async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
+    try:
+        _, _, action = _path_parts(path)
+    except HTTPException:
+        return
+    if action not in _PLAN_GATED_PROXY_ACTIONS:
+        return
+    # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
+    # this fixed non-human Free-plan UID to prove the Gemini provider path.
+    # Gating it 402s every desktop-backend auto-dev promotion (seen on
+    # 9cbe134a3c / #12839: `gemini_proxy: HTTP 402 (untyped)`).
+    if uid == RELEASE_PROBE_UID:
+        return
+    funding_owner = 'byok' if get_byok_key('gemini') else 'omi'
+    decision = await run_blocking(
+        db_executor,
+        authorize_managed_compute,
+        uid,
+        _PLAN_GATED_PROXY_FEATURE,
+        funding_owner,
+    )
+    if decision.allowed:
+        return
+    if decision.reason == 'authorization_unavailable':
+        raise HTTPException(status_code=503, detail='plan authorization is temporarily unavailable')
+    raise HTTPException(status_code=402, detail=_plan_gate_detail(decision))
+
+
 @router.post('/v1/proxy/gemini/{path:path}')
 async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, False, uid)
 
 
 @router.post('/v1/proxy/gemini-stream/{path:path}')
 async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
+    await _enforce_managed_plan_gate(uid, path)
     return await _proxy(request, path, True, uid)

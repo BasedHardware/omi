@@ -33,7 +33,7 @@ final class AgentCompletionVoiceDelivery {
 
   private let isVoiceSessionLive: @MainActor () -> Bool
   private let peekDelta: @MainActor () async -> Delta?
-  private let injectContext: @MainActor (String) async -> Bool
+  private let injectContext: @MainActor (String) async -> RealtimeBackgroundContextDeliveryResult
   private let acknowledge: @MainActor (Delta) -> Void
   private let scheduleWork: @MainActor (@escaping @MainActor () async -> Void) -> Void
 
@@ -51,7 +51,7 @@ final class AgentCompletionVoiceDelivery {
   init(
     isVoiceSessionLive: (@MainActor () -> Bool)? = nil,
     peekDelta: (@MainActor () async -> Delta?)? = nil,
-    injectContext: (@MainActor (String) async -> Bool)? = nil,
+    injectContext: (@MainActor (String) async -> RealtimeBackgroundContextDeliveryResult)? = nil,
     acknowledge: (@MainActor (Delta) -> Void)? = nil,
     scheduleWork: (@MainActor (@escaping @MainActor () async -> Void) -> Void)? = nil,
     hasStarted: Bool = false
@@ -157,11 +157,16 @@ final class AgentCompletionVoiceDelivery {
     }
     guard isVoiceSessionLive() else { return }
     guard let delta = await peekDelta() else { return }
-    guard await injectContext(delta.prompt) else {
+    switch await injectContext(delta.prompt) {
+    case .retry:
       log("AgentCompletionVoiceDelivery: completion context not delivered; checkpoint unadvanced")
       return
+    case .unsupported:
+      acknowledge(delta)
+      log("AgentCompletionVoiceDelivery: provider has no safe background-context role; completion stays tool-backed")
+    case .delivered:
+      acknowledge(delta)
+      log("AgentCompletionVoiceDelivery: delivered \(delta.ids.count) completion(s) to live voice session")
     }
-    acknowledge(delta)
-    log("AgentCompletionVoiceDelivery: delivered \(delta.ids.count) completion(s) to live voice session")
   }
 }

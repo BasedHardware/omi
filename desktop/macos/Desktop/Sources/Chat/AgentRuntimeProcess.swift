@@ -2,8 +2,7 @@ import Foundation
 import OmiSupport
 
 extension Notification.Name {
-  /// Posted on MainActor after the runtime handshake makes direct control
-  /// tools admissible. Carries no owner id or request content.
+  /// Posted on MainActor after the runtime handshake makes direct control tools admissible.
   static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
 }
 
@@ -1065,6 +1064,7 @@ actor AgentRuntimeProcess {
     sessionID: String,
     turnID: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
     guard
@@ -1107,6 +1107,7 @@ actor AgentRuntimeProcess {
         sessionId: sessionID,
         turnId: turnID,
         prompt: prompt,
+        promptIsSynthetic: promptIsSynthetic,
         mode: mode
       ),
       expectedKind: .externalSurfaceRunBeginResult,
@@ -1202,6 +1203,7 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String? = nil,
     errorCode: String? = nil,
     transitionCleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async throws -> ExternalSurfaceRunCompletion {
@@ -1246,6 +1248,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         binding: binding,
         terminalStatus: terminalStatus,
+        finalText: finalText,
         errorCode: errorCode
       ),
       expectedKind: .externalSurfaceRunCompleteResult,
@@ -1271,7 +1274,9 @@ actor AgentRuntimeProcess {
       runID: binding.runID,
       attemptID: binding.attemptID,
       terminalStatus: confirmedStatus,
-      duplicate: result["duplicate"] as? Bool ?? false
+      duplicate: result["duplicate"] as? Bool ?? false,
+      finalTextPersisted: result["finalTextPersisted"] as? Bool ?? false,
+      journalMaterialized: result["journalMaterialized"] as? Bool ?? false
     )
   }
 
@@ -1478,6 +1483,7 @@ actor AgentRuntimeProcess {
     sessionId: String,
     turnId: String,
     prompt: String,
+    promptIsSynthetic: Bool = false,
     mode: ExternalSurfaceRunMode
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1489,6 +1495,7 @@ actor AgentRuntimeProcess {
     message["sessionId"] = sessionId
     message["turnId"] = turnId
     message["prompt"] = prompt
+    if promptIsSynthetic { message["promptIsSynthetic"] = true }
     message["mode"] = mode.rawValue
     return message
   }
@@ -1521,6 +1528,7 @@ actor AgentRuntimeProcess {
     requestId: String,
     binding: ExternalSurfaceRunBinding,
     terminalStatus: ExternalSurfaceRunTerminalStatus,
+    finalText: String?,
     errorCode: String?
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1533,6 +1541,8 @@ actor AgentRuntimeProcess {
     message["runId"] = binding.runID
     message["attemptId"] = binding.attemptID
     message["terminalStatus"] = terminalStatus.rawValue
+    // Trimmed, not just non-empty; see ExternalSurfaceRunAnswer for why.
+    if let finalText = ExternalSurfaceRunAnswer.normalized(finalText) { message["finalText"] = finalText }
     if let errorCode, !errorCode.isEmpty { message["errorCode"] = errorCode }
     return message
   }
@@ -1550,6 +1560,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     jitKnowledgeToolsEnabled: Bool = false
   ) -> [String: Any] {
     var message = protocolEnvelope(
@@ -1566,6 +1578,10 @@ actor AgentRuntimeProcess {
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
+    if let jitBudget { message["jitBudget"] = jitBudget.wireDictionary }
+    if let jitCostEvidenceProjection {
+      message["jitCostEvidenceProjection"] = jitCostEvidenceProjection.value
+    }
     // UX gate only: the backend independently re-checks JIT entitlement on
     // every /v1/agent/execute-tool call. Omitted (not `false`) when the
     // rollout verdict isn't `enabled`, matching how the runtime treats an
@@ -2354,6 +2370,8 @@ actor AgentRuntimeProcess {
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -2405,6 +2423,8 @@ actor AgentRuntimeProcess {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
         jitKnowledgeToolsEnabled: jitKnowledgeToolsEnabled
       )
       sendJson(queryDict)
@@ -2665,6 +2685,27 @@ actor AgentRuntimeProcess {
       env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
       env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
+
+    // User-managed local skills and MCP servers (~/.omi). Skills re-read per
+    // turn for the prompt catalog, but the pi-mono extension registers its MCP
+    // proxy tools once per spawn, so a file change reaches chat through the
+    // ChatProvider respawn on .omiUserMcpDidChange (debounced, never mid-turn).
+    // The OAuth refresh is unawaited: a stale token costs one server a 401
+    // (fail-open), and its write notifies, so the refreshed token applies
+    // without waiting for the next session.
+    env["OMI_USER_SKILLS_DIR"] = LocalSkillsStore.rootURL.path
+    // The disabled toggle must bind the tools too, not just the prompt catalog:
+    // load_skill/search_skills refuse names on this list.
+    if let disabledSkillsEnv = ChatProvider.disabledSkillsRuntimeEnvValue() {
+      env["OMI_DISABLED_SKILLS"] = disabledSkillsEnv
+    } else {
+      env.removeValue(forKey: "OMI_DISABLED_SKILLS")
+    }
+    // Skills dropped by hand never run the UI save path, so the ACP lane's
+    // plugin gate would silently miss them; write the manifest before spawn.
+    LocalSkillsStore.ensurePluginManifestIfSkillsExist()
+    env["OMI_LOCAL_MCP_FILE"] = LocalMcpStore.fileURL.path
+    Task { await LocalMcpStore.refreshExpiredTokens() }
 
     try assertStartupAuthority(
       authorizationSnapshot,
@@ -3692,8 +3733,9 @@ actor AgentRuntimeProcess {
         suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
         materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
         materializationReceipts: Self.chatFirstMaterializationReceipts(
-          from: message.payload["materializationReceipts"]
-        ),
+          from: message.payload["materializationReceipts"]),
+        materializationRejections: Self.chatFirstRejections(from: message.payload["materializationRejections"]),
+        materializationDeferrals: Self.chatFirstDeferrals(from: message.payload["materializationDeferrals"]),
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
         ),
@@ -3983,7 +4025,7 @@ actor AgentRuntimeProcess {
         journalRequest.continuation.resume(throwing: BridgeError.authMissing)
         return
       }
-      log("AgentRuntimeProcess: journal operation failed (code-only)")
+      log(Self.chatFirstJournalFailureLog(failure: failure, payload: message.payload, raw: raw))
       journalRequest.continuation.resume(
         throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
       )
@@ -4017,32 +4059,6 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: agent error (raw): \(raw)")
     }
     request.continuation.resume(throwing: bridgeError)
-  }
-
-  private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
-    let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? ""
-    let adapterSessionId = payload["adapterSessionId"] as? String
-    return AgentBridge.QueryResult(
-      text: payload["text"] as? String ?? "",
-      costUsd: payload["costUsd"] as? Double ?? 0,
-      omiSessionId: omiSessionId,
-      runId: payload["runId"] as? String ?? "",
-      attemptId: payload["attemptId"] as? String ?? "",
-      adapterSessionId: adapterSessionId,
-      terminalStatus: payload["terminalStatus"] as? String,
-      failure: AgentRuntimeFailure.parse(from: payload["failure"]),
-      inputTokens: payload["inputTokens"] as? Int ?? 0,
-      outputTokens: payload["outputTokens"] as? Int ?? 0,
-      cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
-      artifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
-      ),
-      completionDeltaArtifacts: AgentArtifactProjection.parseList(
-        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
-      )
-    )
   }
 
   @discardableResult

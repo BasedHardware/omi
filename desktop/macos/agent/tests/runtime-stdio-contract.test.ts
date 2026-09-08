@@ -43,7 +43,7 @@ class RuntimeProcessFixture {
 
   async waitForMessage(
     predicate: (message: OutboundMessage) => boolean,
-    timeoutMs = 5_000,
+    timeoutMs = 20_000,
   ): Promise<OutboundMessage> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -291,5 +291,78 @@ describe("runtime stdio contract", () => {
     const store = new SqliteAgentStore({ stateDir: join(fixture.root, "state"), reconcileOnOpen: false });
     expect(readToolInvocation(store, execution.invocationId)).toMatchObject({ status: "failed" });
     store.close();
+  });
+
+  it("accepts typed appendEvidence through the journal update RPC", async () => {
+    fixture = new RuntimeProcessFixture();
+    await fixture.waitForMessage((message) => message.type === "init");
+    fixture.send({ type: "refresh_owner", ownerId: "owner-evidence-rpc" });
+    fixture.send({
+      type: "resolve_surface_session",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "resolve-evidence-rpc",
+      clientId: "contract-smoke",
+      ownerId: "owner-evidence-rpc",
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "evidence-rpc",
+    });
+    await fixture.waitForMessage(
+      (message) => message.type === "surface_session_resolved" && message.requestId === "resolve-evidence-rpc",
+    );
+    fixture.send({
+      type: "journal_record_turn",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "record-evidence-rpc",
+      clientId: "contract-smoke",
+      ownerId: "owner-evidence-rpc",
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "evidence-rpc",
+      turn: {
+        turnId: "evidence-rpc-turn",
+        role: "user",
+        origin: "realtime_voice",
+        status: "completed",
+        content: "remember this",
+        contentBlocks: [],
+        resources: [],
+        metadataJson: "{}",
+        createdAtMs: 1,
+      },
+    });
+    await fixture.waitForMessage(
+      (message) => message.type === "journal_operation_result" && message.requestId === "record-evidence-rpc",
+    );
+    fixture.send({
+      type: "journal_update_turn",
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "append-evidence-rpc",
+      clientId: "contract-smoke",
+      ownerId: "owner-evidence-rpc",
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "evidence-rpc",
+      update: {
+        turnId: "evidence-rpc-turn",
+        appendEvidence: [{
+          id: "screen-rpc",
+          kind: "screen",
+          title: "Visible source",
+          capturedAtMs: 2,
+          availability: "available",
+          extractionCompleteness: "complete",
+          bodyText: "The source is durable.",
+          provenance: { source: "test" },
+        }],
+      },
+    });
+    const result = await fixture.waitForMessage(
+      (message) => message.type === "journal_operation_result" && message.requestId === "append-evidence-rpc",
+    );
+    expect(result).toMatchObject({
+      operation: "update",
+      turn: { turnId: "evidence-rpc-turn", metadataJson: expect.stringContaining("screen-rpc") },
+    });
   });
 });

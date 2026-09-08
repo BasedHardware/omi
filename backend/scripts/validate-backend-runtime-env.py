@@ -19,6 +19,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
+from scripts.runtime_env_capability_contracts import validate_conversation_finalization_capabilities  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (  # noqa: E402
     _fetch_live_cloud_run_state,
@@ -74,6 +75,7 @@ __all__ = [
     'subprocess',
     'ValidationError',
     'validate_parakeet_admission_contract',
+    'validate_conversation_finalization_capabilities',
     'validate_retired_memory_manifest',
     'validate_runtime_env',
     '_as_config_dict',

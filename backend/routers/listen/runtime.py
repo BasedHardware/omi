@@ -80,11 +80,21 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
+from utils.observability.transcription import record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 FREEMIUM_THRESHOLD_SECONDS = 180
+
+
+def should_emit_plus_meter_warning(subscription: Any) -> bool:
+    """S18: the listen threshold event is the Plus (1,500-min) meter warning only.
+
+    Basic no longer enters on-device through this event (S17). Inactive or
+    missing subscriptions must not emit it.
+    """
+    return getattr(subscription, 'plan', None) == PlanType.plus
 
 
 def _account_deletion_blocks_owner_persistence(uid: str) -> bool:
@@ -117,6 +127,7 @@ class ListenSessionRuntime:
             request.websocket.headers
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
+        record_listen_session_accepted(source=request.source, platform=self.client_device_context.platform)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
@@ -312,7 +323,31 @@ class ListenSessionRuntime:
         # onboarding state more than the admission TTL ago — or never calls
         # the state endpoint at all — still gets a server-owned session, while
         # completed accounts can never re-enter onboarding provenance.
-        if request.onboarding_mode:
+        speech_profile_redo_admitted = False
+        if request.onboarding_mode and request.speech_profile_redo:
+            # Re-recording an existing speech profile from Settings does not
+            # claim onboarding provenance, so it never touches the completed-
+            # account gate above — every account, onboarded or not, can always
+            # redo their profile. The client flag alone is only a hint: the
+            # redo is proven from durable state, an actually persisted speech
+            # profile. Without one the claim falls through to the provenance
+            # admission below, so a query parameter cannot mint the bypass.
+            # OnboardingHandler mints its own session id (see
+            # utils/onboarding.py) when none is supplied, and explicitly
+            # clearing onboarding_session_id here keeps any resulting
+            # conversation untagged as onboarding-provenance.
+            try:
+                has_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            except Exception as error:
+                # Fail closed: an unverifiable redo claim is treated as a
+                # plain onboarding request and judged by the gate below.
+                logger.warning('Speech profile redo check failed type=%s', type(error).__name__)
+                has_profile = False
+            if has_profile:
+                self.onboarding_admitted = True
+                self.onboarding_session_id = None
+                speech_profile_redo_admitted = True
+        if request.onboarding_mode and not speech_profile_redo_admitted:
             try:
                 admitted = await run_blocking(db_executor, user_db.ensure_backend_onboarding_admission, request.uid)
             except Exception as error:
@@ -332,9 +367,11 @@ class ListenSessionRuntime:
             request.onboarding_mode,
             base.transcription_prefs.get('single_language_mode', False),
         )
+        # Retained so a mid-session failover reselects under the same language policy.
+        self.multi_lang_enabled = not single_language_mode
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
-            multi_lang_enabled=not single_language_mode,
+            multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
@@ -397,13 +434,15 @@ class ListenSessionRuntime:
         self._build_components()
         if not self.user_has_credits:
             try:
-                await send_credit_limit_notification(request.uid)
-                await request.websocket.send_json(
-                    FreemiumThresholdReachedEvent(
-                        remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
-                    ).to_json()
-                )
-                self.state.freemium_threshold_sent = True
+                subscription = await self.persistence.call(user_db.get_user_valid_subscription, request.uid)
+                if should_emit_plus_meter_warning(subscription):
+                    await send_credit_limit_notification(request.uid)
+                    await request.websocket.send_json(
+                        FreemiumThresholdReachedEvent(
+                            remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                        ).to_json()
+                    )
+                    self.state.freemium_threshold_sent = True
             except Exception as error:
                 logger.error('Credit-limit notification failed type=%s', type(error).__name__)
         if FAIR_USE_ENABLED:
@@ -528,19 +567,22 @@ class ListenSessionRuntime:
         elif self.state.remaining_seconds_cache is not None and transcription_seconds > 0:
             self.state.remaining_seconds_cache = max(0, self.state.remaining_seconds_cache - transcription_seconds)
         remaining = self.state.remaining_seconds_cache
+        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
-            await self.asend_event(
-                FreemiumThresholdReachedEvent(remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT)
-            )
-            self.state.freemium_threshold_sent = True
-            try:
-                await send_credit_limit_notification(self.request.uid)
-            except Exception as error:
-                logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
+            if should_emit_plus_meter_warning(subscription):
+                await self.asend_event(
+                    FreemiumThresholdReachedEvent(
+                        remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                    )
+                )
+                self.state.freemium_threshold_sent = True
+                try:
+                    await send_credit_limit_notification(self.request.uid)
+                except Exception as error:
+                    logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
         self.user_has_credits = remaining is None or remaining > 0
         if self.user_has_credits and (remaining is None or remaining > FREEMIUM_THRESHOLD_SECONDS):
             self.state.freemium_threshold_sent = False
-        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if not subscription or subscription.plan == PlanType.basic:
             last_words = self.state.last_transcript_time or self.state.first_audio_byte_timestamp
             if (

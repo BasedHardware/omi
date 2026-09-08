@@ -1871,9 +1871,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openSettings => 'அமைப்புகளைத் திறக்கவும்';
 
   @override
-  String get wantDifferentName => 'வேறு ஒன்றால் செல்ல விரும்புகிறீர்களா?';
-
-  @override
   String get whatsYourName => 'உங்கள் பெயர் என்ன?';
 
   @override
@@ -2054,7 +2051,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryDeleted => 'பதிவு நீக்கப்பட்டுள்ளது.';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial =>
+      'நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.';
 
   @override
   String get undo => 'மறுசெய்க';
@@ -9914,12 +9912,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get accountCutoverOpenStore => 'स्टोर खोलें';
 
   @override
-  String get chatScopeToday => 'இன்று';
-
-  @override
-  String get chatScopeThisWeek => 'இந்த வாரம்';
-
-  @override
   String chatScopeAbout(String title) {
     return '$title பற்றி';
   }
@@ -9983,4 +9975,78 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get pendantFullSyncBlocked =>
       'Pendant-இன் சேமிப்பகம் நிரம்பிவிட்டது, அது இன்னும் பதிவு பயன்முறையில் உள்ளது, எனவே சேமிக்கப்பட்ட ஆடியோவை மாற்ற முடியாது. பதிவை நிறுத்த Pendant-இன் பொத்தானை அழுத்தி, பின்னர் மீண்டும் ஒத்திசைக்கவும்.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'பதிவு செய்யப்படவில்லை ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name இன் குரல் சுயவிவரம்';
+  }
+
+  @override
+  String get play => 'இயக்கு';
+
+  @override
+  String get redo => 'மீண்டும் பதிவு செய்';
+
+  @override
+  String get answerWithYourVoice => 'உங்கள் குரலில் பதிலளிக்கவும்:';
+
+  @override
+  String get speechProfileTopicLocation => 'நீங்கள் எங்கு வசிக்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicWork => 'நீங்கள் என்ன வேலை செய்கிறீர்கள்?';
+
+  @override
+  String get speechProfileTopicGoal => 'உங்கள் நீண்டகால இலக்கு என்ன?';
+
+  @override
+  String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
+
+  @override
+  String get tapPlusToStartRecording => 'பதிவைத் தொடங்க + ஐத் தட்டவும்';
+
+  @override
+  String get chatBlockTask => 'பணி';
+
+  @override
+  String get chatBlockGoal => 'இலக்கு';
+
+  @override
+  String get chatBlockConversation => 'உரையாடல்';
+
+  @override
+  String get chatBlockMemory => 'நினைவு';
+
+  @override
+  String get chatBlockQuestion => 'கேள்வி';
+
+  @override
+  String get chatBlockOpenInGoals => 'இலக்குகளில் திறக்க';
+
+  @override
+  String get chatBlockOpenConversation => 'உரையாடலைத் திறக்க';
+
+  @override
+  String get chatBlockOpenInMemories => 'நினைவுகளில் திறக்க';
+
+  @override
+  String get chatBlockUnavailable => 'இனி கிடைக்கவில்லை';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'பரிந்துரைக்கப்பட்ட அடுத்த படிகள்';
+
+  @override
+  String get couldNotLoadMemories => 'நினைவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'அறிவு வரைபடத்தை ஏற்ற முடியவில்லை';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
 }

@@ -9,12 +9,14 @@ private actor OwnerBoundaryExternalRunProbe {
   private var closed = false
   private var observedOwnerID: String?
   private var observedStatus: ExternalSurfaceRunTerminalStatus?
+  private var observedFinalText: String?
   private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
   private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
 
   func terminalize(
     binding: ExternalSurfaceRunBinding,
     status: ExternalSurfaceRunTerminalStatus,
+    finalText: String?,
     capability: RuntimeOwnerTransitionCleanupCapability?
   ) async throws {
     guard let capability,
@@ -26,6 +28,7 @@ private actor OwnerBoundaryExternalRunProbe {
     }
     observedOwnerID = binding.ownerID
     observedStatus = status
+    observedFinalText = finalText
     entered = true
     let waiters = enteredWaiters
     enteredWaiters.removeAll()
@@ -59,8 +62,10 @@ private actor OwnerBoundaryExternalRunProbe {
     waiters.forEach { $0.resume() }
   }
 
-  func snapshot() -> (closed: Bool, ownerID: String?, status: ExternalSurfaceRunTerminalStatus?) {
-    (closed, observedOwnerID, observedStatus)
+  func snapshot() -> (
+    closed: Bool, ownerID: String?, status: ExternalSurfaceRunTerminalStatus?, finalText: String?
+  ) {
+    (closed, observedOwnerID, observedStatus, observedFinalText)
   }
 }
 
@@ -265,11 +270,13 @@ final class PushToTalkStateMachineTests: XCTestCase {
           captureID: VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)))
       hub.installOwnerBoundaryExternalRunFixture(
         ownerID: "owner-a",
-        turnID: turnID
-      ) { binding, status, _, capability in
+        turnID: turnID,
+        finalText: "Answer captured before UI cleanup."
+      ) { binding, status, finalText, _, capability in
         try await probe.terminalize(
           binding: binding,
           status: status,
+          finalText: finalText,
           capability: capability)
       }
 
@@ -293,6 +300,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       XCTAssertTrue(terminal.closed)
       XCTAssertEqual(terminal.ownerID, "owner-a")
       XCTAssertEqual(terminal.status, .cancelled)
+      XCTAssertEqual(terminal.finalText, "Answer captured before UI cleanup.")
       XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-b")
       XCTAssertEqual(VoiceTurnCoordinator.shared.model.lastTerminal?.reason, .ownerChanged)
       assertHubOwnerBoundaryIsEmpty(hub.ownerBoundarySnapshot)

@@ -22,6 +22,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
 | `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
 | `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads |
+| `conversation_duration.json` | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records |
 
 ## Conformance suites
 
@@ -30,7 +31,7 @@ cross-platform decision instead of a single-platform drive-by.
 | Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py` | Backend unit suite and Desktop Backend Contracts CI |
 | Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
 | Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Task/day adapter remains pending. | Desktop Swift CI |
+| macOS desktop | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter remains pending. | Desktop Swift CI |
 | Web app | `web/app/src/lib/__tests__/knowledgeLedger.test.ts` | `web/app/test.sh`, CI Web App checks |
 
 The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,
@@ -84,6 +85,24 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
+5. JIT empty watchlist. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
+   `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
+   routes a complete *empty* watchlist to the bounded ambient lane (owner decision
+   2026-09-01: an account with no standing trigger must not go silent). Windows
+   (`desktop/windows/src/shared/jitTriggerRuntime.ts`, `desktop/windows/src/main/jit/jitRuntime.ts`)
+   still returns `none` and suppresses `empty_watchlist`; its ambient lane is
+   caller-controlled and not wired. The beta cohort is macOS-only and the Windows JIT
+   client floor is unmet, so the losing platform is Windows and must adopt the macOS
+   behavior before any Windows cohort activates (JIT decision 19).
+6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
+   vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS
+   (`ServerConversation.durationInSeconds`) validate each segment — empty text,
+   non-finite `start`/`end`, and `end < start` are ignored, and a wall window that
+   ends before it starts clamps to 0 — while the Flutter
+   `ServerConversation.getDurationInSeconds` takes the raw maximum `end` over every
+   segment and returns a negative wall duration unclamped. The losing platform is
+   Flutter; converging it means changing `app/lib/backend/schema/conversation.dart`
+   and adding the malformed vectors to the fixture in the same PR.
 
 ## Adding or changing a case
 

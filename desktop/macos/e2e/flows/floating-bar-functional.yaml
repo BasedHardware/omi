@@ -4,12 +4,21 @@ tier: 2
 description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/FirstRealAppCardPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/FirstRealApp/AnalyticsManager+FirstRealAppCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCard.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextReminders/ContextReminderStore.swift
   - desktop/macos/Desktop/Sources/Chat/AgentCompletionVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationCardLead.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarNotificationJournalCopy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
+  # Where the notch's own agent-exit routing decision lives.
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
@@ -22,6 +31,20 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectClassificationDelivery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectAttention.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectCopyBudget.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayDuration.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectDisplayTimer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectFeature.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectGraceWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyHint.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectReplyWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectSuggestionFeedbackStore.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectVoiceFeedbackRouting.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientFeedback.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift

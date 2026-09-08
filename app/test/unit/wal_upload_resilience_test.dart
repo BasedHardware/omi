@@ -89,7 +89,7 @@ void main() {
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
           throw uploadFailure;
         },
         fairUseStatusLoader: () async => {'stage': 'none'},

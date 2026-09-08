@@ -13,7 +13,7 @@ import XCTest
 /// 1. The composer bound a `@State` on `QueryShellHome` while `ChatProvider.draftText` — what
 ///    persistence restores, what a send clears and what the automation bridge's `set_chat_drafts`
 ///    writes — went somewhere nothing rendered. `chat_drafts_snapshot` reported a draft stored and
-///    the bar went on showing `Ask a follow-up…`, so every harness assertion made through the bridge
+///    the bar went on showing its placeholder, so every harness assertion made through the bridge
 ///    was an assertion about a dead variable.
 /// 2. It was an `NSTextField`. A pasted three-line block was stored in full and drawn as its last
 ///    line, a long question scrolled its own beginning out of view, and Shift-⏎ did nothing.
@@ -297,6 +297,26 @@ final class QueryComposerTests: XCTestCase {
     XCTAssertEqual(QueryShellSubmit.resolve(text: "  "), .none)
   }
 
+  func testSendStopAndStoppingKeepTheDraftAndComposerGeometry() throws {
+    for mode in [QueryShellMode.answer, .results] {
+      let composer = try Composer(mode: mode)
+      defer { composer.tearDown() }
+      composer.type("A draft for the next question\nwith a second line")
+      let draft = composer.visibleText
+      let height = composer.barHeight
+      composer.surface.isWorking = true
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+      composer.surface.isStopping = true
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+      composer.surface.isStopping = false
+      composer.surface.isWorking = false
+      XCTAssertEqual(composer.visibleText, draft)
+      XCTAssertEqual(composer.barHeight, height, accuracy: 0.5)
+    }
+  }
+
   // MARK: - Harness
 
   /// The real `QueryHeroBar` over the real `ChatComposerDraft`, in a window, with the `NSTextView`
@@ -468,7 +488,8 @@ final class QueryComposerTests: XCTestCase {
         QueryHeroBar(
           text: draft,
           caretClaim: surface.caretClaims,
-          isWorking: false,
+          isWorking: surface.isWorking,
+          isStopping: surface.isStopping,
           mode: mode,
           onAsk: { surface.asks += 1 }
         )
@@ -494,6 +515,8 @@ final class QueryComposerTests: XCTestCase {
   @MainActor
   private final class Surface: ObservableObject {
     @Published var caretClaims = 0
+    @Published var isWorking = false
+    @Published var isStopping = false
     var asks = 0
   }
 }

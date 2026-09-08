@@ -96,7 +96,9 @@ import {
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { backendOutboxRetryAtMs } from "./runtime/durable-queue.js";
 import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
+import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import {
@@ -140,10 +142,8 @@ import {
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
+  chatFirstMaterializationDeferrals,
   classifyBackendTurnResultDisposition,
-  drainBackendConversationDeleteOutbox,
-  drainBackendTurnOutbox,
-  drainChatFirstDeferralOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
@@ -180,7 +180,12 @@ import type {
   ConversationTurnOrigin,
   ConversationTurnStatus,
 } from "./runtime/types.js";
+import {
+  conversationEvidenceRelayDiagnostic,
+  type ConversationEvidence,
+} from "./runtime/conversation-evidence.js";
 import { createStdoutLineSender } from "./stdout-line-sender.js";
+import { loadLocalMcpConfig, type UserMcpServer } from "./runtime/user-extensions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -385,6 +390,8 @@ function relayResultIdentity(
       runId: invocation.runId,
       attemptId: invocation.attemptId,
       toolName: invocation.canonicalToolName,
+      surfaceKind: invocation.surfaceKind,
+      purpose: invocation.originatingUserText,
     };
   }
   // Capability rejection occurs before a kernel-owned invocation exists. It
@@ -411,6 +418,13 @@ function finalizeRelayResult(
     outcome,
     kernel: runtimeKernel,
     artifactRoot: agentArtifactsDir(),
+    onDegraded: (record) => {
+      // Projecting a large-but-successful result down to its model budget is
+      // the intended path here, not an error. logErr keeps the write pipe-safe
+      // (a destroyed stderr during shutdown must not throw) and off the
+      // error-level stream.
+      logErr(`fallback area=tool_result_projection outcome=degraded ${JSON.stringify(record)}`);
+    },
   });
 }
 
@@ -537,6 +551,21 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       writeFinalizedRelayToolResult(pending.client, pending.callId, result);
     } catch (error) {
       logErr(`Rejected authorized tool execution result invocation=${msg.invocationId}: ${error}`);
+      pendingToolCalls.delete(key);
+      clearTimeout(pending.timeout);
+      const failure = finalizeRelayResult(
+        pending.callId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        pending.invocation,
+        "failed",
+      );
+      writeFinalizedRelayToolResult(pending.client, pending.callId, failure);
     }
     return;
   }
@@ -581,6 +610,32 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
       });
     } catch (error) {
       logErr(`Rejected external authorized tool result invocation=${msg.invocationId}: ${error}`);
+      pendingExternalToolCalls.delete(key);
+      clearTimeout(external.timeout);
+      const failure = finalizeRelayResult(
+        external.request.requestId,
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "tool_result_finalization_failed",
+            message: "The authorized tool result could not be finalized.",
+          },
+        }),
+        external.invocation,
+        "failed",
+      );
+      send({
+        type: "external_surface_tool_result",
+        requestId: external.request.requestId,
+        clientId: external.request.clientId,
+        ownerId: external.invocation.ownerId,
+        sessionId: external.invocation.sessionId,
+        runId: external.invocation.runId,
+        attemptId: external.invocation.attemptId,
+        invocationId: external.invocation.invocationId,
+        ok: true,
+        result: failure,
+      });
     }
     return;
   }
@@ -842,6 +897,18 @@ function relayError(code: string, message: string): string {
   return JSON.stringify({ ok: false, error: { code, message } });
 }
 
+function journalLocalReadToolRelayFailure(
+  canonicalToolName: string,
+): { code: string; message: string } {
+  if (canonicalToolName === "search_chat_history") {
+    return { code: "chat_history_search_failed", message: "Chat history search could not be completed" };
+  }
+  if (canonicalToolName === "read_conversation_evidence") {
+    return conversationEvidenceRelayDiagnostic("read_conversation_evidence");
+  }
+  return conversationEvidenceRelayDiagnostic("search_conversation_evidence");
+}
+
 function controlToolInvocationOutcome(result: string): "succeeded" | "failed" {
   return finalizedToolResultOutcome(result);
 }
@@ -982,6 +1049,8 @@ function startOmiToolsRelay(): Promise<string> {
                           runId: authorized.runId,
                           attemptId: authorized.attemptId,
                           toolName: authorized.canonicalToolName,
+                          surfaceKind: authorized.surfaceKind,
+                          purpose: authorized.originatingUserText,
                         },
                         getOwnerId: establishedOwnerId,
                         executionLease,
@@ -1029,24 +1098,41 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              if (authorized.canonicalToolName === "search_chat_history") {
+              if (
+                authorized.canonicalToolName === "search_chat_history" ||
+                authorized.canonicalToolName === "read_conversation_evidence" ||
+                authorized.canonicalToolName === "search_conversation_evidence"
+              ) {
                 void (async () => {
                   let result: string;
                   let outcome: "succeeded" | "failed" = "succeeded";
                   try {
                     if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
                     runtimeKernel.markRunToolInvocationDispatched(authorized);
-                    const search = runtimeKernel.searchAuthorizedChatHistory({
-                      invocation: authorized,
-                      toolInput: routedProposal.toolInput,
-                      activeOwnerId: () => currentOwnerId,
-                    });
-                    result = JSON.stringify(search);
+                    const value = authorized.canonicalToolName === "search_chat_history"
+                      ? runtimeKernel.searchAuthorizedChatHistory({
+                        invocation: authorized,
+                        toolInput: routedProposal.toolInput,
+                        activeOwnerId: () => currentOwnerId,
+                      })
+                      : authorized.canonicalToolName === "read_conversation_evidence"
+                        ? runtimeKernel.readAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        })
+                        : runtimeKernel.searchAuthorizedConversationEvidence({
+                          invocation: authorized,
+                          toolInput: routedProposal.toolInput,
+                          activeOwnerId: () => currentOwnerId,
+                        });
+                    result = JSON.stringify(value);
                   } catch {
                     outcome = "failed";
                     // Search results and journal details are transcript data.
                     // Keep relay diagnostics shape-only even on malformed input.
-                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                    const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+                    result = relayError(failure.code, failure.message);
                   }
                   const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
                   const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
@@ -1365,7 +1451,7 @@ function buildMcpServers(
   cwd?: string,
   sessionKey?: string,
   context?: McpServerBuildContext
-): McpServerConfig[] {
+): Array<McpServerConfig | UserMcpServer> {
   const servers: McpServerConfig[] = [];
 
   if (context?.includeSwiftBackedTools !== false) {
@@ -1386,6 +1472,9 @@ function buildMcpServers(
     }
     if (context?.jitKnowledgeToolsEnabled === true) {
       omiToolsEnv.push({ name: "OMI_JIT_KNOWLEDGE_TOOLS_ENABLED", value: "true" });
+    }
+    if (context?.jitProactivity === true) {
+      omiToolsEnv.push({ name: "OMI_JIT_PROACTIVITY_MODE", value: "true" });
     }
     // Keep the exact surface marker for every typed chat run. Legacy typed
     // chat uses it to project coordinator-only writes (such as create_memory),
@@ -1434,7 +1523,16 @@ function buildMcpServers(
     });
   }
 
-  return servers;
+  // User-added MCP servers from ~/.omi/mcp.json (standard Claude Desktop
+  // format: stdio commands, plain URLs, API keys, and OAuth tokens the app
+  // keeps fresh). Read per session so changes apply without a restart.
+  const localServers = loadLocalMcpConfig(
+    process.env.OMI_LOCAL_MCP_FILE,
+    new Set(servers.map((s) => s.name)),
+    logErr,
+  );
+
+  return [...servers, ...localServers];
 }
 
 function requireControlSessionPolicy(sessionId: string | undefined, ownerId: string | undefined) {
@@ -1784,77 +1882,14 @@ async function main(): Promise<void> {
     pumpingJournalOutbox = true;
     try {
       const activeOwnerId = currentOwnerId;
-      for (const deletion of drainBackendConversationDeleteOutbox(store, {
+      pumpJournalOutboxDeliveries({
+        store,
         ownerId: activeOwnerId,
-        limit: 20,
-      })) {
-        send({
-          type: "journal_backend_delete",
-          requestId: `journal-delete:${deletion.operationId}:${deletion.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: deletion.ownerId,
-          operationId: deletion.operationId,
-          conversationId: deletion.conversationId,
-          conversationGeneration: deletion.conversationGeneration,
-          attemptCount: deletion.attemptCount,
-          deliveryGeneration: deletion.deliveryGeneration,
-          payloadHash: deletion.payloadHash,
-          targetKind: deletion.targetKind,
-          targetId: deletion.targetId,
-        });
-      }
-      for (const delivery of drainBackendTurnOutbox(store, {
-        ownerId: activeOwnerId,
-        limit: 20,
+        hasChatFirstMainCapability: kernel.hasChatFirstMainCapability(activeOwnerId),
+        send,
         onQuarantine: (turnId) =>
           logErr(`Journal outbox parked turn ${turnId}: canonical payload hash mismatch (not re-delivered)`),
-      })) {
-        send({
-          type: "journal_backend_sync",
-          requestId: `journal:${delivery.turnId}:${delivery.deliveryGeneration}`,
-          clientId: "kernel-journal",
-          ownerId: delivery.ownerId,
-          ...delivery.payload,
-          turnId: delivery.turnId,
-          conversationId: delivery.conversationId,
-          conversationGeneration: delivery.conversationGeneration,
-          attemptCount: delivery.attemptCount,
-          deliveryGeneration: delivery.deliveryGeneration,
-          payloadHash: delivery.payloadHash,
-        });
-      }
-      // This deliberately remains distinct from backend_turn_outbox: a
-      // deferral is task-intelligence state, never a second transcript write.
-      // Do not even claim an outbox row until the server-sampled Main Chat
-      // capability is present in this process. A fresh capability-off launch
-      // must leave chat-first background work entirely dormant.
-      if (kernel.hasChatFirstMainCapability(activeOwnerId)) {
-        for (const delivery of drainChatFirstDeferralOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
-          const deferredQuestionSubject = delivery.question.subject;
-          if (deferredQuestionSubject.kind === "cold_start") {
-            throw new Error("Cold-start sequence questions cannot enter the deferral outbox");
-          }
-          const deferralSubject = deferredQuestionSubject as { kind: "task" | "goal" | "capture"; id: string };
-          send({
-            type: "chat_first_deferral_delivery",
-            requestId: `chat-first-deferral:${delivery.continuityKey}:${delivery.deliveryGeneration}`,
-            clientId: "kernel-chat-first",
-            ownerId: delivery.ownerId,
-            continuityKey: delivery.continuityKey,
-            controlGeneration: delivery.controlGeneration,
-            subject: delivery.subject,
-            question: {
-              questionId: delivery.question.questionId,
-              text: delivery.question.text,
-              subject: deferralSubject,
-              options: delivery.question.options,
-            },
-            attemptCount: delivery.attemptCount,
-            deliveryGeneration: delivery.deliveryGeneration,
-            payloadHash: delivery.payloadHash,
-          });
-        }
-      }
+      });
       return true;
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
@@ -2237,6 +2272,7 @@ async function main(): Promise<void> {
             sessionId: request.sessionId,
             turnId: request.turnId,
             prompt: request.prompt,
+            promptIsSynthetic: request.promptIsSynthetic === true,
             mode: request.mode,
             clientId,
             requestId,
@@ -2325,6 +2361,8 @@ async function main(): Promise<void> {
                     runId: authorized.runId,
                     attemptId: authorized.attemptId,
                     toolName: authorized.canonicalToolName,
+                    surfaceKind: authorized.surfaceKind,
+                    purpose: authorized.originatingUserText,
                   },
                   getOwnerId: establishedOwnerId,
                   executionLease,
@@ -2381,6 +2419,65 @@ async function main(): Promise<void> {
               // `ok` means the correlated external protocol request was
               // processed. A failed tool result is carried in its canonical
               // envelope so Swift can return it to the provider unchanged.
+              ok: true,
+              result: finalizedResult,
+            });
+            break;
+          }
+
+          if (
+            authorized.canonicalToolName === "read_conversation_evidence" ||
+            authorized.canonicalToolName === "search_conversation_evidence"
+          ) {
+            kernel.markRunToolInvocationDispatched(authorized);
+            let result: string;
+            let outcome: "succeeded" | "failed" = "succeeded";
+            try {
+              const value = authorized.canonicalToolName === "read_conversation_evidence"
+                ? kernel.readAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                })
+                : kernel.searchAuthorizedConversationEvidence({
+                  invocation: authorized,
+                  toolInput: routed.toolInput,
+                  activeOwnerId: establishedOwnerId,
+                });
+              result = JSON.stringify(value);
+            } catch {
+              outcome = "failed";
+              const failure = journalLocalReadToolRelayFailure(authorized.canonicalToolName);
+              result = relayError(failure.code, failure.message);
+            }
+            const finalizedResult = finalizeRelayResult(requestId, result, authorized, outcome);
+            const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+            kernel.completeRunToolInvocation({
+              invocationId: authorized.invocationId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              profileGeneration: authorized.profileGeneration,
+              manifestVersion: authorized.manifestVersion,
+              manifestDigest: authorized.manifestDigest,
+              daemonBootEpoch: authorized.daemonBootEpoch,
+              executionGeneration: authorized.executionGeneration,
+              inputHash: authorized.inputHash,
+              capabilityRef: authorized.capabilityRef,
+              activeOwnerId: currentOwnerId,
+              outcome: finalizedOutcome,
+              result: finalizedResult,
+            });
+            send({
+              type: "external_surface_tool_result",
+              requestId,
+              clientId,
+              ownerId: authorized.ownerId,
+              sessionId: authorized.sessionId,
+              runId: authorized.runId,
+              attemptId: authorized.attemptId,
+              invocationId: authorized.invocationId,
               ok: true,
               result: finalizedResult,
             });
@@ -2459,6 +2556,7 @@ async function main(): Promise<void> {
             runId: request.runId,
             attemptId: request.attemptId,
             terminalStatus: request.terminalStatus,
+            finalText: request.finalText,
             errorCode: request.errorCode,
           });
           send({
@@ -2472,7 +2570,28 @@ async function main(): Promise<void> {
             ok: true,
             terminalStatus: result.terminalStatus,
             duplicate: result.duplicate,
+            finalTextPersisted: result.finalTextPersisted,
+            journalMaterialized: result.journalMaterialized,
           });
+          for (const change of result.journalChanges) {
+            const range = listJournalTurns(store, {
+              ownerId: change.ownerId,
+              conversationId: change.conversationId,
+              afterTurnSeq: Math.max(0, change.turn.turnSeq - 1),
+              limit: 1,
+            });
+            send({
+              type: "journal_turn_changed",
+              ownerId: change.ownerId,
+              conversationGeneration: range.generation,
+              generationBaseTurnSeq: range.generationBaseTurnSeq,
+              surfaceKind: change.surfaceKind,
+              externalRefKind: change.externalRefKind,
+              externalRefId: change.externalRefId,
+              turn: journalTurnProjection(change.turn),
+            });
+          }
+          if (result.journalChanges.length > 0) pumpJournalOutbox();
         } catch (error) {
           send({
             type: "external_surface_run_complete_result",
@@ -2742,7 +2861,11 @@ async function main(): Promise<void> {
             appendResources: Array.isArray(update.appendResources)
               ? update.appendResources as ConversationResource[]
               : undefined,
+            appendEvidence: Array.isArray(update.appendEvidence)
+              ? update.appendEvidence as ConversationEvidence[]
+              : undefined,
             metadataJson: typeof update.metadataJson === "string" ? update.metadataJson : undefined,
+            terminalRevision: update.terminalRevision === true,
           };
           assertPublicJournalUpdatePolicy(store, parsedUpdate);
           const turn = updateJournalTurn(store, parsedUpdate);
@@ -3098,6 +3221,12 @@ async function main(): Promise<void> {
             suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
             materializationStoppedByTail: result.stoppedByTail,
             materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+            materializationRejections: result.results.flatMap((candidate, index) => candidate.rejected ? [{
+              intentId: intents[index]!.intentId,
+              code: candidate.rejectionCode ?? "kernel_materialization_failed",
+              message: candidate.rejectionMessage ?? "Chat-first intent materialization failed",
+            }] : []),
+            materializationDeferrals: chatFirstMaterializationDeferrals(intents, result),
           });
           if (committedTurns.length > 0) {
             for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
@@ -3524,19 +3653,11 @@ async function main(): Promise<void> {
             conversationGeneration: result.conversationGeneration,
             payloadHash: result.payloadHash,
             errorCode: result.errorCode ?? "backend_sync_failed",
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_sync_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(
-                result.errorCode ?? "backend_sync_failed",
-              )
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode: result.errorCode ?? "backend_sync_failed",
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();
@@ -3575,17 +3696,11 @@ async function main(): Promise<void> {
             deliveryGeneration: result.deliveryGeneration,
             payloadHash: result.payloadHash,
             errorCode,
-            retryAtMs: result.attemptCount < 5
-              && [
-                "backend_delete_failed",
-                "backend_sync_owner_changed",
-                "backend_sync_http_retryable",
-                "network_unavailable",
-                "timeout",
-                "connection_lost",
-              ].includes(errorCode)
-              ? Date.now() + Math.min(60_000, 1_000 * 2 ** result.attemptCount)
-              : undefined,
+            retryAtMs: backendOutboxRetryAtMs({
+              attemptCount: result.attemptCount,
+              errorCode,
+              nowMs: Date.now(),
+            }),
           });
         }
         pumpJournalOutbox();

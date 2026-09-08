@@ -23,6 +23,27 @@ MEETING_SEARCH_TOLERANCE_MINUTES = 30
 
 _CONFERENCING_MARKERS = ('zoom', 'microsoft teams', 'webex', 'facetime', 'google meet', 'meet.google')
 _CONFERENCING_URL_MARKERS = ('meet.google.com/', 'zoom.us/j/', 'teams.microsoft.com/l/meetup', 'webex.com/meet')
+# Native messaging-call apps already in the desktop ConferencingApps catalog.
+# Matched on appName only — a Chrome tab titled "Discord" is not a call.
+_MESSAGING_CALL_APPS = ('telegram', 'discord', 'slack', 'whatsapp')
+_CALL_CONTROL_MARKERS = (
+    'mute',
+    'unmute',
+    'end call',
+    'hang up',
+    'leave call',
+    'stop video',
+    'start video',
+    'screen share',
+    'screenshare',
+    'in call',
+    'in-call',
+    'camera off',
+    'camera on',
+)
+_CALL_CONTROL_PATTERN = re.compile(
+    r'(?<!\w)(?:' + '|'.join(re.escape(marker) for marker in _CALL_CONTROL_MARKERS) + r')(?!\w)'
+)
 # A Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx").
 # Once the call is joined the omnibox URL is often scrolled out of the capture, so
 # the title is the only marker left. The code shape keeps this precise.
@@ -46,7 +67,19 @@ _OCR_UI_WORDS = {
 }
 
 
+def _is_messaging_call_app(app_name: str) -> bool:
+    hay = (app_name or '').casefold()
+    return any(marker in hay for marker in _MESSAGING_CALL_APPS)
+
+
+def _has_call_control(row: dict[str, Any]) -> bool:
+    hay = f'{row.get("windowTitle") or ""} {row.get("ocrText") or ""}'.casefold()
+    return _CALL_CONTROL_PATTERN.search(hay) is not None
+
+
 def _is_conferencing_row(row: dict[str, Any]) -> bool:
+    if _is_messaging_call_app(str(row.get('appName') or '')):
+        return True
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
     if any(marker in haystack for marker in _CONFERENCING_MARKERS):
         return True
@@ -139,7 +172,8 @@ def _split_roster(people: str) -> Iterable[str]:
 def _roster_names(text: str) -> Iterable[str]:
     for raw_line in text.splitlines():
         line = _clean_line(raw_line)
-        if not line:
+        # Roster sentences are short UI chrome, never a 4k-character OCR smear.
+        if not line or len(line) > 200:
             continue
         for pattern in _ROSTER_PATTERNS:
             match = pattern.match(line)
@@ -149,6 +183,8 @@ def _roster_names(text: str) -> Iterable[str]:
 
 
 def _emails(text: str) -> Iterable[str]:
+    if '@' not in text:
+        return
     for match in _EMAIL_PATTERN.finditer(text):
         yield match.group(0).strip('.').casefold()
 
@@ -168,15 +204,17 @@ def _decorated_name_lines(text: str) -> Iterable[str]:
             yield line
 
 
-def _row_identity_signal(text: str) -> int:
+def _row_identity_signal(text: str, row: Optional[dict[str, Any]] = None) -> int:
     """Rank rows by how much identity they carry, so the bounded budget is spent
     on the pre-join/roster frames rather than on whichever frames happen to be
     chronologically first."""
     score = 0
     if any(True for _ in _roster_names(text)):
         score += 2
-    if _EMAIL_PATTERN.search(text):
+    if '@' in text and _EMAIL_PATTERN.search(text):
         score += 1
+    if row is not None and _is_messaging_call_app(str(row.get('appName') or '')) and _has_call_control(row):
+        score += 2
     return score
 
 
@@ -190,7 +228,7 @@ def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
     # Highest identity signal first; chronological order breaks ties so the budget
     # stays deterministic.
-    combined.sort(key=lambda item: (-_row_identity_signal(item[2]), item[0]))
+    combined.sort(key=lambda item: (-_row_identity_signal(item[2], item[1]), item[0]))
 
     selected: list[dict[str, Any]] = []
     used_characters = 0
@@ -270,6 +308,51 @@ def participants_from_ocr(texts: Iterable[str]) -> list[MeetingParticipant]:
     return participants[:12]
 
 
+def _dominating_call_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        title = _clean_line(str(row.get('windowTitle') or ''))
+        if not title:
+            continue
+        counts[title] = counts.get(title, 0) + 1
+    titled_count = sum(counts.values())
+    if not titled_count:
+        return []
+    top_title, top_count = max(counts.items(), key=lambda item: item[1])
+    if not _looks_like_person_name(top_title):
+        return []
+    runner_up = max((count for title, count in counts.items() if title != top_title), default=0)
+    if top_count * 2 <= titled_count or top_count <= runner_up:
+        return []
+    return [row for row in rows if _clean_line(str(row.get('windowTitle') or '')) == top_title]
+
+
+def _messaging_call_participants(rows: list[dict[str, Any]]) -> list[MeetingParticipant]:
+    """Name-shaped native-call window titles, only with call chrome or a dominant window.
+
+    Telegram/Discord/Slack/WhatsApp do not print Meet-style roster sentences. The
+    call window's title *is* the other party, but only when in-call chrome (mute /
+    end call / video) corroborates a live call, or one title dominates the interval.
+    Browsing many chats in the same window must not invent a roster.
+    """
+    messaging = [row for row in rows if _is_messaging_call_app(str(row.get('appName') or ''))]
+    if not messaging:
+        return []
+    source = [row for row in messaging if _has_call_control(row)] or _dominating_call_windows(messaging)
+    names: list[str] = []
+    for row in source:
+        title = _clean_line(str(row.get('windowTitle') or ''))
+        if not _looks_like_person_name(title):
+            continue
+        if title.casefold() in _OCR_UI_WORDS:
+            continue
+        if title.casefold() == str(row.get('appName') or '').casefold():
+            continue
+        if title not in names:
+            names.append(title)
+    return [MeetingParticipant(name=name) for name in names[:12]]
+
+
 def context_from_screen_activity(
     rows: list[dict[str, Any]],
     *,
@@ -288,6 +371,8 @@ def context_from_screen_activity(
         return None
 
     participants = participants_from_ocr(str(row.get('ocrText') or '') for row in selected)
+    if not participants:
+        participants = _messaging_call_participants(rows)
     if not participants:
         return None
 

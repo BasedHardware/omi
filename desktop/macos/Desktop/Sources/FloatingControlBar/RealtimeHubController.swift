@@ -5,10 +5,43 @@ import OmiSupport
 import VoiceTurnDomain
 
 @MainActor
+final class RealtimeExternalRunAnswerAccumulator {
+  private var text = ""
+
+  /// Seeded with whatever the provider has already streamed for this turn.
+  ///
+  /// An external tool can be requested mid-answer, and a run created with an empty
+  /// accumulator loses everything said before it. That is invisible on the success
+  /// path, where `hubDidFinishTurn` replaces the whole text -- but a failed or
+  /// cancelled turn reads `snapshot` directly, so its diagnostic text came back
+  /// empty exactly when it was most wanted.
+  init(seed: String = "") {
+    text = seed
+  }
+
+  func append(_ delta: String) {
+    text += delta
+  }
+
+  func replace(with finalText: String) {
+    text = finalText
+  }
+
+  var snapshot: String? {
+    let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty ? nil : value
+  }
+}
+
+@MainActor
 final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   static let shared = RealtimeHubController()
 
   var session: RealtimeHubSession?
+  /// Copy of the Interject classification instruction so a replacement session
+  /// can be armed before `beginInputTurn`. The inject often hits the old idle
+  /// socket, which is then discarded.
+  var pendingTrustedTurnInstruction: String?
   var voiceSessionID: VoiceSessionID?
   /// Shared with the screen-evidence receipt extension to fence image dispatch to one response.
   var voiceResponseID: VoiceResponseID?
@@ -83,6 +116,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// image before the model can ask for it.
   var screenEvidenceSpeechEndedAt: Date?
   var screenEvidence: RealtimeScreenEvidence?
+  /// `evidenceID|session` of the PTT-down frame already attached to the live turn.
+  var attachedTurnScreenFrameKey: String?
   var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
   var screenGroundingState: RealtimeScreenGroundingState = .inactive
   /// Latest safe protocol disposition, surfaced only through the non-production automation
@@ -96,12 +131,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
   /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
+  /// Process-local OCR obligations keyed by the exact authenticated owner and
+  /// voice turn. Durable truth remains the kernel journal; this ledger only
+  /// bridges capture completion to the existing journal persistence fence.
+  let turnEvidenceLedger = RealtimeTurnEvidenceLedger()
   let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
   var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
+  /// Assistant rows this process sealed `.completed` at provider-response-finish
+  /// (delivery still pending), keyed by the turn's continuity key. Consumed by
+  /// the reducer's terminal, which revises a row whose answer never reached the
+  /// user (#12743). In-memory journal-write bookkeeping only.
+  var sealedCompletedVoiceJournalRows: [String: SealedCompletedVoiceJournalRow] = [:]
   /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
   var acceptedSpawnJournalReceiptByContinuityKey: [String: AcceptedSpawnJournalReceipt] = [:]
+  var screenContextByContinuityKey: [String: String] = [:]  // accepted screen observation per voice turn
+  /// Exact public-web output owned by the current voice turn. The realtime model may summarize
+  /// tool output when constructing think_deeper arguments, so the host carries the source evidence.
+  var turnPublicWebEvidence: RealtimePublicWebEvidenceReceipt?
   /// One bounded same-turn recovery after a failed spawn. The first failure
   /// returns typed guidance to the provider; a repeat closes the turn.
   var spawnFailureContinuationPolicy = RealtimeSpawnFailureContinuationPolicy()
@@ -172,6 +220,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let ownerID: String
     let turnID: VoiceTurnID
     let task: Task<ExternalSurfaceRunBinding, Error>
+    let answer: RealtimeExternalRunAnswerAccumulator
   }
   struct ExternalRunTerminalizationResult: Sendable {
     let binding: ExternalSurfaceRunBinding?
@@ -187,6 +236,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let ownerID: String
     let terminalStatus: ExternalSurfaceRunTerminalStatus
     let errorCode: String?
+    let finalText: String?
     let task: Task<ExternalRunTerminalizationResult, Never>
   }
   static let externalRunClientID = "omi-realtime-voice"
@@ -205,6 +255,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         @Sendable (
           ExternalSurfaceRunBinding,
           ExternalSurfaceRunTerminalStatus,
+          String?,
           String?,
           RuntimeOwnerTransitionCleanupCapability?
         ) async throws -> Void
@@ -398,6 +449,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    _ = turnEvidenceLedger.revokeAll()
+    sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
@@ -441,6 +494,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastTurnDiagnostics.removeAll()
     testProviderTranscriptOverride = nil
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
+    turnPublicWebEvidence = nil
     prefetchedVoiceContext = ""
     prefetchedVoiceContextSessionID = ""
     prefetchedVoiceContextFreshnessIdentity = ""
@@ -499,6 +553,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           binding: binding,
           terminalStatus: tracked.terminalStatus,
           errorCode: tracked.errorCode,
+          finalText: tracked.finalText,
           cleanupCapability: cleanupCapability)
       }
       if let usedCapability = result.cleanupCapability,
@@ -556,10 +611,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     func installOwnerBoundaryExternalRunFixture(
       ownerID: String,
       turnID: VoiceTurnID,
+      finalText: String? = nil,
       onComplete:
         @escaping @Sendable (
           ExternalSurfaceRunBinding,
           ExternalSurfaceRunTerminalStatus,
+          String?,
           String?,
           RuntimeOwnerTransitionCleanupCapability?
         ) async throws -> Void
@@ -572,10 +629,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         attemptID: "owner-boundary-attempt",
         duplicate: false)
       externalRunAuthorityState?.task.cancel()
+      let answer = RealtimeExternalRunAnswerAccumulator()
+      if let finalText { answer.replace(with: finalText) }
       externalRunAuthorityState = ExternalRunAuthorityState(
         ownerID: ownerID,
         turnID: turnID,
-        task: Task { binding })
+        task: Task { binding },
+        answer: answer)
       ownerBoundaryExternalRunCompletion = onComplete
     }
 
@@ -593,7 +653,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         turnID: turnID,
         task: Task<ExternalSurfaceRunBinding, Error> {
           throw ExternalSurfaceAuthorityError(code: "owner_boundary_begin_receipt_lost")
-        })
+        },
+        answer: RealtimeExternalRunAnswerAccumulator())
       ownerBoundaryExternalRunCompletion = nil
     }
 
@@ -1519,5 +1580,4 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     fallbackProvider = nil
     pendingFailoverReason = nil
   }
-
 }

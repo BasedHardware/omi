@@ -18,6 +18,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstPromptMaterializationCoordinator.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
 preconditions:
   - automation_bridge_ready
   - named_non_production_bundle_ui_lane

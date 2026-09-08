@@ -8,7 +8,7 @@ embeddings.
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -188,3 +188,145 @@ def test_gateway_embeddings_helpers_post_to_the_embeddings_surface(monkeypatch):
     query = gateway_client.invoke_gemini_embedding_gateway('q', task_type='RETRIEVAL_QUERY')
     assert query == [0.1, 0.2]
     assert GEMINI_EMBEDDINGS_AUTO_LANE_ID.encode() in seen[1]['body']
+
+
+# --- gateway/backend deploy skew: a gateway older than its caller -------------
+#
+# Regression cover for the 2026-08-30 prod finalization outage. The prod gateway
+# was deployed 2026-08-20, /v1/embeddings landed 2026-08-28 (fe3df5ac00), and the
+# backend half shipped on merge -- so every conversation finalization died on a
+# 404 with a working direct embeddings path sitting right behind it.
+
+
+def _route_absent_error() -> httpx.HTTPStatusError:
+    """A 404 shaped like Starlette's answer for a path the app never registered."""
+    request = httpx.Request('POST', 'http://gateway/v1/embeddings')
+    response = httpx.Response(404, json={'detail': 'Not Found'}, request=request)
+    return httpx.HTTPStatusError('Client error 404', request=request, response=response)
+
+
+def _model_not_found_error() -> httpx.HTTPStatusError:
+    """A 404 the gateway itself emits: it owns the route, it rejected the lane."""
+    request = httpx.Request('POST', 'http://gateway/v1/embeddings')
+    response = httpx.Response(
+        404,
+        json={'error': {'message': 'unknown model', 'type': 'api_error', 'code': 'model_not_found'}},
+        request=request,
+    )
+    return httpx.HTTPStatusError('Client error 404', request=request, response=response)
+
+
+@pytest.fixture(autouse=True)
+def _reset_route_absent_warning(monkeypatch):
+    """The skew warning is once-per-process; each test needs a fresh process view."""
+    monkeypatch.setattr(clients, '_gateway_embeddings_route_absent_warned', False, raising=False)
+
+
+def test_route_absent_discriminates_on_body_not_status():
+    assert gateway_client.is_gateway_route_absent(_route_absent_error()) is True
+    # Same status, gateway-owned rejection: must NOT be read as deploy skew.
+    assert gateway_client.is_gateway_route_absent(_model_not_found_error()) is False
+    assert gateway_client.is_gateway_route_absent(RuntimeError('boom')) is False
+
+
+def test_route_absent_treats_a_non_json_404_as_missing_route():
+    request = httpx.Request('POST', 'http://gateway/v1/embeddings')
+    response = httpx.Response(404, text='<html>404</html>', request=request)
+    error = httpx.HTTPStatusError('Client error 404', request=request, response=response)
+    assert gateway_client.is_gateway_route_absent(error) is True
+
+
+def test_embed_query_falls_back_to_direct_when_gateway_route_is_absent(monkeypatch):
+    _gateway_mode(monkeypatch)
+    direct = MagicMock()
+    direct.embed_query.return_value = [0.7, 0.8]
+
+    with patch.object(
+        clients, 'invoke_openai_embeddings_gateway', MagicMock(side_effect=_route_absent_error())
+    ), patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients._OpenAIEmbeddingsProxy, '_resolve', MagicMock(return_value=direct)
+    ):
+        vector = clients.embeddings.embed_query('q')
+
+    assert vector == [0.7, 0.8]
+    direct.embed_query.assert_called_once_with('q')
+
+
+def test_embed_documents_falls_back_to_direct_when_gateway_route_is_absent(monkeypatch):
+    _gateway_mode(monkeypatch)
+    direct = MagicMock()
+    direct.embed_documents.return_value = [[0.1], [0.2]]
+
+    with patch.object(
+        clients, 'invoke_openai_embeddings_gateway', MagicMock(side_effect=_route_absent_error())
+    ), patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients._OpenAIEmbeddingsProxy, '_resolve', MagicMock(return_value=direct)
+    ):
+        vectors = clients.embeddings.embed_documents(['a', 'b'])
+
+    assert vectors == [[0.1], [0.2]]
+    direct.embed_documents.assert_called_once_with(['a', 'b'])
+
+
+@pytest.mark.asyncio
+async def test_aembed_query_falls_back_to_direct_when_gateway_route_is_absent(monkeypatch):
+    _gateway_mode(monkeypatch)
+    direct = MagicMock()
+    direct.aembed_query = AsyncMock(return_value=[0.3, 0.4])
+
+    with patch.object(
+        clients, 'ainvoke_openai_embeddings_gateway', AsyncMock(side_effect=_route_absent_error())
+    ), patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients._OpenAIEmbeddingsProxy, '_resolve', MagicMock(return_value=direct)
+    ):
+        vector = await clients.embeddings.aembed_query('q')
+
+    assert vector == [0.3, 0.4]
+    direct.aembed_query.assert_awaited_once_with('q')
+
+
+def test_embed_query_still_raises_when_the_gateway_owns_the_route(monkeypatch):
+    """model_not_found is a real gateway rejection; masking it would hide lane drift."""
+    _gateway_mode(monkeypatch)
+
+    with patch.object(
+        clients, 'invoke_openai_embeddings_gateway', MagicMock(side_effect=_model_not_found_error())
+    ), patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients._OpenAIEmbeddingsProxy,
+        '_resolve',
+        MagicMock(side_effect=AssertionError('direct path must not be used')),
+    ):
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            clients.embeddings.embed_query('q')
+
+    assert excinfo.value.response.status_code == 404
+
+
+def test_gemini_embed_query_falls_back_to_direct_when_gateway_route_is_absent(monkeypatch):
+    _gateway_mode(monkeypatch)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={'embedding': {'values': [0.6]}})
+
+    with patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients, 'invoke_gemini_embedding_gateway', MagicMock(side_effect=_route_absent_error())
+    ), patch.object(
+        clients.httpx,
+        'post',
+        MagicMock(
+            side_effect=lambda url, **kwargs: httpx.Client(transport=httpx.MockTransport(handler)).post(url, **kwargs)
+        ),
+    ):
+        values = clients.gemini_embed_query('screen activity')
+
+    assert values == [0.6]
+
+
+def test_gemini_embed_query_still_raises_when_the_gateway_owns_the_route(monkeypatch):
+    _gateway_mode(monkeypatch)
+
+    with patch.object(clients, 'get_byok_key', MagicMock(return_value=None)), patch.object(
+        clients, 'invoke_gemini_embedding_gateway', MagicMock(side_effect=_model_not_found_error())
+    ), patch.object(clients.httpx, 'post', MagicMock(side_effect=AssertionError('direct path must not be used'))):
+        with pytest.raises(httpx.HTTPStatusError):
+            clients.gemini_embed_query('q')

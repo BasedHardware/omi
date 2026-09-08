@@ -3,7 +3,7 @@ import importlib.machinery
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1334,6 +1334,49 @@ def test_background_wipe_proceeds_when_subscription_is_already_canceled(monkeypa
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
 
 
+def test_background_wipe_purges_conversation_typesense_index_after_firestore_wipe(monkeypatch):
+    """The post-wipe Typesense conversation purge is best-effort: it runs after
+    delete_user_data and can never change the wipe outcome while the Firebase
+    extension still owns production indexing."""
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
+
+    from utils.conversations import typesense_index
+
+    purge = MagicMock(return_value=7)
+    with patch.object(typesense_index, 'purge_user_conversation_index', purge):
+        assert account_deletion.background_wipe_user_data('uid1') is True
+
+    purge.assert_called_once_with('uid1')
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+
+
+def test_background_wipe_survives_conversation_typesense_purge_failure(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_user_subscription',
+        MagicMock(return_value=SimpleNamespace(stripe_subscription_id='sub_123')),
+    )
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
+
+    from utils.conversations import typesense_index
+
+    with patch.object(typesense_index, 'purge_user_conversation_index', MagicMock(side_effect=Exception('down'))):
+        assert account_deletion.background_wipe_user_data('uid1') is True
+
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+
+
 def test_background_wipe_still_fails_when_subscription_is_not_terminal(monkeypatch):
     """A cancel that failed while the subscription can still bill stays a hard failure."""
     _stub_wipe_steps_after_billing(monkeypatch)
@@ -1516,7 +1559,10 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     account_deletion.delete_action_item_vectors_batch.assert_called_once_with('uid1', ['a1'])
     account_deletion.delete_screen_activity_vectors.assert_called_once_with('uid1', ['s1'])
     account_deletion.delete_all_conversation_recordings.assert_called_once_with('uid1')
-    account_deletion.purge_canonical_derived_user_data.assert_called_once_with('uid1')
+    account_deletion.purge_canonical_derived_user_data.assert_called_once()
+    purge_args, purge_kwargs = account_deletion.purge_canonical_derived_user_data.call_args
+    assert purge_args == ('uid1',)
+    assert 'db_client' in purge_kwargs
     assert [failure['operation'] for failure in result['required_failures']] == [
         'conversation_vectors',
         'transcript_chunk_vectors',
@@ -1721,18 +1767,17 @@ def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
     enqueued = []
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', lambda job_id: enqueued.append(job_id))
     monkeypatch.setattr(
         account_deletion,
         'submit_with_context',
-        lambda executor, target, uid: enqueued.append((executor, target, uid)),
+        lambda *args, **kwargs: pytest.fail('reconciliation re-dispatches; the OIDC handler executes'),
     )
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 2, 'skipped': 0}
-    assert len(enqueued) == 2
-    assert enqueued[0] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1')
-    assert enqueued[1] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid2')
+    assert enqueued == ['job-1', 'job-2']
 
 
 def test_reconcile_emits_failure_when_stale_running_wipe_is_reclaimed(monkeypatch):
@@ -1852,16 +1897,12 @@ def test_reconcile_pending_deletion_wipes_skips_already_claimed(monkeypatch):
         lambda uid: uid if uid == 'uid1' else None,
     )
     enqueued = []
-    monkeypatch.setattr(
-        account_deletion,
-        'submit_with_context',
-        lambda executor, target, uid: enqueued.append(uid),
-    )
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', lambda job_id: enqueued.append(job_id))
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 1, 'skipped': 1}
-    assert enqueued == ['uid1']
+    assert enqueued == ['job-1']
 
 
 def test_reconcile_pending_deletion_wipes_skips_claim_exception(monkeypatch):
@@ -1887,16 +1928,12 @@ def test_reconcile_pending_deletion_wipes_skips_missing_uid(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
     enqueued = []
-    monkeypatch.setattr(
-        account_deletion,
-        'submit_with_context',
-        lambda executor, target, uid: enqueued.append(uid),
-    )
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', lambda job_id: enqueued.append(job_id))
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 1, 'skipped': 1}
-    assert enqueued == ['uid1']
+    assert enqueued == ['job-1']
 
 
 def test_reconcile_pending_deletion_wipes_handles_query_error(monkeypatch):
@@ -1923,14 +1960,14 @@ def test_reconcile_recovers_deleting_auth_when_user_gone(monkeypatch):
     enqueued = []
     monkeypatch.setattr(
         account_deletion,
-        'submit_with_context',
-        lambda executor, target, uid: enqueued.append(uid),
+        'enqueue_account_deletion_wipe',
+        lambda job_id: enqueued.append(job_id),
     )
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 1, 'skipped': 0}
-    assert enqueued == ['uid1']
+    assert enqueued == ['job-1']
 
 
 def test_reconcile_recovers_deleting_auth_when_user_exists(monkeypatch):
@@ -1942,13 +1979,13 @@ def test_reconcile_recovers_deleting_auth_when_user_exists(monkeypatch):
     claim = MagicMock(return_value='uid1')
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
     submit = MagicMock()
-    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', submit)
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 1, 'skipped': 0}
     claim.assert_called_once_with('uid1')
-    submit.assert_called_once()
+    submit.assert_called_once_with('job-1')
 
 
 def test_reconcile_does_not_query_auth_for_legacy_durable_intent(monkeypatch):
@@ -1960,11 +1997,11 @@ def test_reconcile_does_not_query_auth_for_legacy_durable_intent(monkeypatch):
     claim = MagicMock(return_value='uid1')
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
     submit = MagicMock()
-    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', submit)
 
     result = account_deletion.reconcile_pending_deletion_wipes()
 
     assert result == {'requeued': 1, 'skipped': 0}
     claim.assert_called_once_with('uid1')
-    submit.assert_called_once()
+    submit.assert_called_once_with('job-1')
     account_deletion.auth.get_user.assert_not_called()

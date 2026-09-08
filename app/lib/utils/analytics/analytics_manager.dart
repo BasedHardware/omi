@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -10,6 +13,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +34,8 @@ class AnalyticsManager {
   static bool _flushInProgress = false;
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
+  static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+  static bool _analyticsReady = false;
 
   /// Inject the analytics adapter at boot. Must be called before [init].
   /// Calling without ever configuring leaves every method as a no-op, which
@@ -52,7 +58,11 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
+      await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
+      _analyticsReady = true;
+      _retryTimer?.cancel();
+      _retryTimer = null;
       _scheduleFlush();
     } catch (_) {}
   }
@@ -81,6 +91,8 @@ class AnalyticsManager {
     _retryTimer?.cancel();
     _retryTimer = null;
     _droppedEvents = 0;
+    _globalEventProperties = {'app_platform': _mobilePlatformName};
+    _analyticsReady = false;
   }
 
   factory AnalyticsManager() {
@@ -235,7 +247,7 @@ class AnalyticsManager {
     });
   }
 
-  void identify() {
+  void identify({String? authMethod, DateTime? userCreatedAt, String userRole = 'member'}) {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
@@ -247,8 +259,20 @@ class AnalyticsManager {
         return;
       }
       _instance.setPeopleValues();
+      _setUserPropertiesBatch({
+        if (authMethod != null) 'auth_method': authMethod,
+        if (userCreatedAt != null) 'user_created_at': userCreatedAt.toUtc().toIso8601String(),
+        'user_role': userRole,
+      });
       setNameAndEmail();
     });
+  }
+
+  void accountCreated({required String authProvider, String acquisitionSource = 'mobile_oauth'}) {
+    track(
+      'Account Created',
+      properties: {'is_first_auth': true, 'auth_provider': authProvider, 'acquisition_source': acquisitionSource},
+    );
   }
 
   void migrateUser(String newUid) {
@@ -323,7 +347,7 @@ class AnalyticsManager {
     _flushInProgress = true;
     try {
       final adapter = _adapter;
-      if (adapter == null || !adapter.isInitialized) {
+      if (adapter == null || !adapter.isInitialized || !_analyticsReady) {
         retryLater = _queuedEvents.isNotEmpty;
         retryDelay = _retryDelays.last;
         return;
@@ -333,7 +357,7 @@ class AnalyticsManager {
       while (_queuedEvents.isNotEmpty && delivered < _flushBatchSize) {
         final event = _queuedEvents.removeAt(0);
         try {
-          adapter.track(eventName: event.eventName, properties: event.properties);
+          adapter.track(eventName: event.eventName, properties: {...event.properties, ..._globalEventProperties});
           delivered++;
         } catch (_) {
           final retriedEvent = event.nextAttempt();
@@ -448,6 +472,71 @@ class AnalyticsManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
+  void recordingUploadStarted({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    String? recordingId,
+  }) =>
+      track(
+        'Recording Upload Started',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+        },
+      );
+
+  void recordingUploadCompleted({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String result,
+    String? recordingId,
+  }) =>
+      track(
+        'Recording Upload Completed',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+          'duration_seconds': durationSeconds,
+          'result': result,
+        },
+      );
+
+  void recordingUploadFailed({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String failureClass,
+    String? recordingId,
+  }) =>
+      track(
+        'Recording Upload Failed',
+        properties: {
+          'upload_attempt_id': attemptId,
+          if (recordingId != null) 'recording_id': recordingId,
+          'file_count': fileCount,
+          'total_bytes': totalBytes,
+          'claims_live_capture': claimsLiveCapture,
+          'upload_source': 'offline_audio_queue',
+          'duration_seconds': durationSeconds,
+          'failure_class': failureClass,
+        },
+      );
+
   // Transcribe Later (batch / offline capture)
   void transcribeLaterToggled({required bool enabled}) =>
       track('Transcribe Later Toggled', properties: {'enabled': enabled});
@@ -471,6 +560,37 @@ class AnalyticsManager {
 
   void phoneCallEnded({required int durationSeconds}) =>
       track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
+
+  /// End-of-call (or stall) snapshot of the live-transcript session.
+  /// Aggregate counts and closed status strings only — no raw audio samples,
+  /// contact/phone numbers, transcripts, or ids are tracked.
+  void phoneCallTranscriptSession({
+    required bool wsAccepted,
+    required int audioFramesSent,
+    required int audioBytesSent,
+    required int audioChannel1Frames,
+    required int audioChannel2Frames,
+    required int eventChannelErrors,
+    required int eventChannelCoerced,
+    required String transcriptionStatusFinal,
+    required int durationSeconds,
+    String? reason,
+  }) =>
+      track(
+        'Phone Call Transcript Session',
+        properties: {
+          'ws_accepted': wsAccepted,
+          'audio_frames_sent': audioFramesSent,
+          'audio_bytes_sent': audioBytesSent,
+          'audio_channel_1_frames': audioChannel1Frames,
+          'audio_channel_2_frames': audioChannel2Frames,
+          'event_channel_errors': eventChannelErrors,
+          'event_channel_coerced': eventChannelCoerced,
+          'transcription_status_final': transcriptionStatusFinal,
+          'duration_seconds': durationSeconds,
+          if (reason != null) 'reason': reason,
+        },
+      );
 
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
@@ -523,20 +643,39 @@ class AnalyticsManager {
 
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
-    track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
+    final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
+    track(
+      'Device Connected',
+      properties: {
+        ...device.toJson(),
+        'type': device.type.name,
+        'device_vendor': vendor,
+        'hardware_family': hardwareFamily,
+        ..._deviceIdentityProperties(device),
+      },
+    );
     setUserProperty('device_vendor', vendor);
+    setUserProperty('hardware_family', hardwareFamily);
   }
 
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
+    final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
     track(
       'Device Paired',
-      properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': device.type.analyticsVendor},
+      properties: {
+        ...device.toJson(),
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': hardwareFamily,
+        ..._deviceIdentityProperties(device),
+      },
     );
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
       'device_vendor': device.type.analyticsVendor,
+      'hardware_family': hardwareFamily,
     });
   }
 
@@ -547,6 +686,7 @@ class AnalyticsManager {
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),
       'device_vendor': device.type.analyticsVendor,
+      'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
       'model': _knownDeviceValue(device.modelNumber),
       'firmware_revision': _knownDeviceValue(device.firmwareRevision),
     };
@@ -557,6 +697,30 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
+    final serial = device.serialNumber?.trim();
+    String hash(String value) => sha256.convert(utf8.encode(value)).toString().substring(0, 16);
+    final transportIdKind = switch (device.type) {
+      DeviceType.appleWatch => 'watch_identifier',
+      DeviceType.limitless => 'limitless_identifier',
+      DeviceType.raybanMeta => 'rayban_identifier',
+      _ => 'ble_identifier',
+    };
+    return {
+      'transport_device_id': hash(device.id),
+      'transport_id_kind': transportIdKind,
+      'transport_id_stability': 'platform_dependent',
+      if (serial != null && serial.isNotEmpty && serial != 'Unknown') ...{
+        'hardware_id': hash(serial),
+        'hardware_id_kind': 'manufacturer_serial',
+        'hardware_id_stable': true,
+      } else ...{
+        'hardware_id_kind': 'unavailable',
+        'hardware_id_stable': false,
+      },
+    };
+  }
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
@@ -572,7 +736,10 @@ class AnalyticsManager {
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
   void memorySearched(String query, int resultsCount) {
-    track('Fact Searched', properties: {'search_query_length': query.length, 'results_count': resultsCount});
+    track(
+      'Fact Searched',
+      properties: _searchProperties(query: query, resultsCount: resultsCount, surface: 'facts'),
+    );
   }
 
   void memorySearchCleared(int totalFactsCount) {
@@ -595,6 +762,37 @@ class AnalyticsManager {
         'new_visibility': newVisibility.name,
       },
     );
+  }
+
+  /// "Things I learned today" card became visible. Counts only — the card's
+  /// content and memory ids never leave the device through analytics.
+  void memoryReviewCardShown({required int itemCount, required String source}) {
+    track('memory_review_card_shown', properties: {'item_count': itemCount, 'source': source});
+  }
+
+  /// One accept / reject / edit verdict on a learned memory.
+  ///
+  /// [action] is accept|reject|edit, [outcome] is ok|error, [source] is
+  /// chat_block|daily_summary_detail. `memory_category` is the coarse category
+  /// label; no memory content and no raw memory id are ever attached.
+  void memoryReviewAction({
+    required String source,
+    required String action,
+    required String outcome,
+    required String memoryCategory,
+  }) {
+    track(
+      'memory_review_action',
+      properties: {'source': source, 'action': action, 'outcome': outcome, 'memory_category': memoryCategory},
+    );
+  }
+
+  /// The one grounded follow-up chip under an answer was tapped.
+  ///
+  /// Mobile has no `question_asked` event to attribute to, so the origin is
+  /// carried by this event instead of as a property on a send event.
+  void followUpChipTapped({required String source}) {
+    track('followup_chip_tapped', properties: {'source': source});
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
@@ -633,7 +831,7 @@ class AnalyticsManager {
     return properties;
   }
 
-  void conversationCreated(ServerConversation conversation) {
+  void conversationCreated(ServerConversation conversation, {BtDevice? recordingDevice}) {
     var properties = getConversationEventProperties(conversation);
     properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
     properties['action_items_count'] = conversation.structured.actionItems.length;
@@ -643,6 +841,7 @@ class AnalyticsManager {
     properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
     properties['duration_seconds'] = conversation.getDurationInSeconds();
     properties['timestamp'] = conversation.createdAt.toIso8601String();
+    properties.addAll(recordingDeviceProperties(recordingDevice));
 
     // Get the summarized app info if available
     if (conversation.appResults.isNotEmpty) {
@@ -654,6 +853,12 @@ class AnalyticsManager {
 
     track('Memory Created', properties: properties);
   }
+
+  @visibleForTesting
+  static Map<String, Object> recordingDeviceProperties(BtDevice? device) => {
+        'recording_hardware_type': device?.type.name ?? 'phone',
+        'recording_firmware_revision': device == null ? 'not_applicable' : _knownDeviceValue(device.firmwareRevision),
+      };
 
   void conversationListItemClicked(ServerConversation conversation, int idx) =>
       track('Memory List Item Clicked', properties: getConversationEventProperties(conversation));
@@ -817,7 +1022,18 @@ class AnalyticsManager {
   void upgradePlanSelected({required String plan, required String source}) =>
       track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
 
-  void upgradeSucceeded() => track('Upgrade Succeeded');
+  void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
+    track(
+      'Subscription Plan Changed',
+      properties: {
+        'previous_plan': previousPlan,
+        'new_plan': newPlan,
+        'billing_interval': billingInterval,
+        'change_source': 'mobile_checkout',
+      },
+    );
+    track('Upgrade Succeeded');
+  }
 
   void upgradeCancelled() => track('Upgrade Cancelled');
 
@@ -933,8 +1149,6 @@ class AnalyticsManager {
   }
 
   void brainMapShareClicked() => track('Brain Map Share Clicked');
-
-  void brainMapRebuilt() => track('Brain Map Rebuilt');
 
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({required String conversationId, String? currentSummarizedAppId}) {
@@ -1060,11 +1274,7 @@ class AnalyticsManager {
   void searchQueryEntered(String query, int resultsCount) {
     track(
       'Search Query Entered',
-      properties: {
-        'query_length': query.length,
-        'query_word_count': query.split(' ').length,
-        'results_count': resultsCount,
-      },
+      properties: _searchProperties(query: query, resultsCount: resultsCount, surface: 'conversations'),
     );
   }
 
@@ -1078,8 +1288,7 @@ class AnalyticsManager {
     required int conversationIndexInResults,
   }) {
     var properties = getConversationEventProperties(conversation);
-    properties['search_query'] = searchQuery;
-    properties['search_query_length'] = searchQuery.length;
+    properties.addAll(_searchProperties(query: searchQuery, surface: 'conversations'));
     properties['conversation_index_in_results'] = conversationIndexInResults;
     track('Conversation Opened From Search', properties: properties);
   }
@@ -1144,15 +1353,9 @@ class AnalyticsManager {
     required int resultsCount,
     required String activeTab,
   }) {
-    track(
-      'Conversation Detail Search Query Entered',
-      properties: {
-        'conversation_id': conversationId,
-        'query_length': query.length,
-        'results_count': resultsCount,
-        'active_tab': activeTab,
-      },
-    );
+    final properties = _searchProperties(query: query, resultsCount: resultsCount, surface: 'conversation_detail');
+    properties.addAll({'conversation_id': conversationId, 'active_tab': activeTab});
+    track('Conversation Detail Search Query Entered', properties: properties);
   }
 
   void conversationReprocessedWithApp({
@@ -1385,7 +1588,10 @@ class AnalyticsManager {
   // ============================================================================
 
   void appsSearched({required String searchTerm, required int resultCount}) {
-    track('Apps Searched', properties: {'search_term': searchTerm, 'result_count': resultCount});
+    track(
+      'Apps Searched',
+      properties: _searchProperties(query: searchTerm, resultsCount: resultCount, surface: 'apps'),
+    );
   }
 
   void appsFilterMyApps({required bool enabled}) {
@@ -1960,6 +2166,34 @@ class AnalyticsManager {
       return out;
     }
     return value.toString();
+  }
+
+  static String get _mobilePlatformName {
+    if (PlatformService.isIOS) return 'ios';
+    if (PlatformService.isAndroid) return 'android';
+    return 'unknown';
+  }
+
+  static Future<void> _loadGlobalEventProperties({required Duration timeout}) async {
+    var version = 'unknown';
+    var build = 'unknown';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform().timeout(timeout);
+      if (packageInfo.version.isNotEmpty) version = packageInfo.version;
+      if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
+    } catch (_) {}
+    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
+  }
+
+  static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {
+    final trimmedQuery = query.trim();
+    final properties = <String, dynamic>{
+      'query_length': query.length,
+      'query_word_count': trimmedQuery.isEmpty ? 0 : trimmedQuery.split(RegExp(r'\s+')).length,
+      'search_surface': surface,
+    };
+    if (resultsCount != null) properties['results_count'] = resultsCount;
+    return properties;
   }
 }
 

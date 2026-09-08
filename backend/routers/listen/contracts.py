@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from utils.client_device import ClientDeviceContext
+from models.geolocation import Geolocation
 
 
 class CustomSttMode(str, Enum):
@@ -42,6 +43,14 @@ class ListenRequest:
     conversation_role: str = 'ambient'
     client_device_context: Optional[ClientDeviceContext] = None
     owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
+    geolocation: Optional[Geolocation] = None
+    # A re-record of an *existing* speech profile from Settings, not a claim to
+    # onboarding provenance. Distinct from onboarding_mode (which still drives
+    # the same server-pushed question flow) so this can bypass the
+    # completed-account admission gate below without weakening it for real
+    # onboarding — see runtime.py's _bootstrap. Appended last so a positional
+    # caller can't silently mis-bind an existing argument.
+    speech_profile_redo: bool = False
 
 
 @dataclass
@@ -92,7 +101,6 @@ class ListenLimits:
     image_chunk_cleanup_min_size: int = 5
     ring_buffer_duration: float = 60.0
     speaker_id_min_audio: float = 2.0
-    speaker_id_target_audio: float = 4.0
     credits_refresh_seconds: int = 900
     ws_receive_timeout: float = 300.0
     bg_drain_timeout: float = 30.0

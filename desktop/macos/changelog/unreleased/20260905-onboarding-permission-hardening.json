@@ -1,0 +1,3 @@
+{
+  "change": "Fixed remaining macOS permission prompts and file-index loss after skipping onboarding permissions"
+}

@@ -16,6 +16,7 @@ import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
+from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
@@ -30,16 +31,17 @@ from models.conversation import (
     SearchRequest,
     SetConversationActionItemsStateRequest,
     SetConversationEventsStateRequest,
+    SharedConversationResponse,
     TestPromptRequest,
     TranscriptMatchSnippet,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
+    project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
-from utils.conversations.render import conversation_to_dict
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -49,13 +51,18 @@ from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
+from utils.conversations.projection_payload import (
+    client_processing_mutation,
+    sanitize_untrusted_provenance_field,
+)
 from utils.conversations.process_conversation import (
     AppUsageAttribution,
+    DerivedEffectsDisposition,
     process_conversation,
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
@@ -98,7 +105,9 @@ from utils.conversations.calendar_linking import (
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import resolve_geolocation
+from utils.conversations.transcript_hash import transcript_sha256_for_binding
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -200,10 +209,19 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             try:
-                conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
-                lifecycle_service.complete(uid, conversation_id)
+                recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
+                if not recovered:
+                    logger.warning(
+                        'lazy enrich recovery lost ownership uid=%s conv=%s',
+                        uid,
+                        conversation_id,
+                    )
             except Exception:
-                pass
+                logger.exception(
+                    'lazy enrich recovery failed uid=%s conv=%s',
+                    uid,
+                    conversation_id,
+                )
 
     submit_with_context(postprocess_executor, _run_enrichment)
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
@@ -247,6 +265,154 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
+    # Schema, size caps, and transcript-hash binding run in the handler.
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler so a malformed projection cannot 422 a "
+            "finished recording. Hash-bound to the persisted transcript. Display only "
+            "— never an input to intelligence."
+        ),
+    )
+
+
+# Provenance is untrusted client input. Bound it before it reaches a log
+# record so a newline / C0 control / oversized token cannot forge a second line.
+def _projection_provenance_for_log(raw: Any) -> tuple[Any, Any, Any]:
+    """Pull provenance for logs. Never raises; never returns body text."""
+    try:
+        if raw is None or isinstance(raw, (str, bytes, list, tuple, int, float, bool)):
+            return None, None, None
+        if isinstance(raw, dict):
+            provenance = raw.get('provenance')
+        else:
+            provenance = getattr(raw, 'provenance', None)
+        if provenance is None or isinstance(provenance, (str, bytes, list, tuple, int, float, bool)):
+            return None, None, None
+        if isinstance(provenance, dict):
+            return (
+                sanitize_untrusted_provenance_field(provenance.get('model_id')),
+                sanitize_untrusted_provenance_field(provenance.get('runtime')),
+                sanitize_untrusted_provenance_field(provenance.get('device_class')),
+            )
+        return (
+            sanitize_untrusted_provenance_field(getattr(provenance, 'model_id', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'runtime', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'device_class', None)),
+        )
+    except Exception:
+        return None, None, None
+
+
+def _log_client_projection_rejected(reason: str, raw: Any) -> None:
+    """Content-free reject log. Provenance may be missing or malformed."""
+    try:
+        model_id, runtime, device_class = _projection_provenance_for_log(raw)
+        logger.warning(
+            'client_processing rejected reason=%s model_id=%s runtime=%s device_class=%s',
+            reason,
+            model_id,
+            runtime,
+            device_class,
+        )
+    except Exception:
+        logger.warning('client_processing rejected reason=%s', reason)
+
+
+def _accepted_client_projection(raw: Any, segments: Any) -> Optional[ClientProcessing]:
+    """Bind a client projection to the persisted transcript, or drop it.
+
+    Schema failures and hash mismatch are not request errors: the conversation
+    still finalizes on the deterministic minimum. Warnings are content-free
+    (reason plus provenance only — never transcript or body).
+    """
+    if raw is None:
+        return None
+    try:
+        projection = ClientProcessing.model_validate(raw)
+    except (TypeError, ValidationError, ValueError):
+        _log_client_projection_rejected('schema_invalid', raw)
+        return None
+    # Stored rows only: every caller here binds against a persisted transcript.
+    # `transcript_sha256_for_binding` returns None for a legacy row whose stored
+    # identity is not canonical -- for those, a matching digest would not imply
+    # matching rendered attribution, so the projection is dropped, not trusted.
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical', raw)
+        return None
+    if expected != projection.transcript_sha256:
+        _log_client_projection_rejected('hash_mismatch', raw)
+        return None
+    return projection
+
+
+def _drop_display_projection(conversation: Conversation) -> None:
+    """Clear the in-memory projection after a transcript mutation invalidated storage.
+
+    Consults ``PROJECTION_FAMILY_FIELDS`` rather than naming the field, so a
+    sibling projection classified there is dropped here too without a code change.
+    """
+    for field in PROJECTION_FAMILY_FIELDS:
+        setattr(conversation, field, None)
+
+
+# Must match database.conversations.CLIENT_PROCESSING_BIND_REPORT_KEY.
+# Local copy: this router is loaded under a stubbed database.conversations.
+_CLIENT_PROCESSING_BIND_REPORT_KEY = '_client_processing_bind_report'
+
+
+def _projection_bind_report() -> dict[str, bool]:
+    return {'submitted_projection_bound': False}
+
+
+def _carry_projection_bind_report(extra_updates: dict[str, Any]) -> dict[str, bool]:
+    """Attach an out-parameter the transactional bind fills. Never persisted."""
+    report = _projection_bind_report()
+    extra_updates[_CLIENT_PROCESSING_BIND_REPORT_KEY] = report
+    return report
+
+
+def _echo_submitted_projection_if_bound(
+    conversation: Conversation,
+    client_projection: Optional[ClientProcessing],
+    bind_report: dict[str, bool],
+) -> Optional[ClientProcessing]:
+    """Attach the submitted projection only when THIS transaction stored it.
+
+    The bind report is the transaction's answer. A later request's projection
+    on the document is not this request's, and a rejected candidate must not
+    appear in the response.
+    """
+    if client_projection is not None and bind_report.get('submitted_projection_bound') is True:
+        conversation.client_processing = client_projection
+        return client_projection
+    return None
+
+
+def _bind_late_client_projection(uid: str, conversation: Conversation, raw: Any) -> Conversation:
+    """Idempotency hit: bind a late projection to the stored transcript.
+
+    Updates only ``client_processing``. Never touches ``structured``, never
+    re-enters processing, never reprocesses. Invalid, mismatched, or missing
+    projection: return the existing conversation unchanged (still not a 422).
+    The write re-checks the digest against the transactional snapshot so a
+    T2 segment update cannot resurrect a T1 projection.
+    """
+    if raw is None:
+        return conversation
+    bound = _accepted_client_projection(raw, getattr(conversation, 'transcript_segments', None))
+    if bound is None:
+        return conversation
+    # Route-level hash is a fast drop. The write re-checks the stored
+    # transcript inside the same transaction so a T2 segment update that
+    # landed after this snapshot cannot resurrect a T1 projection.
+    payload = client_processing_mutation(bound)
+    if conversations_db.bind_client_processing(uid, conversation.id, payload):
+        conversation.client_processing = bound
+    return conversation
 
 
 class ConversationSearchItem(Conversation):
@@ -275,12 +441,6 @@ class ConversationRecordingResponse(BaseModel):
     has_recording: bool
 
 
-class SharedConversationResponse(Conversation):
-    model_config = {"extra": "allow"}
-
-    people: List[Person] = []
-
-
 class ConversationSuggestedAppsResponse(BaseModel):
     suggested_apps: List[App]
     conversation_id: str
@@ -307,15 +467,60 @@ def process_in_progress_conversation(
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
-    # Geolocation
-    geolocation = redis_db.get_cached_user_geolocation(uid)
-    if geolocation:
-        geolocation = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    client_projection = _accepted_client_projection(
+        request.client_processing if request is not None else None,
+        getattr(conversation, 'transcript_segments', None),
+    )
 
-    if not lifecycle_service.admit_processing(uid, conversation.id):
+    # Geolocation
+    if conversation.geolocation:
+        conversation.geolocation = resolve_geolocation(conversation.geolocation)
+    else:
+        geolocation = redis_db.get_cached_user_geolocation(uid)
+        if geolocation:
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='conversation_snapshot',
+                to_mode='redis_user_cache',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
+
+    # Winner owns ingress. The accepted projection rides the admission CAS:
+    # status→processing and client_processing are one write. A later request
+    # (including a loser that late-binds) can only land after this commit, so
+    # a stalled second write cannot last-writer-wins an older projection over
+    # a newer one (section 1.7 (c)). A mutation failure is an admission
+    # failure — the row stays in_progress instead of stranding on processing
+    # with no durable job. Ingress-owned mutation only; the coordinator's
+    # existing-row persist still strips the field. Omit extra_updates when
+    # there is no projection so positional admit stubs keep working.
+    extra_updates = client_processing_mutation(client_projection) if client_projection is not None else None
+    bind_report = _projection_bind_report()
+    if extra_updates is None:
+        admitted = lifecycle_service.admit_processing(uid, conversation.id)
+    else:
+        bind_report = _carry_projection_bind_report(extra_updates)
+        admitted = lifecycle_service.admit_processing(uid, conversation.id, extra_updates=extra_updates)
+    if not admitted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
-        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+        latest_conversation = deserialize_conversation(latest)
+        # Losing the compare-and-swap still 200s, but must not silently drop a
+        # valid projection. Hash-bind against the conversation actually stored
+        # and write client_processing alone — never structured, never reprocess.
+        latest_conversation = _bind_late_client_projection(
+            uid,
+            latest_conversation,
+            request.client_processing if request is not None else None,
+        )
+        return CreateConversationResponse(conversation=latest_conversation, messages=[])
+
+    # The admission CAS reports whether the submitted projection bound.
+    # A follow-up read would race a later request's write and could strand
+    # this row on processing if it raised before the guard.
+    client_projection = _echo_submitted_projection_if_bound(conversation, client_projection, bind_report)
 
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation.id:
@@ -323,10 +528,15 @@ def process_in_progress_conversation(
 
     conversation.status = ConversationStatus.processing
     persisted = False
+    derived_effects_disposition = DerivedEffectsDisposition.RUN
 
     def record_persistence(current: bool) -> None:
         nonlocal persisted
         persisted = current
+
+    def record_derived_effects_disposition(current: DerivedEffectsDisposition) -> None:
+        nonlocal derived_effects_disposition
+        derived_effects_disposition = current
 
     # This synchronous path has no durable job for the reconciler to replay, so
     # a processing failure must return the admission to in_progress — otherwise
@@ -339,10 +549,18 @@ def process_in_progress_conversation(
             conversation,
             force_process=True,
             persistence_observer=record_persistence,
+            derived_effects_disposition_observer=record_derived_effects_disposition,
+            client_projection=client_projection,
         )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+    # A terminal free-tier minimum persists successfully but must not fan out
+    # apps/webhooks — the same decision the durable finalizer already honours
+    # via derived_effects_disposition_observer (section 1.7). The conversation
+    # itself still returns to the client; this suppresses derived effects only.
+    if derived_effects_disposition == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS:
+        return CreateConversationResponse(conversation=conversation, messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -366,6 +584,16 @@ def finalize_conversation(
     conversation = deserialize_conversation(conversation)
 
     if conversation.status != ConversationStatus.in_progress:
+        # Section 1.7 (c): a later projection overwrites projection fields only.
+        # A slow device finishing local inference after the first finalize is
+        # the normal case — hash-bind against the stored transcript and persist
+        # client_processing alone. Never rewrite structured, never re-enter
+        # processing, never reprocess. Mismatch / invalid: drop, still 200.
+        conversation = _bind_late_client_projection(
+            uid,
+            conversation,
+            request.client_processing if request is not None else None,
+        )
         return CreateConversationResponse(conversation=conversation, messages=[])
 
     extra_updates = {}
@@ -374,6 +602,20 @@ def finalize_conversation(
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         extra_updates['external_data'] = conversation.external_data
+
+    # Persist an accepted projection on the conversation document so the
+    # Cloud Tasks worker's stored-projection has_projection path can see it.
+    # Drop-never-422: a bad payload must not reject the finished recording.
+    # Do not attach yet: the outbox transaction re-checks the digest and may
+    # drop a T1-validated candidate after a T2 race.
+    client_projection = _accepted_client_projection(
+        request.client_processing if request is not None else None,
+        getattr(conversation, 'transcript_segments', None),
+    )
+    bind_report = _projection_bind_report()
+    if client_projection is not None:
+        extra_updates.update(client_processing_mutation(client_projection))
+        bind_report = _carry_projection_bind_report(extra_updates)
 
     # The durable Cloud Tasks worker cannot inherit this request's BYOK
     # context: the task payload is the opaque {job_id, dispatch_generation}
@@ -415,6 +657,10 @@ def finalize_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
+
+    # The outbox transaction reports whether the submitted projection bound.
+    # A follow-up read would attribute a later request's projection to this one.
+    _echo_submitted_projection_if_bound(conversation, client_projection, bind_report)
 
     # The Cloud Tasks worker owns expensive processing, memory extraction, and
     # integration fanout under the persisted job lease. Returning this snapshot
@@ -483,6 +729,7 @@ def reprocess_conversation(
         conversation,
         force_process=True,
         is_reprocess=True,
+        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -950,7 +1197,7 @@ def delete_conversation(
     background_tasks: BackgroundTasks,
     # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
-    # docs/memory/domain_model.md §Delete/privacy matrix.
+    # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -975,6 +1222,13 @@ def delete_conversation(
                     status_code=503,
                     detail='Conversation memory retraction is busy, please retry',
                 ) from error
+            except RuntimeError as error:
+                # Isolated router tests stub database/utils.other at import time.
+                if type(error).__name__ != "DestructiveOperationInProgress":
+                    raise
+                from utils.other.account_gate_http import account_gate_busy_http_exception
+
+                raise account_gate_busy_http_exception() from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
@@ -1214,8 +1468,11 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
     )
+    _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=conversation_id,
@@ -1298,8 +1555,11 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
     )
+    _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=conversation_id,
@@ -1364,8 +1624,11 @@ def assign_segments_bulk(
             segment.person_id = value
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
     )
+    _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,
         conversation_id=conversation_id,
@@ -1613,14 +1876,6 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
     conversation = deserialize_conversation(conversation)
-    # This endpoint is public and unauthenticated. Strip fields that are internal
-    # to the owner and never part of the shared transcript/summary the user chose
-    # to publish: precise geolocation, the server-side encryption tier, and
-    # external_data (which carries merge provenance — other conversation ids — and
-    # integration metadata).
-    conversation.geolocation = None
-    conversation.data_protection_level = None
-    conversation.external_data = None
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
@@ -1629,10 +1884,10 @@ def get_shared_conversation_by_id(conversation_id: str):
         people_data = users_db.get_people_by_ids(uid, person_ids)
         people = [Person(**p) for p in people_data]
 
-    # Return conversation with people data
-    response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.model_dump() for p in people]
-    return response_dict
+    # Public unauthenticated surface: return only the explicit allowlist.
+    # SharedConversationResponse does not inherit Conversation and ignores extras,
+    # so new Conversation fields and stored-document keys stay off this response.
+    return project_shared_conversation(conversation, people)
 
 
 class ConversationTopicRequest(BaseModel):

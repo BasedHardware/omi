@@ -36,6 +36,7 @@ from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
 from utils.executors import run_blocking
+from utils.metrics import record_jit_rollout_decision
 
 logger = logging.getLogger(__name__)
 
@@ -330,6 +331,16 @@ class JITRolloutAuthority:
             'control_plane_only',
             decision.error_class.value,
         )
+        try:
+            record_jit_rollout_decision(
+                effective=decision.effective.value,
+                reason=decision.reason.value,
+                stage=stage.value,
+                error_class=decision.error_class.value,
+                latency_ms=min(latency_ms, 30_000),
+            )
+        except Exception:
+            logger.debug('jit_rollout_decision metric increment failed', exc_info=True)
 
 
 class PostHogJITFlagProvider:

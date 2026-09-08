@@ -37,10 +37,10 @@ Prioritized feature map to guide desktop E2E coverage. Uses the same two-dimensi
 
 | # | Feature | Layer | Priority | Bridge | Walker | Coverage Status |
 |---|---------|-------|----------|--------|--------|-----------------|
-| 1 | Dashboard — conversations list, refresh | intelligence (3) | 9 | 2 | 2 | ✅ flow: `dashboard.yaml` (nav + `conversation_list_snapshot`) |
+| 1 | Dashboard — conversations list, refresh | intelligence (3) | 9 | 2 | 2 | ✅ flow: `home.yaml` (nav + `conversation_list_snapshot`) |
 | 2 | Chat — send message, AI response | intelligence (3) | 9 | 2 | 2 | ✅ flow: `chat-hermetic.yaml` |
 | 3 | Sidebar navigation — all sections | retrieval-action (3) | 9 | 2 | 3 | ✅ flow: `navigation.yaml` |
-| 4 | Home stage (hub / chat / connect) | intelligence (3) | 9 | 2 | 2 | ✅ flow: `home-stage.yaml` (chat-first bundle) |
+| 4 | Home stage (hub / chat / connect) | intelligence (3) | 9 | 2 | 2 | ⛔️ retired: `DashboardPage` was the only view that rendered the stage and it is deleted (#12598); Home is `QueryShellHome` and reports no stage |
 | 5 | Capture lifecycle (hermetic transcript seam) | capture (5) | 15 | 2 | 1 | ✅ flow: `capture-lifecycle.yaml` |
 | 6 | Screen capture (Rewind) | capture (5) | 15 | 0 | 2 | ⚠️ manual: `rewind.yaml`, `screen-recording-permission.yaml` (TCC) |
 | 7 | Audio recording (desktop mic) | capture (5) | 15 | 0 | 1 | ⚠️ manual: `audio-recording.yaml` (mic permission); added `recording-finalization.yaml` |

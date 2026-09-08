@@ -48,7 +48,7 @@ void main() {
       _Listener(),
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
           claims.add(claimLiveCapture);
           return UploadFilesResult.queued('job-${claims.length}');
         },
@@ -87,9 +87,7 @@ void main() {
     // a claim covering only the remainder splits one conversation's audio
     // across both server meters and spends the claim on a subset.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    sync.testWals = [
-      for (var index = 0; index < 7; index++) await writeWal(now - index, conversationId: 'c1'),
-    ];
+    sync.testWals = [for (var index = 0; index < 7; index++) await writeWal(now - index, conversationId: 'c1')];
 
     await sync.syncAll();
 
@@ -99,9 +97,7 @@ void main() {
 
   test('a conversation that fits one batch still claims', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    sync.testWals = [
-      for (var index = 0; index < 3; index++) await writeWal(now - index, conversationId: 'c1'),
-    ];
+    sync.testWals = [for (var index = 0; index < 3; index++) await writeWal(now - index, conversationId: 'c1')];
 
     await sync.syncAll();
 

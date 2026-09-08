@@ -201,11 +201,10 @@ try:
     )
     from utils.stt.speaker_embedding import (
         compare_embeddings,
-        is_same_speaker,
-        find_best_match,
         SPEAKER_MATCH_THRESHOLD,
         _get_wav_duration,
     )
+    from utils.stt.speaker_match import select_speaker_match
 finally:
     _restore_stub_modules()
 
@@ -389,9 +388,27 @@ class TestDetectSpeakerFromText:
         ('fr', "Je m'appelle Sophie", "Sophie"),
         ('de', "Ich bin Hans", "Hans"),
         ('de', "Mein Name ist Klaus", "Klaus"),
-        ('zh', "我是李明", None),  # Chinese names — detect_speaker_from_text returns capitalized
-        ('ja', "私は田中", None),  # Japanese — same pattern
-        ('ko', "저는 김철수", None),  # Korean
+        ('zh', "我是李明", "李明"),
+        ('zh', "我叫王芳", "王芳"),
+        ('zh', "我的名字是张伟", "张伟"),
+        ('ja', "私は田中", "田中"),
+        ('ja', "私は田中です", "田中"),
+        ('ja', "私の名前は佐藤です", "佐藤"),
+        ('ja', "私の名前は渡辺", "渡辺"),
+        ('ja', "私は田中と申します", "田中"),
+        ('ja', "私は山田太郎です", "山田太郎"),
+        ('ja', "私は田中。", "田中"),
+        ('ja', "私は田中！", "田中"),
+        ('ja', "私は田中？", "田中"),
+        ('ja', "私は田中、元気です", "田中"),
+        ('ja', "私の名前は今日子です", "今日子"),
+        ('ja', "私は明日香です", "明日香"),
+        ('ja', "私は今井です", "今井"),
+        ('ja', "私は中村です", "中村"),
+        ('ja', "私は小林です", "小林"),
+        ('ko', "저는 김철수", "김철수"),
+        ('ko', "저는 김철수입니다", "김철수"),
+        ('ko', "제 이름은 이영희입니다", "이영희"),
         ('ru', "Меня зовут Иван", "Иван"),
         ('pt', "Eu sou Pedro", "Pedro"),
         ('it', "Mi chiamo Marco", "Marco"),
@@ -425,6 +442,36 @@ class TestDetectSpeakerFromText:
         "a",  # Too short for name match
         "i am",  # No name follows (lowercase)
         "I am",  # No name follows
+        # Japanese ordinary sentences (#12900 reproduction cases):
+        "私はそう思います",
+        "私は行きます",
+        "私はちょっと疲れました",
+        "私はコーヒーが好きです",
+        "わたしはお腹すいた",
+        "私は学生です",
+        "私は日本人です",
+        "私は大丈夫です",
+        "私は会社員です",
+        "私は大学生です",
+        "私は高校生です",
+        "私は公務員です",
+        "私の名前は会社員です",
+        "私はそう思う",
+        "私は行きます。",
+        # Chinese ordinary sentences:
+        "我是中国人",
+        "我是学生",
+        "我是你的朋友",
+        "我是觉得不行",
+        "我是真的不知道",
+        "我们的这个",
+        "我是谁",
+        "我是你",
+        # Korean ordinary sentences:
+        "저는 학생입니다",
+        "저는 생각합니다",
+        "저는 갑니다",
+        "저는 한국인입니다",
     ]
 
     # Run-on / garbled transcripts where the regex captures a pronoun or filler
@@ -469,6 +516,15 @@ class TestDetectSpeakerFromText:
         assert detect_speaker_from_text("I am John") == "John"
         assert detect_speaker_from_text("My name is Alice") == "Alice"
 
+    def test_language_hint_prioritization_and_fallback(self):
+        """Language hint prioritizes given language but preserves multi-language fallback."""
+        # Prioritizes given language:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="ja") == "佐藤"
+        # Falls back to other languages when hint does not match:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="fr") == "佐藤"
+        assert detect_speaker_from_text("My name is Alice", language="ja") == "Alice"
+        assert detect_speaker_from_text("Me llamo Carlos", language="ja") == "Carlos"
+
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""
         assert detect_speaker_from_text("") is None
@@ -504,7 +560,7 @@ class TestDetectSpeakerFromText:
 
 
 class TestSpeakerEmbeddingMath:
-    """Tests for cosine distance, matching, and best-match selection."""
+    """Tests for cosine distance and the shared match decision."""
 
     def _random_embedding(self, dim=512, seed=None):
         """Generate a random unit-normalized embedding."""
@@ -558,100 +614,20 @@ class TestSpeakerEmbeddingMath:
         b = self._random_embedding(seed=2)
         assert compare_embeddings(a, b) == pytest.approx(compare_embeddings(b, a), abs=1e-7)
 
-    def test_is_same_speaker_true_below_threshold(self):
-        """Match returns True when distance is below threshold."""
-        emb = self._random_embedding(seed=42)
-        noise = np.random.RandomState(99).randn(1, 512).astype(np.float32) * 0.01
-        similar = emb + noise
-        similar /= np.linalg.norm(similar)
+    def test_threshold_is_the_bench_operating_point(self):
+        """0.65 came from the offline bench on real enrollments (see speaker_match.py)."""
+        assert SPEAKER_MATCH_THRESHOLD == 0.65
 
-        is_match, distance = is_same_speaker(emb, similar)
-        assert is_match is True
-        assert distance < SPEAKER_MATCH_THRESHOLD
-
-    def test_is_same_speaker_false_above_threshold(self):
-        """Match returns False when distance is above threshold."""
-        a = self._random_embedding(seed=1)
-        b = self._random_embedding(seed=2)
-
-        is_match, distance = is_same_speaker(a, b)
-        # Random 512-d vectors typically have distance ~1.0
-        assert is_match is False
-        assert distance >= SPEAKER_MATCH_THRESHOLD
-
-    def test_is_same_speaker_exact_threshold_boundary(self):
-        """Distance exactly at threshold returns False (strict < comparison)."""
-        # is_same_speaker uses distance < threshold, so equality means no match
-        emb = self._random_embedding(seed=42)
-        # Use distance=0.0 (identical), threshold=0.0 → 0 < 0 is False
-        is_match, distance = is_same_speaker(emb, emb, threshold=0.0)
-        assert distance == pytest.approx(0.0, abs=1e-6)
-        assert is_match is False  # strict <, not <=
-
-    def test_is_same_speaker_custom_threshold(self):
-        """Custom threshold is respected."""
-        emb = self._random_embedding(seed=42)
-        is_match, _ = is_same_speaker(emb, emb, threshold=0.0001)
-        assert is_match is True  # identical
-
-        a = self._random_embedding(seed=1)
-        b = self._random_embedding(seed=2)
-        is_match, _ = is_same_speaker(a, b, threshold=999.0)
-        assert is_match is True  # huge threshold accepts everything
-
-    def test_find_best_match_returns_lowest_distance(self):
-        """find_best_match selects the candidate with minimum distance."""
+    def test_select_speaker_match_prefers_nearest_candidate(self):
         query = self._random_embedding(seed=42)
-
-        # Create 3 candidates: one identical, two random
-        candidates = [
-            self._random_embedding(seed=1),  # random
-            query.copy(),  # identical — should be best match
-            self._random_embedding(seed=2),  # random
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is not None
-        best_idx, best_distance = result
-        assert best_idx == 1  # the identical copy
-        assert best_distance == pytest.approx(0.0, abs=1e-6)
-
-    def test_find_best_match_none_when_all_above_threshold(self):
-        """Returns None when no candidate is within threshold."""
-        query = self._random_embedding(seed=42)
-        candidates = [self._random_embedding(seed=i) for i in range(5)]
-
-        result = find_best_match(query, candidates, threshold=0.001)
-        assert result is None  # random vectors won't be that close
-
-    def test_find_best_match_empty_candidates(self):
-        """Returns None for empty candidate list."""
-        query = self._random_embedding(seed=42)
-        result = find_best_match(query, [])
-        assert result is None
-
-    def test_find_best_match_single_candidate_within_threshold(self):
-        """Single candidate within threshold is returned."""
-        query = self._random_embedding(seed=42)
-        result = find_best_match(query, [query.copy()])
-        assert result is not None
-        assert result[0] == 0
-        assert result[1] == pytest.approx(0.0, abs=1e-6)
-
-    def test_find_best_match_tie_breaks_deterministically(self):
-        """When multiple candidates have same distance, first one wins."""
-        query = self._random_embedding(seed=42)
-        # Two identical copies
-        candidates = [query.copy(), query.copy()]
-        result = find_best_match(query, candidates)
-        assert result is not None
-        # Implementation iterates in order, updates only on strict <
-        # So first candidate (idx 0) wins on tie
-        assert result[0] == 0
-
-    def test_threshold_default_is_045(self):
-        """Verify the SPEAKER_MATCH_THRESHOLD constant."""
-        assert SPEAKER_MATCH_THRESHOLD == 0.45
+        distances = {
+            'random-a': compare_embeddings(query, self._random_embedding(seed=1)),
+            'same': compare_embeddings(query, query.copy()),
+            'random-b': compare_embeddings(query, self._random_embedding(seed=2)),
+        }
+        decision = select_speaker_match(distances)
+        assert decision.person_id == 'same'
+        assert decision.best_distance == pytest.approx(0.0, abs=1e-6)
 
 
 # ─── PCM-to-WAV Conversion ──────────────────────────────────────────────────
@@ -846,24 +822,6 @@ class TestEmbeddingShapes:
         distance = compare_embeddings(a, b)
         assert isinstance(distance, float)
         assert 0.0 <= distance <= 2.0
-
-    def test_find_best_match_with_different_dimensions(self):
-        """find_best_match works with various embedding dimensions."""
-        for dim in [128, 256, 512, 1024]:
-            query = np.random.randn(1, dim).astype(np.float32)
-            candidates = [np.random.randn(1, dim).astype(np.float32) for _ in range(3)]
-            # Should not crash regardless of dimension
-            result = find_best_match(query, candidates, threshold=2.0)
-            assert result is not None
-
-    def test_is_same_speaker_returns_tuple(self):
-        """is_same_speaker returns (bool, float) tuple."""
-        a = np.random.randn(1, 512).astype(np.float32)
-        result = is_same_speaker(a, a)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], bool)
-        assert isinstance(result[1], float)
 
 
 # ─── User Embedding Cache Integration ─────────────────────────────────────────

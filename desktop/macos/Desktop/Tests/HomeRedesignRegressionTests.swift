@@ -146,7 +146,7 @@ final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
         isSynced: isSynced),
       app: nil,
       showsOmiMark: false,
-      onRate: { _ in })
+      onRate: { _, _ in })
   }
 
   private func rowHeight(showsMetadata: Bool) -> CGFloat {
@@ -211,6 +211,60 @@ final class ChatBubbleIdentityTests: XCTestCase {
       bubble(isSynced: false, metadata: Self.sampleMetadata))
   }
 
+  /// `copyableText` is not an equality term: it derives purely from
+  /// `(contentBlocks, text, isStreaming)`, which the conjunction already
+  /// compares, and re-deriving it normalized the whole answer on every
+  /// SwiftUI diff pass. Block-only edits stay visible through the blocks
+  /// term — this pins that the blocks term alone still separates two rows
+  /// whose derived copy text differs.
+  func testBlockOnlyEditsStayVisibleWithoutTheCopyableTextTerm() {
+    let plain = bubble(isSynced: false, metadata: nil)
+    let withBlock = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        contentBlocks: [
+          .text(id: "b1", text: "On it — I'll look up the backend IDs and delete the duplicates now.")
+        ]),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _, _ in })
+    // Same id, same text, and the same derived copyable text — but the blocks
+    // term must still tell the row bodies apart.
+    XCTAssertNotEqual(plain, withBlock)
+  }
+
+  /// Content blocks compare field-by-field now. Two deliberate consequences
+  /// are pinned here: question-card options deep-compare, and tool-call
+  /// in-flight distinctions (.running/.slow/.stalled) are no longer collapsed
+  /// the way the persistence encoder collapsed them.
+  func testChatContentBlockEqualityIsFieldWise() {
+    let options: [[String: Any]] = [["id": "a", "label": "Yes"], ["id": "b", "label": "No"]]
+    let sameOptions: [[String: Any]] = [["id": "a", "label": "Yes"], ["id": "b", "label": "No"]]
+
+    let question = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: options, selectedOptionId: nil)
+    let questionRebuilt = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: sameOptions, selectedOptionId: nil)
+    XCTAssertEqual(question, questionRebuilt)
+
+    let questionEdited = ChatContentBlock.questionCard(
+      id: "q1", questionId: "q", text: "Go?", subjectKind: "plan", subjectId: "s",
+      options: [["id": "a", "label": "Yes"], ["id": "b", "label": "Maybe"]],
+      selectedOptionId: nil)
+    XCTAssertNotEqual(question, questionEdited)
+
+    let running = ChatContentBlock.toolCall(id: "t1", name: "search", status: .running)
+    let slow = ChatContentBlock.toolCall(id: "t1", name: "search", status: .slow)
+    XCTAssertNotEqual(running, slow)
+    XCTAssertEqual(running, ChatContentBlock.toolCall(id: "t1", name: "search", status: .running))
+  }
+
   func testLateArtifactsAreVisibleIdentity() {
     let withoutArtifact = bubble(isSynced: false, metadata: nil)
     let withArtifact = ChatBubble(
@@ -237,7 +291,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         ]),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
     XCTAssertNotEqual(withoutArtifact, withArtifact)
   }
 
@@ -253,7 +307,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         journalStatus: .failed),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
     XCTAssertNotEqual(completed, failed)
   }
 
@@ -270,7 +324,7 @@ final class ChatBubbleIdentityTests: XCTestCase {
         metadata: metadata),
       app: nil,
       showsOmiMark: true,
-      onRate: { _ in })
+      onRate: { _, _ in })
   }
 }
 
@@ -365,12 +419,135 @@ final class ChatRowPresentationTests: XCTestCase {
   func testNotificationJournalTextPreservesTheHeadlineAndBody() {
     XCTAssertEqual(
       FloatingControlBarManager.notificationJournalText(
-        title: "Insight",
-        body: "PR blocked, needs review"),
-      "Insight\nPR blocked, needs review")
+        title: "PR blocked, needs review",
+        body: "The deploy is waiting on your approval."),
+      "PR blocked, needs review\nThe deploy is waiting on your approval.")
     XCTAssertEqual(
       FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
       "Meeting notes ready")
+  }
+
+  /// Producers send the category word as `title` so the system banner has a
+  /// headline. The chat row already draws that category as a badge, so journaling
+  /// it again is the "Focus / Focus / meet with…" row observed in history.
+  func testJournalDropsACategoryTitleTheBadgeAlreadyNames() {
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Focus",
+        body: "Meet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review",
+        kind: .insight),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review"),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Memory Saved",
+        body: "New memory: David prefers morning reviews",
+        kind: .memory),
+      "David prefers morning reviews")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "New Goal",
+        body: "Ship 200k users",
+        kind: .goal),
+      "Ship 200k users")
+    // A unique task headline is content, not the category word — keep it.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Send the quarterly report",
+        body: "You promised it by 5pm.",
+        kind: .task),
+      "Send the quarterly report\nYou promised it by 5pm.")
+  }
+
+  /// Historical rows already contain the redundant first line; the renderer must
+  /// drop it even when the journaled text is never rewritten.
+  func testChatDisplayDropsARedundantCategoryFirstLineForEveryKind() {
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Focus\nMeet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "**Focus**\nMeet with Aryan Gupta for Omi project discussion",
+        kind: .suggestion),
+      "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Insight\nPR blocked, needs review",
+        kind: .insight),
+      "PR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Memory Saved\nNew memory: David prefers morning reviews",
+        kind: .memory),
+      "David prefers morning reviews")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "New Goal\nShip 200k users",
+        kind: .goal),
+      "Ship 200k users")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Task\nSend the quarterly report",
+        kind: .task),
+      "Send the quarterly report")
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Integration\nOmi can read your inbox",
+        kind: .integration),
+      "Omi can read your inbox")
+    // Unique headlines stay, including when they share a function word with the badge.
+    XCTAssertEqual(
+      FloatingControlBarManager.chatDisplayText(
+        "Send the quarterly report\nYou promised it by 5pm.",
+        kind: .task),
+      "Send the quarterly report\nYou promised it by 5pm.")
+  }
+
+  func testFloatingBarCardPromotesTheMessageWhenTheTitleIsCategoryChrome() {
+    let focus = FloatingControlBarManager.notificationCardCopy(
+      title: "Focus",
+      message: "Meet with Aryan Gupta for Omi project discussion",
+      kind: .suggestion)
+    XCTAssertEqual(focus.caption, "Focus")
+    XCTAssertEqual(focus.heading, "Meet with Aryan Gupta for Omi project discussion")
+    XCTAssertNil(focus.detail)
+    XCTAssertEqual(focus.systemImage, ProactiveNotificationBadge.suggestionSystemImage)
+
+    let insight = FloatingControlBarManager.notificationCardCopy(
+      title: "Insight",
+      message: "PR blocked, needs review",
+      kind: .insight)
+    XCTAssertEqual(insight.caption, "Insight")
+    XCTAssertEqual(insight.heading, "PR blocked, needs review")
+    XCTAssertNil(insight.detail)
+
+    let memory = FloatingControlBarManager.notificationCardCopy(
+      title: "Memory Saved",
+      message: "New memory: David prefers morning reviews",
+      kind: .memory)
+    XCTAssertEqual(memory.caption, "Memory")
+    XCTAssertEqual(memory.heading, "David prefers morning reviews")
+    XCTAssertNil(memory.detail)
+
+    let task = FloatingControlBarManager.notificationCardCopy(
+      title: "Send the quarterly report",
+      message: "You promised it by 5pm.",
+      kind: .task)
+    XCTAssertNil(task.caption)
+    XCTAssertEqual(task.heading, "Send the quarterly report")
+    XCTAssertEqual(task.detail, "You promised it by 5pm.")
   }
 
   /// The director's copy contract makes the title and the message both name the same
@@ -507,14 +684,20 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
 final class ChatBubbleLayoutRegressionTests: XCTestCase {
   func testCollapsedReplyKeepsAnEllipsisBeforeTheBelowMessageExpansionControl() {
-    let source = String(repeating: "reply ", count: 100)
-    let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
+    let budget = ChatBubbleTruncation.Budget(lines: 12, charactersPerLine: 40)
+    let source = (1...40).map { "Line \($0) of a long reply that keeps going" }.joined(separator: "\n")
+    let collapsed = ChatBubbleTruncation.displayText(
+      source, isStreaming: false, isExpanded: false, budget: budget)
 
-    XCTAssertTrue(ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false))
+    XCTAssertTrue(
+      ChatBubbleTruncation.shouldTruncate(text: source, isStreaming: false, isExpanded: false, budget: budget))
     XCTAssertTrue(collapsed.hasSuffix("…"), "collapsed body must expose an ellipsis before Show more")
-    XCTAssertEqual(collapsed.count, ChatBubbleTruncation.threshold + 1)
+    XCTAssertTrue(collapsed.hasPrefix("Line 1 of"), "the start of the message stays visible")
+    XCTAssertLessThanOrEqual(
+      ChatBubbleTruncation.estimatedLines(String(collapsed.dropLast()), charactersPerLine: 40),
+      Double(budget.lines))
     XCTAssertEqual(
-      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true),
+      ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: true, budget: budget),
       source,
       "expanding must restore the complete reply"
     )
@@ -528,6 +711,102 @@ final class ChatBubbleLayoutRegressionTests: XCTestCase {
       ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false),
       source
     )
+  }
+
+  /// Five hundred characters was five lines, and every real answer collapsed.
+  /// A reply may fill two screens before the transcript offers to fold it.
+  func testTwoScreensOfProseFitBeforeTheCollapseOffer() {
+    let budget = ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640)
+    // 720 pt of 14 pt type with the transcript's leading is about 32 lines a screen.
+    XCTAssertGreaterThanOrEqual(budget.lines, 60)
+    XCTAssertLessThanOrEqual(budget.lines, 72)
+    XCTAssertGreaterThanOrEqual(budget.charactersPerLine, 70)
+
+    let aboutOneScreen = String(repeating: "Prose that wraps naturally across the column. ", count: 50)
+    XCTAssertFalse(
+      ChatBubbleTruncation.shouldTruncate(
+        text: aboutOneScreen, isStreaming: false, isExpanded: false, budget: budget),
+      "a screen of prose is not collapsed")
+
+    let fiveScreens = String(repeating: aboutOneScreen + "\n\n", count: 5)
+    XCTAssertTrue(
+      ChatBubbleTruncation.shouldTruncate(
+        text: fiveScreens, isStreaming: false, isExpanded: false, budget: budget),
+      "five screens start collapsed")
+  }
+
+  func testABulletedReplyIsMeasuredInLinesNotCharacters() {
+    let budget = ChatBubbleTruncation.Budget(lines: 20, charactersPerLine: 80)
+    // 30 short bullets are 30 lines, though only 600 characters.
+    let bullets = (1...30).map { "- item \($0)" }.joined(separator: "\n")
+    XCTAssertTrue(ChatBubbleTruncation.exceedsBudget(bullets, budget: budget))
+    // The same character count in one paragraph is eight lines.
+    let paragraph = String(repeating: "x", count: 600)
+    XCTAssertFalse(ChatBubbleTruncation.exceedsBudget(paragraph, budget: budget))
+  }
+
+  func testACollapsedBodyCutsAtALineNotMidWord() {
+    let budget = ChatBubbleTruncation.Budget(lines: 3, charactersPerLine: 100)
+    let source = ["First line.", "Second line.", "Third line.", "Fourth line.", "Fifth line."]
+      .joined(separator: "\n")
+
+    XCTAssertEqual(
+      ChatBubbleTruncation.collapsedPrefix(source, budget: budget),
+      "First line.\nSecond line.\nThird line.")
+  }
+
+  func testACutInsideAFenceClosesTheFence() {
+    let budget = ChatBubbleTruncation.Budget(lines: 4, charactersPerLine: 80)
+    let source = "Intro\n```swift\nlet a = 1\nlet b = 2\nlet c = 3\nlet d = 4\n```\nAfter"
+    let collapsed = ChatBubbleTruncation.displayText(
+      source, isStreaming: false, isExpanded: false, budget: budget)
+
+    XCTAssertEqual(collapsed.components(separatedBy: "```").count - 1, 2, "the kept fence is closed")
+    XCTAssertTrue(collapsed.hasSuffix("…"))
+    XCTAssertFalse(collapsed.contains("let c"))
+  }
+
+  func testTheBudgetFollowsTheTranscriptsGeometry() {
+    let standard = ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640)
+    XCTAssertGreaterThan(
+      ChatBubbleTruncation.budget(viewportHeight: 1400, columnWidth: 640).lines, standard.lines,
+      "a taller transcript shows more before folding")
+    XCTAssertLessThan(
+      ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 320).charactersPerLine,
+      standard.charactersPerLine,
+      "a narrower column wraps sooner")
+    XCTAssertLessThan(
+      ChatBubbleTruncation.budget(viewportHeight: 720, columnWidth: 640, fontScale: 1.5).lines,
+      standard.lines,
+      "larger type fits fewer lines in the same screens")
+    XCTAssertEqual(
+      ChatBubbleTruncation.budget(viewportHeight: 0, columnWidth: 0), ChatBubbleTruncation.Budget.fallback,
+      "an unmeasured transcript uses the fallback rather than collapsing everything")
+  }
+
+  /// An answer collapsing at the moment it settles is the one case truncation
+  /// must not cover: the reader watched the whole thing arrive, and the
+  /// transcript was following it down.
+  func testAnAnswerTheReaderJustWatchedArriveIsNotCollapsedWhenItSettles() {
+    XCTAssertTrue(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: false),
+      "a stream that just ended keeps the body the reader was reading")
+    XCTAssertTrue(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: nil),
+      "a row that loses its streaming flag entirely settled just the same")
+  }
+
+  /// Restored history is what truncation is for, so nothing about merely
+  /// appearing may expand a row.
+  func testRestoredHistoryStillCollapses() {
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: false, isStreaming: false),
+      "a row that was never streaming here is history, and history stays compact")
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: nil, isStreaming: false))
+    XCTAssertFalse(
+      ChatBubbleTruncation.settlingKeepsFullBody(wasStreaming: true, isStreaming: true),
+      "still streaming is not settled")
   }
 
 }

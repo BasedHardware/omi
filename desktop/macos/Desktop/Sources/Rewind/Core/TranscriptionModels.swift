@@ -93,6 +93,8 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var geolocationJson: String?  // JSON-encoded Geolocation
   var photosJson: String?  // JSON-encoded [ConversationPhoto]
   var appsResultsJson: String?  // JSON-encoded [AppResponse]
+  /// Stored `client_processing` JSON. Retry sends this blob; it is never regenerated.
+  var clientProcessingJson: String?
 
   // MARK: - Conversation Status & Flags
   var conversationStatus: LocalConversationStatus  // Backend processing status
@@ -140,6 +142,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     geolocationJson: String? = nil,
     photosJson: String? = nil,
     appsResultsJson: String? = nil,
+    clientProcessingJson: String? = nil,
     // Status & flags
     conversationStatus: LocalConversationStatus = .inProgress,
     discarded: Bool = false,
@@ -181,6 +184,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
     self.appsResultsJson = appsResultsJson
+    self.clientProcessingJson = clientProcessingJson
     // Status & flags
     self.conversationStatus = conversationStatus
     self.discarded = discarded

@@ -38,6 +38,8 @@ ACTION_SOURCE_RELATIVE_PATHS = _bridge_action_sources() + (
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
     "Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbeRegistration.swift",
     "Desktop/Sources/Automation/DesktopAutomationHomeStageActions.swift",
+    "Desktop/Sources/Automation/DesktopAutomationActivationActions.swift",
+    "Desktop/Sources/Automation/DesktopAutomationPTTRecoveryActions.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
 )

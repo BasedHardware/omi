@@ -89,9 +89,6 @@ pytz==2024.1
 stripe==11.3.0
 twilio==9.5.0
 
-# Search
-typesense==0.21.0
-
 # Locale
 pycountry==24.6.1
 langdetect==1.0.9

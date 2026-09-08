@@ -42,11 +42,13 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
     ).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  func clamped() -> ContextDirectorDecision {
-    ContextDirectorDecision(
+  func clamped(copyBudget: InterjectCopyBudget.Limits? = nil) -> ContextDirectorDecision {
+    let titleLimit = InterjectCopyBudget.clampedTitleLimit(copyBudget?.titleLimit ?? 120)
+    let messageLimit = InterjectCopyBudget.clampedMessageLimit(copyBudget?.messageLimit ?? 600)
+    return ContextDirectorDecision(
       decision: decision,
-      title: String(Self.strippingInlineRefs(title).prefix(120)),
-      message: String(Self.strippingInlineRefs(message).prefix(600)),
+      title: String(Self.strippingInlineRefs(title).prefix(titleLimit)),
+      message: String(Self.strippingInlineRefs(message).prefix(messageLimit)),
       reasoning: String(reasoning.prefix(1_200)),
       bucketEntryRefs: bucketEntryRefs.prefix(20).map { String($0.prefix(200)) },
       factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },
@@ -62,6 +64,36 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
 enum ContextDirectorEligibility {
   static func permitsEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
     snapshot.notifyWorthiness > 0 && !snapshot.validatedFacts.isEmpty
+  }
+
+  /// Planned JIT matching is grounded on validated facts, not director worthiness.
+  /// A standing Safari trigger still has to see a Safari fact whose
+  /// `notifyWorthiness` is 0. Ambient nano keeps the worthiness gate via
+  /// `JITAmbientRuntimeContext.locallyRelevant`.
+  static func permitsJITEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
+    !snapshot.validatedFacts.isEmpty
+  }
+}
+
+enum ContextProactivityVisitRoute: Equatable, Sendable {
+  case skip
+  case jitOnly
+  case jitThenLegacyDirector
+}
+
+enum ContextProactivityAdmissionOutcome: Equatable, Sendable {
+  case skipped
+  case jitConsumed
+  case legacyDirector
+}
+
+enum ContextProactivityVisitAdmission {
+  static func route(for snapshot: ContextBucketSnapshot) -> ContextProactivityVisitRoute {
+    guard ContextDirectorEligibility.permitsJITEvaluation(of: snapshot) else { return .skip }
+    if ContextDirectorEligibility.permitsEvaluation(of: snapshot) {
+      return .jitThenLegacyDirector
+    }
+    return .jitOnly
   }
 }
 
@@ -137,10 +169,16 @@ enum ContextDirectorTaskSelection {
 
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
+  typealias JITHandle =
+    @Sendable (
+      ContextVisitFence, ContextBucketSnapshot, CapturedFrame, RuntimeOwnerAuthorizationSnapshot
+    ) async -> Bool
+
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
   private let presentationPreflight: @Sendable (String) async -> OwnerBoundNotificationPresentationResult
   private let retrieve: @Sendable (String, RuntimeOwnerAuthorizationSnapshot) async -> [ContextRetrievedItem]
+  private let jitHandle: JITHandle
   private var dwellAdmission = ContextVisitDwellAdmission()
   private let dwellNanoseconds: UInt64
 
@@ -156,6 +194,11 @@ actor ContextProactivityEngine {
       query, authorizationSnapshot in
       await ContextDirectorRetrievalExecutor.retrieve(
         query: query, authorizationSnapshot: authorizationSnapshot)
+    },
+    jitHandle: @escaping JITHandle = { fence, snapshot, frame, authorizationSnapshot in
+      await JITProactivityCoordinator.shared.handle(
+        fence: fence, snapshot: snapshot, frame: frame,
+        authorizationSnapshot: authorizationSnapshot)
     }
   ) {
     self.client = client
@@ -163,6 +206,7 @@ actor ContextProactivityEngine {
     self.dwellNanoseconds = dwellNanoseconds
     self.presentationPreflight = presentationPreflight
     self.retrieve = retrieve
+    self.jitHandle = jitHandle
   }
 
   func contextEntered(_ fence: ContextVisitFence) async {
@@ -193,9 +237,10 @@ actor ContextProactivityEngine {
       freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
-    // Facts are the only source of notification worthiness. A bucket containing
-    // ambient narrative alone cannot purchase a frontier-model call.
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // Validated facts are enough to run planned JIT matching. A bucket of
+    // ambient narrative alone still cannot purchase a frontier-model call;
+    // `admitJITThenLegacyDirector` keeps that worthiness gate on the director.
+    guard ContextProactivityVisitAdmission.route(for: snapshot) != .skip else { return }
     // After a departure the latest tracked frame can be the NEXT context's
     // screen. Sample the frame first, then re-read freshness and bound the
     // sample against it: the transition persists `endedAt` before the next
@@ -217,16 +262,10 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: frameSample.frame,
-      authorizationSnapshot: authorizationSnapshot)
-    {
-      return
-    }
-    await evaluateAndDeliver(
+    await admitJITThenLegacyDirector(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: frameSample.frame,
+      frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot)
   }
 
@@ -269,24 +308,41 @@ actor ContextProactivityEngine {
       log("DepartureEvalDebug: no snapshot")
       return
     }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else {
       log(
         "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
       )
       return
     }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: departingFrame,
+    _ = await admitJITThenLegacyDirector(
+      fence: fence,
+      snapshot: snapshot,
+      frame: departingFrame,
       authorizationSnapshot: authorizationSnapshot)
-    {
-      return
+  }
+
+  /// Shared post-snapshot tail: planned JIT may run on validated facts even at
+  /// zero worthiness; the legacy director still requires positive worthiness.
+  @discardableResult
+  func admitJITThenLegacyDirector(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    frame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> ContextProactivityAdmissionOutcome {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else { return .skipped }
+    if await jitHandle(fence, snapshot, frame, authorizationSnapshot) {
+      return .jitConsumed
     }
-    log("DepartureEvalDebug: proceeding to evaluateAndDeliver")
+    guard route == .jitThenLegacyDirector else { return .skipped }
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: departingFrame,
+      currentFrame: frame,
       authorizationSnapshot: authorizationSnapshot)
+    return .legacyDirector
   }
 
   /// The shared post-settle tail of the director pipeline: presentation
@@ -441,6 +497,7 @@ actor ContextProactivityEngine {
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+    let interjectCopyBudgets = await MainActor.run { InterjectFeature.isEnabled }
     if !retrievalHopEnabled {
       let diag = await MainActor.run {
         "enabled=\(ContextBucketsFeature.isEnabled) nonprod=\(AppBuild.isNonProduction) env=\(ProcessInfo.processInfo.environment["OMI_FORCE_BUCKET_RETRIEVAL"] ?? "unset")"
@@ -448,7 +505,9 @@ actor ContextProactivityEngine {
       log("ForcedLookupDebug: retrieval hop DISABLED (\(diag))")
     }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
-      snapshot: snapshot, allowLookup: retrievalHopEnabled)
+      snapshot: snapshot,
+      allowLookup: retrievalHopEnabled,
+      includeInterjectCopyBudgets: interjectCopyBudgets)
     let envSignal = await MainActor.run {
       EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
     }
@@ -553,7 +612,7 @@ actor ContextProactivityEngine {
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       guard
@@ -567,9 +626,10 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let firstDecision = try JSONDecoder().decode(
-        ContextDirectorDecision.self, from: Data(result.content.utf8)
-      ).clamped()
+      let firstRaw = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8))
+      let firstDecision = firstRaw.clamped(
+        copyBudget: interjectCopyBudgets ? InterjectCopyBudget.limits(for: firstRaw.decision) : nil)
       var decision = firstDecision
       var retrievedRefAllowlist: Set<String> = forcedRetrievalAllowlist
       var retrievalProvenance: [String: Any]? = forcedRetrievalProvenance
@@ -589,7 +649,8 @@ actor ContextProactivityEngine {
           imageData: currentFrame.jpegData,
           cacheKey: cacheKey,
           fence: fence,
-          authorizationSnapshot: authorizationSnapshot)
+          authorizationSnapshot: authorizationSnapshot,
+          includeInterjectCopyBudgets: interjectCopyBudgets)
         // A failed, empty, or gated hop keeps the first decision untouched:
         // retrieval may upgrade a decision, never lose one.
         decision = ContextDirectorRetrievalHop.finalDecision(
@@ -918,15 +979,11 @@ actor ContextProactivityEngine {
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
-        // 400, not 120: the reasoning model bills its thinking into completion
-        // tokens. Measured directly against the same model with this exact
-        // prompt shape: at 120 the call finished with `finish_reason=length`,
-        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
-        // attempts — which parses as malformed and silently suppresses the
-        // candidate. At 400 every attempt finished clean (33-174 reasoning
-        // tokens plus the small JSON body). Live provenance shows the same
-        // degenerate shape (a bare "false" reason) at the old cap.
-        maxCompletionTokens: 400,
+        // The backend-compatible floor applies to every reasoning request. The
+        // reasoning model bills its thinking into completion tokens, so a small
+        // client cap can finish with `finish_reason=length` and empty content,
+        // which parses as malformed and silently suppresses the
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       // The gate awaited the model; ownership can be revoked or the visit can
@@ -982,8 +1039,16 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      let message = String(candidate.message.prefix(600))
-      let title = String(message.prefix(120))
+      let interjectCopyBudgets = await MainActor.run { InterjectFeature.isEnabled }
+      let insightBudget = InterjectCopyBudget.limits(for: "insight")
+      let messageLimit =
+        interjectCopyBudgets
+        ? InterjectCopyBudget.clampedMessageLimit(insightBudget.messageLimit) : 600
+      let titleLimit =
+        interjectCopyBudgets
+        ? InterjectCopyBudget.clampedTitleLimit(insightBudget.titleLimit) : 120
+      let message = String(candidate.message.prefix(messageLimit))
+      let title = String(message.prefix(titleLimit))
       try await store.completeDelivery(
         id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
         message: message, state: "model_completed")
@@ -1115,7 +1180,8 @@ actor ContextProactivityEngine {
     imageData: Data?,
     cacheKey: String,
     fence: ContextVisitFence,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    includeInterjectCopyBudgets: Bool = false
   ) async -> RetrievalHopOutcome {
     func abandoned(_ items: [ContextRetrievedItem], failure: String?) -> RetrievalHopOutcome {
       RetrievalHopOutcome(
@@ -1154,12 +1220,14 @@ actor ContextProactivityEngine {
         imageData: imageData,
         jsonSchema: Self.schema(allowLookup: true),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
-      let decision = try JSONDecoder().decode(
-        ContextDirectorDecision.self, from: Data(result.content.utf8)
-      ).clamped()
+      let hopRaw = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8))
+      let decision = hopRaw.clamped(
+        copyBudget: includeInterjectCopyBudgets
+          ? InterjectCopyBudget.limits(for: hopRaw.decision) : nil)
       return RetrievalHopOutcome(
         decision: decision,
         allowedRefs: Set(items.map(\.ref)),

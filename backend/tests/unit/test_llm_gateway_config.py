@@ -34,7 +34,7 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert get_model('conv_discard') == 'gpt-5-nano'
     assert get_model('memories') == 'gpt-5.6-luna'
     assert get_model('fair_use') == 'gpt-5.6-luna'
-    assert get_model('chat_agent') == 'claude-sonnet-4-6'
+    assert get_model('chat_agent') == 'gpt-5.6-luna'
 
     assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
     assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.6-luna'

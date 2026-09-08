@@ -19,10 +19,12 @@ alert fired. Nothing was down in the sense any existing alert could observe:
   `llm_gateway_request_rejections_total`, not by `llm_gateway_requests_total`.
   For the whole outage the chat lane's request counter showed
   **100% success**, because the failing requests never reached it.
-- `omi-journey-chat-fail` already existed and is shaped correctly, but
-  `omi_journey_accepted_total{journey="chat_response"}` is emitted by the
-  Cloud Run `backend` service, which Prometheus does not scrape. The counter
-  has been flat at zero for its whole existence, so the rule could never fire.
+- `omi-journey-chat-fail` already existed and is shaped correctly, but at the
+  time `omi_journey_accepted_total{journey="chat_response"}` was emitted by the
+  Cloud Run `backend` service, which Prometheus did not scrape. The counter
+  had been flat at zero for its whole existence, so the rule could never fire.
+  (Resolved since: the Cloud Run metrics bridge delivers these series today,
+  and `chat_response` is covered by `omi-journey-signal-dead`.)
 - Only one client population was affected. A second, larger population on the
   same endpoint stayed healthy and kept every aggregate ratio green.
 
@@ -95,16 +97,23 @@ touching configuration.
 `omi-journey-signal-dead`
 
 ```promql
-(sum by (journey) (increase(omi_journey_accepted_total{journey=~"pusher_session|capture_finalization"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100)
+(sum by (journey) (increase(omi_journey_accepted_total{journey=~"pusher_session|capture_finalization"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100) or (sum by (journey) (increase(omi_journey_accepted_total{journey="chat_response"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total{lane_id="omi:auto:chat-agent"}[1h])) > bool 20)
 ```
 
 This is the alert for the alerts. Every real-traffic journey rule assumes its
 journey counter is being scraped. When that assumption breaks, the rule does not
 fail loudly — it goes quiet, which looks exactly like health.
 
-The rule fires when a journey reports **zero** accepted attempts in an hour while
-the platform is demonstrably serving traffic. `noDataState` is `Alerting`: if the
-series vanish entirely, that is the failure, not the absence of one.
+The first arm covers the backend-listen journeys (`pusher_session`,
+`capture_finalization`) and gates on total gateway traffic. The second arm
+covers `chat_response`, whose counter arrives through the Cloud Run metrics
+bridge, and gates on the chat-agent lane instead: that lane measured min 9,
+p01 15, p05 23 requests/hour over 7 production days, so `> 20` demands
+liveness only at above-p05 chat demand and stays silent in quiet hours.
+
+The rule fires when a journey reports **zero** accepted attempts in an hour
+while its own traffic gate proves demand exists. `noDataState` is `Alerting`:
+if the series vanish entirely, that is the failure, not the absence of one.
 
 **Verify:** check whether the emitting service is still running *and* still
 scraped, in that order. Do not treat a missing journey signal as evidence that
@@ -117,21 +126,19 @@ dead has no alerting coverage at all until it is scraped again.
 
 `tz_chat_agent_requests_zero` — `< 5` requests in 1h, sustained 30m.
 
-The threshold is set from measurement, not intuition. Sampled at 15-minute
-resolution across the seven days before this rule was written, `omi:auto:chat-agent`
-had a floor of 9 requests per hour, p01 of 15, p05 of 23, and a median of 55. Zero
-evaluations fell below 5.
-
 ## What these alerts still cannot see
 
-Anything emitted only by a Cloud Run service. `backend`, `desktop-backend`,
-`backend-sync`, and `backend-integration` have no application-metrics scrape
-path; Prometheus scrapes GKE pods only. `omi-journey-signal-dead` deliberately
-does **not** include `journey="chat_response"` yet, because that counter is
-emitted from Cloud Run and is expected to read zero until an ingestion path
-exists. Add it to the rule in the same change that makes those metrics arrive —
-otherwise the rule pages permanently and gets muted, which is worse than the
-gap it describes.
+Anything emitted only by a Cloud Run service and not covered by the bridge
+alerts. `backend` and `desktop-backend` application metrics now arrive through
+the Cloud Run GMP sidecar → Cloud Monitoring → isolated exporter path
+(`job="cloud-run-application-metrics"`), verified live at ~28MB / 52,662
+`omi_*` series per prod scrape (#12146). That bridge is itself guarded:
+`omi-cloud-run-egress-down`, `omi-cloud-run-egress-query-rejected`, and
+`omi-cloud-run-metric-names-unnormalized` page when it breaks, and
+`chat_response` is inside `omi-journey-signal-dead`'s selector, so a bridge
+regression that silences the chat counters pages on its own. `backend-sync`
+and `backend-integration` still have no application-metrics path; alerts that
+would read their in-process counters do not exist.
 
 ## Adding a journey alert later
 
@@ -145,12 +152,12 @@ ship again. Any rule whose expression selects `journey="..."` on an `omi_journey
 `omi_client_journey_*` metric must have that journey inside `omi-journey-signal-dead`'s
 selector, so a dead counter pages on its own.
 
-The only escape is `LIVENESS_EXEMPT_JOURNEYS` in the contract test, which requires a
-written reason. There is one entry today — `chat_response`, because it is emitted from
-Cloud Run and cannot arrive at all. **Delete that exemption in the same change that gives
-Cloud Run services a metrics ingestion path**, and add `chat_response` to the liveness
-rule at the same time. The test asserts a journey is never both exempt and covered, so
-the two cannot silently disagree.
+The only escape is `LIVENESS_EXEMPT_JOURNEYS` in the contract test, which
+requires a written reason. It is empty as of 2026-08-30: the last entry
+(`chat_response`, kept while its counter could not arrive) was deleted in the
+same change that added `chat_response` to the liveness rule behind a
+chat-agent-lane traffic gate. The test asserts a journey is never both exempt
+and covered, so the two cannot silently disagree.
 
 ## Backtest
 
