@@ -28,6 +28,8 @@ For physical-device builds, use the wrapper: it owns `dev + local_dev` and
 `prod + mobile_beta` pairing plus auth env setup. Direct builds must first run
 `scripts/validate_mobile_build_config.sh --flavor <dev|prod> --profile <profile>`
 with the matching `OMI_APP_PROFILE`; release/profile helpers do this too.
+`OMI_MOBILE_BUILD_MODE=profile` installs an AOT build that opens untethered
+(debug builds need `flutter run` attached on a physical iPhone; see README).
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
