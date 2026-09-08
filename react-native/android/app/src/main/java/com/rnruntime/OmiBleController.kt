@@ -150,7 +150,7 @@ class OmiBleController(
     override fun onScanFailed(errorCode: Int) {
       synchronized(this@OmiBleController) {
         if (!scanLease.active()) return
-        lastEvent = "BLE scan failed: $errorCode"
+        lastEvent = "Bluetooth scan failed"
         scanLease.fail(IllegalStateException("Bluetooth scan failed"))
       }
     }
@@ -317,7 +317,7 @@ class OmiBleController(
           if (!lease.accepts(generation)) return
           val connected = status == android.bluetooth.BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED
           connectionState = if (connected) "connected" else "disconnected"
-          lastEvent = if (connected) "Connected to Omi" else "Omi connection failed: $status"
+          lastEvent = if (connected) "Connected to Omi" else "Omi connection failed"
           if (connected) {
             if (results[id] == null) results[id] = OmiDevice(id, runCatching { gatt.device.name }.getOrNull() ?: "Omi", null)
             val started = runCatching { gatt.discoverServices() }.getOrElse { error ->
@@ -337,7 +337,7 @@ class OmiBleController(
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
           if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-            retireConnection("Omi service discovery failed: $status")
+            retireConnection("Omi service discovery failed")
             return
           }
           val audio = gatt.getService(UUID.fromString(OMI_SERVICE_UUID))?.getCharacteristic(UUID.fromString(OMI_AUDIO_UUID))
@@ -371,7 +371,7 @@ class OmiBleController(
         synchronized(this@OmiBleController) {
           if (!lease.accepts(generation)) return
           if (characteristic.uuid == UUID.fromString(OMI_CODEC_UUID) && status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-            retireConnection("Omi codec read failed: $status")
+            retireConnection("Omi codec read failed")
             return
           }
           if (status != BluetoothGatt.GATT_SUCCESS && characteristic.uuid == STORAGE_STATUS_UUID) finishStorage(null, "Storage status read failed")
@@ -396,7 +396,7 @@ class OmiBleController(
           }
           if (!lease.accepts(generation)) return
           if (characteristic.uuid == UUID.fromString(OMI_CODEC_UUID) && status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-            retireConnection("Omi codec read failed: $status")
+            retireConnection("Omi codec read failed")
             return
           }
           if (status != BluetoothGatt.GATT_SUCCESS && characteristic.uuid == STORAGE_STATUS_UUID) finishStorage(null, "Storage status read failed")
@@ -476,7 +476,7 @@ class OmiBleController(
             emitSnapshot()
           }
           if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-            if (descriptor.characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID)) retireConnection("Omi notification subscription failed: $status")
+            if (descriptor.characteristic.uuid == UUID.fromString(OMI_AUDIO_UUID)) retireConnection("Omi notification subscription failed")
             else finishGattOp(gatt)
             return
           }

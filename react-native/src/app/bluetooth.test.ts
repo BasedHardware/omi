@@ -17,6 +17,19 @@ test.each([
   ],
   ['Bluetooth is unavailable', 'unknown', 'Bluetooth is unavailable'],
   ['No Omi devices found', 'poweredOn', 'No Omi devices found'],
+  ['BLE scan failed: 2', 'poweredOn', 'Bluetooth scan failed.'],
+  ['Omi connection failed: 133', 'poweredOn', 'Omi connection failed.'],
+  [
+    'Omi service discovery failed: 8',
+    'poweredOn',
+    'Omi service discovery failed.',
+  ],
+  ['Omi codec read failed: 257', 'poweredOn', 'Omi codec read failed.'],
+  [
+    'Omi notification subscription failed: 133',
+    'poweredOn',
+    'Omi notification subscription failed.',
+  ],
 ] as const)('emptyDeviceListHint(%j, %s)', (event, bluetooth, expected) => {
   expect(emptyDeviceListHint(event, bluetooth)).toBe(expected);
 });

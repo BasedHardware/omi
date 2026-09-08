@@ -270,6 +270,41 @@ test.each([
   },
 );
 
+test.each([
+  ['BLE scan failed: 2', 'Bluetooth scan failed.'],
+  ['Omi connection failed: 133', 'Omi connection failed.'],
+] as const)(
+  'empty device list does not show GATT status %s',
+  async (lastEvent, expected) => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={
+            {
+              bluetooth: 'poweredOn',
+              devices: [],
+              connectedDeviceId: null,
+              capture: 'idle',
+              lastEvent,
+            } as PlatformNativeSnapshot
+          }
+          deviceBusy={false}
+          deviceScanMessage={null}
+          variant="compact"
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    const output = JSON.stringify(renderer.toJSON());
+    expect(output).toContain(expected);
+    expect(output).not.toContain('failed: 2');
+    expect(output).not.toContain('failed: 133');
+    await act(async () => renderer.unmount());
+  },
+);
+
 test('empty device list keeps an already-human Bluetooth last event', async () => {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {

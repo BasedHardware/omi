@@ -46,5 +46,11 @@ export function emptyDeviceListHint(
   if (trimmed === '' || wireToken !== null) {
     return bluetoothStatusLabel(wireToken ?? bluetooth);
   }
+  const statusCode = /^(.+ failed): \d+$/.exec(trimmed);
+  if (statusCode !== null) {
+    return statusCode[1] === 'BLE scan failed'
+      ? 'Bluetooth scan failed.'
+      : `${statusCode[1]}.`;
+  }
   return trimmed;
 }

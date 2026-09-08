@@ -388,7 +388,8 @@ didFailToConnectPeripheral:(CBPeripheral *)peripheral
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
-  [self retireConnection:error.localizedDescription ?: @"Omi connection failed"];
+  (void)error;
+  [self retireConnection:@"Omi connection failed"];
   [self.retiringPeripherals removeObject:peripheral];
 }
 
@@ -399,7 +400,8 @@ didDisconnectPeripheral:(CBPeripheral *)peripheral
   if (!OmiBleCallbackIsCurrent(self.connectedPeripheral, peripheral)) {
     return;
   }
-  [self retireConnection:error.localizedDescription ?: @"Disconnected from Omi"];
+  (void)error;
+  [self retireConnection:@"Disconnected from Omi"];
   [self.retiringPeripherals removeObject:peripheral];
 }
 

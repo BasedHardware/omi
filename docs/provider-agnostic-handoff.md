@@ -262,6 +262,8 @@ Cloud Linux after `c289780e66`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after the closed-write CTA slice: a nested non-retryable Apps enable no longer keeps a disabled Install control. Nested non-retryable training Opt in and independent recording/sync Updates are omitted the same way; status copy stays. Retryable 503 still keeps the control live. This does not invent an Apps or Settings write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
+Cloud Linux after the BLE status-code hint slice: an empty Devices list no longer shows Android GATT/scan integers such as BLE scan failed: 2, Omi connection failed: 133, or codec/notification failures with a status code. Apple connect/disconnect lastEvent copy uses Omi connection failed / Disconnected from Omi instead of CoreBluetooth localizedDescription. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

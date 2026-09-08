@@ -738,6 +738,10 @@ test('does not construct CBCentralManager until an explicit scan or connect', ()
   );
   expect(iosSource).not.toContain('Bluetooth is %@');
   expect(iosSource).toContain('bluetoothLastEvent');
+  expect(source).not.toContain('retireConnection:error.localizedDescription');
+  expect(iosSource).not.toContain(
+    'retireConnection:error.localizedDescription',
+  );
 });
 
 test('static tripwire: OmiNative wires CoreBluetooth and tested connection policy', () => {
