@@ -15,6 +15,7 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
+from typing import TextIO
 from unittest.mock import Mock, patch
 
 import preflight_runner
@@ -815,6 +816,7 @@ class SingleFlightTests(unittest.TestCase):
         command: list[str],
         *,
         extra_env: dict[str, str] | None = None,
+        stdout: int | TextIO = subprocess.PIPE,
     ) -> subprocess.Popen[str]:
         env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
         if extra_env:
@@ -824,7 +826,7 @@ class SingleFlightTests(unittest.TestCase):
             cwd=REPO_ROOT,
             env=env,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=stdout,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
@@ -871,25 +873,44 @@ class SingleFlightTests(unittest.TestCase):
                 "    time.sleep(0.02)\n"
             )
             command = [sys.executable, "-c", script]
-            first = self.run_runner(temp, command)
-            assert first.stdin is not None
-            first.stdin.write("same\n")
-            first.stdin.close()
-            self.wait_for_lock(temp)
-            second = self.run_runner(temp, command)
-            assert second.stdin is not None
-            second.stdin.write("same\n")
-            second.stdin.close()
-            time.sleep(0.3)
-            hold.unlink(missing_ok=True)
-            first_output = first.stdout.read() if first.stdout else ""
-            second_output = second.stdout.read() if second.stdout else ""
-            self.assertEqual(first.wait(), 0, first_output)
-            self.assertEqual(second.wait(), 0, second_output)
-            if first.stdout:
-                first.stdout.close()
-            if second.stdout:
-                second.stdout.close()
+            joined_log = temp / "joined.log"
+            processes: list[subprocess.Popen[str]] = []
+            outputs: list[str] = []
+            with joined_log.open("w", encoding="utf-8") as log:
+                try:
+                    first = self.run_runner(temp, command)
+                    processes.append(first)
+                    assert first.stdin is not None
+                    first.stdin.write("same\n")
+                    first.stdin.close()
+                    self.wait_for_lock(temp)
+                    second = self.run_runner(temp, command, stdout=log)
+                    processes.append(second)
+                    assert second.stdin is not None
+                    second.stdin.write("same\n")
+                    second.stdin.close()
+                    # Observe the flushed join message before releasing the owner.
+                    deadline = time.monotonic() + 5
+                    while "Joining identical preflight" not in joined_log.read_text(encoding="utf-8"):
+                        if second.poll() is not None or time.monotonic() >= deadline:
+                            self.fail("second runner did not join: " + joined_log.read_text(encoding="utf-8"))
+                        time.sleep(0.02)
+                finally:
+                    hold.unlink(missing_ok=True)
+                    for process in processes:
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
+                        if process.stdin and not process.stdin.closed:
+                            process.stdin.close()
+                        outputs.append(process.stdout.read() if process.stdout else "")
+                        if process.stdout:
+                            process.stdout.close()
+            second_output = joined_log.read_text(encoding="utf-8")
+            self.assertEqual(first.returncode, 0, outputs[0])
+            self.assertEqual(second.returncode, 0, second_output)
             self.assertEqual(counter.read_text(), "x")
             self.assertIn("Joining identical preflight", second_output)
             status = json.loads((temp / "test" / "status.json").read_text())
