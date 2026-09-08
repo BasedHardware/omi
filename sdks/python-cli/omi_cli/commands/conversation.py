@@ -45,8 +45,13 @@ def list_conversations(
     ),
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
+    folder_id: Optional[str] = typer.Option(None, "--folder-id", help="Only show conversations in this folder."),
+    starred: Optional[bool] = typer.Option(None, "--starred/--not-starred", help="Filter by starred status."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if folder_id is not None and not folder_id.strip():
+        raise UsageError(message="Invalid folder ID", detail="--folder-id must not be empty.")
+
     with ctx.make_client() as client:
         items = client.get(
             "/v1/dev/user/conversations",
@@ -57,6 +62,8 @@ def list_conversations(
                 "end_date": end_date.isoformat() if end_date else None,
                 "categories": categories,
                 "include_transcript": include_transcript,
+                "folder_id": folder_id,
+                "starred": starred,
             },
         )
     if ctx.renderer.json_mode:

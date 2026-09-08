@@ -90,6 +90,8 @@ Visibility: `public` or `private`.
 | `omi conversation update ID [--title ... --discarded/--no-discarded]` | `PATCH /v1/dev/user/conversations/{id}` |
 | `omi conversation delete ID [-y]`             | `DELETE /v1/dev/user/conversations/{id}`                       |
 
+`omi conversation list` supports the same read filters as the Developer API: `--limit`, `--offset`, `--start-date`, `--end-date`, `--categories`, `--folder-id`, `--starred`, `--not-starred`, and `--include-transcript`.
+
 The `--text` flag accepts `-` to read from stdin:
 
 ```bash
