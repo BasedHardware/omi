@@ -107,6 +107,9 @@ jest.mock('../src/app/useReduceMotion', () => ({
 }));
 
 jest.mock('../src/desktopSettingsClient', () => {
+  const actual = jest.requireActual(
+    '../src/desktopSettingsClient',
+  ) as typeof import('../src/desktopSettingsClient');
   const prefs = {
     audioMode: 'off',
     floatingBar: true,
@@ -124,6 +127,7 @@ jest.mock('../src/desktopSettingsClient', () => {
     vadGate: true,
   };
   return {
+    ...actual,
     defaultDesktopPreferences: () => prefs,
     loadDesktopPreferences: jest.fn(async () => prefs),
     loadPermissionStatus: jest.fn(async () => ({

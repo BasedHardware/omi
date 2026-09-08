@@ -62,6 +62,9 @@ jest.mock('./ShippingStage', () => {
 });
 
 jest.mock('../desktopSettingsClient', () => {
+  const actual = jest.requireActual(
+    '../desktopSettingsClient',
+  ) as typeof import('../desktopSettingsClient');
   const prefs = {
     audioMode: 'off',
     floatingBar: true,
@@ -79,6 +82,7 @@ jest.mock('../desktopSettingsClient', () => {
     vadGate: true,
   };
   return {
+    ...actual,
     defaultDesktopPreferences: () => prefs,
     loadDesktopPreferences: jest.fn(async () => prefs),
     loadPermissionStatus: jest.fn(async () => ({
@@ -707,6 +711,9 @@ test('Settings opens the shipping multi-pane IA including Advanced', async () =>
   expect(tree).toContain('New backend');
   expect(tree).toContain('Screen Capture');
   expect(tree).toContain('Audio Recording');
+  expect(tree).toContain('Off');
+  expect(tree).toContain('Always');
+  expect(tree).toContain('Meetings');
   expect(tree).toContain('Notifications');
   await act(async () => {
     renderer.root
@@ -1386,7 +1393,7 @@ test('Settings does not persist audio capture when microphone access is denied',
     await Promise.resolve();
   });
   await act(async () => {
-    pressText(renderer, 'always');
+    pressText(renderer, 'Always');
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -1397,6 +1404,35 @@ test('Settings does not persist audio capture when microphone access is denied',
   );
   expect(renderedText(renderer)).toContain(
     'Microphone access is denied in System Settings.',
+  );
+});
+
+test('Settings audio recording labels are not raw mode tokens', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    requestDesktopPermission: jest.Mock;
+    setDesktopPreference: jest.Mock;
+  };
+  settings.requestDesktopPermission.mockResolvedValueOnce('granted');
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Off');
+  expect(tree).toContain('Always');
+  expect(tree).toContain('Meetings');
+  await act(async () => {
+    pressText(renderer, 'Always');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.setDesktopPreference).toHaveBeenCalledWith(
+    'audioMode',
+    'always',
   );
 });
 

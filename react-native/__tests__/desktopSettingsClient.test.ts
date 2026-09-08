@@ -1,4 +1,5 @@
 import {
+  audioRecordingModeCopy,
   defaultDesktopPreferences,
   loadDesktopPreferences,
   parseAudioRecordingMode,
@@ -17,6 +18,9 @@ test('desktop settings persist the Advanced software plane locally', () => {
   expect(parseSoftwarePlane('new')).toBe('new');
   expect(parseAudioRecordingMode('meetings')).toBe('meetings');
   expect(parseAudioRecordingMode('off')).toBe('off');
+  expect(audioRecordingModeCopy('off')).toBe('Off');
+  expect(audioRecordingModeCopy('always')).toBe('Always');
+  expect(audioRecordingModeCopy('meetings')).toBe('Meetings');
   expect(
     parseStampedV5Origin('https://omi-v5-backend-staging.example.workers.dev'),
   ).toBe('https://omi-v5-backend-staging.example.workers.dev');

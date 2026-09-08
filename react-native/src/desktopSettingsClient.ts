@@ -81,6 +81,17 @@ export function parseAudioRecordingMode(value: unknown): AudioRecordingMode {
   return 'off';
 }
 
+export function audioRecordingModeCopy(mode: AudioRecordingMode): string {
+  switch (mode) {
+    case 'always':
+      return 'Always';
+    case 'meetings':
+      return 'Meetings';
+    case 'off':
+      return 'Off';
+  }
+}
+
 export function parseStampedV5Origin(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0) {
     return null;

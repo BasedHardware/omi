@@ -18,6 +18,7 @@ import {
   subscriptionStatusCopy,
 } from '../desktopReadClient';
 import {
+  audioRecordingModeCopy,
   defaultDesktopPreferences,
   loadDesktopPreferences,
   loadPermissionStatus,
@@ -112,11 +113,13 @@ function Row({
 
 function Segmented<Value extends string>({
   disabled = false,
+  formatOption,
   onChange,
   options,
   value,
 }: {
   disabled?: boolean;
+  formatOption?: (value: Value) => string;
   onChange: (value: Value) => void;
   options: readonly Value[];
   value: Value;
@@ -140,7 +143,7 @@ function Segmented<Value extends string>({
               styles.segmentText,
               value === option && styles.segmentTextActive,
             ]}>
-            {option}
+            {formatOption ? formatOption(option) : option}
           </Text>
         </FocusPressable>
       ))}
@@ -398,6 +401,7 @@ export function DesktopSettings({
         title="Audio Recording"
         trailing={
           <Segmented<AudioRecordingMode>
+            formatOption={audioRecordingModeCopy}
             onChange={value => {
               runAction(async () => {
                 if (
