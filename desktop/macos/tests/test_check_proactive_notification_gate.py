@@ -58,7 +58,7 @@ class ProactiveNotificationGateCheckerTests(unittest.TestCase):
         found = self._scan(
             {
                 "TrialBannerService.swift": "FloatingControlBarManager.shared.showNotification(\n)",
-                "Onboarding/OnboardingChatView.swift": "FloatingControlBarManager.shared.showNotification(\n)",
+                "FloatingControlBar/FloatingControlBarWindow.swift": "FloatingControlBarManager.shared.showNotification(\n)",
             }
         )
         self.assertEqual(found, [])
@@ -89,6 +89,27 @@ class ProactiveNotificationGateCheckerTests(unittest.TestCase):
             }
         )
         self.assertEqual(found[0][1], 4)
+
+    def test_flags_an_allowlist_entry_whose_file_is_gone(self):
+        """A dead exemption is a bypass waiting for the next file at that path.
+
+        `Sources/Onboarding/OnboardingChatView.swift` sat on the allowlist after main
+        retired the onboarding wizard views, so anything later created there would have
+        inherited an exemption nobody granted it.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "Sources"
+            for rel in gate_checker.ALLOWLIST:
+                path = root.parent / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("// present\n", encoding="utf-8")
+            self.assertEqual(gate_checker.stale_allowlist_entries(root), [])
+
+            (root.parent / "Sources/TrialBannerService.swift").unlink()
+            self.assertEqual(
+                gate_checker.stale_allowlist_entries(root),
+                ["Sources/TrialBannerService.swift"],
+            )
 
     def test_does_not_scan_tests(self):
         found = self._scan({"Tests/SomeTests.swift": "FloatingControlBarManager.shared.showNotification(\n)"})

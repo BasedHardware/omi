@@ -1483,6 +1483,27 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return .suppressed
     }
 
+    // The category toggle belongs here, not in the caller. Today's only caller gates
+    // itself on `IntegrationNudgeCoordinator.isFeatureEnabled`, which is the same
+    // setting `categoryToggleAllows` reads for `.integration` — so this changes nothing
+    // for it. It is here so the next caller, with a different kind, cannot arrive
+    // ungated: Settings promises five notification types, and a toggle that silences
+    // only the producers that remembered to check it would make that promise a lie.
+    // Same reasoning, and same argument list, as the context-director path above.
+    guard
+      Self.categoryToggleAllows(
+        kind: kind,
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
+    else {
+      onDropped?()
+      return .suppressed
+    }
+
     // Hard-codes `respectFrequency: true`: this entry point is proactive by
     // construction. A functional notice goes through `sendNotification` with
     // `respectFrequency: false`.

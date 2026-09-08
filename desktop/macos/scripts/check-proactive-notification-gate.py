@@ -37,10 +37,6 @@ Allowlisted callers, each because it is NOT proactive:
   TrialBannerService.swift
       Trial expiry and billing state. A user who silenced suggestions still has to
       learn their trial ended, or the silence costs them the product.
-  Onboarding/OnboardingChatView.swift
-      Permission help during onboarding. Suppressing the message that explains how
-      to grant a permission is how a broken permission stays broken.
-
 Comments and string literals are blanked before matching, so prose mentioning the
 primitive (including this file's own rationale, quoted in a Swift comment) is not
 reported.
@@ -58,7 +54,6 @@ ALLOWLIST = {
     "Sources/ProactiveAssistants/Services/NotificationService.swift",
     "Sources/FloatingControlBar/FloatingControlBarWindow.swift",
     "Sources/TrialBannerService.swift",
-    "Sources/Onboarding/OnboardingChatView.swift",
 }
 
 CALL = re.compile(rf"{MANAGER}\s*\.\s*shared\s*\.\s*{PRIMITIVE}\s*\(")
@@ -102,6 +97,18 @@ def mask_comments_and_strings(source: str) -> str:
     return "".join(out)
 
 
+def stale_allowlist_entries(root: pathlib.Path):
+    """Allowlist entries naming files that no longer exist.
+
+    An exemption outlives the file it was written for: `Onboarding/OnboardingChatView.swift`
+    stayed on this list after main retired the onboarding wizard views, so any file later
+    created at that path would have inherited a bypass nobody granted it. The list only
+    ever shrinks by someone noticing, which is exactly what this checker exists not to
+    rely on.
+    """
+    return sorted(rel for rel in ALLOWLIST if not (root.parent / rel).is_file())
+
+
 def violations(root: pathlib.Path):
     found = []
     for path in sorted(root.rglob("*.swift")):
@@ -130,6 +137,18 @@ def main() -> int:
     if not root.is_dir():
         print(f"check-proactive-notification-gate: no such directory: {root}", file=sys.stderr)
         return 2
+
+    stale = stale_allowlist_entries(root)
+    if stale:
+        print(
+            "check-proactive-notification-gate: ALLOWLIST names files that no longer exist. "
+            "Remove them — a dead exemption silently covers whatever is created at that path "
+            "next.\n",
+            file=sys.stderr,
+        )
+        for rel in stale:
+            print(f"  {rel}", file=sys.stderr)
+        return 1
 
     found = violations(root)
     if not found:
