@@ -17,10 +17,14 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/analytics/firmware_update_telemetry.dart';
+import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/manifest/manifest.dart';
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
+  FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
+
   Map latestFirmwareDetails = {};
   bool isDownloading = false;
   bool isDownloaded = false;
@@ -30,13 +34,15 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  final mcumgr.FirmwareUpdateManagerFactory? managerFactory = mcumgr.FirmwareUpdateManagerFactory();
+  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
+      firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
+  FirmwareUpdateTelemetry? _firmwareTelemetry;
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
     // Create temporary directory
-    final prefix = 'firmware_${Uuid().v4()}';
+    final prefix = 'firmware_${const Uuid().v4()}';
     final systemTempDir = await getTemporaryDirectory();
     final tempDir = Directory('${systemTempDir.path}/$prefix');
     await tempDir.create();
@@ -78,7 +84,12 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> startDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('Omi firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
     if (isLegacySecureDFU) {
+      _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'nordic_dfu');
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
@@ -96,6 +107,11 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> startMCUDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('MCU firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
+    _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'mcumgr');
     setState(() {
       isInstalling = true;
     });
@@ -105,6 +121,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     final file = File(firmwareFile);
     if (!await file.exists()) {
+      _firmwareTelemetry?.failed(failureClass: 'firmware_file_missing');
       Logger.debug('Firmware file not found: $firmwareFile');
       if (mounted) {
         setState(() {
@@ -129,6 +146,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     updateStream.listen((state) {
       if (state == mcumgr.FirmwareUpgradeState.success) {
+        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
         Logger.debug('update success');
         killMcuUpdateManager();
         setState(() {
@@ -136,7 +154,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           isInstalled = true;
         });
       } else {
+        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
         Logger.debug('update state: $state');
+        if (mounted) {
+          setState(() {
+            isInstalling = false;
+          });
+        }
       }
     });
 
@@ -150,13 +174,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-          Logger.debug('dfu log: ${log.message}');
-        });
+      Logger.debug('dfu log: ${log.message}');
+    });
 
     await updateManager.update(images, configuration: configuration);
   }
 
   Future<void> startLegacyDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
+    if (!firmwareUpdatePolicy.allowsOmiFirmwareUpdate) {
+      Logger.debug('Legacy firmware updates are unavailable in the Ray-Ban DAT build');
+      return;
+    }
     setState(() {
       isInstalling = true;
     });
@@ -183,6 +211,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         });
       },
       onError: (deviceAddress, error, errorType, message) {
+        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
         Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
         setState(() {
           isInstalling = false;
@@ -198,6 +227,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
       onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
       onDfuCompleted: (deviceAddress) {
+        _firmwareTelemetry?.completed(toVersion: latestFirmwareDetails['version']?.toString());
         Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
         setState(() {
           isInstalling = false;
@@ -245,6 +275,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future downloadFirmware() async {
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
     final zipUrl = latestFirmwareDetails['zip_url'];
     if (zipUrl == null) {
       Logger.debug('Error: zip_url is null in latestFirmwareDetails');
@@ -252,7 +283,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         isDownloading = false;
       });
       // Reset firmware update state on error
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.resetFirmwareUpdateState();
       return;
     }
@@ -310,7 +340,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           setState(() {
             isDownloading = false;
           });
-          final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
           deviceProvider.resetFirmwareUpdateState();
           completer.completeError(error);
         },
@@ -324,7 +353,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           isDownloading = false;
         });
       }
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       deviceProvider.resetFirmwareUpdateState();
     }
   }

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-media-track-output-liveness",
+  "violated_contract": "A long-lived capture loop must treat every browser-declared media-output unavailable state, including a muted live track and an ended track, as non-capturable and recover before persisting another frame.",
+  "canonical_prevention": "Centralize track usability as live and not muted, route ended, mute, and initially unusable tracks through one generation-fenced restart path, and behaviorally assert that no frame is saved until a replacement stream is usable.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/renderer/src/components/rewind/RewindCaptureHost.test.tsx"
+  ],
+  "evidence_prs": [10549],
+  "scope_hints": [
+    "desktop/windows/src/renderer/src/components/rewind/**"
+  ],
+  "status": "open"
+}

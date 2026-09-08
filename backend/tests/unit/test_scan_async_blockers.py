@@ -1,0 +1,682 @@
+import importlib.util
+import textwrap
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+SCANNER_PATH = BACKEND_DIR / "scripts" / "scan_async_blockers.py"
+
+
+@pytest.fixture
+def scanner() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("scan_async_blockers_interprocedural_test", SCANNER_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _scan_source(scanner: ModuleType, tmp_path: Path, source: str):
+    source_path = tmp_path / "sample.py"
+    source_path.write_text(textwrap.dedent(source), encoding="utf-8")
+    return source_path, scanner.scan_dirs([str(tmp_path)])
+
+
+def _scan_service_source(scanner: ModuleType, tmp_path: Path, source: str):
+    service_dir = tmp_path / "backend" / "routers"
+    service_dir.mkdir(parents=True)
+    source_path = service_dir / "service.py"
+    source_path.write_text(textwrap.dedent(source), encoding="utf-8")
+    return source_path, scanner.scan_dirs([str(service_dir)])
+
+
+def test_scan_dirs_reads_source_as_utf8(scanner, tmp_path, monkeypatch):
+    source_path = tmp_path / "unicode_source.py"
+    source_path.write_text('"""Unicode source - snowman: \u2603."""\n', encoding="utf-8")
+    real_open = open
+    opened = []
+
+    def tracked_open(path, *args, **kwargs):
+        opened.append((path, kwargs.get("encoding")))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", tracked_open)
+
+    scanner.scan_dirs([str(tmp_path)])
+
+    assert opened == [(str(source_path), "utf-8")]
+
+
+def test_direct_local_sync_wrapper_is_reported_at_async_call_site(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def read_payload():
+            return open("payload.json").read()
+
+        @router.get("/payload")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return read_payload()
+        """,
+    )
+
+    assert len(results["medium_file_io"]) == 1
+    call = results["medium_file_io"][0]["calls"][0]
+    assert call["call"] == "read_payload() -> open()"
+    assert call["via"] == ["read_payload"]
+    assert call["line"] != call["sink_line"]
+
+
+def test_transitive_local_sync_wrappers_preserve_full_blocking_path(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+        import requests
+
+        def request_remote():
+            return requests.get("https://example.test")
+
+        def load_remote():
+            return request_remote()
+
+        @router.get("/remote")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return load_remote()
+        """,
+    )
+
+    assert len(results["high_network_io"]) == 1
+    call = results["high_network_io"][0]["calls"][0]
+    assert call["call"] == "load_remote() -> request_remote() -> requests.get()"
+    assert call["via"] == ["load_remote", "request_remote"]
+    assert len(call["chain_lines"]) == 3
+
+
+def test_safe_local_sync_helper_does_not_create_a_finding(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def normalize(value):
+            return value.strip().lower()
+
+        @router.get("/normalize")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return normalize(" Safe ")
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["medium_file_io"] == []
+    assert results["time_sleep"] == []
+    assert results["mixed_await_sync_db"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_recursive_helper_cycle_reaches_blocking_sink_without_looping(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def first(depth):
+            if depth:
+                return second(depth - 1)
+            return open("payload.json").read()
+
+        def second(depth):
+            return first(depth - 1) if depth else "done"
+
+        @router.get("/recursive")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return second(2)
+        """,
+    )
+
+    call = results["medium_file_io"][0]["calls"][0]
+    assert call["call"] == "second() -> first() -> open()"
+    assert call["via"] == ["second", "first"]
+
+
+def test_safe_recursive_helper_cycle_has_no_effect(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def first(depth):
+            return second(depth - 1) if depth else "done"
+
+        def second(depth):
+            return first(depth - 1) if depth else "done"
+
+        @router.get("/recursive")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return first(2)
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["medium_file_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_local_sync_helper_passed_to_run_blocking_is_safe(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        def read_payload():
+            return open("payload.json").read()
+
+        async def helper():
+            return await run_blocking(storage_executor, read_payload)
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_direct_credentials_refresh_is_reported_as_sync_network_io(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        async def refresh_token():
+            creds.refresh(request)
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert finding["function"] == "refresh_token"
+    assert finding["network_io"] == [{"line": 3, "call": "creds.refresh() [sync HTTP]"}]
+
+
+def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, tmp_path):
+    _source_path, results = _scan_service_source(
+        scanner,
+        tmp_path,
+        """
+        from firebase_admin import auth, firestore
+
+        def _get_firestore_db():
+            return firestore.client()
+
+        def _get_user_context():
+            return _get_firestore_db().collection("users")
+
+        async def websocket_handler(token):
+            auth.verify_id_token(token)
+            return _get_user_context()
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert {call["call"] for call in finding["network_io"]} == {"verify_id_token() [sync HTTP]"}
+    assert {call["call"] for call in finding["db_calls"]} == {
+        "_get_user_context() -> _get_firestore_db() -> firestore.client"
+    }
+
+
+def test_firebase_auth_and_firestore_helpers_are_safe_on_owned_executors(scanner, tmp_path):
+    _source_path, results = _scan_service_source(
+        scanner,
+        tmp_path,
+        """
+        from firebase_admin import auth, firestore
+
+        def _verify(token):
+            return auth.verify_id_token(token)
+
+        def _get_firestore_db():
+            return firestore.client()
+
+        def _get_user_context():
+            return _get_firestore_db().collection("users")
+
+        async def websocket_handler(token):
+            decoded = await run_blocking(critical_executor, _verify, token)
+            context = await run_blocking(db_executor, _get_user_context)
+            return decoded, context
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_prerecorded_stt_and_storage_lifecycle_calls_are_network_io(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.other.storage import (
+            get_syncing_file_temporal_signed_url,
+            schedule_syncing_temporal_file_deletion,
+        )
+        from utils.stt.pre_recorded import prerecorded, prerecorded_from_bytes
+
+        async def stream_voice_message():
+            await checkpoint()
+            url = get_syncing_file_temporal_signed_url("audio.wav")
+            schedule_syncing_temporal_file_deletion("audio.wav")
+            prerecorded(url)
+            prerecorded_from_bytes(b"audio")
+        """,
+    )
+
+    calls = results["async_helpers_with_blocking"][0]["network_io"]
+    assert {call["call"] for call in calls} == {
+        "get_syncing_file_temporal_signed_url",
+        "schedule_syncing_temporal_file_deletion",
+        "prerecorded() [sync STT]",
+        "prerecorded_from_bytes() [sync STT]",
+    }
+
+
+def test_prerecorded_stt_and_storage_helpers_are_safe_on_managed_executors(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.other.storage import (
+            get_syncing_file_temporal_signed_url,
+            schedule_syncing_temporal_file_deletion,
+        )
+        from utils.stt.pre_recorded import prerecorded
+
+        def _prepare_url(path):
+            url = get_syncing_file_temporal_signed_url(path)
+            schedule_syncing_temporal_file_deletion(path)
+            return url
+
+        def _transcribe(url):
+            return prerecorded(url)
+
+        async def stream_voice_message():
+            url = await run_blocking(storage_executor, _prepare_url, "audio.wav")
+            return await run_blocking(sync_executor, _transcribe, url)
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_sync_app_and_subscription_imports_are_db_blockers_with_aliases(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.apps import get_available_apps as load_apps
+        from utils.subscription import is_trial_paywalled
+
+        async def realtime_coordinator(uid, source):
+            await checkpoint()
+            if is_trial_paywalled(uid, source):
+                return []
+            return load_apps(uid)
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    assert {call["call"] for call in finding["db_calls"]} == {"is_trial_paywalled", "load_apps"}
+
+
+def test_sync_notification_import_is_detected_through_local_helper(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.notifications import send_notification
+
+        def send_app_notification(uid, message):
+            send_notification(uid, "App says", message)
+
+        async def realtime_coordinator(uid):
+            await checkpoint()
+            send_app_notification(uid, "hello")
+        """,
+    )
+
+    finding = results["async_helpers_with_blocking"][0]
+    call = finding["network_io"][0]
+    assert call["call"] == "send_app_notification() -> send_notification() [sync notification]"
+    assert call["via"] == ["send_app_notification"]
+
+
+def test_app_boundaries_are_clean_on_owned_executor_and_async_notification_seam(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from utils.apps import get_available_apps
+        from utils.subscription import is_trial_paywalled
+        from utils.notifications import send_notification_async
+
+        async def realtime_coordinator(uid, source):
+            if await run_blocking(db_executor, is_trial_paywalled, uid, source):
+                return []
+            apps = await run_blocking(db_executor, get_available_apps, uid)
+            await send_notification_async(uid, "App says", "hello")
+            return apps
+        """,
+    )
+
+    assert results["high_network_io"] == []
+    assert results["mixed_await_sync_db"] == []
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_asyncio_to_thread_is_reported_as_unmanaged_offload(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        async def legacy_helper():
+            return await asyncio.to_thread(blocking_call)
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == [
+        {
+            "file": str(_source_path),
+            "line": 4,
+            "end_line": 5,
+            "function": "legacy_helper",
+            "calls": [{"line": 5, "call": "asyncio.to_thread() [unmanaged executor]"}],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("import_statement", "offload_call"),
+    [
+        ("import asyncio as aio", "aio.to_thread(blocking_call)"),
+        ("from asyncio import to_thread", "to_thread(blocking_call)"),
+        ("from asyncio import to_thread as offload", "offload(blocking_call)"),
+    ],
+)
+def test_asyncio_to_thread_import_aliases_are_reported_as_unmanaged_offloads(
+    scanner,
+    tmp_path,
+    import_statement,
+    offload_call,
+):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        f"""
+        {import_statement}
+
+        async def legacy_helper():
+            return await {offload_call}
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == [
+        {
+            "file": str(_source_path),
+            "line": 4,
+            "end_line": 5,
+            "function": "legacy_helper",
+            "calls": [{"line": 5, "call": "asyncio.to_thread() [unmanaged executor]"}],
+        }
+    ]
+
+
+def test_unrelated_to_thread_import_is_not_reported_as_an_asyncio_offload(scanner, tmp_path):
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from workers import to_thread
+
+        async def helper():
+            return await to_thread(blocking_call)
+        """,
+    )
+
+    assert results["unmanaged_thread_offload"] == []
+
+
+def test_explicit_python_file_path_is_scanned(scanner, tmp_path):
+    source_path = tmp_path / "dependencies.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def auth_dependency():
+                creds.refresh(request)
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["summary"]["files_scanned"] == 1
+    assert results["high_network_io"][0]["endpoint"] == "auth_dependency"
+
+
+def test_dependency_module_async_without_await_is_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "dependencies.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            async def pure_dependency():
+                return "uid"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"][0]["endpoint"] == "pure_dependency"
+
+
+def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
+    source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        def read_payload():
+            return open("payload.json").read()
+
+        @router.get("/payload")
+        async def endpoint():
+            await asyncio.sleep(0)
+            return read_payload()
+        """,
+    )
+    finding = results["medium_file_io"][0]
+    sink_line = finding["calls"][0]["sink_line"]
+    scope = {
+        "ranges": {scanner._normalize_path(str(source_path)): [(sink_line, sink_line)]},
+        "import_changed_files": set(),
+    }
+
+    assert scanner.finding_in_changed_scope(finding, scope)
+
+
+def test_async_for_consumption_is_not_a_structural_finding(scanner, tmp_path):
+    """An endpoint that drives an async generator suspends and cannot become `def`."""
+    source_path = tmp_path / "streaming_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/stream")
+            async def consume_stream():
+                async for chunk in produce():
+                    continue
+                return "done"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "context_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/context")
+            async def use_context():
+                async with acquire() as handle:
+                    return handle
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_awaited_async_db_accessor_is_not_blocking(scanner, tmp_path):
+    """`await`ing an async accessor from database.* yields to the loop, so it is not blocking.
+
+    The scanner classified every `database.*` import called inside an `async def` as a sync DB
+    call without checking whether it was awaited. That made a correct fix — routing the
+    proactive dispatcher onto the publisher's shared Redis client via the async accessor —
+    fail the push gate, with no allowlist or inline waiver to say otherwise.
+    """
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            client = await get_async_redis_client()
+            return client
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_unawaited_sync_db_call_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: the same import called without `await` still blocks."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            client = get_redis_client()
+            return client
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1
+
+
+def test_coroutines_handed_to_asyncio_are_not_blocking(scanner, tmp_path):
+    """Awaiting through asyncio is the same handoff as `await`, so it is not blocking either.
+
+    `_awaited_call_ids` only sees a call that is the direct operand of an `await`. Awaiting two
+    accessors at once, or one with a deadline, means writing `asyncio.gather(...)`,
+    `asyncio.create_task(...)` or `asyncio.wait_for(...)`, and the inner call stops being that
+    operand — so the same async accessor the previous fix cleared was reported again the moment
+    a second one was awaited beside it.
+    """
+    for form in (
+        "await asyncio.gather(get_async_redis_client(), get_async_cache_client())",
+        "await asyncio.wait_for(get_async_redis_client(), timeout=5)",
+        "await asyncio.wait([get_async_redis_client(), get_async_cache_client()])",
+        "await asyncio.create_task(get_async_redis_client())",
+        "await asyncio.shield(get_async_redis_client())",
+    ):
+        _source_path, results = _scan_source(
+            scanner,
+            tmp_path,
+            f"""
+            import asyncio
+
+            from database.redis_db import get_async_cache_client, get_async_redis_client
+
+            async def dispatcher():
+                return {form}
+            """,
+        )
+
+        assert results["async_helpers_with_blocking"] == [], form
+
+
+def test_task_group_create_task_is_not_blocking(scanner, tmp_path):
+    """A TaskGroup drives its argument on the event loop exactly as `asyncio.create_task` does."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client
+
+        async def dispatcher():
+            async with asyncio.TaskGroup() as group:
+                group.create_task(get_async_redis_client())
+        """,
+    )
+
+    assert results["async_helpers_with_blocking"] == []
+
+
+def test_a_sync_db_call_beside_a_handoff_on_one_line_is_still_blocking(scanner, tmp_path):
+    """The skip stays keyed on the call node: only the handed-off half of a line is cleared."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_async_redis_client, get_redis_client
+
+        async def dispatcher():
+            return await asyncio.gather(get_async_redis_client()), get_redis_client()
+        """,
+    )
+
+    assert [call["call"] for finding in results["async_helpers_with_blocking"] for call in finding["db_calls"]] == [
+        "get_redis_client"
+    ]
+
+
+def test_a_call_asyncio_never_receives_is_still_blocking(scanner, tmp_path):
+    """The guard must not widen: importing asyncio near a sync DB call does not clear it."""
+    _source_path, results = _scan_source(
+        scanner,
+        tmp_path,
+        """
+        import asyncio
+
+        from database.redis_db import get_redis_client
+
+        async def dispatcher():
+            await asyncio.sleep(1)
+            return get_redis_client()
+        """,
+    )
+
+    assert len(results["async_helpers_with_blocking"]) == 1

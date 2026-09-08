@@ -43,7 +43,7 @@ export function PromoCard() {
       }`}
     >
       {/* Gradient accent bar */}
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-blue-500 to-cyan-500" />
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-white/70 via-white/30 to-transparent" />
 
       {/* Dismiss button */}
       <button
@@ -56,8 +56,8 @@ export function PromoCard() {
 
       {/* Content */}
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20">
-          <Sparkles className="h-5 w-5 text-violet-400" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.10]">
+          <Sparkles className="h-5 w-5 text-text-primary" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-white">Try the New Web Experience</h3>
@@ -70,15 +70,15 @@ export function PromoCard() {
       {/* CTA */}
       <button
         onClick={handleSignIn}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-all hover:from-violet-500 hover:to-blue-500 hover:shadow-lg hover:shadow-violet-500/25"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black transition-all hover:bg-white/90 hover:shadow-lg hover:shadow-white/20"
       >
         <LogIn className="h-4 w-4" />
         Sign In
       </button>
 
       {/* Decorative glow */}
-      <div className="pointer-events-none absolute -bottom-20 -right-20 h-40 w-40 rounded-full bg-violet-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-20 -right-20 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+      <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full bg-white/[0.06] blur-3xl" />
     </div>
   );
 }

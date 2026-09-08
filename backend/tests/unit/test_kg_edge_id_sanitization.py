@@ -4,25 +4,26 @@ Tests for issue #4929: Edge ID sanitization in knowledge graph.
 Firestore document IDs cannot contain '/'. When the LLM generates edge labels
 like 'works/with', the '/' in the constructed edge_id breaks the Firestore path.
 Fix: replace '/' with '_' in edge_id before using as document ID.
+
+The module under test (``database.knowledge_graph``) binds ``db`` at import via
+``from database._client import db``, but ``database._client.db`` is a lazy proxy
+that defers client construction to first use, so the import is pure and no
+``sys.modules`` stubbing is required.
 """
 
 import os
 import sys
-import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
 
-# Patch the Firestore Client before importing any database module
-with patch("google.cloud.firestore.Client") as mock_client_cls:
-    mock_db = MagicMock()
-    mock_client_cls.return_value = mock_db
-    from database.knowledge_graph import upsert_knowledge_edge
+from database.knowledge_graph import upsert_knowledge_edge
+
+mock_db = MagicMock()
 
 
 class TestEdgeIdSanitization:
@@ -30,6 +31,9 @@ class TestEdgeIdSanitization:
 
     def setup_method(self):
         mock_db.reset_mock()
+        # database.knowledge_graph imports a module-level db object; point it at
+        # this test's mock so the Firestore document() call is observable.
+        upsert_knowledge_edge.__globals__['db'] = mock_db
         # Set up document chain: db.collection().document().collection().document()
         self.mock_edge_ref = MagicMock()
         self.mock_edge_ref.get.return_value = MagicMock(exists=False)

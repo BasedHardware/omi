@@ -55,7 +55,6 @@ class TestReExportsRemoved:
 
         reexport_symbols = [
             'ActionItem',
-            'ActionItemsExtraction',
             'AudioFile',
             'CalendarMeetingContext',
             'CategoryEnum',
@@ -81,7 +80,8 @@ class TestReExportsRemoved:
     def test_canonical_imports_work(self):
         """All moved symbols import from their canonical modules."""
         from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
-        from models.structured import Structured, ActionItem, Event, ActionItemsExtraction
+        from models.structured import Structured, ActionItem, Event
+        from models.structured_extraction import ActionItemsExtraction
         from models.audio_file import AudioFile
         from models.calendar_context import CalendarMeetingContext, MeetingParticipant
         from models.conversation_photo import ConversationPhoto
@@ -215,6 +215,46 @@ class TestSerializationRoundTrip:
         assert eic2.text == "test content"
         assert eic2.text_source == ExternalIntegrationConversationSource.message
 
+    def test_legacy_transcript_segment_ids_are_deterministic_per_conversation(self):
+        from models.conversation import Conversation
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        raw_segments = [
+            {
+                "text": "legacy",
+                "speaker": "SPEAKER_00",
+                "is_user": False,
+                "start": 0.0,
+                "end": 1.0,
+            },
+            {
+                "id": "explicit-segment-id",
+                "text": "explicit",
+                "speaker": "SPEAKER_01",
+                "is_user": False,
+                "start": 1.0,
+                "end": 2.0,
+            },
+        ]
+        fields = {
+            "id": "conversation-with-legacy-segments",
+            "created_at": now,
+            "started_at": now,
+            "finished_at": now,
+            "structured": Structured(),
+            "transcript_segments": raw_segments,
+        }
+
+        first = Conversation(**fields)
+        second = Conversation(**fields)
+
+        assert first.transcript_segments[0].id == second.transcript_segments[0].id
+        assert first.transcript_segments[0].id
+        assert first.transcript_segments[0].id != first.transcript_segments[1].id
+        assert first.transcript_segments[1].id == "explicit-segment-id"
+        assert "id" not in raw_segments[0]
+
 
 class TestHelperMethods:
     """Helper methods on moved models must work correctly."""
@@ -305,56 +345,6 @@ class TestHelperMethods:
         d = e.as_dict_cleaned_dates()
         assert isinstance(d['start'], str)
         assert '2025-06-15' in d['start']
-
-
-class TestConversationSummary:
-    """Phase 2: ConversationSummary lightweight view model."""
-
-    def test_basic_creation(self):
-        from models.conversation_summary import ConversationSummary
-
-        s = ConversationSummary(id="test-1", title="Test", overview="Overview")
-        assert s.id == "test-1"
-        assert s.title == "Test"
-        assert s.category == "other"
-        assert s.person_ids == []
-
-    def test_from_conversation(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.conversation_summary import ConversationSummary
-        from models.structured import Structured
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="conv-1",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(
-                title="Team standup",
-                overview="Daily sync",
-                category=CategoryEnum.work,
-            ),
-        )
-        summary = ConversationSummary.from_conversation(conv)
-        assert summary.id == "conv-1"
-        assert summary.title == "Team standup"
-        assert summary.overview == "Daily sync"
-        assert summary.category == "work"
-        assert summary.created_at == now
-        assert summary.person_ids == []
-
-    def test_defaults(self):
-        from models.conversation_summary import ConversationSummary
-
-        s = ConversationSummary(id="x")
-        assert s.title == ''
-        assert s.overview == ''
-        assert s.category == 'other'
-        assert s.transcript_text == ''
-        assert s.created_at is None
 
 
 class TestPhase3NarrowImports:
@@ -526,44 +516,64 @@ class TestAsDictCleanedDates:
         assert isinstance(d['finished_at'], str)
 
 
-class TestConversationSummaryWithTranscript:
-    """ConversationSummary.from_conversation with real data."""
+class TestImportedFlag:
+    """imported marks ZIP/external imports; default False for normal captures."""
 
-    def test_from_conversation_with_transcript_and_person_ids(self):
+    def test_defaults_to_false(self):
         from models.conversation import Conversation
-        from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.conversation_summary import ConversationSummary
+        from models.conversation_enums import ConversationSource
         from models.structured import Structured
-        from models.transcript_segment import TranscriptSegment
 
         now = datetime.now(timezone.utc)
         conv = Conversation(
-            id="summary-1",
+            id="imported-default",
             created_at=now,
             started_at=now,
             finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(
-                title="Team standup",
-                overview="Daily sync",
-                category=CategoryEnum.work,
-            ),
-            transcript_segments=[
-                TranscriptSegment(
-                    text="Hello team", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True, person_id="p1"
-                ),
-                TranscriptSegment(
-                    text="Hi there", speaker="SPEAKER_01", start=1.0, end=2.0, is_user=False, person_id="p2"
-                ),
-            ],
+            source=ConversationSource.limitless,
+            structured=Structured(title="Pendant sync"),
         )
-        summary = ConversationSummary.from_conversation(conv)
-        assert summary.id == "summary-1"
-        assert summary.title == "Team standup"
-        assert summary.category == "work"
-        assert "Hello team" in summary.transcript_text
-        assert "Hi there" in summary.transcript_text
-        assert sorted(summary.person_ids) == ["p1", "p2"]
+        assert conv.imported is False
+
+    def test_limitless_import_sets_true_and_serializes(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        conv = Conversation(
+            id="imported-true",
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.limitless,
+            structured=Structured(title="ZIP import"),
+            imported=True,
+        )
+        assert conv.imported is True
+        dumped = conv.model_dump()
+        cleaned = conv.as_dict_cleaned_dates()
+        assert dumped['imported'] is True
+        assert cleaned['imported'] is True
+
+    def test_missing_firestore_field_defaults_false(self):
+        from models.conversation import Conversation
+        from models.conversation_enums import ConversationSource
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        # Construct from a dict that omits the field (legacy docs).
+        from_legacy = Conversation.model_validate(
+            {
+                'id': 'legacy-no-imported',
+                'created_at': now,
+                'started_at': now,
+                'finished_at': now,
+                'source': ConversationSource.omi,
+                'structured': Structured(title='Legacy'),
+            }
+        )
+        assert from_legacy.imported is False
 
 
 class TestPhase4ConsumerMigration:
@@ -574,7 +584,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/trends.py').read_text()
+        source = pathlib.Path('utils/llm/trends.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'trends_extractor':
@@ -588,7 +598,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'retrieve_memory_context_params':
@@ -602,7 +612,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'obtain_emotional_message':
@@ -622,7 +632,7 @@ class TestPhase4ConsumerMigration:
             'routers/chat.py',
             'utils/chat.py',
         ]:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert (
                 'from models.conversation import' not in source
             ), f'{file_path} still imports from models.conversation'
@@ -631,7 +641,7 @@ class TestPhase4ConsumerMigration:
         """Files using TYPE_CHECKING should not have runtime Conversation import."""
         import pathlib
 
-        source = pathlib.Path('utils/retrieval/graph.py').read_text()
+        source = pathlib.Path('utils/retrieval/graph.py').read_text(encoding='utf-8')
         assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
         assert 'from __future__ import annotations' in source
 
@@ -700,13 +710,14 @@ class TestPhase4RuntimeBehavior:
         import pathlib
 
         for file_path in ['routers/chat.py', 'utils/chat.py']:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert 'extract_memory_ids' in source, f'{file_path} should use extract_memory_ids'
             assert 'from utils.conversation_helpers import extract_memory_ids' in source
 
     def test_trends_extractor_signature_callable(self):
         """trends_extractor can be called with the new signature shape."""
         import sys
+        from contextlib import nullcontext
         from unittest.mock import patch, MagicMock
         from models.transcript_segment import TranscriptSegment
 
@@ -733,11 +744,15 @@ class TestPhase4RuntimeBehavior:
             trends_mod.users_db = MagicMock()
             trends_mod.users_db.get_people_by_ids.return_value = []
             trends_mod.get_user_name = MagicMock(return_value='TestUser')
-            trends_mod.llm_mini = MagicMock()
-            trends_mod.llm_mini.with_structured_output.return_value.invoke.return_value = MagicMock(items=[])
+            trends_mod.get_llm = MagicMock()
+            trends_mod.get_llm.return_value.with_structured_output.return_value.invoke.return_value = MagicMock(
+                items=[]
+            )
+            trends_mod.track_usage = MagicMock(side_effect=lambda _uid, _feature: nullcontext())
 
             result = trends_mod.trends_extractor('test-uid', segments, person_ids)
             assert result == []
+            trends_mod.track_usage.assert_called_once_with('test-uid', trends_mod.Features.TRENDS)
         finally:
             for mod_name, saved in saved_modules.items():
                 if saved is None:
@@ -757,7 +772,15 @@ class TestPhase4RuntimeBehavior:
         # Mock Firestore
         mock_client = MagicMock()
         saved = sys.modules.get('database._client')
+        saved_firebase_admin = sys.modules.get('firebase_admin')
+        saved_firebase_firestore = sys.modules.get('firebase_admin.firestore')
         sys.modules['database._client'] = MagicMock(db=mock_client, document_id_from_seed=lambda s: f'id-{s}')
+        firebase_admin_stub = MagicMock()
+        firebase_firestore_stub = MagicMock()
+        firebase_firestore_stub.ArrayUnion = lambda values: values
+        firebase_admin_stub.firestore = firebase_firestore_stub
+        sys.modules['firebase_admin'] = firebase_admin_stub
+        sys.modules['firebase_admin.firestore'] = firebase_firestore_stub
 
         try:
             sys.modules.pop('database.trends', None)
@@ -778,4 +801,12 @@ class TestPhase4RuntimeBehavior:
                 sys.modules.pop('database._client', None)
             else:
                 sys.modules['database._client'] = saved
+            if saved_firebase_admin is None:
+                sys.modules.pop('firebase_admin', None)
+            else:
+                sys.modules['firebase_admin'] = saved_firebase_admin
+            if saved_firebase_firestore is None:
+                sys.modules.pop('firebase_admin.firestore', None)
+            else:
+                sys.modules['firebase_admin.firestore'] = saved_firebase_firestore
             sys.modules.pop('database.trends', None)

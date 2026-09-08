@@ -22,10 +22,10 @@ Requires:
 import argparse
 import io
 import os
-import struct
 import sys
 import time
 import wave
+from typing import Any, Dict, List, Tuple, cast
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -44,24 +44,24 @@ if os.path.exists(env_file):
                     os.environ[key] = value
 
 import numpy as np
+import numpy.typing as npt
 from jiwer import wer
 
 from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
 from utils.stt.vad_gate import VADStreamingGate
 
 
-def read_wav(path: str):
+def read_wav(path: str) -> Tuple[npt.NDArray[np.int16], int, int]:
     """Read WAV file, return (samples_int16, sample_rate, channels)."""
     with wave.open(path, 'rb') as wf:
         sr = wf.getframerate()
         ch = wf.getnchannels()
-        sw = wf.getsampwidth()
         frames = wf.readframes(wf.getnframes())
     samples = np.frombuffer(frames, dtype=np.int16)
     return samples, sr, ch
 
 
-def samples_to_wav_bytes(samples: np.ndarray, sample_rate: int, channels: int = 1) -> bytes:
+def samples_to_wav_bytes(samples: npt.NDArray[Any], sample_rate: int, channels: int = 1) -> bytes:
     """Convert int16 samples to WAV bytes for Deepgram."""
     buf = io.BytesIO()
     with wave.open(buf, 'wb') as wf:
@@ -85,11 +85,12 @@ def pcm_bytes_to_wav_bytes(pcm: bytes, sample_rate: int, channels: int = 1) -> b
 
 def transcribe(wav_bytes: bytes, sample_rate: int) -> str:
     """Transcribe WAV bytes via Deepgram batch API."""
-    words = deepgram_prerecorded_from_bytes(wav_bytes, sample_rate=sample_rate, diarize=False)
+    raw_words = deepgram_prerecorded_from_bytes(wav_bytes, sample_rate=sample_rate, diarize=False)
+    words = cast(List[Dict[str, Any]], raw_words)
     return ' '.join(w['text'] for w in words)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='Offline VAD gate replay with transcript comparison')
     parser.add_argument('--input', required=True, help='Input WAV file')
     parser.add_argument('--ground-truth', help='Optional ground truth transcript file')
@@ -120,10 +121,10 @@ def main():
 
     # Override thresholds if specified
     if args.speech_threshold is not None:
-        gate._speech_threshold = args.speech_threshold
+        gate._speech_threshold = args.speech_threshold  # type: ignore[reportPrivateUsage]
 
-    print(f'  Speech threshold: {gate._speech_threshold}')
-    print(f'  Pre-roll: {gate._pre_roll_ms}ms, Hangover: {gate._hangover_ms}ms')
+    print(f'  Speech threshold: {gate._speech_threshold}')  # type: ignore[reportPrivateUsage]
+    print(f'  Pre-roll: {gate._pre_roll_ms}ms, Hangover: {gate._hangover_ms}ms')  # type: ignore[reportPrivateUsage]
     print()
 
     # Chunk audio and feed through gate
@@ -133,7 +134,7 @@ def main():
 
     speech_windows = 0
     silence_windows = 0
-    state_log = []
+    state_log: list[tuple[float, str, bool]] = []
 
     print(f'Replaying {duration_s:.1f}s of audio in {args.chunk_ms}ms chunks...')
     t0 = time.time()

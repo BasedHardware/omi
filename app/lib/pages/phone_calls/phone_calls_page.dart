@@ -2,7 +2,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
+// hide PermissionStatus: flutter_contacts has its own PermissionStatus enum, and this
+// file never spells out permission_handler's version by name (only inferred via `var`).
+import 'package:permission_handler/permission_handler.dart' hide PermissionStatus;
 import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
@@ -52,8 +54,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   Future<void> _loadContacts() async {
     try {
-      bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
-      if (!hasPermission) {
+      final status = await FlutterContacts.permissions.request(PermissionType.read);
+      if (!mounted) return;
+      if (status != PermissionStatus.granted && status != PermissionStatus.limited) {
         setState(() {
           _permissionDenied = true;
           _loadingContacts = false;
@@ -61,29 +64,34 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         return;
       }
 
-      var contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      var contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
       contacts = contacts.where((c) => c.phones.isNotEmpty).toList();
-      contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
+      contacts.sort((a, b) => (a.displayName ?? '').compareTo(b.displayName ?? ''));
 
-      setState(() {
-        _contacts = contacts;
-        _filteredContacts = contacts;
-        _loadingContacts = false;
-      });
+      if (mounted) {
+        setState(() {
+          _contacts = contacts;
+          _filteredContacts = contacts;
+          _loadingContacts = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _loadingContacts = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingContacts = false;
+        });
+      }
     }
   }
 
   void _filterContacts(String query) {
+    if (!mounted) return;
     setState(() {
       if (query.isEmpty) {
         _filteredContacts = _contacts;
       } else {
         _filteredContacts = _contacts.where((c) {
-          return c.displayName.toLowerCase().contains(query.toLowerCase()) ||
+          return (c.displayName ?? '').toLowerCase().contains(query.toLowerCase()) ||
               c.phones.any((p) => p.number.contains(query));
         }).toList();
       }
@@ -214,7 +222,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                   if (status.isPermanentlyDenied || status.isDenied) {
                     await openAppSettings();
                   } else {
-                    await FlutterContacts.requestPermission(readonly: true);
+                    await FlutterContacts.permissions.request(PermissionType.read);
                   }
                   _loadContacts();
                 },
@@ -270,11 +278,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                   itemBuilder: (context, index) {
                     var contact = _filteredContacts[index];
                     var phone = contact.phones.first;
+                    var name = contact.displayName ?? '';
                     return _ContactRow(
-                      name: contact.displayName,
-                      phone: '${phone.label.name} ${phone.number}',
-                      initial: contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?',
-                      onCall: () => _makeCall(phone.number, contactName: contact.displayName),
+                      name: name,
+                      phone: '${phone.label.label.name} ${phone.number}',
+                      initial: name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      onCall: () => _makeCall(phone.number, contactName: name),
                     );
                   },
                 ),
@@ -298,16 +307,20 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 // Invisible spacer to balance the backspace button
                 const SizedBox(width: 48),
                 Expanded(
-                  child: Text(
-                    hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: hasDigits ? 2 : 0,
-                      color: hasDigits ? Colors.white : Colors.grey[600],
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPressStart: (details) => _showPasteMenu(details.globalPosition),
+                    child: Text(
+                      hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: hasDigits ? 2 : 0,
+                        color: hasDigits ? Colors.white : Colors.grey[600],
+                      ),
                     ),
                   ),
                 ),
@@ -415,6 +428,65 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         }),
       ),
     );
+  }
+
+  /// Keep only dialpad-valid characters (digits, *, #) plus a leading +.
+  /// Strips spaces, dashes, parens, dots, and other formatting from pasted text
+  /// like "+1 (415) 555-1234" → "+14155551234".
+  String _sanitizePastedNumber(String input) {
+    final buf = StringBuffer();
+    var seenPlus = false;
+    for (var i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (ch == '+' && !seenPlus && buf.isEmpty) {
+        buf.write('+');
+        seenPlus = true;
+      } else if (ch.codeUnitAt(0) >= 0x30 && ch.codeUnitAt(0) <= 0x39) {
+        buf.write(ch);
+      } else if (ch == '*' || ch == '#') {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
+  }
+
+  Future<void> _showPasteMenu(Offset globalPosition) async {
+    HapticFeedback.lightImpact();
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+
+    final raw = clipboardData?.text;
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final sanitized = _sanitizePastedNumber(raw);
+    if (sanitized.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final selected = await showMenu<String>(
+      context: context,
+      color: const Color(0xFF2A2A2E),
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        overlay.size.width - globalPosition.dx,
+        overlay.size.height - globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'paste',
+          child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+
+    if (selected == 'paste' && mounted) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _dialpadController.text = sanitized;
+      });
+    }
   }
 
   /// Extracts the country code (e.g. "+1", "+91") from an E.164 phone number

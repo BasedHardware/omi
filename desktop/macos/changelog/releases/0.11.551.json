@@ -1,0 +1,7 @@
+{
+  "version": "0.11.551",
+  "date": "2026-06-28",
+  "changes": [
+    "Improved Hermes and OpenClaw agent chats with better follow-up handling, safer progress summaries, and clearer provider visuals"
+  ]
+}

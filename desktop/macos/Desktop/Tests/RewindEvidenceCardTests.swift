@@ -1,0 +1,311 @@
+import XCTest
+
+@testable import Omi_Computer
+
+final class RewindEvidenceCardTests: XCTestCase {
+  private let deviceID = "macos_test-device"
+
+  func testProducerMarksAnActualScreenshotAsAnExactRewindFrame() throws {
+    XCTAssertEqual(
+      ScreenCandidateAdapter.evidenceVersion(for: 42),
+      RewindEvidenceCardPolicy.supportedVersion
+    )
+    let decision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID,
+      evidenceVersion: ScreenCandidateAdapter.evidenceVersion(for: 42)
+    )
+    let evidence = try XCTUnwrap(decision.candidateEvidenceRefs.first)
+
+    XCTAssertEqual(evidence.id, "screen-42")
+    XCTAssertEqual(evidence.version, "rewind_frame.v1")
+    XCTAssertEqual(
+      RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID)?.screenshotID,
+      42
+    )
+  }
+
+  func testProducerEvidenceReachesAvailableOnlyAfterLocalRowResolution() throws {
+    let decision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID,
+      evidenceVersion: ScreenCandidateAdapter.evidenceVersion(for: 42)
+    )
+    let evidence = try XCTUnwrap(decision.candidateEvidenceRefs.first)
+    XCTAssertNotNil(RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID))
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: true,
+        ownerStillCurrent: true
+      ),
+      .available
+    )
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: false,
+        ownerStillCurrent: true
+      ),
+      .unavailable
+    )
+  }
+
+  func testNilScreenshotFallbackCannotCollideIntoARewindFrame() throws {
+    XCTAssertEqual(
+      ScreenCandidateAdapter.evidenceVersion(for: nil),
+      ScreenCandidateAdapter.captureEvidenceVersion
+    )
+    let fallbackDecision = ScreenCandidateAdapter.adapt(
+      task: makeExtractedTask(),
+      dueAt: nil,
+      localEvidenceID: "screen-42",
+      deviceID: deviceID
+    )
+    let fallback = try XCTUnwrap(fallbackDecision.candidateEvidenceRefs.first)
+    let actual = makeEvidence(
+      deviceID: deviceID,
+      id: fallback.id,
+      version: RewindEvidenceCardPolicy.supportedVersion
+    )
+
+    XCTAssertEqual(fallback.version, ScreenCandidateAdapter.captureEvidenceVersion)
+    XCTAssertEqual(fallback.id, actual.id)
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: fallback, currentDeviceID: deviceID))
+    XCTAssertEqual(RewindEvidenceCardPolicy.card(for: actual, currentDeviceID: deviceID)?.screenshotID, 42)
+  }
+
+  func testOldCaptureVersionAndLegacyNilVersionRemainTextOnly() {
+    let oldCapture = makeEvidence(deviceID: deviceID, id: "screen-7", version: "capture.v2")
+    let legacy = makeEvidence(deviceID: deviceID, id: "screen-8", version: nil)
+
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: oldCapture, currentDeviceID: deviceID))
+    XCTAssertNil(RewindEvidenceCardPolicy.card(for: legacy, currentDeviceID: deviceID))
+  }
+
+  func testOwnerTransitionMakesAnExistingLocalRowUnavailable() {
+    guard let owner = RewindCaptureOwnerSnapshot.capture() else {
+      return XCTFail("owner snapshot should be available for this local resolution test")
+    }
+    RewindCaptureOwnerGeneration.beginTransition()
+    XCTAssertFalse(owner.isCurrent())
+    let oldLease = RewindEvidenceCardLease(screenshotID: 42, owner: owner)
+    RewindCaptureOwnerGeneration.endTransition()
+    let nextOwner = RewindCaptureOwnerSnapshot.capture()
+    XCTAssertFalse(
+      RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+        oldLease,
+        screenshotID: 42,
+        currentOwner: nextOwner
+      )
+    )
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: true,
+        ownerStillCurrent: false
+      ),
+      .unavailable
+    )
+  }
+
+  func testMissingLocalRowResolvesUnavailable() async {
+    let localRowExists = (try? await RewindDatabase.shared.getScreenshot(id: Int64.max)) != nil
+
+    XCTAssertFalse(localRowExists)
+    XCTAssertEqual(
+      RewindEvidenceCardResolutionPolicy.availability(
+        localRowExists: localRowExists,
+        ownerStillCurrent: true
+      ),
+      .unavailable
+    )
+  }
+
+  func testUnavailablePresentationIsDisabledAndAccessible() {
+    let card = RewindEvidenceCardModel(screenshotID: 42)
+
+    XCTAssertFalse(
+      RewindEvidenceCardPresentationPolicy.isOpenable(
+        availability: .unavailable,
+        hasOpenHandler: true
+      )
+    )
+    XCTAssertEqual(
+      RewindEvidenceCardPresentationPolicy.subtitle(for: card, availability: .unavailable),
+      "Unavailable locally · frame 42"
+    )
+    XCTAssertTrue(
+      RewindEvidenceCardPresentationPolicy.accessibilityHint(
+        availability: .unavailable,
+        hasOpenHandler: true
+      ).contains("unavailable locally")
+    )
+  }
+
+  func testNilHostCallbackRemainsNonActionable() {
+    XCTAssertNil(RewindEvidenceCardPolicy.openHandler(for: 42, onOpen: nil))
+  }
+
+  func testNilHostSubtitleMatchesDisabledState() {
+    let card = RewindEvidenceCardModel(screenshotID: 42)
+
+    XCTAssertEqual(
+      RewindEvidenceCardPresentationPolicy.subtitle(
+        for: card,
+        availability: .available,
+        hasOpenHandler: false
+      ),
+      "Unavailable to open here · frame 42"
+    )
+    XCTAssertFalse(
+      RewindEvidenceCardPresentationPolicy.isOpenable(
+        availability: .available,
+        hasOpenHandler: false
+      )
+    )
+  }
+
+  func testMalformedForeignAndFutureEvidenceRemainTextOnly() {
+    let cases = [
+      makeEvidence(deviceID: deviceID, id: "42", version: "capture.v2"),
+      makeEvidence(deviceID: deviceID, id: "screen-0", version: "capture.v2"),
+      makeEvidence(deviceID: deviceID, id: "screen-01", version: "capture.v2"),
+      makeEvidence(
+        deviceID: "macos_other-device",
+        id: "screen-42",
+        version: RewindEvidenceCardPolicy.supportedVersion
+      ),
+      makeEvidence(deviceID: deviceID, id: "screen-42", version: "rewind_frame.v2"),
+      OmiAPI.EvidenceRef(id: "screen-42", kind: .conversation, scope: .canonical, version: "capture.v2"),
+      OmiAPI.EvidenceRef(id: "screen-42", kind: .local_screen, scope: .canonical, version: "capture.v2"),
+    ]
+
+    for evidence in cases {
+      XCTAssertNil(
+        RewindEvidenceCardPolicy.card(for: evidence, currentDeviceID: deviceID),
+        "unexpected card for \(evidence.kind.rawValue):\(evidence.id)"
+      )
+    }
+  }
+
+  func testTaskDetailLocalEvidenceFallsBackToRewindWhenItCannotBeValidated() throws {
+    let task = TaskActionItem(
+      id: "task-1",
+      description: "Review context",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 1),
+      source: "screenshot",
+      provenance: [
+        OmiAPI.EvidenceRef(
+          id: "screen-42",
+          kind: .local_screen,
+          scope: .device_local,
+          version: "capture.v3"
+        )
+      ]
+    )
+
+    let link = try XCTUnwrap(TaskDetailSourceLinkPolicy.links(for: task).first)
+
+    XCTAssertEqual(link.route, .rewind)
+    XCTAssertEqual(link.title, "Screen context")
+    XCTAssertEqual(link.subtitle, "Open Rewind")
+  }
+
+  /// Every screen-derived task written before the frame contract carries
+  /// `capture.v2`. Those rows must keep the source row they already had.
+  func testTaskDetailLegacyCaptureProvenanceStillRendersItsSourceRow() throws {
+    let task = TaskActionItem(
+      id: "task-1b",
+      description: "Review the legacy capture",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 1),
+      source: "screenshot",
+      provenance: [
+        makeEvidence(
+          deviceID: ClientDeviceService.shared.clientDeviceId,
+          id: "screen-42",
+          version: ScreenCandidateAdapter.captureEvidenceVersion
+        )
+      ]
+    )
+
+    let link = try XCTUnwrap(TaskDetailSourceLinkPolicy.links(for: task).first)
+
+    XCTAssertEqual(ScreenCandidateAdapter.captureEvidenceVersion, "capture.v2")
+    XCTAssertEqual(link.route, .rewind)
+    XCTAssertEqual(link.title, "Screen context")
+    XCTAssertEqual(link.subtitle, "Open Rewind")
+  }
+
+  func testTaskDetailCurrentDeviceEvidenceCarriesTheExactFrameIntoRewind() throws {
+    let task = TaskActionItem(
+      id: "task-2",
+      description: "Review the captured screen",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 1),
+      source: "screenshot",
+      provenance: [
+        makeEvidence(
+          deviceID: ClientDeviceService.shared.clientDeviceId,
+          id: "screen-42",
+          version: RewindEvidenceCardPolicy.supportedVersion
+        )
+      ]
+    )
+
+    let link = try XCTUnwrap(TaskDetailSourceLinkPolicy.links(for: task).first)
+
+    XCTAssertEqual(link.route, .rewindFrame(id: 42))
+    XCTAssertEqual(link.title, "Screen evidence")
+  }
+
+  private func makeEvidence(deviceID: String?, id: String, version: String?) -> OmiAPI.EvidenceRef {
+    OmiAPI.EvidenceRef(
+      deviceId: deviceID,
+      id: id,
+      kind: .local_screen,
+      scope: .device_local,
+      version: version
+    )
+  }
+
+  private func makeExtractedTask() -> ExtractedTask {
+    ExtractedTask(
+      title: "Review the captured screen",
+      description: nil,
+      priority: .medium,
+      sourceApp: "Messages",
+      inferredDeadline: nil,
+      confidence: 0.95,
+      tags: [],
+      sourceCategory: "direct_request",
+      sourceSubcategory: "message",
+      captureKind: "direct_request",
+      owner: "user",
+      concreteDeliverable: true,
+      publicBroadcast: false,
+      directMention: true,
+      alreadyDone: false,
+      duplicateOf: nil,
+      refinesTask: nil,
+      ownershipConfidence: 0.95
+    )
+  }
+}
+
+extension ScreenCandidateDecision {
+  fileprivate var candidateEvidenceRefs: [OmiAPI.EvidenceRef] {
+    guard let candidate else { return [] }
+    switch candidate {
+    case .taskCreate(let candidate): return candidate.evidenceRefs
+    case .taskUpdate(let candidate): return candidate.evidenceRefs
+    case .taskComplete(let candidate): return candidate.evidenceRefs
+    case .taskCancel(let candidate): return candidate.evidenceRefs
+    case .taskSupersede(let candidate): return candidate.evidenceRefs
+    case .workstreamCreate(let candidate): return candidate.evidenceRefs
+    }
+  }
+}

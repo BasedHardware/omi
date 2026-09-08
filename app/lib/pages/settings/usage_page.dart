@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
@@ -20,6 +21,7 @@ import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -33,6 +35,7 @@ class UsagePage extends StatefulWidget {
 class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
+  final GlobalKey _shareButtonKey = GlobalKey();
   final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   late AnimationController _waveController;
@@ -45,6 +48,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Future<void> _loadFairUseStatus() async {
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of widget mount state.
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted && result != null) {
         setState(() => _fairUseStatus = result);
       }
@@ -64,9 +69,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final provider = context.read<UsageProvider>();
     final localeName = l10n.localeName;
 
-    final RenderRepaintBoundary boundary =
-        _screenshotKeys[_tabController.index].currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final captureContext = _screenshotKeys[_tabController.index].currentContext;
+    if (captureContext == null || !mounted) return;
+    final RenderRepaintBoundary boundary = captureContext.findRenderObject() as RenderRepaintBoundary;
     final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+    if (!mounted) return;
 
     // Load logo
     final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
@@ -123,7 +130,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Convert the canvas to a new image and then to bytes
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
     final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
-    final Uint8List pngBytes = byteData!.buffer.asUint8List();
+    if (byteData == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.wrappedFailedToShare)));
+      return;
+    }
+    final Uint8List pngBytes = byteData.buffer.asUint8List();
 
     final tempDir = await getTemporaryDirectory();
     final file = await File('${tempDir.path}/omi_usage.png').create();
@@ -194,7 +205,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: periodTitle.isEmpty ? null : periodTitle,
+        text: shareText.isEmpty ? null : shareText,
+        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+      ),
+    );
   }
 
   String _getPeriodForIndex(int index) {
@@ -287,7 +305,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
-        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
+        actions: [
+          IconButton(
+            key: _shareButtonKey,
+            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
+            onPressed: _shareUsage,
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,
@@ -410,7 +434,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final plan = provider.subscription!.subscription.plan;
-    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    final isPaid = plan.isPaid;
+    // Plan names are product names; only the free/unlimited labels are localized.
+    final planLabel = plan == PlanType.plus ? 'Plus' : (isPaid ? context.l10n.unlimitedPlan : context.l10n.basicPlan);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -426,11 +452,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              if (isUnlimited)
+              Text(planLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
@@ -443,7 +466,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          if (!isUnlimited) ...[
+          if (!isPaid) ...[
             const SizedBox(height: 4),
             Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
             const SizedBox(height: 16),
@@ -467,10 +490,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
+                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
                         ],
@@ -698,6 +718,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -716,6 +737,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -733,6 +755,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -755,6 +778,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -1052,7 +1076,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value, style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1)),
+            Text(
+              value,
+              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1086,7 +1113,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildUsageCard(
     BuildContext context, {
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String value,
     required String subtitle,
@@ -1267,36 +1294,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     children: [
                       Text(
                         context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-            if (icon == FontAwesomeIcons.brain &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.memoriesCreatedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.memoriesCreatedUsed;
-                  final limit = subscription.memoriesCreatedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                       ),
                       const SizedBox(height: 8),

@@ -58,7 +58,14 @@ export function RecordingController() {
           break;
         case 'request-state':
           // Send current state to the requesting window
-          broadcastStateUpdate(channel, state, audioMode, duration, micLevel, systemLevel);
+          broadcastStateUpdate(
+            channel,
+            state,
+            audioMode,
+            duration,
+            micLevel,
+            systemLevel,
+          );
           broadcastSegmentsUpdate(channel, segments);
           break;
       }
@@ -73,7 +80,14 @@ export function RecordingController() {
   // Broadcast state updates when state changes
   useEffect(() => {
     if (channelRef.current) {
-      broadcastStateUpdate(channelRef.current, state, audioMode, duration, micLevel, systemLevel);
+      broadcastStateUpdate(
+        channelRef.current,
+        state,
+        audioMode,
+        duration,
+        micLevel,
+        systemLevel,
+      );
     }
   }, [state, audioMode, duration, micLevel, systemLevel]);
 

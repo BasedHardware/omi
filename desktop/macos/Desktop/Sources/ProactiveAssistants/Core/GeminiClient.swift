@@ -1,0 +1,1224 @@
+import Foundation
+
+enum GeminiWorkloadClass: String {
+  case interactive
+  case extraction
+  case maintenance
+}
+
+// MARK: - Thinking Budget Configuration
+
+/// Controls how many tokens Gemini 2.5 spends on internal reasoning.
+/// Budget 0 disables thinking (cheapest). Budget -1 = dynamic (model decides).
+/// Flash range: 0–24576. Pro range: 128–32768.
+struct ThinkingConfig: Encodable {
+  let thinkingBudget: Int
+
+  enum CodingKeys: String, CodingKey {
+    case thinkingBudget = "thinking_budget"
+  }
+
+  /// Minimum thinking budget that disables or minimizes reasoning for a given model.
+  /// Flash supports 0 (fully off). Pro requires at least 128.
+  static func minimumBudget(for model: String) -> Int {
+    model.contains("pro") ? 128 : 0
+  }
+}
+
+// MARK: - Gemini API Request/Response Types
+
+struct GeminiRequest: Encodable {
+  let contents: [Content]
+  let systemInstruction: SystemInstruction?
+  let generationConfig: GenerationConfig?
+
+  enum CodingKeys: String, CodingKey {
+    case contents
+    case systemInstruction = "system_instruction"
+    case generationConfig = "generation_config"
+  }
+
+  struct Content: Encodable {
+    let parts: [Part]
+  }
+
+  struct Part: Encodable {
+    let text: String?
+    let inlineData: InlineData?
+
+    enum CodingKeys: String, CodingKey {
+      case text
+      case inlineData = "inline_data"
+    }
+
+    init(text: String) {
+      self.text = text
+      self.inlineData = nil
+    }
+
+    init(mimeType: String, data: String) {
+      self.text = nil
+      self.inlineData = InlineData(mimeType: mimeType, data: data)
+    }
+  }
+
+  struct InlineData: Encodable {
+    let mimeType: String
+    let data: String
+
+    enum CodingKeys: String, CodingKey {
+      case mimeType = "mime_type"
+      case data
+    }
+  }
+
+  struct SystemInstruction: Encodable {
+    let parts: [TextPart]
+
+    struct TextPart: Encodable {
+      let text: String
+    }
+  }
+
+  struct GenerationConfig: Encodable {
+    let responseMimeType: String?
+    let responseSchema: ResponseSchema?
+    let thinkingConfig: ThinkingConfig?
+
+    enum CodingKeys: String, CodingKey {
+      case responseMimeType = "response_mime_type"
+      case responseSchema = "response_schema"
+      case thinkingConfig = "thinking_config"
+    }
+
+    struct ResponseSchema: Encodable {
+      let type: String
+      let properties: [String: Property]
+      let required: [String]
+
+      struct Property: Encodable {
+        let type: String
+        let `enum`: [String]?
+        let description: String?
+        let items: Items?
+        let nestedProperties: [String: Property]?
+        let nestedRequired: [String]?
+
+        enum CodingKeys: String, CodingKey {
+          case type
+          case `enum`
+          case description
+          case items
+          case nestedProperties = "properties"
+          case nestedRequired = "required"
+        }
+
+        init(type: String, enum: [String]? = nil, description: String? = nil, items: Items? = nil) {
+          self.type = type
+          self.enum = `enum`
+          self.description = description
+          self.items = items
+          self.nestedProperties = nil
+          self.nestedRequired = nil
+        }
+
+        /// Initialize an object property with nested properties
+        init(
+          type: String, description: String? = nil, properties: [String: Property],
+          required: [String]
+        ) {
+          self.type = type
+          self.enum = nil
+          self.description = description
+          self.items = nil
+          self.nestedProperties = properties
+          self.nestedRequired = required
+        }
+
+        struct Items: Encodable {
+          let type: String
+          let properties: [String: Property]?
+          let required: [String]?
+        }
+      }
+    }
+  }
+}
+
+struct GeminiResponse: Decodable {
+  let candidates: [Candidate]?
+  let error: GeminiError?
+  let promptFeedback: PromptFeedback?
+
+  struct Candidate: Decodable {
+    let content: Content?
+    let finishReason: String?
+
+    enum CodingKeys: String, CodingKey {
+      case content
+      case finishReason = "finish_reason"
+    }
+
+    struct Content: Decodable {
+      let parts: [Part]?
+
+      struct Part: Decodable {
+        let text: String?
+      }
+    }
+  }
+
+  struct PromptFeedback: Decodable {
+    let blockReason: String?
+
+    enum CodingKeys: String, CodingKey {
+      case blockReason = "block_reason"
+    }
+  }
+
+  struct GeminiError: Decodable {
+    let message: String
+  }
+}
+
+// MARK: - GeminiClient
+
+/// Low-level client for communicating with the Gemini API via backend proxy.
+/// All requests route through the Rust backend (/v1/proxy/gemini/*) which adds
+/// the Gemini API key server-side. Auth uses Firebase Bearer token.
+actor GeminiClient {
+  private let model: String
+  private let workload: GeminiWorkloadClass
+
+  /// Backend proxy base URL resolved through the identity-bound endpoint policy.
+  /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
+  /// development serving endpoint even when an inherited environment is stale.
+  static var proxyBaseURL: String {
+    proxyBaseURL(bundleIdentifier: AppBuild.bundleIdentifier)
+  }
+
+  static func proxyBaseURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil,
+    launchEnvironmentValue: String? = nil
+  ) -> String {
+    DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: bundleIdentifier,
+        updateChannel: AppBuild.currentUpdateChannel
+      ),
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+      launchEnvironmentValue: launchEnvironmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    )
+  }
+
+  nonisolated enum GeminiClientError: LocalizedError {
+    case missingAPIKey
+    case networkError(Error)
+    case invalidResponse
+    case apiError(String, retryable: Bool? = nil)
+    /// Identified basic + non-BYOK, or a typed 402 `plan_gated` from the proxy.
+    /// Non-retryable. Distinct from chat-quota 402 (`error` field).
+    case planGated
+
+    /// The raw API message for internal logging (not shown to user).
+    var internalMessage: String? {
+      if case .apiError(let msg, _) = self { return msg }
+      return nil
+    }
+
+    /// True for transient backend-capacity failures (rate limit, quota, overload,
+    /// 5xx, network blips) — retryable and not an app bug. Drives both retry
+    /// decisions and Sentry noise suppression (these flood without being actionable).
+    var isTransient: Bool {
+      switch self {
+      case .apiError(let message, _):
+        let lower = message.lowercased()
+        return Self.isTimeoutLike(lower)
+          || lower.contains("service unavailable")
+          || lower.contains("overloaded")
+          || lower.contains("resource exhausted")
+          || lower.contains("high demand")
+          || lower.contains("503")
+          || lower.contains("502")
+          || lower.contains("429")
+          || lower.contains("internal error")
+      case .networkError:
+        return true
+      case .invalidResponse, .missingAPIKey, .planGated:
+        return false
+      }
+    }
+
+    /// True when an error should be retried automatically inside GeminiClient.
+    /// Long upstream deadlines are recoverable, but auto-retrying them can keep
+    /// the user waiting through several multi-minute attempts.
+    var shouldAutoRetry: Bool {
+      switch self {
+      case .apiError(_, let retryable):
+        return retryable == true
+      case .networkError:
+        // A transport error after dispatch is ambiguous. Only a typed backend
+        // response may authorize replay.
+        return false
+      case .invalidResponse, .missingAPIKey, .planGated:
+        return false
+      }
+    }
+
+    /// Expected product/account states should not page Sentry. They are useful in
+    /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
+    var isExpectedProductState: Bool {
+      switch self {
+      case .apiError(let message, _):
+        let lower = message.lowercased()
+        return lower.contains("trial_expired")
+          || lower.contains("trial expired")
+          || lower.contains("payment required")
+          || lower.contains("byok")
+          || lower.contains("bring your own key")
+          || lower.contains("usage limit")
+          || lower.contains("quota exceeded")
+          || lower.contains("http 402")
+      case .missingAPIKey, .planGated:
+        return true
+      case .networkError, .invalidResponse:
+        return false
+      }
+    }
+
+    var errorDescription: String? {
+      switch self {
+      case .missingAPIKey:
+        return "AI features are not configured. Please update the app."
+      case .networkError:
+        return "Could not reach AI service. Check your internet connection and try again."
+      case .invalidResponse:
+        return "AI service returned an unexpected response. Please try again."
+      case .apiError(let message, _):
+        return Self.userFacingMessage(for: message)
+      case .planGated:
+        return "AI features require an active plan or BYOK keys."
+      }
+    }
+
+    /// Convert raw API error messages into user-friendly descriptions.
+    /// Never expose API keys, auth details, or internal service info to users.
+    private static func userFacingMessage(for rawMessage: String) -> String {
+      let lower = rawMessage.lowercased()
+
+      if lower.contains("trial_expired") || lower.contains("trial expired")
+        || lower.contains("payment required") || lower.contains("byok")
+        || lower.contains("bring your own key") || lower.contains("usage limit")
+        || lower.contains("http 402") || lower.contains("quota exceeded")
+      {
+        return "AI features require an active plan or BYOK keys."
+      }
+      if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
+        || lower.contains("unauthorized") || lower.contains("permission denied")
+        || lower.contains("invalid key") || lower.contains("forbidden")
+      {
+        return "AI service authentication error. Please update the app to the latest version."
+      }
+      if lower.contains("quota") || lower.contains("rate limit")
+        || lower.contains("resource exhausted")
+        || lower.contains("429")
+      {
+        return "AI service is busy. Please try again in a moment."
+      }
+      if Self.isTimeoutLike(lower) {
+        return "AI request took too long. Please try again or shorten the request."
+      }
+      if lower.contains("overloaded") || lower.contains("service unavailable")
+        || lower.contains("503")
+        || lower.contains("502") || lower.contains("internal error") || lower.contains("500")
+      {
+        return "AI service is temporarily unavailable. Please try again later."
+      }
+      if lower.contains("blocked") || lower.contains("safety") {
+        return "Content was filtered by the AI safety system."
+      }
+      // Fallback: generic message that doesn't leak internals
+      return "AI service error. Please try again."
+    }
+
+    private static func isTimeoutLike(_ lowercasedMessage: String) -> Bool {
+      lowercasedMessage.contains("upstream_timeout")
+        || lowercasedMessage.contains("timed out")
+        || lowercasedMessage.contains("timeout")
+        || lowercasedMessage.contains("deadline")
+        || lowercasedMessage.contains("http 504")
+        || lowercasedMessage.contains(" 504")
+        || lowercasedMessage.contains("http 408")
+        || lowercasedMessage.contains(" 408")
+    }
+  }
+
+  /// Optional model to retry with if the primary model keeps failing transiently
+  /// (e.g. Pro overloaded → fall back to Flash). Nil or equal-to-primary = no fallback.
+  private let fallbackModel: String?
+
+  init(
+    apiKey: String? = nil,
+    model: String = ModelQoS.Gemini.proactive,
+    fallbackModel: String? = nil,
+    workload: GeminiWorkloadClass
+  ) throws {
+    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
+    // All Gemini requests now route through the backend proxy which supplies
+    // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
+    // so installed test bundles launched from Finder still have AI features.
+    guard !Self.proxyBaseURL.isEmpty else {
+      throw GeminiClientError.missingAPIKey
+    }
+    self.model = model
+    self.fallbackModel = fallbackModel
+    self.workload = workload
+    // Which model a proactive assistant actually runs on is a product decision with a
+    // measurable click-through cost, and until now it was invisible at runtime — the model
+    // appears only inside the request URL, so a tier change could not be confirmed on a
+    // real machine. Model IDs are non-sensitive and low-cardinality.
+    log("GeminiClient: model=\(model) fallback=\(fallbackModel ?? "none")")
+  }
+
+  /// Get Firebase auth header for proxy requests
+  private func authHeader() async throws -> String {
+    let authService = await MainActor.run { AuthService.shared }
+    return try await authService.getAuthHeader()
+  }
+
+  /// Build proxy URL for a Gemini model action. Pass `modelOverride` to use a model
+  /// other than the instance default (e.g. the fallback model).
+  private func proxyURL(action: String, modelOverride: String? = nil) -> URL {
+    URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelOverride ?? model):\(action)")!
+  }
+
+  /// Log the raw API error message for debugging and throw a sanitized error.
+  /// The `errorDescription` on GeminiClientError is user-friendly; this log preserves the raw detail.
+  private func throwAPIError(_ rawMessage: String) throws -> Never {
+    log("GeminiClient: API error (raw): \(rawMessage)")
+    throw GeminiClientError.apiError(rawMessage)
+  }
+
+  /// Throw a descriptive error based on why the Gemini response has no usable content.
+  /// Prefers block reasons from promptFeedback or finishReason over the generic invalidResponse.
+  private func throwBlockedOrInvalidResponse(
+    blockReason: String?,
+    finishReason: String?
+  ) throws -> Never {
+    if let reason = blockReason {
+      throw GeminiClientError.apiError("blocked: \(reason)")
+    }
+    if let reason = finishReason, reason != "STOP" {
+      throw GeminiClientError.apiError("blocked: \(reason)")
+    }
+    throw GeminiClientError.invalidResponse
+  }
+
+  /// Convert a non-2xx response into a typed error while preserving the backend's
+  /// replay authorization. Missing or malformed retryability remains fail-closed.
+  static func httpError(response: URLResponse, data: Data) -> GeminiClientError? {
+    guard let httpResponse = response as? HTTPURLResponse else { return nil }
+    let status = httpResponse.statusCode
+    guard !(200..<300).contains(status) else { return nil }
+
+    if ManagedPlanGateHTTP.isPlanGated(status: status, data: data) {
+      return .planGated
+    }
+
+    let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+    let retryable: Bool?
+    switch httpResponse.value(forHTTPHeaderField: "X-Omi-Retryable")?.lowercased() {
+    case "true":
+      retryable = true
+    case "false":
+      retryable = false
+    default:
+      retryable = nil
+    }
+    return .apiError("HTTP \(status): \(body)", retryable: retryable)
+  }
+
+  /// Check HTTP status code before attempting JSON decode.
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    if let error = Self.httpError(response: response, data: data) {
+      throw error
+    }
+  }
+
+  /// Replay only outcomes whose typed backend contract says they are safe.
+  /// Issues one proxy request on a connection pool that does not outlive it.
+  ///
+  /// `URLSession.shared` pools keep-alive connections across every request the app makes.
+  /// When the server has already closed a pooled socket, the next caller is handed that
+  /// dead socket and fails instantly with `NSURLErrorNetworkConnectionLost` (-1005); a
+  /// retry draws from the same pool and reproduces the failure, which is why three
+  /// attempts could fail identically within seconds.
+  ///
+  /// Measured on a live desktop session: 5 of 5 suggestion evaluations failed this way,
+  /// while `curl` to the same endpoint with an 800 KB body returned in ~1.9s over both
+  /// IPv4 and IPv6 — the difference being that curl dials a fresh connection each time.
+  ///
+  /// An ephemeral per-request session costs one TLS handshake per evaluation. These are
+  /// dwell-gated and capped by a daily budget, so that is a trade worth making to remove
+  /// an entire class of stale-pool failure rather than manage it.
+  static func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = 60
+    configuration.timeoutIntervalForResource = 300
+    let session = URLSession(configuration: configuration)
+    defer { session.finishTasksAndInvalidate() }
+    return try await session.data(for: request)
+  }
+
+  static func shouldAutoRetry(_ error: Error) -> Bool {
+    if let geminiError = error as? GeminiClientError {
+      if geminiError.shouldAutoRetry { return true }
+      if case .networkError(let underlying) = geminiError {
+        return isReplayableTransportError(underlying)
+      }
+      return false
+    }
+    return isReplayableTransportError(error)
+  }
+
+  /// Transport failures that are safe to replay for this client.
+  ///
+  /// Replaying a dispatched request is only unsafe when the request may have had an
+  /// effect. Every call this client makes is a `generateContent` inference: it reads a
+  /// prompt and an image and returns text, with no server-side state change, so a duplicate
+  /// costs one extra inference and nothing else.
+  ///
+  /// `NSURLErrorNetworkConnectionLost` (-1005) is the dominant failure here and is a stale
+  /// pooled-connection race, not a real network outage: URLSession reuses a keep-alive
+  /// socket the server has already closed, and the request dies immediately. Measured on a
+  /// live desktop session, 12 of 13 suggestion evaluations failed this way while ordinary
+  /// requests to the same host succeeded in ~0.4s — every one of them was discarded without
+  /// a second attempt.
+  static func isReplayableTransportError(_ error: Error) -> Bool {
+    let code = (error as? URLError)?.code ?? URLError.Code(rawValue: (error as NSError).code)
+    switch code {
+    case .networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet,
+      .dnsLookupFailed, .cannotFindHost:
+      return true
+    default:
+      return false
+    }
+  }
+
+  /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
+  private static func bucketGeminiModel(_ model: String) -> String {
+    let lower = model.lowercased()
+    if lower.contains("pro") { return "pro" }
+    if lower.contains("flash") { return "flash" }
+    return "other"
+  }
+
+  /// Map transient failures to shared fallback reason buckets.
+  private static func fallbackReason(for error: Error) -> String {
+    if let geminiError = error as? GeminiClientError {
+      switch geminiError {
+      case .networkError(let underlying):
+        let nsError = underlying as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+          return "timeout"
+        }
+        return "other"
+      case .apiError(let message, _):
+        let lower = message.lowercased()
+        if lower.contains("upstream_timeout")
+          || lower.contains("timed out")
+          || lower.contains("timeout")
+          || lower.contains("deadline")
+          || lower.contains("http 504")
+          || lower.contains(" 504")
+          || lower.contains("http 408")
+          || lower.contains(" 408")
+        {
+          return "timeout"
+        }
+        if lower.contains("429")
+          || lower.contains("rate limit")
+          || lower.contains("too many requests")
+        {
+          return "provider_429"
+        }
+        if lower.contains("quota")
+          || lower.contains("resource exhausted")
+        {
+          return "quota"
+        }
+        if lower.contains("503")
+          || lower.contains("502")
+          || lower.contains("500")
+          || lower.contains("service unavailable")
+          || lower.contains("internal error")
+          || lower.contains("overloaded")
+          || lower.contains("high demand")
+        {
+          return "provider_5xx"
+        }
+        return "other"
+      case .invalidResponse, .missingAPIKey, .planGated:
+        return "other"
+      }
+    }
+    return "other"
+  }
+
+  /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
+  private func retryBackoff(attempt: Int, error: Error) async throws {
+    let delaySec = [2, 8][min(attempt, 1)]
+    log(
+      "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
+    )
+    try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+  }
+
+  /// Client UX gate. Server 402 `plan_gated` remains the invariant.
+  static func requireManagedProactivity(_ decision: SubscriptionEntitlementDecision) throws {
+    guard decision == .planGated else { return }
+    // S24 / TBD-2 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route to
+    // `LocalInferenceRuntime.generateStructuredFailClosed` / `runToolLoopFailClosed`.
+    // This shard only types the gate. Flag read is the seam; the lane is not built.
+    if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
+      // Local lane not shipped — still fail closed to `.planGated`.
+    }
+    throw GeminiClientError.planGated
+  }
+
+  static func enforceManagedProactivity() async throws {
+    try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
+  }
+
+  /// Send a request to the Gemini API with an image
+  /// Retries up to 2 times for transient errors (3 total attempts).
+  /// - Parameters:
+  ///   - prompt: Text prompt to send
+  ///   - imageData: JPEG image data to analyze
+  ///   - systemPrompt: System instructions for the model
+  ///   - responseSchema: JSON schema for structured output
+  /// - Returns: The text response from the model
+  func sendRequest(
+    prompt: String,
+    imageData: Data,
+    systemPrompt: String,
+    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
+    thinkingBudget: Int = 0
+  ) async throws -> String {
+    try await Self.enforceManagedProactivity()
+    let maxRetries = 2
+    var lastError: Error?
+
+    for attempt in 0...maxRetries {
+      do {
+        // Wrap base64 encoding + JSON serialization in autoreleasepool.
+        // These create bridged Obj-C objects (NSString, NSData) that accumulate
+        // in Swift concurrency's cooperative thread pool without being drained.
+        let requestBody: Data = try autoreleasepool {
+          let base64Data = imageData.base64EncodedString()
+
+          let request = GeminiRequest(
+            contents: [
+              GeminiRequest.Content(parts: [
+                GeminiRequest.Part(text: prompt),
+                GeminiRequest.Part(mimeType: "image/webp", data: base64Data),
+              ])
+            ],
+            systemInstruction: GeminiRequest.SystemInstruction(
+              parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
+            ),
+            generationConfig: GeminiRequest.GenerationConfig(
+              responseMimeType: "application/json",
+              responseSchema: responseSchema,
+              thinkingConfig: ThinkingConfig(
+                thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            )
+          )
+
+          return try JSONEncoder().encode(request)
+        }
+
+        let url = proxyURL(action: "generateContent")
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.timeoutInterval = 300
+        urlRequest.httpBody = requestBody
+
+        let (data, urlResponse) = try await Self.send(urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let error = response.error {
+          try throwAPIError(error.message)
+        }
+
+        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
+          try throwBlockedOrInvalidResponse(
+            blockReason: response.promptFeedback?.blockReason,
+            finishReason: response.candidates?.first?.finishReason
+          )
+        }
+
+        return text
+      } catch {
+        lastError = error
+
+        // Don't retry non-transient errors (e.g. safety filter / invalidResponse)
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
+          throw error
+        }
+
+        // Backoff: 1s after first failure, 2s after second
+        try await retryBackoff(attempt: attempt, error: error)
+      }
+    }
+
+    throw lastError!
+  }
+
+  /// Send a text-only request to the Gemini API
+  /// Retries up to 2 times for transient errors (3 total attempts).
+  /// - Parameters:
+  ///   - prompt: Text prompt to send
+  ///   - systemPrompt: System instructions for the model
+  /// - Returns: The text response from the model
+  func sendTextRequest(
+    prompt: String,
+    systemPrompt: String,
+    maxRetries: Int = 2,
+    timeout: TimeInterval = 300,
+    thinkingBudget: Int = 0
+  ) async throws -> String {
+    try await Self.enforceManagedProactivity()
+    var lastError: Error?
+
+    for attempt in 0...maxRetries {
+      do {
+        let request = GeminiRequest(
+          contents: [
+            GeminiRequest.Content(parts: [
+              GeminiRequest.Part(text: prompt)
+            ])
+          ],
+          systemInstruction: GeminiRequest.SystemInstruction(
+            parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
+          ),
+          generationConfig: GeminiRequest.GenerationConfig(
+            responseMimeType: nil,
+            responseSchema: nil,
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+          )
+        )
+
+        let url = proxyURL(action: "generateContent")
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.timeoutInterval = timeout
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+
+        let (data, urlResponse) = try await Self.send(urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let error = response.error {
+          try throwAPIError(error.message)
+        }
+
+        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
+          try throwBlockedOrInvalidResponse(
+            blockReason: response.promptFeedback?.blockReason,
+            finishReason: response.candidates?.first?.finishReason
+          )
+        }
+
+        return text
+      } catch {
+        lastError = error
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
+          throw error
+        }
+        try await retryBackoff(attempt: attempt, error: error)
+      }
+    }
+
+    throw lastError!
+  }
+
+  /// Send a text-only request with structured JSON output
+  /// Retries up to 2 times for transient errors (3 total attempts).
+  /// - Parameters:
+  ///   - prompt: Text prompt to send
+  ///   - systemPrompt: System instructions for the model
+  ///   - responseSchema: JSON schema for structured output
+  /// - Returns: The text response from the model (JSON)
+  func sendRequest(
+    prompt: String,
+    systemPrompt: String,
+    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
+    thinkingBudget: Int = 0
+  ) async throws -> String {
+    try await Self.enforceManagedProactivity()
+    let maxRetries = 2
+    var lastError: Error?
+
+    for attempt in 0...maxRetries {
+      do {
+        let request = GeminiRequest(
+          contents: [
+            GeminiRequest.Content(parts: [
+              GeminiRequest.Part(text: prompt)
+            ])
+          ],
+          systemInstruction: GeminiRequest.SystemInstruction(
+            parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
+          ),
+          generationConfig: GeminiRequest.GenerationConfig(
+            responseMimeType: "application/json",
+            responseSchema: responseSchema,
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+          )
+        )
+
+        let url = proxyURL(action: "generateContent")
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+        urlRequest.timeoutInterval = 300
+        urlRequest.httpBody = try JSONEncoder().encode(request)
+
+        let (data, urlResponse) = try await Self.send(urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
+
+        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
+
+        if let error = response.error {
+          try throwAPIError(error.message)
+        }
+
+        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
+          try throwBlockedOrInvalidResponse(
+            blockReason: response.promptFeedback?.blockReason,
+            finishReason: response.candidates?.first?.finishReason
+          )
+        }
+
+        return text
+      } catch {
+        lastError = error
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
+          throw error
+        }
+        try await retryBackoff(attempt: attempt, error: error)
+      }
+    }
+
+    throw lastError!
+  }
+
+}
+
+// MARK: - Tool Calling Support
+
+/// Wrapper for dynamic JSON values in function arguments
+struct AnyCodable: Decodable {
+  let value: Any
+
+  init(_ value: Any) {
+    self.value = value
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+
+    if let string = try? container.decode(String.self) {
+      value = string
+    } else if let int = try? container.decode(Int.self) {
+      value = int
+    } else if let double = try? container.decode(Double.self) {
+      value = double
+    } else if let bool = try? container.decode(Bool.self) {
+      value = bool
+    } else if let array = try? container.decode([AnyCodable].self) {
+      value = array.map { $0.value }
+    } else if let dict = try? container.decode([String: AnyCodable].self) {
+      value = dict.mapValues { $0.value }
+    } else {
+      value = NSNull()
+    }
+  }
+
+  var stringValue: String? { value as? String }
+  var intValue: Int? { value as? Int }
+  var doubleValue: Double? { value as? Double }
+  var boolValue: Bool? { value as? Bool }
+}
+
+/// Tool definition for Gemini function calling
+struct GeminiTool: Encodable {
+  let functionDeclarations: [FunctionDeclaration]
+
+  enum CodingKeys: String, CodingKey {
+    case functionDeclarations = "function_declarations"
+  }
+
+  struct FunctionDeclaration: Encodable {
+    let name: String
+    let description: String
+    let parameters: Parameters
+
+    struct Parameters: Encodable {
+      let type: String
+      let properties: [String: Property]
+      let required: [String]
+
+      struct Property: Encodable {
+        let type: String
+        let description: String
+        let `enum`: [String]?
+        let items: Items?
+
+        init(type: String, description: String, enumValues: [String]? = nil, items: Items? = nil) {
+          self.type = type
+          self.description = description
+          self.enum = enumValues
+          self.items = items
+        }
+
+        struct Items: Encodable {
+          let type: String
+        }
+      }
+    }
+  }
+}
+
+/// Result of a tool-enabled chat (may include tool calls)
+struct ToolChatResult {
+  let text: String
+  let toolCalls: [ToolCall]
+  let requiresToolExecution: Bool
+}
+
+/// A function call from the model
+struct ToolCall: @unchecked Sendable {
+  let name: String
+  let arguments: [String: Any]
+  let thoughtSignature: String?
+}
+
+// MARK: - Image + Tool Calling Request
+
+/// Request type combining image analysis with tool calling
+struct GeminiImageToolRequest: Encodable {
+  let contents: [Content]
+  let systemInstruction: SystemInstruction?
+  let generationConfig: GenerationConfig?
+  let tools: [GeminiTool]?
+  let toolConfig: ToolConfig?
+
+  enum CodingKeys: String, CodingKey {
+    case contents
+    case systemInstruction = "system_instruction"
+    case generationConfig = "generation_config"
+    case tools
+    case toolConfig = "tool_config"
+  }
+
+  struct GenerationConfig: Encodable {
+    let thinkingConfig: ThinkingConfig?
+
+    enum CodingKeys: String, CodingKey {
+      case thinkingConfig = "thinking_config"
+    }
+  }
+
+  struct Content: Encodable {
+    let role: String
+    let parts: [Part]
+  }
+
+  struct Part: Encodable {
+    let text: String?
+    let inlineData: InlineData?
+    let functionCall: FunctionCallPart?
+    let functionResponse: FunctionResponsePart?
+    let thoughtSignature: String?
+
+    enum CodingKeys: String, CodingKey {
+      case text
+      case inlineData = "inline_data"
+      case functionCall = "functionCall"
+      case functionResponse = "functionResponse"
+      case thoughtSignature = "thoughtSignature"
+    }
+
+    init(text: String) {
+      self.text = text
+      self.inlineData = nil
+      self.functionCall = nil
+      self.functionResponse = nil
+      self.thoughtSignature = nil
+    }
+
+    init(mimeType: String, data: String) {
+      self.text = nil
+      self.inlineData = InlineData(mimeType: mimeType, data: data)
+      self.functionCall = nil
+      self.functionResponse = nil
+      self.thoughtSignature = nil
+    }
+
+    init(functionCall: FunctionCallPart, thoughtSignature: String? = nil) {
+      self.text = nil
+      self.inlineData = nil
+      self.functionCall = functionCall
+      self.functionResponse = nil
+      self.thoughtSignature = thoughtSignature
+    }
+
+    init(functionResponse: FunctionResponsePart) {
+      self.text = nil
+      self.inlineData = nil
+      self.functionCall = nil
+      self.functionResponse = functionResponse
+      self.thoughtSignature = nil
+    }
+  }
+
+  struct InlineData: Encodable {
+    let mimeType: String
+    let data: String
+
+    enum CodingKeys: String, CodingKey {
+      case mimeType = "mime_type"
+      case data
+    }
+  }
+
+  struct FunctionCallPart: Encodable {
+    let name: String
+    let args: [String: String]
+  }
+
+  struct FunctionResponsePart: Encodable {
+    let name: String
+    let response: ResponseContent
+
+    struct ResponseContent: Encodable {
+      let result: String
+    }
+  }
+
+  struct SystemInstruction: Encodable {
+    let parts: [TextPart]
+
+    struct TextPart: Encodable {
+      let text: String
+    }
+  }
+
+  struct ToolConfig: Encodable {
+    let functionCallingConfig: FunctionCallingConfig
+
+    enum CodingKeys: String, CodingKey {
+      case functionCallingConfig = "function_calling_config"
+    }
+
+    struct FunctionCallingConfig: Encodable {
+      let mode: String  // "ANY", "AUTO", "NONE"
+    }
+  }
+}
+
+// MARK: - GeminiClient Image + Tool Extensions
+
+extension GeminiClient {
+
+  /// Send image + tool loop request: takes pre-built contents array for multi-turn tool calling.
+  /// Retries up to 2 times for transient errors.
+  /// - Parameter thinkingBudget: Token budget for model reasoning. Tool-calling features that need
+  ///   multi-step reasoning (e.g. InsightAssistant SQL generation, TaskAssistant screen analysis)
+  ///   should pass a reasonable budget (e.g. 1024). Default 0 = minimal thinking.
+  func sendImageToolLoop(
+    contents: [GeminiImageToolRequest.Content],
+    systemPrompt: String,
+    tools: [GeminiTool],
+    forceToolCall: Bool = false,
+    thinkingBudget: Int = 0
+  ) async throws -> ToolChatResult {
+    try await Self.enforceManagedProactivity()
+    // Try the primary model first; if it keeps failing transiently, fall back to the
+    // secondary model (e.g. Pro overloaded → Flash) before giving up.
+    let models: [String] = {
+      if let fb = fallbackModel, fb != model { return [model, fb] }
+      return [model]
+    }()
+    let maxRetries = 2
+    var lastError: Error?
+
+    for (modelIndex, activeModel) in models.enumerated() {
+      for attempt in 0...maxRetries {
+        do {
+          // Wrap JSON serialization in autoreleasepool (contents may include
+          // large base64 image data that creates bridged Obj-C intermediaries).
+          let requestBody: Data = try autoreleasepool {
+            let toolConfig =
+              forceToolCall
+              ? GeminiImageToolRequest.ToolConfig(
+                functionCallingConfig: .init(mode: "ANY")
+              ) : nil
+
+            let request = GeminiImageToolRequest(
+              contents: contents,
+              systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                parts: [.init(text: systemPrompt)]
+              ),
+              generationConfig: GeminiImageToolRequest.GenerationConfig(
+                thinkingConfig: ThinkingConfig(
+                  thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
+              ),
+              tools: tools,
+              toolConfig: toolConfig
+            )
+
+            return try JSONEncoder().encode(request)
+          }
+
+          let url = proxyURL(action: "generateContent", modelOverride: activeModel)
+          var urlRequest = URLRequest(url: url)
+          urlRequest.httpMethod = "POST"
+          urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
+          urlRequest.timeoutInterval = 300
+          urlRequest.httpBody = requestBody
+
+          let (data, urlResponse) = try await Self.send(urlRequest)
+          try checkHTTPStatus(urlResponse, data: data)
+
+          let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
+
+          if let error = response.error {
+            try throwAPIError(error.message)
+          }
+
+          guard let candidate = response.candidates?.first,
+            let parts = candidate.content?.parts
+          else {
+            try throwBlockedOrInvalidResponse(
+              blockReason: response.promptFeedback?.blockReason,
+              finishReason: response.candidates?.first?.finishReason
+            )
+          }
+
+          var toolCalls: [ToolCall] = []
+          var textResponse = ""
+
+          for part in parts {
+            if let functionCall = part.functionCall {
+              let args = functionCall.args?.mapValues { $0.value } ?? [:]
+              toolCalls.append(
+                ToolCall(
+                  name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
+            }
+            if let text = part.text {
+              textResponse += text
+            }
+          }
+
+          return ToolChatResult(
+            text: textResponse,
+            toolCalls: toolCalls,
+            requiresToolExecution: !toolCalls.isEmpty
+          )
+        } catch {
+          lastError = error
+          guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
+            // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
+            // if the failure is transient and a fallback model remains.
+            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "gemini_model",
+                from: Self.bucketGeminiModel(activeModel),
+                to: Self.bucketGeminiModel(models[modelIndex + 1]),
+                reason: Self.fallbackReason(for: error),
+                outcome: .degraded,
+                extra: ["user_visible": false])
+              log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
+              break
+            }
+            throw error
+          }
+          try await retryBackoff(attempt: attempt, error: error)
+        }
+      }
+    }
+
+    throw lastError!
+  }
+
+}
+
+/// Response type for tool-enabled requests
+struct GeminiToolResponse: Decodable {
+  let candidates: [Candidate]?
+  let error: GeminiError?
+  let promptFeedback: PromptFeedback?
+
+  struct Candidate: Decodable {
+    let content: Content?
+    let finishReason: String?
+
+    enum CodingKeys: String, CodingKey {
+      case content
+      case finishReason = "finish_reason"
+    }
+
+    struct Content: Decodable {
+      let parts: [Part]?
+
+      struct Part: Decodable {
+        let text: String?
+        let functionCall: FunctionCall?
+        let thoughtSignature: String?
+
+        enum CodingKeys: String, CodingKey {
+          case text
+          case functionCall = "functionCall"
+          case thoughtSignature = "thoughtSignature"
+        }
+      }
+    }
+  }
+
+  struct PromptFeedback: Decodable {
+    let blockReason: String?
+
+    enum CodingKeys: String, CodingKey {
+      case blockReason = "block_reason"
+    }
+  }
+
+  struct FunctionCall: Decodable {
+    let name: String
+    let args: [String: AnyCodable]?
+  }
+
+  struct GeminiError: Decodable {
+    let message: String
+  }
+}

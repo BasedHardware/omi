@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-daily-memory-sweep-fence",
+  "violated_contract": "A completed-day memory sweep must never advance or recreate canonical state across an account-deletion, owner, generation, source-completeness, or concurrent-runner boundary.",
+  "canonical_prevention": "Read deletion and live generation markers inside the canonical apply, receipt, and cursor transactions; require immutable complete-day packets; use generation-scoped leased receipts and prove crash, wipe, rollover, and overlapping-runner recovery against the Firestore emulator.",
+  "canonical_prevention_artifact": [
+    "backend/database/memory_apply_store.py",
+    "backend/utils/memory/daily_memory_sweep.py",
+    "backend/scripts/daily_memory_sweep_emulator_test.py"
+  ],
+  "evidence_prs": [
+    12084
+  ],
+  "scope_hints": [
+    "backend/utils/memory/daily_memory_sweep.py",
+    "backend/database/memory_apply_store.py"
+  ],
+  "status": "open"
+}

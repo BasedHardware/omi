@@ -1,16 +1,16 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { useParams } from '@tschk/moonshine-next/navigation';
 import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactPluginCard';
 import { FeaturedPluginCard } from '@/components/marketplace/plugin-card/FeaturedPluginCard';
 import { ScrollableCategoryNav } from '@/components/marketplace/ScrollableCategoryNav';
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { CategoryHeader } from '@/components/marketplace/CategoryHeader';
 import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
-import { getCategoryMetadata, categoryMetadata } from '@/components/marketplace/category';
+import { getCategoryMetadata } from '@/components/marketplace/category';
 import { BreadcrumbJsonLd, CollectionPageJsonLd } from '@/components/seo/JsonLd';
-import type { Metadata } from 'next';
-
-type Props = {
-  params: Promise<{ category: string }>;
-};
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 // ISR configuration
 export const revalidate = 300; // Revalidate every 5 minutes
@@ -19,49 +19,14 @@ export const dynamicParams = true; // Allow non-pre-rendered categories
 // Pre-generate top categories from v2 (by app count)
 export async function generateStaticParams() {
   const topCategories = [
-    'conversation-analysis',        // 22 apps
-    'utilities-and-tools',           // 18 apps
+    'conversation-analysis', // 22 apps
+    'utilities-and-tools', // 18 apps
     'productivity-and-organization', // 14 apps
-    'entertainment-and-fun',         // 7 apps
-    'communication-improvement',     // 5 apps
-    'education-and-learning'         // 3 apps
+    'entertainment-and-fun', // 7 apps
+    'communication-improvement', // 5 apps
+    'education-and-learning', // 3 apps
   ];
   return topCategories.map((category) => ({ category }));
-}
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { category } = await params;
-  const metadata = getCategoryMetadata(category);
-  const title = `${metadata.displayName} Apps - Omi App Store`;
-  const description = `${metadata.description} Browse ${metadata.displayName} apps for your Omi.`;
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: `/apps/category/${category}`,
-    },
-    openGraph: {
-      title,
-      description,
-      url: `/apps/category/${category}`,
-      type: 'website',
-      images: [
-        {
-          url: '/og-apps.png',
-          width: 1200,
-          height: 630,
-          alt: `${metadata.displayName} Apps`,
-        },
-      ],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: ['/og-apps.png'],
-    },
-  };
 }
 
 // Helper for Fisher-Yates shuffle
@@ -74,32 +39,56 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default async function CategoryPage({ params }: Props) {
-  const { category } = await params;
+export default function CategoryPage() {
+  const params = useParams();
+  const category = params.category ?? 'other';
   const categoryMeta = getCategoryMetadata(category);
-
-  // Fetch ALL v2 apps by paginating through all capability groups
-  // This makes multiple requests during build time but ensures all 600+ apps are available
-  const rawApps = await getAllAppsV2(true); // include_reviews=true to get ratings
-
-  const allPlugins = rawApps.map(transformToPlugin);
-
-  // Filter plugins by category
-  const categoryPlugins = allPlugins.filter((p) => p.category === category);
-
-  // Get new or recent apps (lowest download count)
-  const newOrRecentApps = shuffleArray(
-    [...categoryPlugins].sort((a, b) => a.installs - b.installs).slice(0, 4)
+  const [rawApps, setRawApps] = useState<Awaited<ReturnType<typeof getAllAppsV2>> | null>(
+    null,
   );
 
-  // Get most popular
-  const mostPopular =
-    categoryPlugins.length > 6
-      ? [...categoryPlugins].sort((a, b) => b.installs - a.installs).slice(0, 6)
-      : [];
+  useEffect(() => {
+    let active = true;
+    getAllAppsV2(true).then((apps) => {
+      if (active) setRawApps(apps);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // All apps sorted by installs
-  const allApps = [...categoryPlugins].sort((a, b) => b.installs - a.installs);
+  const categoryData = useMemo(() => {
+    if (!rawApps) return null;
+    const allPlugins = rawApps.map(transformToPlugin);
+
+    // Fetch ALL v2 apps by paginating through all capability groups
+    // This makes multiple requests during build time but ensures all 600+ apps are available
+
+    // Filter plugins by category
+    const categoryPlugins = allPlugins.filter((p) => p.category === category);
+
+    // Get new or recent apps (lowest download count)
+    const newOrRecentApps = shuffleArray(
+      [...categoryPlugins].sort((a, b) => a.installs - b.installs).slice(0, 4),
+    );
+
+    // Get most popular
+    const mostPopular =
+      categoryPlugins.length > 6
+        ? [...categoryPlugins].sort((a, b) => b.installs - a.installs).slice(0, 6)
+        : [];
+
+    // All apps sorted by installs
+    const allApps = [...categoryPlugins].sort((a, b) => b.installs - a.installs);
+
+    return { categoryPlugins, newOrRecentApps, mostPopular, allApps };
+  }, [category, rawApps]);
+
+  if (!categoryData) {
+    return <div className="min-h-screen bg-[#0B0F17]" />;
+  }
+
+  const { categoryPlugins, newOrRecentApps, mostPopular, allApps } = categoryData;
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0B0F17]">
@@ -181,11 +170,7 @@ export default async function CategoryPage({ params }: Props) {
               </h3>
               <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
                 {allApps.map((plugin, index) => (
-                  <CompactPluginCard
-                    key={plugin.id}
-                    plugin={plugin}
-                    index={index + 1}
-                  />
+                  <CompactPluginCard key={plugin.id} plugin={plugin} index={index + 1} />
                 ))}
               </div>
             </section>
@@ -195,3 +180,5 @@ export default async function CategoryPage({ params }: Props) {
     </div>
   );
 }
+
+registerMoonshineRoute('/apps/category/:category', CategoryPage, 'public');

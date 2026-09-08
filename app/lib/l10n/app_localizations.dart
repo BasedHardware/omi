@@ -189,6 +189,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// Message shown after an expired authenticated session returns the user to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired — sign in again.'**
+  String get sessionExpiredSignInAgain;
+
   /// The app title displayed in various places
   ///
   /// In en, this message translates to:
@@ -792,7 +798,7 @@ abstract class AppLocalizations {
   /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
-  /// **'My Apps'**
+  /// **'Created by me'**
   String get myApps;
 
   /// Filter button for installed apps
@@ -998,6 +1004,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Offline Sync'**
   String get offlineSync;
+
+  /// Title of the toggle in device settings that controls automatic syncing of offline recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Sync'**
+  String get autoSync;
+
+  /// Subtitle explaining the Auto-Sync toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically sync offline recordings when your device connects'**
+  String get autoSyncDescription;
 
   /// Device settings menu item
   ///
@@ -1599,12 +1617,6 @@ abstract class AppLocalizations {
   /// **'Your plan will cancel on {date}.'**
   String cancelAtPeriodEnd(String date);
 
-  /// Renewal message
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan renews on {date}.'**
-  String renewsOn(String date);
-
   /// Basic plan name
   ///
   /// In en, this message translates to:
@@ -2006,12 +2018,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{used} of {limit} insights gained this month'**
   String insightsUsedThisMonth(String used, String limit);
-
-  /// No description provided for @memoriesUsedThisMonth.
-  ///
-  /// In en, this message translates to:
-  /// **'{used} of {limit} memories created this month'**
-  String memoriesUsedThisMonth(String used, String limit);
 
   /// Label for memory visibility selection section
   ///
@@ -2886,7 +2892,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'1,200 free minutes/month included. Unlimited with '**
+  /// **'300 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -3228,7 +3234,7 @@ abstract class AppLocalizations {
   /// No description provided for @processing.
   ///
   /// In en, this message translates to:
-  /// **'Processing...'**
+  /// **'Processing'**
   String get processing;
 
   /// No description provided for @features.
@@ -3489,30 +3495,6 @@ abstract class AppLocalizations {
   /// **'Loving Omi?'**
   String get lovingOmi;
 
-  /// App review prompt text for iOS users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!'**
-  String get leaveReviewIos;
-
-  /// App review prompt text for Android users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!'**
-  String get leaveReviewAndroid;
-
-  /// Button text to rate on Apple App Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on App Store'**
-  String get rateOnAppStore;
-
-  /// Button text to rate on Google Play Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on Google Play'**
-  String get rateOnGooglePlay;
-
   /// Button text to defer action
   ///
   /// In en, this message translates to:
@@ -3522,7 +3504,7 @@ abstract class AppLocalizations {
   /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
-  /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
+  /// **'Let\'s set up your speech profile. You can always change it later'**
   String get speechProfileIntro;
 
   /// Button text to begin a process
@@ -3650,12 +3632,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Settings'**
   String get openSettings;
-
-  /// Question asking if user wants to change their display name
-  ///
-  /// In en, this message translates to:
-  /// **'Want to go by something else?'**
-  String get wantDifferentName;
 
   /// Question asking for user's name
   ///
@@ -3981,6 +3957,12 @@ abstract class AppLocalizations {
   /// **'Memory Deleted.'**
   String get memoryDeleted;
 
+  /// Notice shown when the memory history response is truncated
+  ///
+  /// In en, this message translates to:
+  /// **'Some memory history is unavailable. Showing the history received so far.'**
+  String get memoryHistoryPartial;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -4136,6 +4118,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'✏️ Edit Memory'**
   String get editMemory;
+
+  /// Label for pinning a memory as baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Pin as Baseline'**
+  String get pinAsBaseline;
+
+  /// Label for unpinning a memory from baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Baseline'**
+  String get unpinAsBaseline;
+
+  /// Label for baseline memory
+  ///
+  /// In en, this message translates to:
+  /// **'Baseline Memory'**
+  String get baselineMemory;
+
+  /// Description for baseline memory being always in context
+  ///
+  /// In en, this message translates to:
+  /// **'Always in context'**
+  String get alwaysInContext;
 
   /// Input hint
   ///
@@ -8811,47 +8817,11 @@ abstract class AppLocalizations {
   /// **'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.'**
   String get thankYouText;
 
-  /// WiFi sync settings - wifiSyncSettings
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync Settings'**
-  String get wifiSyncSettings;
-
-  /// WiFi sync settings - enterHotspotCredentials
-  ///
-  /// In en, this message translates to:
-  /// **'Enter your phone\'s hotspot credentials'**
-  String get enterHotspotCredentials;
-
-  /// WiFi sync settings - wifiSyncUsesHotspot
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.'**
-  String get wifiSyncUsesHotspot;
-
-  /// WiFi sync settings - hotspotNameSsid
-  ///
-  /// In en, this message translates to:
-  /// **'Hotspot Name (SSID)'**
-  String get hotspotNameSsid;
-
-  /// WiFi sync settings - exampleIphoneHotspot
-  ///
-  /// In en, this message translates to:
-  /// **'e.g. iPhone Hotspot'**
-  String get exampleIphoneHotspot;
-
   /// WiFi sync settings - password
   ///
   /// In en, this message translates to:
   /// **'Password'**
   String get password;
-
-  /// WiFi sync settings - enterHotspotPassword
-  ///
-  /// In en, this message translates to:
-  /// **'Enter hotspot password'**
-  String get enterHotspotPassword;
 
   /// WiFi sync settings - saveCredentials
   ///
@@ -8864,24 +8834,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear Credentials'**
   String get clearCredentials;
-
-  /// WiFi sync settings - pleaseEnterHotspotName
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter a hotspot name'**
-  String get pleaseEnterHotspotName;
-
-  /// WiFi sync settings - wifiCredentialsSaved
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi credentials saved'**
-  String get wifiCredentialsSaved;
-
-  /// WiFi sync settings - wifiCredentialsCleared
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi credentials cleared'**
-  String get wifiCredentialsCleared;
 
   /// Daily summary settings - summaryGeneratedForDate
   ///
@@ -8994,7 +8946,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium mins + unlimited on-device'**
+  /// **'300 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -10668,7 +10620,7 @@ abstract class AppLocalizations {
   /// Button text to listen to speech profile
   ///
   /// In en, this message translates to:
-  /// **'Listen to my speech profile ➡️'**
+  /// **'Listen to my speech profile'**
   String get listenToSpeechProfile;
 
   /// Button text to recognize other people
@@ -11025,12 +10977,6 @@ abstract class AppLocalizations {
   /// **'Limitless'**
   String get limitless;
 
-  /// Name of the fast transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer'**
-  String get fastTransfer;
-
   /// Status label when syncing is in progress
   ///
   /// In en, this message translates to:
@@ -11048,24 +10994,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ETA: {time}'**
   String etaLabel(String time);
-
-  /// Page title for transfer method settings
-  ///
-  /// In en, this message translates to:
-  /// **'Transfer Method'**
-  String get transferMethod;
-
-  /// Label for fast WiFi transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'Fast'**
-  String get fast;
-
-  /// Label for Bluetooth Low Energy transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'BLE'**
-  String get ble;
 
   /// Filter label for phone storage
   ///
@@ -11103,47 +11031,11 @@ abstract class AppLocalizations {
   /// **'Processed files deleted'**
   String get processedFilesDeleted;
 
-  /// Error message when WiFi fails to enable on device
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable WiFi on device. Please try again.'**
-  String get wifiEnableFailed;
-
-  /// Error message when device does not support fast transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Your device does not support Fast Transfer. Use Bluetooth instead.'**
-  String get deviceNoFastTransfer;
-
-  /// Error message asking user to enable hotspot
-  ///
-  /// In en, this message translates to:
-  /// **'Please enable your phone\'s hotspot and try again.'**
-  String get enableHotspotMessage;
-
-  /// Error message when transfer fails to start
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to start transfer. Please try again.'**
-  String get transferStartFailed;
-
   /// Error message when device times out
   ///
   /// In en, this message translates to:
   /// **'Device did not respond. Please try again.'**
   String get deviceNotResponding;
-
-  /// Error message for invalid WiFi credentials
-  ///
-  /// In en, this message translates to:
-  /// **'Invalid WiFi credentials. Check your hotspot settings.'**
-  String get invalidWifiCredentials;
-
-  /// Error message when WiFi connection fails
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi connection failed. Please try again.'**
-  String get wifiConnectionFailed;
 
   /// Dialog title for SD card processing
   ///
@@ -11162,12 +11054,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Process'**
   String get process;
-
-  /// Error title when WiFi sync fails
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync Failed'**
-  String get wifiSyncFailed;
 
   /// Error title when processing fails
   ///
@@ -11478,7 +11364,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11622,7 +11508,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -12567,35 +12453,17 @@ abstract class AppLocalizations {
   /// **'Here\'s what we just discussed: {link}'**
   String heresWhatWeDiscussed(String link);
 
-  /// WiFi sync feature label
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync'**
-  String get wifiSync;
-
   /// Message when item is copied to clipboard
   ///
   /// In en, this message translates to:
   /// **'{item} copied to clipboard'**
   String itemCopiedToClipboard(String item);
 
-  /// Title shown when WiFi connection to device fails
-  ///
-  /// In en, this message translates to:
-  /// **'Connection Failed'**
-  String get wifiConnectionFailedTitle;
-
   /// Title shown while connecting to device WiFi
   ///
   /// In en, this message translates to:
   /// **'Connecting to {deviceName}'**
   String connectingToDeviceName(String deviceName);
-
-  /// Step text for enabling device WiFi
-  ///
-  /// In en, this message translates to:
-  /// **'Enable {deviceName}\'s WiFi'**
-  String enableDeviceWifi(String deviceName);
 
   /// Step text for connecting to device
   ///
@@ -12771,12 +12639,6 @@ abstract class AppLocalizations {
   /// **'Unprocessed'**
   String get statusUnprocessed;
 
-  /// Snackbar message when switching to fast transfer mode
-  ///
-  /// In en, this message translates to:
-  /// **'Switched to Fast Transfer'**
-  String get switchedToFastTransfer;
-
   /// Success message when transfer completes
   ///
   /// In en, this message translates to:
@@ -12795,59 +12657,11 @@ abstract class AppLocalizations {
   /// **'Transfer cancelled'**
   String get transferCancelled;
 
-  /// Snackbar message when fast transfer is enabled
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer enabled'**
-  String get fastTransferEnabled;
-
   /// Snackbar message when bluetooth sync is enabled
   ///
   /// In en, this message translates to:
   /// **'Bluetooth sync enabled'**
   String get bluetoothSyncEnabled;
-
-  /// Dialog title for enabling fast transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Enable Fast Transfer'**
-  String get enableFastTransfer;
-
-  /// Description of fast transfer feature in dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.'**
-  String get fastTransferDescription;
-
-  /// Warning that internet is paused during transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Internet access is paused during transfer'**
-  String get internetAccessPausedDuringTransfer;
-
-  /// Description text on transfer method page
-  ///
-  /// In en, this message translates to:
-  /// **'Choose how recordings are transferred from your Omi device to your phone.'**
-  String get chooseTransferMethodDescription;
-
-  /// Speed description for WiFi transfer
-  ///
-  /// In en, this message translates to:
-  /// **'~150 KB/s via WiFi'**
-  String get wifiSpeed;
-
-  /// Badge label for faster transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'5X FASTER'**
-  String get fiveTimesFaster;
-
-  /// Description of fast transfer method card
-  ///
-  /// In en, this message translates to:
-  /// **'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.'**
-  String get fastTransferMethodDescription;
 
   /// Name of bluetooth transfer method
   ///
@@ -12888,8 +12702,8 @@ abstract class AppLocalizations {
   /// Body text for low battery notification
   ///
   /// In en, this message translates to:
-  /// **'Your device is running low on battery. Time for a recharge! 🔋'**
-  String get lowBatteryAlertBody;
+  /// **'Your battery is at {level}%. Time for a recharge! 🔋'**
+  String lowBatteryAlertBody(int level);
 
   /// No description provided for @batteryFullyChargedTitle.
   ///
@@ -14085,18 +13899,6 @@ abstract class AppLocalizations {
   /// **'Failed to transcribe audio'**
   String get voiceFailedToTranscribe;
 
-  /// Title for dialog requesting location permission
-  ///
-  /// In en, this message translates to:
-  /// **'Location Permission Required'**
-  String get locationPermissionRequired;
-
-  /// Explanation text for location permission dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.'**
-  String get locationPermissionContent;
-
   /// Title for PDF transcript export document
   ///
   /// In en, this message translates to:
@@ -14313,18 +14115,6 @@ abstract class AppLocalizations {
   /// **'Your daily recaps will appear here once generated'**
   String get dailyRecapsDescription;
 
-  /// Title for transfer method selection dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Choose Transfer Method'**
-  String get chooseTransferMethod;
-
-  /// Speed description for fast transfer via WiFi
-  ///
-  /// In en, this message translates to:
-  /// **'~150 KB/s via WiFi'**
-  String get fastTransferSpeed;
-
   /// No description provided for @largeTimeGapDetected.
   ///
   /// In en, this message translates to:
@@ -14336,12 +14126,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Large time gaps detected ({gaps})'**
   String largeTimeGapsDetected(String gaps);
-
-  /// Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Device does not support WiFi sync, switching to Bluetooth'**
-  String get deviceDoesNotSupportWifiSwitchingToBle;
 
   /// No description provided for @appleHealthNotAvailable.
   ///
@@ -14738,6 +14522,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View All'**
   String get viewAll;
+
+  /// Button text to expand/open a section such as the mind map preview
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
 
   /// Menu option to add a new task
   ///
@@ -15798,7 +15588,7 @@ abstract class AppLocalizations {
   /// Description for synced files in manage storage sheet
   ///
   /// In en, this message translates to:
-  /// **'Safely backed up to your phone'**
+  /// **'Conversations created'**
   String get safelyBackedUp;
 
   /// Description for pending files in manage storage sheet
@@ -16998,8 +16788,8 @@ abstract class AppLocalizations {
   /// No description provided for @savePercent.
   ///
   /// In en, this message translates to:
-  /// **'Save ~17%'**
-  String get savePercent;
+  /// **'Save ~{percent}%'**
+  String savePercent(int percent);
 
   /// No description provided for @popular.
   ///
@@ -17258,6 +17048,1536 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete tasks. Please try again.'**
   String get bulkDeleteFailed;
+
+  /// Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete recap'**
+  String get deleteRecap;
+
+  /// Title of the confirm dialog when deleting a daily recap.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this recap?'**
+  String get deleteRecapConfirmTitle;
+
+  /// Body of the confirm dialog clarifying that conversations are not deleted with the recap.
+  ///
+  /// In en, this message translates to:
+  /// **'This recap will be permanently removed. The original conversations from that day are not affected.'**
+  String get deleteRecapConfirmBody;
+
+  /// Confirm action button on the delete-recap dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteRecapAction;
+
+  /// Snackbar shown after a recap was successfully deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Recap deleted'**
+  String get recapDeletedSnackbar;
+
+  /// Snackbar shown when the recap delete API fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete the recap. Try again later.'**
+  String get recapDeleteFailed;
+
+  /// No description provided for @syncStatusBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed up'**
+  String get syncStatusBackedUp;
+
+  /// No description provided for @syncStatusBackingUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get syncStatusBackingUp;
+
+  /// No description provided for @syncStatusWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to sync'**
+  String get syncStatusWaiting;
+
+  /// No description provided for @syncStatusRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t process — retrying'**
+  String get syncStatusRetrying;
+
+  /// No description provided for @syncStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed — tap Retry'**
+  String get syncStatusFailed;
+
+  /// No description provided for @syncStatusFileUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File unavailable'**
+  String get syncStatusFileUnavailable;
+
+  /// No description provided for @noRecordingsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings yet'**
+  String get noRecordingsYet;
+
+  /// No description provided for @syncInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync in progress'**
+  String get syncInProgress;
+
+  /// No description provided for @syncStatusUploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploaded · processing on Omi'**
+  String get syncStatusUploaded;
+
+  /// No description provided for @deleteWhileProcessingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing'**
+  String get deleteWhileProcessingTitle;
+
+  /// No description provided for @deleteWhileProcessingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  String get deleteWhileProcessingMessage;
+
+  /// No description provided for @syncCardAllBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings synced'**
+  String get syncCardAllBackedUp;
+
+  /// Status card: pending recordings count
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}'**
+  String syncCardReadyCount(int count);
+
+  /// No description provided for @syncCardProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing on Omi…'**
+  String get syncCardProcessing;
+
+  /// No description provided for @syncCardWaitingInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for internet'**
+  String get syncCardWaitingInternet;
+
+  /// Status card: items that need user attention
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recording{count, plural, =1{} other{s}} need attention'**
+  String syncCardNeedsAttention(int count);
+
+  /// No description provided for @syncFlowIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.'**
+  String get syncFlowIntro;
+
+  /// No description provided for @syncStepUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get syncStepUpload;
+
+  /// No description provided for @syncStepUploadDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording is sent to Omi\'s server'**
+  String get syncStepUploadDesc;
+
+  /// No description provided for @syncStepProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe'**
+  String get syncStepProcess;
+
+  /// No description provided for @syncStepProcessDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi turns the audio into a conversation'**
+  String get syncStepProcessDesc;
+
+  /// No description provided for @syncStepBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation ready'**
+  String get syncStepBackedUp;
+
+  /// No description provided for @syncStepBackedUpDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Find it under Conversations'**
+  String get syncStepBackedUpDesc;
+
+  /// No description provided for @syncFailureFootnote.
+  ///
+  /// In en, this message translates to:
+  /// **'If processing fails, your recording is retried automatically on the next sync.'**
+  String get syncFailureFootnote;
+
+  /// Row subtitle on the sync page for a fully synced recording: emphasises that processing succeeded and a conversation now exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation created'**
+  String get syncStatusConversationCreated;
+
+  /// Top status card: phase title when uploading audio batches to Omi (sub-line shows X of Y)
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading to Omi'**
+  String get syncCardUploadingTitle;
+
+  /// Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from your device'**
+  String get syncCardDownloadingTitle;
+
+  /// Top status card: secondary progress line under the phase title.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String syncCardProgressOf(int current, int total);
+
+  /// Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet.
+  ///
+  /// In en, this message translates to:
+  /// **'On your device'**
+  String get syncStatusOnDevice;
+
+  /// Row subtitle for a recording currently being transferred from the Omi device to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from your device'**
+  String get syncStatusDownloadingFromDevice;
+
+  /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.
+  ///
+  /// In en, this message translates to:
+  /// **'Newest first'**
+  String get newestFirst;
+
+  /// Empty-state message when the Synced filter is active but no recording has finished backing up.
+  ///
+  /// In en, this message translates to:
+  /// **'No synced recordings yet'**
+  String get noSyncedRecordingsYet;
+
+  /// Placeholder card text shown under available payment methods
+  ///
+  /// In en, this message translates to:
+  /// **'More payment methods coming soon'**
+  String get morePaymentMethodsComingSoon;
+
+  /// Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress.
+  ///
+  /// In en, this message translates to:
+  /// **'This continues in the background — you can leave this screen.'**
+  String get syncProcessingBackgroundHint;
+
+  /// Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair-use limit reached — syncing will resume automatically'**
+  String get syncCardRateLimited;
+
+  /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi servers are busy — your recordings will sync once capacity returns'**
+  String get syncCardBackendBusy;
+
+  /// Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to determine current firmware version'**
+  String get unableToDetermineFirmwareVersion;
+
+  /// No description provided for @promoCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Promo code'**
+  String get promoCode;
+
+  /// No description provided for @enterPromoCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter promo code'**
+  String get enterPromoCode;
+
+  /// No description provided for @invalidPromotionCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid promotion code.'**
+  String get invalidPromotionCode;
+
+  /// Title for the background connection mode toggle in device settings (Android only)
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode'**
+  String get backgroundModeTitle;
+
+  /// Subtitle explaining the background mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your Omi recording even when the app is fully closed.'**
+  String get backgroundModeDescription;
+
+  /// Caveat note shown in the Background Mode sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices only for now, and is being improved continuously.'**
+  String get backgroundModeNote;
+
+  /// Warning shown in Background Mode sheet when no device with a native BLE audio route is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.'**
+  String get backgroundModeUnavailable;
+
+  /// No description provided for @regenerateRecap.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate recap'**
+  String get regenerateRecap;
+
+  /// No description provided for @recapRegeneratedSnackbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Recap regenerated'**
+  String get recapRegeneratedSnackbar;
+
+  /// No description provided for @recapRegenerateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t regenerate the recap. Try again later.'**
+  String get recapRegenerateFailed;
+
+  /// No description provided for @recapRegenerateCooldown.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait a few seconds before regenerating again.'**
+  String get recapRegenerateCooldown;
+
+  /// No description provided for @recapRegenerateNoConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations to summarize for this day.'**
+  String get recapRegenerateNoConversations;
+
+  /// Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Sync uses Omi transcription'**
+  String get syncCustomSttWarningTitle;
+
+  /// Body warning that syncing transcribes on Omi servers and counts toward the plan limit
+  ///
+  /// In en, this message translates to:
+  /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
+  String get syncCustomSttWarningMessage;
+
+  /// Title for the 'transcribe later' capture-mode toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe Later'**
+  String get transcribeLaterTitle;
+
+  /// Subtitle explaining the transcribe-later mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.'**
+  String get transcribeLaterDescription;
+
+  /// Caveat note shown in the Transcribe Later sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
+  String get transcribeLaterNote;
+
+  /// Warning shown when storage is too low to keep recording in Transcribe Later mode
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get transcribeLaterStorageFull;
+
+  /// Title of the bottom sheet for choosing between Live and Transcribe Later recording modes
+  ///
+  /// In en, this message translates to:
+  /// **'Recording mode'**
+  String get recordingMode;
+
+  /// Short label for the Transcribe Later mode shown on the home app-bar mode chip
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get captureModeLater;
+
+  /// Subtitle for the Live option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe in real time as you speak.'**
+  String get captureModeLiveDescription;
+
+  /// Subtitle for the Transcribe Later option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio now and transcribe whenever you want.'**
+  String get captureModeLaterDescription;
+
+  /// Button to resume Transcribe Later capture after muting
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get unmute;
+
+  /// Button to finalize the current recording and start a new one
+  ///
+  /// In en, this message translates to:
+  /// **'New recording'**
+  String get newRecording;
+
+  /// Capture-card subtitle shown while Transcribe Later capture is muted/paused
+  ///
+  /// In en, this message translates to:
+  /// **'Paused — audio isn\'t being recorded'**
+  String get transcribeLaterPaused;
+
+  /// Filter chip and provenance label for the current device
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get memoryThisDevice;
+
+  /// Provenance label when capture device is this iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone'**
+  String get memoryThisIphone;
+
+  /// Provenance label when capture device is this Android phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get memoryThisPhone;
+
+  /// Provenance label for a Mac capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Mac'**
+  String get memoryProvenanceMac;
+
+  /// Provenance label for an iPhone capture device
+  ///
+  /// In en, this message translates to:
+  /// **'iPhone'**
+  String get memoryProvenanceIphone;
+
+  /// Provenance label for an Android capture device
+  ///
+  /// In en, this message translates to:
+  /// **'Android'**
+  String get memoryProvenanceAndroid;
+
+  /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
+  ///
+  /// In en, this message translates to:
+  /// **'How to Use Your Omi'**
+  String get deviceTutorial;
+
+  /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Into Your Omi'**
+  String get deviceOnboardingTranscriptionTitle;
+
+  /// Tutorial step 1 subtitle — explains that spoken words appear in real time
+  ///
+  /// In en, this message translates to:
+  /// **'Say a few words and watch them appear in real-time'**
+  String get deviceOnboardingTranscriptionSubtitle;
+
+  /// Tutorial step 1 success message after the user speaks enough words
+  ///
+  /// In en, this message translates to:
+  /// **'Good job!'**
+  String get deviceOnboardingGoodJob;
+
+  /// Tutorial step 1 placeholder in the live transcript area before any speech is detected
+  ///
+  /// In en, this message translates to:
+  /// **'Start speaking...'**
+  String get deviceOnboardingStartSpeaking;
+
+  /// Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi a Question'**
+  String get deviceOnboardingAskQuestionTitle;
+
+  /// Tutorial step 2 subtitle — instructions for the single-press ask-a-question flow
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button once, speak your question, then press again when done'**
+  String get deviceOnboardingAskQuestionSubtitle;
+
+  /// Tutorial step 2 status while the spoken question is processed by the AI
+  ///
+  /// In en, this message translates to:
+  /// **'Processing your question...'**
+  String get deviceOnboardingProcessingQuestion;
+
+  /// Tutorial step 2 status chip while Omi is actively listening to the question
+  ///
+  /// In en, this message translates to:
+  /// **'Listening...'**
+  String get deviceOnboardingListening;
+
+  /// Tutorial step 3 title while waiting for the user to power the device off
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Off'**
+  String get deviceOnboardingTurnOffTitle;
+
+  /// Tutorial step 3 title while waiting for the user to power the device back on
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On'**
+  String get deviceOnboardingTurnOnTitle;
+
+  /// Tutorial step 3 instruction to long-press the button to turn the device off
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button for 3 seconds'**
+  String get deviceOnboardingTurnOffSubtitle;
+
+  /// Tutorial step 3 instruction to press the button to turn the device back on
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button to turn it back on'**
+  String get deviceOnboardingTurnOnSubtitle;
+
+  /// Tutorial step 3 hint shown if the device has not turned off after a while
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button firmly until the light turns off'**
+  String get deviceOnboardingHoldButtonHint;
+
+  /// Tutorial step 3 status chip — device connected (before power-off)
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get deviceOnboardingStatusConnected;
+
+  /// Tutorial step 3 status chip — device reconnected after the power cycle
+  ///
+  /// In en, this message translates to:
+  /// **'Connected!'**
+  String get deviceOnboardingStatusConnectedDone;
+
+  /// Tutorial step 3 status chip — device disconnected/off
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected'**
+  String get deviceOnboardingStatusDisconnected;
+
+  /// Tutorial step 3 status chip while the device is powering off
+  ///
+  /// In en, this message translates to:
+  /// **'Turning off...'**
+  String get deviceOnboardingStatusTurningOff;
+
+  /// Tutorial step 4 title — configure the device double-tap action
+  ///
+  /// In en, this message translates to:
+  /// **'Customize Double Tap'**
+  String get deviceOnboardingDoubleTapTitle;
+
+  /// Tutorial step 4 double-tap option title — end the current conversation
+  ///
+  /// In en, this message translates to:
+  /// **'End Conversation'**
+  String get deviceOnboardingEndConversation;
+
+  /// Tutorial step 4 double-tap option description for End Conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Save and end current conversation'**
+  String get deviceOnboardingEndConversationDesc;
+
+  /// Tutorial step 4 double-tap option title — mute or unmute the microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Mute / Unmute'**
+  String get deviceOnboardingMuteUnmute;
+
+  /// Tutorial step 4 double-tap option description for Mute/Unmute
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle microphone on or off'**
+  String get deviceOnboardingMuteUnmuteDesc;
+
+  /// Tutorial step 4 double-tap option title — star the ongoing conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Star Ongoing Conversation'**
+  String get deviceOnboardingStarConversation;
+
+  /// Tutorial step 4 double-tap option description for Star Conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Mark conversation as important'**
+  String get deviceOnboardingStarConversationDesc;
+
+  /// Tutorial step 4 hint shown when the user single-taps instead of double-tapping
+  ///
+  /// In en, this message translates to:
+  /// **'That was a single tap — try tapping twice quickly!'**
+  String get deviceOnboardingSingleTapHint;
+
+  /// Tutorial step 4 prompt encouraging the user to double-tap the device
+  ///
+  /// In en, this message translates to:
+  /// **'Try it now! Double tap your Omi'**
+  String get deviceOnboardingTryDoubleTap;
+
+  /// Onboarding tutorial primary button label to advance to the next step
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get deviceOnboardingContinue;
+
+  /// Onboarding tutorial final button label to complete the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get deviceOnboardingFinish;
+
+  /// Onboarding intro screen title shown before the device tutorial steps
+  ///
+  /// In en, this message translates to:
+  /// **'Get to Know Your Omi'**
+  String get deviceOnboardingIntroTitle;
+
+  /// Onboarding intro screen subtitle explaining the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  String get deviceOnboardingIntroSubtitle;
+
+  /// Onboarding intro screen estimated duration hint
+  ///
+  /// In en, this message translates to:
+  /// **'About 1 minute'**
+  String get deviceOnboardingIntroDuration;
+
+  /// Accessibility label and tooltip for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to latest message'**
+  String get jumpToLatestMessage;
+
+  /// Visible label for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get latest;
+
+  /// Button on the manual firmware flash page (developer settings)
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Firmware'**
+  String get flashFirmware;
+
+  /// No description provided for @pendantRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording on Pendant'**
+  String get pendantRecordingTitle;
+
+  /// No description provided for @pendantRecordingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is recording on its own. Recordings sync to your phone while the app is open.'**
+  String get pendantRecordingNote;
+
+  /// No description provided for @pendantSyncingRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing recordings from your pendant…'**
+  String get pendantSyncingRecordings;
+
+  /// No description provided for @pendantMinutesStored.
+  ///
+  /// In en, this message translates to:
+  /// **'~{minutes} min stored'**
+  String pendantMinutesStored(int minutes);
+
+  /// No description provided for @pendantStorageAlmostFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant storage is almost full — keep the app open to sync.'**
+  String get pendantStorageAlmostFull;
+
+  /// No description provided for @connectRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Ray-Ban Meta'**
+  String get connectRayBanMeta;
+
+  /// No description provided for @raybanMetaSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.'**
+  String get raybanMetaSetupDescription;
+
+  /// No description provided for @raybanMetaOpenMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through Meta AI'**
+  String get raybanMetaOpenMetaAI;
+
+  /// No description provided for @raybanMetaWaitingForMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish connecting in the Meta AI app, then come back here.'**
+  String get raybanMetaWaitingForMetaAI;
+
+  /// No description provided for @raybanMetaCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get raybanMetaCheckAgain;
+
+  /// No description provided for @raybanMetaAllowCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Camera on Glasses'**
+  String get raybanMetaAllowCamera;
+
+  /// No description provided for @raybanMetaCameraExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.'**
+  String get raybanMetaCameraExplanation;
+
+  /// No description provided for @raybanMetaSkipForNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get raybanMetaSkipForNow;
+
+  /// No description provided for @raybanMetaAudioOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ray-Ban Meta audio-only mode'**
+  String get raybanMetaAudioOnlyTitle;
+
+  /// No description provided for @raybanMetaAudioOnlyExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.'**
+  String get raybanMetaAudioOnlyExplanation;
+
+  /// No description provided for @raybanMetaMusicPauseNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Music on your phone pauses while the glasses microphone is in use.'**
+  String get raybanMetaMusicPauseNote;
+
+  /// No description provided for @raybanMetaContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get raybanMetaContinue;
+
+  /// No description provided for @raybanMetaCapturePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture Photo'**
+  String get raybanMetaCapturePhoto;
+
+  /// No description provided for @raybanMetaPhotoRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo requested — it will appear in your conversation.'**
+  String get raybanMetaPhotoRequested;
+
+  /// No description provided for @raybanMetaMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone ready'**
+  String get raybanMetaMicrophoneReady;
+
+  /// No description provided for @raybanMetaImageCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Image capture ready'**
+  String get raybanMetaImageCaptureReady;
+
+  /// No description provided for @raybanMetaImageCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable in audio-only mode'**
+  String get raybanMetaImageCaptureUnavailable;
+
+  /// No description provided for @raybanMetaCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get raybanMetaCamera;
+
+  /// No description provided for @errorConnectingRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Ray-Ban Meta: {error}'**
+  String errorConnectingRayBanMeta(String error);
+
+  /// Title of the on-device storage usage card on the Auto Sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Device Storage'**
+  String get deviceStorageTitle;
+
+  /// Percentage of on-device storage used
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% full'**
+  String deviceStoragePercentFull(int percent);
+
+  /// Used vs total on-device storage, e.g. 338 MB of 469 MB used
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {total} used'**
+  String deviceStorageUsedOfTotal(String used, String total);
+
+  /// Amount of free on-device storage, e.g. 131 MB free
+  ///
+  /// In en, this message translates to:
+  /// **'{free} free'**
+  String deviceStorageFree(String free);
+
+  /// Warning shown when on-device storage is 95% or more full
+  ///
+  /// In en, this message translates to:
+  /// **'Device nearly full — sync to free space.'**
+  String get deviceStorageNearlyFull;
+
+  /// Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline
+  ///
+  /// In en, this message translates to:
+  /// **'No connection — recording locally. It will be transcribed when you\'re back online.'**
+  String get phoneMicOfflineFallbackMessage;
+
+  /// Data privacy page banner summarizing encryption and user control
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.'**
+  String get dataEncryptedBanner;
+
+  /// Label for accuracy metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Accuracy'**
+  String get sttModelAccuracy;
+
+  /// Whisper model size: base
+  ///
+  /// In en, this message translates to:
+  /// **'Base'**
+  String get whisperModelSizeBase;
+
+  /// Section title for cloud-based transcription providers
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Transcription'**
+  String get cloudTranscription;
+
+  /// Brand name for the Deepgram speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Deepgram'**
+  String get sttProviderDeepgram;
+
+  /// Action label to delete a downloaded on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Model'**
+  String get deleteOnDeviceModel;
+
+  /// Confirmation prompt shown before deleting a downloaded model
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this model?'**
+  String get deleteOnDeviceModelConfirm;
+
+  /// Status label indicating an on-device model has been downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get onDeviceModelDownloaded;
+
+  /// Relative speed indicator: faster
+  ///
+  /// In en, this message translates to:
+  /// **'Faster'**
+  String get sttModelFaster;
+
+  /// Filter option label meaning "automatic"
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get sttFilterAuto;
+
+  /// Relative quality/accuracy indicator: higher
+  ///
+  /// In en, this message translates to:
+  /// **'Higher'**
+  String get sttModelHigher;
+
+  /// Whisper model size: large
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get whisperModelSizeLarge;
+
+  /// Relative quality/accuracy indicator: lower
+  ///
+  /// In en, this message translates to:
+  /// **'Lower'**
+  String get sttModelLower;
+
+  /// Whisper model size: medium
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get whisperModelSizeMedium;
+
+  /// Toast shown after an on-device model is deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Model deleted'**
+  String get onDeviceModelDeleted;
+
+  /// Toast title when a model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Model download failed'**
+  String get onDeviceModelDownloadFailed;
+
+  /// Toast body when a Whisper model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download Whisper model. Please try again.'**
+  String get onDeviceModelDownloadFailedDesc;
+
+  /// Toast shown after an on-device model is downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Model downloaded'**
+  String get onDeviceModelDownloadSuccess;
+
+  /// Toast body when a Whisper model is downloaded successfully
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper model downloaded successfully'**
+  String get onDeviceModelDownloadSuccessDesc;
+
+  /// Label for the size of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Model Size'**
+  String get onDeviceModelSize;
+
+  /// Generic "none" option label
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get sttNone;
+
+  /// Section title for on-device transcription settings
+  ///
+  /// In en, this message translates to:
+  /// **'On-Device Transcription'**
+  String get onDeviceTranscription;
+
+  /// Description of on-device transcription behavior
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is processed locally on your device'**
+  String get onDeviceTranscriptionDesc;
+
+  /// Relative speed indicator: slower
+  ///
+  /// In en, this message translates to:
+  /// **'Slower'**
+  String get sttModelSlower;
+
+  /// Whisper model size: small
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get whisperModelSizeSmall;
+
+  /// Brand name for the Soniox speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Soniox'**
+  String get sttProviderSoniox;
+
+  /// Label for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-Text Provider'**
+  String get speechToTextProvider;
+
+  /// Description for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the service used for transcription'**
+  String get speechToTextProviderDesc;
+
+  /// Brand name for the Speechmatics speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Speechmatics'**
+  String get sttProviderSpeechmatics;
+
+  /// Label for speed metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get sttModelSpeed;
+
+  /// Whisper model size: tiny
+  ///
+  /// In en, this message translates to:
+  /// **'Tiny'**
+  String get whisperModelSizeTiny;
+
+  /// Label for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription Language'**
+  String get transcriptionLanguage;
+
+  /// Description for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the language for speech transcription'**
+  String get transcriptionLanguageDesc;
+
+  /// Label for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper Model'**
+  String get whisperModel;
+
+  /// Description for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the model for on-device transcription'**
+  String get whisperModelDesc;
+
+  /// Title of the confirmation dialog before downgrading to the free plan
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium?'**
+  String get downgradeToFreemiumTitle;
+
+  /// Heading shown above the list of free-plan limitations in the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'You will experience these limitations:'**
+  String get downgradeLimitationsHeading;
+
+  /// Free-plan limitation: 7x battery consumption
+  ///
+  /// In en, this message translates to:
+  /// **'7x battery consumption'**
+  String get downgradeLimitBattery;
+
+  /// Free-plan limitation: lower transcription quality
+  ///
+  /// In en, this message translates to:
+  /// **'30% less transcription quality'**
+  String get downgradeLimitQuality;
+
+  /// Free-plan limitation: noticeable transcription delay
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay'**
+  String get downgradeLimitDelay;
+
+  /// Free-plan limitation: speaker identification disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot identify speakers'**
+  String get downgradeLimitSpeakers;
+
+  /// Destructive confirm button on the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade Anyway'**
+  String get downgradeAnyway;
+
+  /// Dialog title shown when trying to link a conversation to a calendar event without Google Calendar connected
+  ///
+  /// In en, this message translates to:
+  /// **'Google Calendar Not Connected'**
+  String get googleCalendarNotConnected;
+
+  /// Dialog body for the Google-Calendar-not-connected dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Google Calendar to link conversations to calendar events.'**
+  String get googleCalendarConnectPrompt;
+
+  /// Snackbar shown after a conversation is linked to a calendar event
+  ///
+  /// In en, this message translates to:
+  /// **'Linked to \"{title}\"'**
+  String linkedToEvent(String title);
+
+  /// Snackbar shown when linking a conversation to a calendar event fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to link calendar event'**
+  String get failedToLinkCalendarEvent;
+
+  /// Snackbar shown after the user gives feedback on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for your feedback!'**
+  String get thanksForYourFeedback;
+
+  /// Label of the copy-message action on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Copy message'**
+  String get copyMessage;
+
+  /// Placeholder of the search input in the settings drawer
+  ///
+  /// In en, this message translates to:
+  /// **'Search settings…'**
+  String get searchSettings;
+
+  /// Title shown when an audio recording fails to load in the conversation player
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading audio'**
+  String get errorLoadingAudio;
+
+  /// Title for the Bluetooth microphone picker used to connect Ray-Ban Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your Ray-Ban Meta microphone'**
+  String get rayBanMetaMicPickerTitle;
+
+  /// Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff
+  ///
+  /// In en, this message translates to:
+  /// **'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.'**
+  String get rayBanMetaMicPickerDescription;
+
+  /// Empty state when iOS reports no Bluetooth HFP microphone inputs
+  ///
+  /// In en, this message translates to:
+  /// **'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'**
+  String get rayBanMetaMicPickerEmpty;
+
+  /// Error state when available Bluetooth HFP inputs cannot be read
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.'**
+  String get rayBanMetaMicPickerLoadError;
+
+  /// Error shown when the selected Bluetooth HFP microphone cannot connect
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
+  String get rayBanMetaMicPickerConnectError;
+
+  /// No description provided for @syncStatusTooOld.
+  ///
+  /// In en, this message translates to:
+  /// **'Too old to sync — Omi can\'t accept it'**
+  String get syncStatusTooOld;
+
+  /// Plans sheet subtitle prompting a free user to pick a paid plan
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your plan to unlock unlimited Omi.'**
+  String get planSheetChooseYourPlan;
+
+  /// Plans sheet highlight: which platforms Omi runs on
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Mac, mobile, and web'**
+  String get availableOnMacMobileWeb;
+
+  /// Badge shown on the most popular plan card
+  ///
+  /// In en, this message translates to:
+  /// **'POPULAR'**
+  String get popularBadge;
+
+  /// Plan card row: this tier includes the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Works on Desktop'**
+  String get worksOnDesktop;
+
+  /// Plan card row: this tier does not include the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t work on Desktop'**
+  String get noDesktopAccess;
+
+  /// Annual plan card subtitle showing the billing term and total price
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months / {price}'**
+  String annualBillingSummary(int months, String price);
+
+  /// Badge on an annual plan card showing how many months the annual price saves
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 Month Free} other{{count} Months Free}}'**
+  String monthsFreeBadge(int count);
+
+  /// Intro line above the list of free-tier limitations
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is free, but freemium has limits that affect your experience:'**
+  String get freemiumLimitsIntro;
+
+  /// Free-tier limitation: transcription is delayed rather than live
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay (not real-time)'**
+  String get downgradeLimitDelayNotRealTime;
+
+  /// Button that moves the user from a paid plan to the free tier
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium'**
+  String get downgradeToFreemiumAction;
+
+  /// Title of the training-data opt-in card offering free unlimited access
+  ///
+  /// In en, this message translates to:
+  /// **'Get Free Unlimited Access'**
+  String get getFreeUnlimitedAccess;
+
+  /// Subtitle of the training-data opt-in card
+  ///
+  /// In en, this message translates to:
+  /// **'Share data for training'**
+  String get shareDataForTraining;
+
+  /// Subtitle shown while a training-data access request is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is under review'**
+  String get yourRequestUnderReview;
+
+  /// Title for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Update Required'**
+  String get accountCutoverUpdateRequiredTitle;
+
+  /// Body for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Install the latest Omi app to continue after account migration.'**
+  String get accountCutoverUpdateRequiredMessage;
+
+  /// Title for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Migration in Progress'**
+  String get accountCutoverMigrationInProgressTitle;
+
+  /// Body for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is migrating. Product features are paused until migration finishes.'**
+  String get accountCutoverMigrationInProgressMessage;
+
+  /// Body when cutover rollback stranded newer data
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is in maintenance after a migration rollback. Some newer data may be stranded.'**
+  String get accountCutoverMigrationRollbackMessage;
+
+  /// Button that opens the app store for a required cutover upgrade
+  ///
+  /// In en, this message translates to:
+  /// **'Open store'**
+  String get accountCutoverOpenStore;
+
+  /// Chat scope chip when asking about a specific conversation
+  ///
+  /// In en, this message translates to:
+  /// **'About: {title}'**
+  String chatScopeAbout(String title);
+
+  /// Tooltip for Ask button on conversation detail
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this'**
+  String get askAboutThisConversation;
+
+  /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Send raw audio to Omi'**
+  String get sendRawAudioToOmi;
+
+  /// Explains that disabling raw audio forwarding preserves transcript-based cloud features
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'**
+  String get sendRawAudioToOmiDescription;
+
+  /// Action that makes a nearby connected Omi pendant vibrate so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findDevice;
+
+  /// Snackbar shown when exporting device diagnostics to the share sheet fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share diagnostics. Please try again.'**
+  String get diagnosticsShareFailed;
+
+  /// Heading of the notice shown on an app the backend has automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'This app is disabled and cannot be installed.'**
+  String get appDisabledTitle;
+
+  /// Explains that an app was auto-disabled because its webhook endpoint kept failing
+  ///
+  /// In en, this message translates to:
+  /// **'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'**
+  String get appDisabledWebhookFailures;
+
+  /// Explains that an app was disabled for a reason other than webhook failures
+  ///
+  /// In en, this message translates to:
+  /// **'It was disabled by Omi.'**
+  String get appDisabledGeneric;
+
+  /// Hint telling the app owner to repair their endpoint before re-enabling the app
+  ///
+  /// In en, this message translates to:
+  /// **'Fix the endpoint first — re-enabling re-checks every configured URL.'**
+  String get appDisabledOwnerHint;
+
+  /// Button that clears the disabled flag on an app the owner has repaired
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enable'**
+  String get appReEnable;
+
+  /// Title of the dialog shown when re-enabling a disabled app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Could not re-enable'**
+  String get appReEnableFailedTitle;
+
+  /// Body of the dialog shown when re-enabling fails and the server gave no reason
+  ///
+  /// In en, this message translates to:
+  /// **'This app could not be re-enabled. Please try again.'**
+  String get appReEnableFailedBody;
+
+  /// States the date an app was automatically disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled on {date}.'**
+  String appDisabledOn(String date);
+
+  /// States the last error recorded from the app's endpoint before it was disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Last error: {error}.'**
+  String appDisabledLastError(String error);
+
+  /// Tab label for the prerecorded conversation transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Prerecorded'**
+  String get prerecordedTranscript;
+
+  /// Shown when offline sync stalls because the Limitless Pendant is actively recording; it cannot serve stored audio until recording stops
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantRecordingSyncBlocked;
+
+  /// Shown when offline sync stalls because the Limitless Pendant's flash storage is full; a full pendant stays armed in recording mode and serves no stored audio until recording is stopped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.'**
+  String get pendantFullSyncBlocked;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
+
+  /// Title shown on the speech profile page when the user already has a speech profile set up
+  ///
+  /// In en, this message translates to:
+  /// **'{name}\'s Speech Profile'**
+  String speechProfileOwnerTitle(String name);
+
+  /// Label for the play/listen button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get play;
+
+  /// Label for the redo/re-record button on the speech profile page
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get redo;
+
+  /// Heading of the compact card listing the topics to speak about while recording the speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Answer with your voice:'**
+  String get answerWithYourVoice;
+
+  /// First speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'Where do you live?'**
+  String get speechProfileTopicLocation;
+
+  /// Second speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What do you do for work?'**
+  String get speechProfileTopicWork;
+
+  /// Third speech profile topic prompt; must match the backend onboarding question
+  ///
+  /// In en, this message translates to:
+  /// **'What is your long-term goal?'**
+  String get speechProfileTopicGoal;
+
+  /// Status when an active call transcription socket receives no audio frames
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription not receiving audio'**
+  String get transcriptionNoAudio;
+
+  /// Empty-home hint pointing at the + record button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap + to start recording'**
+  String get tapPlusToStartRecording;
+
+  /// Eyebrow label on a chat task card block
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get chatBlockTask;
+
+  /// Eyebrow label on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get chatBlockGoal;
+
+  /// Eyebrow label on a chat conversation/capture link block
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation'**
+  String get chatBlockConversation;
+
+  /// Eyebrow label on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get chatBlockMemory;
+
+  /// Eyebrow label on a chat question card block
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get chatBlockQuestion;
+
+  /// Action on a chat goal link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Goals'**
+  String get chatBlockOpenInGoals;
+
+  /// Action on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get chatBlockOpenConversation;
+
+  /// Action on a chat memory link block
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Memories'**
+  String get chatBlockOpenInMemories;
+
+  /// Status shown when a chat block's entity no longer exists
+  ///
+  /// In en, this message translates to:
+  /// **'No longer available'**
+  String get chatBlockUnavailable;
+
+  /// Header above recommended action items on a chat conversation link block
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended next steps'**
+  String get chatBlockRecommendedNextSteps;
+
+  /// Retryable error when fetching memories failed instead of returning an empty list
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load memories'**
+  String get couldNotLoadMemories;
+
+  /// Short user-facing error when the knowledge graph request is non-200; must not include the response body
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load knowledge graph'**
+  String get couldNotLoadKnowledgeGraph;
+
+  /// Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
+  String get speechToTextUnavailableDesc;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

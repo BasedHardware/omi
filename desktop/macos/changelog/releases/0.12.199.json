@@ -1,0 +1,8 @@
+{
+  "version": "0.12.199",
+  "date": "2026-08-21",
+  "changes": [
+    "Proactive insight cards in Chat no longer repeat their headline when the message already says the same thing",
+    "Refined the Refer button with a clean outlined treatment"
+  ]
+}

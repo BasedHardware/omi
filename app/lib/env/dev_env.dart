@@ -9,24 +9,12 @@ final class DevEnv implements EnvFields {
   DevEnv();
 
   @override
-  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
-  final String? openAIAPIKey = _DevEnv.openAIAPIKey;
-
-  @override
   @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
   final String? posthogApiKey = _DevEnv.posthogApiKey;
 
   @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
-
-  @override
-  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
-  final String? growthbookApiKey = _DevEnv.growthbookApiKey;
-
-  @override
-  @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
-  final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
 
   @override
   @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
@@ -55,8 +43,4 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
-
-  @override
-  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
-  final String? stagingApiUrl = _DevEnv.stagingApiUrl;
 }

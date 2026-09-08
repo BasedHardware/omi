@@ -2,16 +2,64 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
-Future<List<ServerMessage>> getMessagesServer({String? appId, bool dropdownSelected = false}) async {
+/// Hard-scope payload for POST /v2/messages `context` (#4515).
+class ChatPageContext {
+  final String type;
+  final String? id;
+  final String? title;
+  final String? startDate;
+  final String? endDate;
+
+  const ChatPageContext({
+    required this.type,
+    this.id,
+    this.title,
+    this.startDate,
+    this.endDate,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        if (id != null) 'id': id,
+        if (title != null) 'title': title,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      };
+
+  ChatPageContext copyWith({
+    String? type,
+    String? id,
+    String? title,
+    String? startDate,
+    String? endDate,
+    bool clearDates = false,
+  }) {
+    return ChatPageContext(
+      type: type ?? this.type,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      startDate: clearDates ? null : (startDate ?? this.startDate),
+      endDate: clearDates ? null : (endDate ?? this.endDate),
+    );
+  }
+}
+
+Future<List<ServerMessage>> getMessagesServer({
+  String? appId,
+  bool dropdownSelected = false,
+  int limit = 100,
+  int offset = 0,
+}) async {
   if (appId == 'no_selected') appId = null;
-  // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected',
+    url:
+        '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected&limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
@@ -19,11 +67,12 @@ Future<List<ServerMessage>> getMessagesServer({String? appId, bool dropdownSelec
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var decodedBody = jsonDecode(body) as List<dynamic>;
-    if (decodedBody.isEmpty) {
+    var messages = (jsonDecode(body) as List<dynamic>)
+        .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+        .toList();
+    if (messages.isEmpty) {
       return [];
     }
-    var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
     Logger.debug('getMessages length: ${messages.length}');
     // Debug: Check if any messages have ratings
     var ratedMessages = messages.where((m) => m.rating != null).toList();
@@ -48,13 +97,22 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
   );
   if (response == null) throw Exception('Failed to delete chat');
   if (response.statusCode == 200) {
-    return [ServerMessage.fromJson(jsonDecode(response.body))];
+    return [ServerMessage.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>)];
   } else {
     throw Exception('Failed to delete chat');
   }
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line.startsWith('error: ')) {
+    final message = line.substring('error: '.length).trim();
+    return ServerMessageChunk(
+      messageId,
+      message.isEmpty ? ServerMessageChunk.failedMessage().text : message,
+      MessageChunkType.error,
+    );
+  }
+
   if (line.startsWith('think: ')) {
     return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
   }
@@ -69,7 +127,7 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
       messageId,
       text,
       MessageChunkType.done,
-      message: ServerMessage.fromJson(json.decode(text)),
+      message: ServerMessage.fromResponseJson(json.decode(text)),
     );
   }
 
@@ -79,22 +137,60 @@ ServerMessageChunk? parseMessageChunk(String line, String messageId) {
       messageId,
       text,
       MessageChunkType.message,
-      message: ServerMessage.fromJson(json.decode(text)),
+      message: ServerMessage.fromResponseJson(json.decode(text)),
     );
   }
 
   return null;
 }
 
-Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, List<String>? filesId}) async* {
+/// Decodes voice-message-specific terminal SSE errors.
+///
+/// The voice endpoint emits typed transcription failures as
+/// `error: {"message":"..."}` while quota failures keep their legacy
+/// `error:402:<body>` shape. Never surface a malformed server frame directly:
+/// return the established generic error chunk instead.
+ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) {
+  if (line.startsWith('error:402:')) {
+    return ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+  }
+
+  if (line.startsWith('error: ')) {
+    try {
+      final payload = jsonDecode(line.substring('error: '.length));
+      if (payload is! Map) return ServerMessageChunk.failedMessage();
+
+      final message = payload['message'];
+      if (message is! String || message.trim().isEmpty) return ServerMessageChunk.failedMessage();
+
+      return ServerMessageChunk(messageId, message, MessageChunkType.error);
+    } on FormatException {
+      return ServerMessageChunk.failedMessage();
+    }
+  }
+
+  return parseMessageChunk(line, messageId);
+}
+
+Stream<ServerMessageChunk> sendMessageStreamServer(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+}) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
     url = '${Env.apiBaseUrl}v2/messages';
   }
 
   var messageId = "1000"; // Default new message
+  final body = <String, dynamic>{
+    'text': text,
+    'file_ids': filesId,
+    if (context != null) 'context': context.toJson(),
+  };
 
-  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
+  await for (var line in makeStreamingApiCall(url: url, body: jsonEncode(body))) {
     if (line.startsWith('error:402:')) {
       yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
       return;
@@ -118,7 +214,7 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   ).then((response) {
     if (response == null) throw Exception('Failed to send message');
     if (response.statusCode == 200) {
-      return ServerMessage.fromJson(jsonDecode(response.body));
+      return ServerMessage.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to send message');
     }
@@ -133,13 +229,10 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {Strin
     files: files,
     fields: language != null ? {'language': language} : {},
   )) {
-    if (line.startsWith('error:402:')) {
-      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
-      return;
-    }
-    var messageChunk = parseMessageChunk(line, messageId);
+    var messageChunk = parseVoiceMessageStreamChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
+      if (messageChunk.type == MessageChunkType.error) return;
     } else {
       yield ServerMessageChunk.failedMessage();
       return;
@@ -157,8 +250,10 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
     var response = await makeMultipartApiCall(url: url, files: files);
 
     if (response.statusCode == 200) {
-      Logger.debug('uploadFileServer response body: ${jsonDecode(response.body)}');
-      return MessageFile.fromJsonList(jsonDecode(response.body));
+      Logger.debug('uploadFileServer response body: ${response.body}');
+      return (jsonDecode(response.body) as List<dynamic>)
+          .map((file) => MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(file as Map<String, dynamic>)))
+          .toList();
     } else {
       Logger.debug('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
       throw Exception('Failed to upload file. Status code: ${response.statusCode}');
@@ -180,6 +275,7 @@ Future reportMessageServer(String messageId) async {
   if (response.statusCode != 200) {
     throw Exception('Failed to report message');
   }
+  wire.GeneratedMessageReportResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 }
 
 /// Transcribe audio files sequentially (one request per file) to stay under
@@ -198,8 +294,10 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final transcript = data['transcript'] ?? '';
+        final data = wire.GeneratedVoiceMessageTranscriptionResponse.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>,
+        );
+        final transcript = data.transcript;
         if (transcript.isNotEmpty) {
           transcripts.add(transcript);
         }

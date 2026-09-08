@@ -1,0 +1,8 @@
+{
+  "version": "0.11.554",
+  "date": "2026-06-28",
+  "changes": [
+    "Fixed failed agent runs so provider errors appear in the agent chat detail, not just the row summary",
+    "Fixed OpenClaw agent launch so it uses the Node runtime from its own install instead of the Omi app bundle."
+  ]
+}

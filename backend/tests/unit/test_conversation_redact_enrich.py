@@ -89,6 +89,7 @@ class TestRedactForList:
 
     def test_locked_strips_details_keeps_title(self):
         conv = _make_conv_dict(is_locked=True)
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_list(conv)
         assert result['structured']['title'] == "Test Title"
         assert result['structured']['overview'] == "Test overview"
@@ -98,6 +99,13 @@ class TestRedactForList:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert result['match_snippets'] == []
+
+    def test_unlocked_keeps_match_snippets(self):
+        conv = _make_conv_dict(is_locked=False)
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
+        result = redact_conversation_for_list(conv)
+        assert result['match_snippets'] == [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
 
     def test_locked_no_structured_key(self):
         conv = {"id": "x", "is_locked": True}
@@ -147,12 +155,14 @@ class TestRedactForList:
 
 class TestRedactForIntegration:
     def test_unlocked_passthrough(self):
-        conv = _make_conv_dict(is_locked=False)
+        conv = _make_conv_dict(is_locked=False, geolocation={'latitude': 1.0, 'longitude': 2.0})
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == "Test Title"
+        assert 'geolocation' not in result
 
     def test_locked_strips_everything(self):
-        conv = _make_conv_dict(is_locked=True)
+        conv = _make_conv_dict(is_locked=True, geolocation={'latitude': 1.0, 'longitude': 2.0})
+        conv['match_snippets'] = [{'text': 'ACME contract', 'start': 1.0, 'end': 2.0}]
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == ''
         assert result['structured']['overview'] == ''
@@ -162,6 +172,8 @@ class TestRedactForIntegration:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert result['match_snippets'] == []
+        assert 'geolocation' not in result
 
     def test_locked_non_dict_structured_coerced(self):
         """Integration redaction also handles non-dict structured (e.g. Pydantic)."""
@@ -295,7 +307,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in self.REDACT_CONSUMERS:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             # Should not have the old inline pattern of stripping action_items inside an is_locked check
             assert (
@@ -309,7 +321,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['routers/mcp.py', 'routers/developer.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _add_speaker_names_to_segments' not in content
@@ -322,7 +334,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['routers/developer.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _add_folder_names_to_conversations' not in content
@@ -335,7 +347,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['utils/webhooks.py', 'utils/app_integrations.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _json_serialize_datetime' not in content
@@ -348,6 +360,23 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['utils/webhooks.py', 'utils/app_integrations.py', 'routers/conversations.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert '.as_dict_cleaned_dates()' not in content, f"{rel_path} still uses .as_dict_cleaned_dates()"
+
+    def test_conversation_upsert_uses_native_datetimes(self):
+        """Firestore writes must pass native datetimes so created_at/started_at/finished_at
+        are stored as Timestamps, not ISO strings (mixed types break sort + date filters)."""
+        import os
+
+        backend = os.path.join(os.path.dirname(__file__), '../..')
+        for rel_path in [
+            'utils/conversations/process_conversation.py',
+            'utils/conversations/merge_conversations.py',
+        ]:
+            path = os.path.join(backend, rel_path)
+            with open(path, encoding='utf-8') as f:
+                content = f.read()
+            assert (
+                'upsert_conversation(uid, conversation.as_dict_cleaned_dates())' not in content
+            ), f"{rel_path} writes ISO strings to Firestore via as_dict_cleaned_dates()"

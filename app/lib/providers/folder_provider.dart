@@ -6,11 +6,17 @@ import 'package:omi/backend/http/api/folders.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/utils/logger.dart';
 
+typedef FoldersFetcher = Future<List<Folder>> Function();
+
 class FolderProvider extends ChangeNotifier {
   List<Folder> _folders = [];
   String? _selectedFolderId;
   bool _isLoading = false;
   String? _error;
+  int _sessionGeneration = 0;
+  final FoldersFetcher _foldersFetcher;
+
+  FolderProvider({FoldersFetcher? foldersFetcher}) : _foldersFetcher = foldersFetcher ?? getFolders;
 
   List<Folder> get folders => _folders;
 
@@ -27,18 +33,23 @@ class FolderProvider extends ChangeNotifier {
   List<Folder> get customFolders => _folders.where((f) => !f.isSystem).toList();
 
   Future<void> loadFolders() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      _folders = await getFolders();
+      final folders = await _foldersFetcher();
+      if (generation != _sessionGeneration) return;
+      _folders = folders;
       _folders.sort((a, b) => a.order.compareTo(b.order));
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       Logger.debug('Error loading folders: $e');
       _error = 'Failed to load folders';
     }
 
+    if (generation != _sessionGeneration) return;
     _isLoading = false;
     notifyListeners();
   }
@@ -54,8 +65,10 @@ class FolderProvider extends ChangeNotifier {
   }
 
   Future<Folder?> createFolder({required String name, String? description, String? color, String? icon}) async {
+    final generation = _sessionGeneration;
     try {
       final folder = await createFolderApi(name: name, description: description, color: color, icon: icon);
+      if (generation != _sessionGeneration) return null;
       if (folder != null) {
         _folders.add(folder);
         _folders.sort((a, b) => a.order.compareTo(b.order));
@@ -63,6 +76,7 @@ class FolderProvider extends ChangeNotifier {
         return folder;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return null;
       Logger.debug('Error creating folder: $e');
       _error = 'Failed to create folder';
       notifyListeners();
@@ -77,6 +91,7 @@ class FolderProvider extends ChangeNotifier {
     String? color,
     String? icon,
   }) async {
+    final generation = _sessionGeneration;
     try {
       final updatedFolder = await updateFolderApi(
         folderId,
@@ -85,6 +100,7 @@ class FolderProvider extends ChangeNotifier {
         color: color,
         icon: icon,
       );
+      if (generation != _sessionGeneration) return null;
       if (updatedFolder != null) {
         final index = _folders.indexWhere((f) => f.id == folderId);
         if (index >= 0) {
@@ -94,6 +110,7 @@ class FolderProvider extends ChangeNotifier {
         return updatedFolder;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return null;
       Logger.debug('Error updating folder: $e');
       _error = 'Failed to update folder';
       notifyListeners();
@@ -102,6 +119,7 @@ class FolderProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteFolder(String folderId, {String? moveToFolderId}) async {
+    final generation = _sessionGeneration;
     _folders.removeWhere((f) => f.id == folderId);
     if (_selectedFolderId == folderId) {
       _selectedFolderId = moveToFolderId;
@@ -109,6 +127,7 @@ class FolderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final success = await deleteFolderApi(folderId, moveToFolderId: moveToFolderId);
+      if (generation != _sessionGeneration) return false;
       if (success) {
         loadFolders();
         return true;
@@ -118,6 +137,7 @@ class FolderProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       Logger.debug('Error deleting folder: $e');
       await loadFolders();
       _error = 'Failed to delete folder';
@@ -127,13 +147,16 @@ class FolderProvider extends ChangeNotifier {
   }
 
   Future<bool> moveConversation(String conversationId, String? folderId) async {
+    final generation = _sessionGeneration;
     try {
       final success = await moveConversationToFolderApi(conversationId, folderId);
+      if (generation != _sessionGeneration) return false;
       if (success) {
         await loadFolders();
         return true;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       Logger.debug('Error moving conversation: $e');
       _error = 'Failed to move conversation';
       notifyListeners();
@@ -142,13 +165,16 @@ class FolderProvider extends ChangeNotifier {
   }
 
   Future<int> bulkMoveConversations(List<String> conversationIds, String folderId) async {
+    final generation = _sessionGeneration;
     try {
       final movedCount = await bulkMoveConversationsToFolderApi(folderId, conversationIds);
+      if (generation != _sessionGeneration) return 0;
       if (movedCount > 0) {
         await loadFolders();
       }
       return movedCount;
     } catch (e) {
+      if (generation != _sessionGeneration) return 0;
       Logger.debug('Error bulk moving conversations: $e');
       _error = 'Failed to move conversations';
       notifyListeners();
@@ -157,8 +183,10 @@ class FolderProvider extends ChangeNotifier {
   }
 
   Future<bool> reorderFolders(List<String> folderIds) async {
+    final generation = _sessionGeneration;
     try {
       final success = await reorderFoldersApi(folderIds);
+      if (generation != _sessionGeneration) return false;
       if (success) {
         // Update local order
         for (int i = 0; i < folderIds.length; i++) {
@@ -172,6 +200,7 @@ class FolderProvider extends ChangeNotifier {
         return true;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       Logger.debug('Error reordering folders: $e');
       _error = 'Failed to reorder folders';
       notifyListeners();
@@ -186,6 +215,15 @@ class FolderProvider extends ChangeNotifier {
 
   /// Get the default folder
   Folder? get defaultFolder => _folders.firstWhereOrNull((f) => f.isDefault);
+
+  void clearUserData() {
+    _sessionGeneration++;
+    _folders = [];
+    _selectedFolderId = null;
+    _isLoading = false;
+    _error = null;
+    notifyListeners();
+  }
 
   void clearError() {
     _error = null;

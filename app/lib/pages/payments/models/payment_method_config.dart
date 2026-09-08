@@ -36,8 +36,12 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: title,
       subtitle: subtitle,
-      icon: SvgPicture.asset(Assets.images.stripeLogo, width: 80, color: Colors.white),
-      backgroundColor: isActive ? const Color(0xFF635BFF) : Color(0xFF35343B),
+      icon: SvgPicture.asset(
+        Assets.images.stripeLogo,
+        width: 80,
+        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+      ),
+      backgroundColor: isActive ? const Color(0xFF635BFF) : const Color(0xFF35343B),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
       isActive: isActive,
@@ -57,7 +61,7 @@ class PaymentMethodConfig {
       title: title,
       subtitle: subtitle,
       icon: const Icon(Icons.paypal, size: 32, color: Colors.white),
-      backgroundColor: isActive ? const Color(0xFF003087) : Color(0xFF35343B),
+      backgroundColor: isActive ? const Color(0xFF003087) : const Color(0xFF35343B),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,
       isActive: isActive,

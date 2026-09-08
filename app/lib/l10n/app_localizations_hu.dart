@@ -9,6 +9,9 @@ class AppLocalizationsHu extends AppLocalizations {
   AppLocalizationsHu([String locale = 'hu']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'A munkamenet lejárt — jelentkezz be újra.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -321,7 +324,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get searchApps => 'Alkalmazások keresése...';
 
   @override
-  String get myApps => 'Alkalmazásaim';
+  String get myApps => 'Általam létrehozva';
 
   @override
   String get installedApps => 'Telepített alkalmazások';
@@ -429,6 +432,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get offlineSync => 'Offline szinkronizálás';
+
+  @override
+  String get autoSync => 'Automatikus szinkronizálás';
+
+  @override
+  String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
   String get deviceSettings => 'Eszköz beállításai';
@@ -741,11 +750,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Előfizetésed $date-án megújul.';
-  }
-
-  @override
   String get basicPlan => 'Ingyenes csomag';
 
   @override
@@ -966,11 +970,6 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '$used / $limit betekintés nyerve ebben a hónapban';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit emlék létrehozva ebben a hónapban';
   }
 
   @override
@@ -1474,7 +1473,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get payYourSttProvider => 'Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.';
 
   @override
-  String get freeMinutesMonth => '1200 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
+  String get freeMinutesMonth => '300 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1653,7 +1652,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get finalTouches => 'Utolsó simítások';
 
   @override
-  String get processing => 'Feldolgozás...';
+  String get processing => 'Feldolgozás';
 
   @override
   String get features => 'Funkciók';
@@ -1798,20 +1797,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lovingOmi => 'Tetszik az Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Segíts elérni több embert azzal, hogy értékelést hagysz az App Store-ban. A visszajelzésed sokat jelent nekünk!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Segíts elérni több embert azzal, hogy értékelést hagysz a Google Play Áruházban. A visszajelzésed sokat jelent nekünk!';
-
-  @override
-  String get rateOnAppStore => 'Értékelés az App Store-ban';
-
-  @override
-  String get rateOnGooglePlay => 'Értékelés a Google Play-en';
-
-  @override
   String get maybeLater => 'Talán később';
 
   @override
@@ -1885,9 +1870,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openSettings => 'Beállítások megnyitása';
-
-  @override
-  String get wantDifferentName => 'Máshogy szeretnéd, hogy hívjanak?';
 
   @override
   String get whatsYourName => 'Mi a neved?';
@@ -2071,6 +2053,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryDeleted => 'Emlék törölve.';
 
   @override
+  String get memoryHistoryPartial =>
+      'Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -2149,6 +2135,18 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Emlékezet szerkesztése';
+
+  @override
+  String get pinAsBaseline => 'Rögzítés alapként';
+
+  @override
+  String get unpinAsBaseline => 'Rögzítés feloldása alapként';
+
+  @override
+  String get baselineMemory => 'Alapmemória';
+
+  @override
+  String get alwaysInContext => 'Mindig a kontextusban';
 
   @override
   String get memoryContentHint => 'Szeretek fagyit enni...';
@@ -4652,41 +4650,13 @@ class AppLocalizationsHu extends AppLocalizations {
       'Köszönjük, hogy az Omi értékes felhasználója. Ha kérdése vagy aggálya van, forduljon hozzánk a team@basedhardware.com címen.';
 
   @override
-  String get wifiSyncSettings => 'WiFi szinkronizálás beállításai';
-
-  @override
-  String get enterHotspotCredentials => 'Adja meg telefonja hotspot hitelesítő adatait';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'A WiFi szinkronizálás a telefont hotspotként használja. A nevet és jelszót a Beállítások > Személyes hotspot menüben találja.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspot neve (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'pl. iPhone Hotspot';
-
-  @override
   String get password => 'Jelszó';
-
-  @override
-  String get enterHotspotPassword => 'Adja meg a hotspot jelszavát';
 
   @override
   String get saveCredentials => 'Hitelesítő adatok mentése';
 
   @override
   String get clearCredentials => 'Hitelesítő adatok törlése';
-
-  @override
-  String get pleaseEnterHotspotName => 'Kérjük, adjon meg egy hotspot nevet';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi hitelesítő adatok mentve';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi hitelesítő adatok törölve';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4755,7 +4725,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
 
   @override
-  String get basicPlanDescription => '1200 prémium perc + korlátlan eszközön';
+  String get basicPlanDescription => '300 prémium perc + korlátlan eszközön';
 
   @override
   String get minutes => 'perc';
@@ -5840,9 +5810,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Gyors átvitel';
-
-  @override
   String get syncingStatus => 'Szinkronizálás';
 
   @override
@@ -5852,15 +5819,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Átviteli módszer';
-
-  @override
-  String get fast => 'Gyors';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5881,25 +5839,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processedFilesDeleted => 'Feldolgozott fájlok törölve';
 
   @override
-  String get wifiEnableFailed => 'A WiFi engedélyezése sikertelen az eszközön. Kérlek, próbáld újra.';
-
-  @override
-  String get deviceNoFastTransfer => 'Az eszközöd nem támogatja a gyors átvitelt. Használd inkább a Bluetooth-t.';
-
-  @override
-  String get enableHotspotMessage => 'Kérlek, engedélyezd a telefonod hotspotját, és próbáld újra.';
-
-  @override
-  String get transferStartFailed => 'Az átvitel indítása sikertelen. Kérlek, próbáld újra.';
-
-  @override
   String get deviceNotResponding => 'Az eszköz nem válaszol. Kérlek, próbáld újra.';
-
-  @override
-  String get invalidWifiCredentials => 'Érvénytelen WiFi hitelesítő adatok. Ellenőrizd a hotspot beállításokat.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi kapcsolódás sikertelen. Kérlek, próbáld újra.';
 
   @override
   String get sdCardProcessing => 'SD Card Processing';
@@ -5911,9 +5851,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get process => 'Feldolgozás';
-
-  @override
-  String get wifiSyncFailed => 'WiFi szinkronizálás sikertelen';
 
   @override
   String get processingFailed => 'Feldolgozás sikertelen';
@@ -6086,7 +6023,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cloudProvider => 'Felhő szolgáltató';
 
   @override
-  String get premiumMinutesInfo => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
+  String get premiumMinutesInfo => '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
@@ -6167,7 +6104,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryDrainSignificantly => 'Az akkumulátor-lemerülés jelentősen növekedni fog.';
 
   @override
-  String get premiumMinutesMonth => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+  String get premiumMinutesMonth => '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6691,24 +6628,13 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi szinkronizálás';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item másolva a vágólapra';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Kapcsolódás sikertelen';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Csatlakozás a következőhöz: $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName WiFi engedélyezése';
   }
 
   @override
@@ -6805,9 +6731,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get statusUnprocessed => 'Feldolgozatlan';
 
   @override
-  String get switchedToFastTransfer => 'Átváltás gyors átvitelre';
-
-  @override
   String get transferCompleteMessage => 'Átvitel befejezve! Most már lejátszhatod ezt a felvételt.';
 
   @override
@@ -6819,34 +6742,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transferCancelled => 'Átvitel megszakítva';
 
   @override
-  String get fastTransferEnabled => 'Gyors átvitel engedélyezve';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth szinkronizálás engedélyezve';
-
-  @override
-  String get enableFastTransfer => 'Gyors átvitel engedélyezése';
-
-  @override
-  String get fastTransferDescription =>
-      'A gyors átvitel WiFi-t használ ~5x gyorsabb sebességekhez. A telefonja ideiglenesen csatlakozik az Omi eszköz WiFi hálózatához az átvitel során.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Az internetelérés szünetel az átvitel alatt';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Válassza ki, hogyan kerüljenek át a felvételek az Omi eszközről a telefonjára.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s WiFi-n keresztül';
-
-  @override
-  String get fiveTimesFaster => '5X GYORSABB';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Közvetlen WiFi kapcsolatot hoz létre az Omi eszközével. A telefonja ideiglenesen lecsatlakozik a szokásos WiFi-ről az átvitel alatt.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6868,7 +6764,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alacsony akkumulátor figyelmeztetés';
 
   @override
-  String get lowBatteryAlertBody => 'Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Az akkumulátorod $level%-on van. Ideje feltölteni! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Az Omi teljesen feltöltődött';
@@ -7547,13 +7445,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nem sikerült átírni a hangot';
 
   @override
-  String get locationPermissionRequired => 'Helymeghatározási engedély szükséges';
-
-  @override
-  String get locationPermissionContent =>
-      'A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.';
-
-  @override
   String get pdfTranscriptExport => 'Átirat exportálása';
 
   @override
@@ -7698,12 +7589,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dailyRecapsDescription => 'A napi összefoglalói itt jelennek meg, amint elkészülnek';
 
   @override
-  String get chooseTransferMethod => 'Válasszon átviteli módot';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s WiFi-n keresztül';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Nagy időeltérés észlelve ($gap)';
   }
@@ -7712,10 +7597,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Nagy időeltérések észlelve ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
 
   @override
   String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';
@@ -7914,6 +7795,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get viewAll => 'Összes megtekintése';
+
+  @override
+  String get expand => 'Kibontás';
 
   @override
   String get addTask => 'Feladat hozzáadása';
@@ -8481,7 +8365,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get manageStorage => 'Tárhely kezelése';
 
   @override
-  String get safelyBackedUp => 'Biztonságosan mentve a telefonjára';
+  String get safelyBackedUp => 'Beszélgetések létrehozva';
 
   @override
   String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
@@ -9136,7 +9020,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get billingYearly => 'Éves';
 
   @override
-  String get savePercent => '~17% megtakarítás';
+  String savePercent(int percent) {
+    return '~$percent% megtakarítás';
+  }
 
   @override
   String get popular => 'Népszerű';
@@ -9285,4 +9171,853 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
+
+  @override
+  String get deleteRecap => 'Összefoglaló törlése';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Törlöd ezt az összefoglalót?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Az összefoglaló véglegesen eltávolításra kerül. Az adott nap eredeti beszélgetései érintetlenek maradnak.';
+
+  @override
+  String get deleteRecapAction => 'Törlés';
+
+  @override
+  String get recapDeletedSnackbar => 'Összefoglaló törölve';
+
+  @override
+  String get recapDeleteFailed => 'Nem sikerült törölni az összefoglalót. Próbáld újra később.';
+
+  @override
+  String get syncStatusBackedUp => 'Mentve';
+
+  @override
+  String get syncStatusBackingUp => 'Szinkronizálás…';
+
+  @override
+  String get syncStatusWaiting => 'Szinkronizálásra vár';
+
+  @override
+  String get syncStatusRetrying => 'A feldolgozás sikertelen — újrapróbálkozás';
+
+  @override
+  String get syncStatusFailed => 'Sikertelen — koppintson az Újra gombra';
+
+  @override
+  String get syncStatusFileUnavailable => 'A fájl nem érhető el';
+
+  @override
+  String get noRecordingsYet => 'Még nincs felvétel';
+
+  @override
+  String get syncInProgress => 'Szinkronizálás folyamatban';
+
+  @override
+  String get syncStatusUploaded => 'Feltöltve · feldolgozás az Omin';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Még feldolgozás alatt';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?';
+
+  @override
+  String get syncCardAllBackedUp => 'Minden felvétel szinkronizálva';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel készen áll a szinkronizálásra',
+      one: '1 felvétel készen áll a szinkronizálásra',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Feldolgozás az Omiban…';
+
+  @override
+  String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel figyelmet igényel',
+      one: '1 felvétel figyelmet igényel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'A felvételek az eszközödről erre a telefonra kerülnek át, és helyben tárolódnak, majd feltöltődnek az Omi szerverére, ahol leiratot készít belőlük, és beszélgetésekké alakítja őket.';
+
+  @override
+  String get syncStepUpload => 'Szinkronizálás';
+
+  @override
+  String get syncStepUploadDesc => 'A felvételed az Omi szerverére kerül';
+
+  @override
+  String get syncStepProcess => 'Átírás';
+
+  @override
+  String get syncStepProcessDesc => 'Az Omi a hangból beszélgetést készít';
+
+  @override
+  String get syncStepBackedUp => 'A beszélgetés kész';
+
+  @override
+  String get syncStepBackedUpDesc => 'A Beszélgetések között találod';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ha a feldolgozás sikertelen, a felvételt a következő szinkronizálásnál automatikusan újrapróbáljuk.';
+
+  @override
+  String get syncStatusConversationCreated => 'Beszélgetés létrehozva';
+
+  @override
+  String get syncCardUploadingTitle => 'Feltöltés az Omira';
+
+  @override
+  String get syncCardDownloadingTitle => 'Letöltés az eszközödről';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Az eszközödön';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Letöltés az eszközödről';
+
+  @override
+  String get newestFirst => 'Legújabbak elöl';
+
+  @override
+  String get noSyncedRecordingsYet => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'A jelenlegi firmware verziója nem határozható meg';
+
+  @override
+  String get promoCode => 'Promóciós kód';
+
+  @override
+  String get enterPromoCode => 'Adja meg a promóciós kódot';
+
+  @override
+  String get invalidPromotionCode => 'Érvénytelen promóciós kód.';
+
+  @override
+  String get backgroundModeTitle => 'Háttérmód';
+
+  @override
+  String get backgroundModeDescription =>
+      'Tartsd az Omi-t felvételen akkor is, amikor az alkalmazás teljesen be van zárva.';
+
+  @override
+  String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.';
+
+  @override
+  String get regenerateRecap => 'Összegzés újragenerálása';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Összegzés újragenerálva';
+
+  @override
+  String get recapRegenerateFailed => 'Nem sikerült újragenerálni az összegzést. Próbáld újra később.';
+
+  @override
+  String get recapRegenerateCooldown => 'Kérlek, várj néhány másodpercet az újragenerálás előtt.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Erre a napra nincsenek összegezhető beszélgetések.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'A szinkronizálás az Omi átiratát használja';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.';
+
+  @override
+  String get transcribeLaterTitle => 'Átírás később';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.';
+
+  @override
+  String get transcribeLaterNote =>
+      'A telefon mikrofonjával, valamint Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.';
+
+  @override
+  String get recordingMode => 'Felvételi mód';
+
+  @override
+  String get captureModeLater => 'Később';
+
+  @override
+  String get captureModeLiveDescription => 'Átírás valós időben, miközben beszélsz.';
+
+  @override
+  String get captureModeLaterDescription => 'Mentsd el a hangot most, és írd át, amikor csak akarod.';
+
+  @override
+  String get unmute => 'Némítás feloldása';
+
+  @override
+  String get newRecording => 'Új felvétel';
+
+  @override
+  String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
+
+  @override
+  String get memoryThisDevice => 'Ez az eszköz';
+
+  @override
+  String get memoryThisIphone => 'Ez az iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ez a telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Az Omi használata';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Mondj néhány szót, és nézd, ahogy valós időben megjelennek';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Szép munka!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Kezdj el beszélni...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tegyél fel kérdést az Ominak';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nyomd meg egyszer a gombot, mondd el a kérdésed, majd nyomd meg újra, ha végeztél';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Kérdés feldolgozása...';
+
+  @override
+  String get deviceOnboardingListening => 'Hallgatom...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kikapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bekapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tartsd nyomva a gombot 3 másodpercig';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nyomd meg a gombot a visszakapcsoláshoz';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tartsd határozottan nyomva a gombot, amíg a fény ki nem alszik';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Csatlakoztatva';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Csatlakoztatva!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Leválasztva';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kikapcsolás...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dupla koppintás testreszabása';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beszélgetés befejezése';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Aktuális beszélgetés mentése és lezárása';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Némítás / Feloldás';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofon be- vagy kikapcsolása';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Folyamatban lévő beszélgetés csillagozása';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Beszélgetés megjelölése fontosként';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Próbáld ki most! Koppints duplán az Omira';
+
+  @override
+  String get deviceOnboardingContinue => 'Folytatás';
+
+  @override
+  String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+
+  @override
+  String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
+
+  @override
+  String get latest => 'Legújabb';
+
+  @override
+  String get flashFirmware => 'Firmware flashelése';
+
+  @override
+  String get pendantRecordingTitle => 'Felvétel a medálon';
+
+  @override
+  String get pendantRecordingNote =>
+      'A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.';
+
+  @override
+  String get pendantSyncingRecordings => 'Felvételek szinkronizálása a medálodról…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes perc tárolva';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta csatlakoztatása';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Használja a Ray-Ban Meta szemüvegét Omi rögzítőeszközként beszélgetésekhez és vizuális kontextushoz. Az Omi megnyitja a Meta AI alkalmazást a szemüveg összekapcsolásához.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Csatlakozás a Meta AI-n keresztül';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Fejezze be a csatlakozást a Meta AI alkalmazásban, majd térjen vissza ide.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Ellenőrzés újra';
+
+  @override
+  String get raybanMetaAllowCamera => 'Kamera engedélyezése a szemüvegen';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Az Omi a szemüveg kameráját használja fényképek hozzáadásához a beszélgetésekhez. Ezt kihagyhatja, és csak hangot használhat.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Kihagyás egyelőre';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta csak hang mód';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Az Omi ezen verziója Bluetooth-on keresztül tudja használni a szemüveg mikrofonját. A fényképek rögzítéséhez az Omi Meta fejlesztői változata szükséges.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'A telefonon lévő zene szünetel, amíg a szemüveg mikrofonja használatban van.';
+
+  @override
+  String get raybanMetaContinue => 'Folytatás';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fénykép készítése';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fénykép kérve — meg fog jelenni a beszélgetésében.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon készen áll';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Képrögzítés készen áll';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nem érhető el csak hang módban';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Hiba a Ray-Ban Meta csatlakoztatásakor: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Eszköz tárhelye';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% megtelt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total felhasználva';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free szabad';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Az adataid alapértelmezés szerint erős titkosítással védettek, és te döntöd el, hogyan tárolják és használják őket.';
+
+  @override
+  String get sttModelAccuracy => 'Pontosság';
+
+  @override
+  String get whisperModelSizeBase => 'Alap';
+
+  @override
+  String get cloudTranscription => 'Felhő átírás';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Modell törlése';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Biztosan törölni szeretnéd ezt a modellt?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Letöltve';
+
+  @override
+  String get sttModelFaster => 'Gyorsabb';
+
+  @override
+  String get sttFilterAuto => 'Automatikus';
+
+  @override
+  String get sttModelHigher => 'Magasabb';
+
+  @override
+  String get whisperModelSizeLarge => 'Nagy';
+
+  @override
+  String get sttModelLower => 'Alacsonyabb';
+
+  @override
+  String get whisperModelSizeMedium => 'Közepes';
+
+  @override
+  String get onDeviceModelDeleted => 'Modell törölve';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'A modell letöltése nem sikerült';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'A Whisper modell letöltése nem sikerült. Próbáld újra.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modell letöltve';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'A Whisper modell letöltése sikerült';
+
+  @override
+  String get onDeviceModelSize => 'Modell mérete';
+
+  @override
+  String get sttNone => 'Nincs';
+
+  @override
+  String get onDeviceTranscription => 'Eszközön történő átírás';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Az átírás helyileg történik az eszközödön';
+
+  @override
+  String get sttModelSlower => 'Lassabb';
+
+  @override
+  String get whisperModelSizeSmall => 'Kicsi';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Beszéd-szöveg szolgáltató';
+
+  @override
+  String get speechToTextProviderDesc => 'Válaszd ki az átíráshoz használt szolgáltatást';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Sebesség';
+
+  @override
+  String get whisperModelSizeTiny => 'Apró';
+
+  @override
+  String get transcriptionLanguage => 'Átírás nyelve';
+
+  @override
+  String get transcriptionLanguageDesc => 'Válaszd ki a beszédátírás nyelvét';
+
+  @override
+  String get whisperModel => 'Whisper modell';
+
+  @override
+  String get whisperModelDesc => 'Válaszd ki a modellt az eszközön történő átíráshoz';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Visszaváltasz az ingyenes csomagra?';
+
+  @override
+  String get downgradeLimitationsHeading => 'A következő korlátozásokkal kell számolnod:';
+
+  @override
+  String get downgradeLimitBattery => '7-szeres akkumulátorfogyasztás';
+
+  @override
+  String get downgradeLimitQuality => '30%-kal gyengébb átírási minőség';
+
+  @override
+  String get downgradeLimitDelay => '5-7 másodperces késleltetés';
+
+  @override
+  String get downgradeLimitSpeakers => 'A beszélők nem azonosíthatók';
+
+  @override
+  String get downgradeAnyway => 'Váltás mindenképp';
+
+  @override
+  String get googleCalendarNotConnected => 'A Google naptár nincs csatlakoztatva';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Csatlakoztasd a Google naptáradat, hogy a beszélgetéseket naptáreseményekhez kapcsolhasd.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Összekapcsolva ezzel: „$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'A naptáresemény összekapcsolása nem sikerült';
+
+  @override
+  String get thanksForYourFeedback => 'Köszönjük a visszajelzést!';
+
+  @override
+  String get copyMessage => 'Üzenet másolása';
+
+  @override
+  String get searchSettings => 'Beállítások keresése…';
+
+  @override
+  String get errorLoadingAudio => 'Hiba a hang betöltésekor';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Válaszd ki a Ray-Ban Meta mikrofonját';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Válaszd ki a szemüveg Bluetooth-mikrofonját. A zene szünetel, amíg az Omi használja.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Nem található Bluetooth-mikrofon. Csatlakoztasd a szemüveget az iPhone Beállításokban, majd próbáld újra.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'A Bluetooth-mikrofonokat nem sikerült betölteni. Ellenőrizd, hogy a Bluetooth be van-e kapcsolva, majd próbáld újra.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e az iPhone Beállításokban.';
+
+  @override
+  String get syncStatusTooOld => 'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';
+
+  @override
+  String get planSheetChooseYourPlan => 'Válaszd ki a csomagodat a korlátlan Omi feloldásához.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Elérhető Macen, mobilon és weben';
+
+  @override
+  String get popularBadge => 'NÉPSZERŰ';
+
+  @override
+  String get worksOnDesktop => 'Működik asztali gépen';
+
+  @override
+  String get noDesktopAccess => 'Nem működik asztali gépen';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months hónap / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hónap ingyen',
+      one: '1 hónap ingyen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Az Omi ingyenes, de az ingyenes verziónak vannak korlátai, amelyek befolyásolják az élményt:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 másodperces késleltetés (nem valós idejű)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Váltás az ingyenes verzióra';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Szerezz ingyenes korlátlan hozzáférést';
+
+  @override
+  String get shareDataForTraining => 'Adatmegosztás tanításhoz';
+
+  @override
+  String get yourRequestUnderReview => 'A kérelmedet vizsgáljuk';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Frissítés szükséges';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Telepítse a legújabb Omi alkalmazást a fiókmigráció utáni folytatáshoz.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migráció folyamatban';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'A fiókja migrálás alatt áll. A termékfunkciók szünetelnek a migráció befejezéséig.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'A fiókja karbantartás alatt áll a migráció visszavonása után. Egyes újabb adatok elkülönítve maradhatnak.';
+
+  @override
+  String get accountCutoverOpenStore => 'Áruház megnyitása';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Erről: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Kérdezz erről';
+
+  @override
+  String get sendRawAudioToOmi => 'Nyers hang küldése az Ominak';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.';
+
+  @override
+  String get findDevice => 'Keresés';
+
+  @override
+  String get diagnosticsShareFailed => 'A diagnosztika megosztása nem sikerült. Próbáld újra.';
+
+  @override
+  String get appDisabledTitle => 'Ez az alkalmazás le van tiltva, és nem telepíthető.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'A végpontja 72 órán át folyamatosan hibázott, ezért a kézbesítések leálltak.';
+
+  @override
+  String get appDisabledGeneric => 'Az Omi tiltotta le.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Először javítsd ki a végpontot — az újraengedélyezés minden beállított URL-t újra ellenőriz.';
+
+  @override
+  String get appReEnable => 'Újraengedélyezés';
+
+  @override
+  String get appReEnableFailedTitle => 'Az újraengedélyezés nem sikerült';
+
+  @override
+  String get appReEnableFailedBody => 'Ezt az alkalmazást nem sikerült újraengedélyezni. Próbáld újra.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Letiltva ekkor: $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Utolsó hiba: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Előre rögzített';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'A Pendant még mindig felvételt készít, ezért a tárolt hang nem vihető át. Nyomd meg a Pendant gombját a felvétel leállításához, majd szinkronizálj újra.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'A Pendant tárhelye megtelt, és még mindig felvételi módban van, ezért a tárolt hang nem vihető át. Nyomja meg a Pendant gombját a felvétel leállításához, majd szinkronizáljon újra.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nincs rögzítve ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name hangprofilja';
+  }
+
+  @override
+  String get play => 'Lejátszás';
+
+  @override
+  String get redo => 'Újrafelvétel';
+
+  @override
+  String get answerWithYourVoice => 'Válaszolj szóban:';
+
+  @override
+  String get speechProfileTopicLocation => 'Hol élsz?';
+
+  @override
+  String get speechProfileTopicWork => 'Mivel foglalkozol?';
+
+  @override
+  String get speechProfileTopicGoal => 'Mi a hosszú távú célod?';
+
+  @override
+  String get transcriptionNoAudio => 'Az átírás nem kap hangot';
+
+  @override
+  String get tapPlusToStartRecording => 'Koppints a + jelre a felvétel indításához';
+
+  @override
+  String get chatBlockTask => 'Feladat';
+
+  @override
+  String get chatBlockGoal => 'Cél';
+
+  @override
+  String get chatBlockConversation => 'Beszélgetés';
+
+  @override
+  String get chatBlockMemory => 'Emlék';
+
+  @override
+  String get chatBlockQuestion => 'Kérdés';
+
+  @override
+  String get chatBlockOpenInGoals => 'Megnyitás a Célokban';
+
+  @override
+  String get chatBlockOpenConversation => 'Beszélgetés megnyitása';
+
+  @override
+  String get chatBlockOpenInMemories => 'Megnyitás az Emlékekben';
+
+  @override
+  String get chatBlockUnavailable => 'Már nem érhető el';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Javasolt következő lépések';
+
+  @override
+  String get couldNotLoadMemories => 'Nem sikerült betölteni az emlékeket';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Nem sikerült betölteni a tudásgráfot';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
 }

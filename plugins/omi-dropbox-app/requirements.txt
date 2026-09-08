@@ -1,4 +1,5 @@
 fastapi>=0.104.0
+../omi-plugin-sdk
 uvicorn>=0.24.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.6

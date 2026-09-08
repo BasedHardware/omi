@@ -59,6 +59,10 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 omi --json memory list | jq '.[] | {id, content}'
 ```
 
+Pretty output displays returned text literally, including square brackets and
+emoji-like codes such as `:warning:`. Styling applies to the table layout, not
+to the contents of your memories or conversations.
+
 ## Auth
 
 Two auth methods, both fully wired:
@@ -85,6 +89,12 @@ omi auth refresh                # force a Firebase refresh (no-op for API keys)
 omi auth logout                 # wipe the credential
 ```
 
+An API-key login candidate is checked before replacing the saved credentials.
+If verification rejects it with HTTP 401 or 403, the existing profile and active
+profile selection remain unchanged. Other HTTP errors retain the existing
+store-and-warn behavior. A transport failure leaves saved credentials unchanged;
+browser OAuth is a separate flow.
+
 You can also set `OMI_API_KEY` in the environment to bypass on-disk config
 entirely — handy in containers and CI:
 
@@ -97,6 +107,8 @@ omi memory list
 
 State lives at `~/.omi/config.toml` (overridable via `$OMI_CONFIG`). The file
 holds one or more named profiles, each with its own auth method and API base.
+Saving configuration preserves unknown settings at both the root and profile
+levels, so editing a known setting does not discard extensions from newer clients.
 Switch between them with `--profile`:
 
 ```bash
@@ -111,8 +123,63 @@ Common config:
 omi config show
 omi config path
 omi config set api_base https://api.staging.omi.me
+omi config set local_api_url http://127.0.0.1:47778
+omi config set local_token ...
 omi config profile list
 omi config profile delete old-account --yes
+```
+
+## Local Omi Desktop API
+
+`omi local` talks to a running Omi Desktop local API. Configure the active
+profile once, or use env vars for ephemeral agent sessions:
+
+```bash
+omi local configure --url http://127.0.0.1:47778 --token ...
+export OMI_LOCAL_API_URL=http://127.0.0.1:47778
+export OMI_LOCAL_TOKEN=...
+```
+
+Common local tools:
+
+```bash
+omi --json local status
+omi --json local tools
+omi --json local call search_screen_history --args-json '{"query":"pricing page","days":7}'
+omi --json local search-screen "pricing page" --days 7 --app Safari
+omi --json local screenshot 123 --output /tmp/omi-shot.jpg
+omi --json local recap --days-ago 1
+omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
+omi --json local task search "taxes" --include-completed
+```
+
+Agent screen-history workflow:
+
+1. Check availability with `omi --json local status`; look for
+   `screen_history_available`, `screenshot_count`, and `indexed_screenshot_count`.
+2. Discover tool schemas with `omi --json local tools`.
+3. Search OCR/screen history with `omi --json local search-screen "query" --days 7`
+   or run exact SQL against `screenshots` when you need app/window filters.
+4. Use a returned `screenshot_id` with
+   `omi --json local screenshot <id> --output /tmp/omi-shot.jpg`.
+5. Validate the file before handing it to vision tooling, for example
+   `file /tmp/omi-shot.jpg`.
+
+When semantic search returns no results, JSON mode also tries a literal
+substring search across app names, window titles, and OCR text. In this
+fallback, `%` and `_` in the query or `--app` filter match those characters
+literally, rather than acting as SQL wildcards.
+
+If pixels are not available, JSON-mode errors preserve Desktop's structured
+fields such as `status_code`, `error`, `reason`, `hint`, and `screenshot_id`.
+For example, `screenshot_pending` means the frame is still in the active video
+segment; retry shortly or choose an older screenshot ID from search results.
+
+Task writes should only run after the user clearly asks for that change:
+
+```bash
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
 
 ## Command surface
@@ -155,15 +222,31 @@ omi
 │   ├── update <id> [--description ...] [--completed/--open] [--due-at ...]
 │   ├── complete <id>
 │   └── delete <id> [-y]
+├── local
+│   ├── configure --url URL --token TOKEN
+│   ├── status
+│   ├── tools
+│   ├── call <tool> [--args-json JSON]
+│   ├── search-screen <query> [--days N] [--app NAME]
+│   ├── screenshot <id> [--output PATH]
+│   ├── recap [--days-ago N]
+│   ├── sql <query>
+│   └── task
+│       ├── search <query> [--include-completed]
+│       ├── complete <id>
+│       └── delete <id> [-y]
 └── goal
     ├── list [--limit N] [--include-inactive]
     ├── get <id>
     ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [...]
+    ├── update <id> [--unit ... | --clear-unit] [...]
     ├── progress <id> <value>
     ├── history <id> [--days N]
     └── delete <id> [-y]
 ```
+
+`conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
+UTF-16, or UTF-32, independently of the system's default text encoding.
 
 ## Global flags
 
@@ -196,10 +279,14 @@ The CLI is built so an LLM can use it without a wrapper:
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
+* Successful resource `delete --yes` commands preserve the API response in
+  JSON mode. A successful response without a body is emitted as JSON `null`.
 * Rate-limit errors include a `Retry-After` window in the message and surface
   the policy name (`dev:conversations`, etc.) so an agent can back off
   intelligently.
 * `OMI_API_KEY` and `OMI_API_BASE` env vars work without any prior `auth login`.
+* `OMI_LOCAL_API_URL` and `OMI_LOCAL_TOKEN` override profile-local Desktop API
+  settings for `omi local`.
 
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.
@@ -217,6 +304,14 @@ The dev API enforces per-policy hourly limits:
 The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
+
+## Datetime options
+Conversation and action-item datetime options accept ISO timestamps with `Z`
+(UTC), numeric offsets, and optional fractional seconds, for example
+`--due-at 2026-09-08T12:30:00Z` or
+`--start-date 2026-09-08T12:30:00.123456+05:30`. Offsets are preserved in API
+requests. Date-only values and timestamps without an offset remain supported;
+the CLI does not assign a timezone to those inputs.
 
 ## Development
 

@@ -195,7 +195,7 @@ class InMemoryCacheManager:
             entry = self.cache.pop(key)
             self.current_size -= entry.size_bytes
 
-    def _evict_if_needed(self, required_bytes: int):
+    def _evict_if_needed(self, required_bytes: int) -> None:
         """
         Evict LRU entries until space available.
 
@@ -204,7 +204,7 @@ class InMemoryCacheManager:
         """
         while self.current_size + required_bytes > self.max_memory_bytes and len(self.cache) > 0:
             # Remove oldest (first item in OrderedDict)
-            key, entry = self.cache.popitem(last=False)
+            _key, entry = self.cache.popitem(last=False)
             self.current_size -= entry.size_bytes
             self.evictions += 1
 
@@ -224,7 +224,7 @@ class InMemoryCacheManager:
             return sys.getsizeof(json_str)
         return sys.getsizeof(obj)
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get cache statistics.
 

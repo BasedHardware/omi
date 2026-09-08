@@ -10,6 +10,9 @@ Design:
 - Atomic Lua script: prune stale entries → sum consumed → reject or record.
 - Fail-open on Redis errors (consistent with existing rate limiting).
 - Separate namespace from fair_use.py DG budget (different purpose/scope).
+- WebSocket PTT sessions atomically reserve up to MAX_SESSION_DURATION_S at
+  connect (force=2), then settle to actual duration at end (refund unused).
+  Probe-only admission + force-record at end is unsafe under concurrency.
 
 Constants:
 - MAX_SESSION_DURATION_S: 120 seconds per request/session.
@@ -18,6 +21,7 @@ Constants:
 
 import logging
 import time
+from typing import Any, Dict, Optional
 
 import av
 
@@ -37,8 +41,14 @@ _WINDOW_S = 86400  # 24 hours in seconds
 # ARGV[2] = window size (seconds)
 # ARGV[3] = budget limit (ms)
 # ARGV[4] = duration to consume (ms)
+# ARGV[5] = force mode:
+#   0 = consume-or-reject (REST)
+#   1 = force-record / settle delta (may be negative for refunds)
+#   2 = reserve-up-to (WS connect): consume min(request, remaining)
 #
-# Returns: [allowed (0/1), used_ms, remaining_ms]
+# Returns:
+#   force 0/1: [allowed (0/1), used_ms, remaining_ms]
+#   force 2:   [allowed (0/1), reserved_ms, used_ms, remaining_ms]
 #
 # The sorted set stores (score=timestamp, member=timestamp:random) with value
 # encoded in the member as "timestamp_ms:duration_ms".  We use the score for
@@ -50,7 +60,7 @@ local now       = tonumber(ARGV[1])
 local window    = tonumber(ARGV[2])
 local budget    = tonumber(ARGV[3])
 local request   = tonumber(ARGV[4])
-local force     = tonumber(ARGV[5] or 0)  -- 1 = force-record (skip budget check)
+local force     = tonumber(ARGV[5] or 0)
 
 -- 1. Prune entries older than the rolling window
 local cutoff = now - window
@@ -74,8 +84,26 @@ for _, member in ipairs(entries) do
     end
 end
 
+-- force=2: atomically reserve up to `request` ms from remaining budget.
+-- Returns 4-tuple so the caller knows how much was reserved.
+if force == 2 then
+    local remaining = math.max(0, budget - used)
+    if remaining <= 0 then
+        return {0, 0, used, 0}
+    end
+    local take = math.min(request, remaining)
+    if take > 0 then
+        local counter = redis.call('INCR', key .. ':seq')
+        local member = tostring(math.floor(now * 1000)) .. ':' .. tostring(take) .. ':' .. tostring(counter)
+        redis.call('ZADD', key, now, member)
+        redis.call('EXPIRE', key, window + 3600)
+        redis.call('EXPIRE', key .. ':seq', window + 3600)
+    end
+    return {1, take, used + take, math.max(0, budget - used - take)}
+end
+
 -- 3. Check budget (> so users can consume the full allowance)
--- Skip check when force=1 (post-session recording must always succeed)
+-- Skip check when force=1 (post-session recording / settle must always succeed)
 if force ~= 1 then
     if used + request > budget and request > 0 then
         return {0, used, math.max(0, budget - used)}
@@ -86,8 +114,9 @@ if force ~= 1 then
     end
 end
 
--- 4. Record consumption (skip if request is zero — probe-only call)
-if request > 0 then
+-- 4. Record consumption (skip if request is zero — probe-only call).
+-- force=1 may pass a negative request to refund unused WS reservation.
+if request ~= 0 then
     -- Use INCR counter as nonce to guarantee unique members even within
     -- the same millisecond (prevents ZADD overwrite under concurrency).
     local counter = redis.call('INCR', key .. ':seq')
@@ -101,10 +130,10 @@ end
 return {1, used + request, math.max(0, budget - used - request)}
 """
 
+_consume_lua: Optional[Any] = None
 try:
-    _CONSUME_LUA = r.register_script(_CONSUME_LUA_SRC)
+    _consume_lua = r.register_script(_CONSUME_LUA_SRC)
 except Exception:
-    _CONSUME_LUA = None
     logger.warning('voice_duration_limiter: failed to register Lua script (Redis unavailable?)')
 
 
@@ -126,11 +155,11 @@ def try_consume_budget(uid: str, duration_ms: int) -> tuple[bool, int, int]:
     if duration_ms < 0:
         return True, 0, DAILY_BUDGET_MS
 
-    if _CONSUME_LUA is None:
+    if _consume_lua is None:
         return True, 0, DAILY_BUDGET_MS
 
     try:
-        result = _CONSUME_LUA(
+        result = _consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms],
         )
@@ -153,24 +182,55 @@ def check_budget(uid: str) -> tuple[bool, int, int]:
     return try_consume_budget(uid, 0)
 
 
-def record_actual_duration(uid: str, duration_ms: int) -> bool:
-    """Record actual consumed duration (used by WebSocket on session end).
+def try_reserve_session_budget(uid: str, max_ms: int) -> tuple[bool, int, int, int]:
+    """Atomically reserve up to max_ms of remaining budget for a WS session.
 
-    For WebSocket sessions where the exact duration isn't known upfront,
-    call this after the session ends with the actual duration.
-    Uses force-record to always persist the usage even if over budget,
-    so the overspend is tracked for subsequent requests.
+    Unlike try_consume_budget (all-or-nothing), this consumes min(max_ms, remaining)
+    when any budget remains, so two concurrent PTT streams cannot both admit the
+    same remaining slice.
+
+    Returns:
+        (allowed, reserved_ms, used_ms, remaining_ms).
+        On Redis error: (True, 0, 0, DAILY_BUDGET_MS) — fail-open (no reservation).
+    """
+    if max_ms <= 0:
+        return False, 0, 0, 0
+
+    if _consume_lua is None:
+        return True, 0, 0, DAILY_BUDGET_MS
+
+    try:
+        result = _consume_lua(
+            keys=[_budget_key(uid)],
+            args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, max_ms, 2],  # force=2 reserve-up-to
+        )
+        allowed = bool(result[0])
+        reserved_ms = int(result[1])
+        used_ms = int(result[2])
+        remaining_ms = int(result[3])
+        return allowed, reserved_ms, used_ms, remaining_ms
+    except Exception as e:
+        logger.error(f'voice_duration_limiter: Redis error reserving budget for uid={uid}: {e}')
+        return True, 0, 0, DAILY_BUDGET_MS
+
+
+def record_actual_duration(uid: str, duration_ms: int) -> bool:
+    """Force-record a duration delta (positive charge or negative refund).
+
+    Used by settle_reserved_duration and by fail-open WS paths that never
+    reserved. force=1 always persists so overspend stays visible to later
+    requests; it is not a substitute for atomic admission.
 
     Returns True on success, False on error (but still fail-open).
     """
-    if duration_ms <= 0:
+    if duration_ms == 0:
         return True
 
-    if _CONSUME_LUA is None:
+    if _consume_lua is None:
         return True
 
     try:
-        _CONSUME_LUA(
+        _consume_lua(
             keys=[_budget_key(uid)],
             args=[time.time(), _WINDOW_S, DAILY_BUDGET_MS, duration_ms, 1],  # force=1
         )
@@ -180,7 +240,20 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
         return True  # Fail-open
 
 
-def get_budget_status(uid: str) -> dict:
+def settle_reserved_duration(uid: str, reserved_ms: int, actual_ms: int) -> bool:
+    """Reconcile a WS reservation with the audio actually accepted by the provider.
+
+    Charges only the delta: refunds unused reservation (negative force-record)
+    or force-records a rare excess past the reserved cap.
+    """
+    if reserved_ms < 0:
+        reserved_ms = 0
+    if actual_ms < 0:
+        actual_ms = 0
+    return record_actual_duration(uid, actual_ms - reserved_ms)
+
+
+def get_budget_status(uid: str) -> Dict[str, Any]:
     """Get the current budget status for a user.
 
     Returns dict with: daily_limit_ms, used_ms, remaining_ms, exhausted.
@@ -227,7 +300,7 @@ def read_wav_duration_ms(file_path: str) -> int | None:
             stream = container.streams.audio[0]
             # Prefer container-level duration; fall back to stream-level
             if container.duration is not None:
-                duration_s = float(container.duration) / av.time_base
+                duration_s = float(container.duration) / getattr(av, 'time_base', 1_000_000)
             elif stream.duration is not None and stream.time_base is not None:
                 duration_s = float(stream.duration * stream.time_base)
             else:

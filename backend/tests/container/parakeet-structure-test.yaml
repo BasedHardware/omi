@@ -1,0 +1,149 @@
+schemaVersion: 2.0.0
+
+# Container structure tests for parakeet NGC image.
+# Validates Dockerfile patches produced correct files, versions, and metadata.
+#
+# Run: container-structure-test test --image parakeet:test \
+#        --config tests/container/parakeet-structure-test.yaml
+
+commandTests:
+  # === Dependency Version Pins ===
+  - name: "torchaudio pinned to 2.5.1"
+    command: "python3"
+    args: ["-c", "import torchaudio; print(torchaudio.__version__)"]
+    expectedOutput: ["2.5.1-ngc-compat"]
+
+  - name: "pyannote.audio pinned to 3.3.2"
+    command: "pip"
+    args: ["show", "pyannote-audio"]
+    expectedOutput: ["Version: 3.3.2"]
+
+  - name: "pyannote.core pinned to 5.0.0"
+    command: "pip"
+    args: ["show", "pyannote-core"]
+    expectedOutput: ["Version: 5.0.0"]
+
+  - name: "pyannote.database pinned to 5.1.0"
+    command: "pip"
+    args: ["show", "pyannote-database"]
+    expectedOutput: ["Version: 5.1.0"]
+
+  - name: "pyannote.pipeline pinned to 3.0.1"
+    command: "pip"
+    args: ["show", "pyannote-pipeline"]
+    expectedOutput: ["Version: 3.0.1"]
+
+  # === Import Chain Smoke Tests ===
+  - name: "torchaudio compliance.kaldi importable"
+    command: "python3"
+    args: ["-c", "from torchaudio.compliance.kaldi import fbank; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "torchaudio functional importable"
+    command: "python3"
+    args: ["-c", "from torchaudio import functional; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "torchaudio C extension disabled"
+    command: "python3"
+    args: ["-c", "import torchaudio._extension as ext; print(ext._IS_TORCHAUDIO_EXT_AVAILABLE)"]
+    expectedOutput: ["False"]
+
+  - name: "torchaudio list_audio_backends callable"
+    command: "python3"
+    args: ["-c", "import torchaudio; print(type(torchaudio.list_audio_backends()))"]
+    expectedOutput: ["<class 'list'>"]
+
+  - name: "torchaudio AudioMetaData available"
+    command: "python3"
+    args: ["-c", "from torchaudio import AudioMetaData; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "torchaudio fail_if_no decorators return function"
+    command: "python3"
+    args: ["-c", "from torchaudio._extension import fail_if_no_sox; f = fail_if_no_sox(lambda: 'test'); print(f())"]
+    expectedOutput: ["test"]
+
+  - name: "pyannote.audio Model importable"
+    command: "python3"
+    args: ["-c", "from pyannote.audio import Model; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "pyannote.audio Inference importable"
+    command: "python3"
+    args: ["-c", "from pyannote.audio import Inference; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "torch_audiomentations stub satisfies pyannote"
+    command: "python3"
+    args: ["-c", "from torch_audiomentations import Identity, Mix; from torch_audiomentations.core.transforms_interface import BaseWaveformTransform; from torch_audiomentations.utils.config import from_dict; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "pyannote telemetry stub works"
+    command: "python3"
+    args: ["-c", "from pyannote.audio.telemetry import track_model_init; track_model_init(); print('OK')"]
+    expectedOutput: ["OK"]
+
+  # === NGC torch ABI NOT corrupted ===
+  - name: "NGC torch has CUDA"
+    command: "python3"
+    args: ["-c", "import torch; assert hasattr(torch.version, 'cuda'), f'no cuda attr'; print('OK')"]
+    expectedOutput: ["OK"]
+
+  - name: "NeMo ASR importable"
+    command: "python3"
+    args: ["-c", "from nemo.collections.asr.models import ASRModel; print('OK')"]
+    expectedOutput: ["OK"]
+
+  # === No duplicate torch from pip ===
+  - name: "pip freeze has no duplicate torch"
+    command: "bash"
+    args: ["-c", "pip freeze 2>/dev/null | grep -c '^torch==' || echo 0"]
+    expectedOutput: ["0"]
+
+# === File Existence Tests ===
+fileExistenceTests:
+  - name: "torchaudio patched init exists"
+    path: "/usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py"
+    shouldExist: true
+
+  - name: "torchaudio extension stub exists"
+    path: "/usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py"
+    shouldExist: true
+
+  - name: "torch_audiomentations stub exists"
+    path: "/usr/local/lib/python3.12/dist-packages/torch_audiomentations/__init__.py"
+    shouldExist: true
+
+  - name: "telemetry stub exists"
+    path: "/usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py"
+    shouldExist: true
+
+# === File Content Tests ===
+fileContentTests:
+  - name: "torchaudio init imports compliance"
+    path: "/usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py"
+    expectedContents: ["from . import compliance"]
+
+  - name: "extension stub has decorator passthrough"
+    path: "/usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py"
+    expectedContents: ["def fail_if_no_sox\\(fn\\): return fn"]
+
+  - name: "telemetry stub has all 5 functions"
+    path: "/usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py"
+    expectedContents:
+      - "def set_opentelemetry_log_level"
+      - "def track_model_init"
+      - "def track_pipeline_init"
+      - "def track_pipeline_apply"
+      - "def set_telemetry_metrics"
+
+# === Container Metadata ===
+metadataTest:
+  envVars:
+    - key: "NVIDIA_VISIBLE_DEVICES"
+      value: "all"
+    - key: "NVIDIA_DRIVER_CAPABILITIES"
+      value: "compute,utility"
+  exposedPorts: ["8080"]
+  cmd: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]

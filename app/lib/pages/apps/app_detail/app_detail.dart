@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,17 +12,18 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/reviews_section.dart';
+import 'package:omi/pages/apps/app_detail/app_summary.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -54,6 +56,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool appLoading = false;
   bool isLoading = false;
   bool chatButtonLoading = false;
+  bool _reEnabling = false;
   Map<String, dynamic>? _subscriptionData;
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
@@ -109,7 +112,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     setState(() => appLoading = true);
     var prefs = SharedPreferencesUtil();
-    var enabled = await enableAppServer(app.id);
+    var (enabled, _) = await enableAppServer(app.id);
 
     if (!mounted) return;
 
@@ -181,7 +184,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorWithMessage(e.toString())), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.l10n.errorWithMessage(readableError(e))), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -230,7 +233,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               '](assets/',
               '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
             );
-            setState(() => instructionsMarkdown = value);
+            if (mounted) setState(() => instructionsMarkdown = value);
           });
         }
       }
@@ -301,7 +304,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
       var details = await getAppDetailsServer(appId);
       if (details != null && details['is_user_paid']) {
-        var enabled = await enableAppServer(appId);
+        var (enabled, _) = await enableAppServer(appId);
         if (enabled) {
           PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
@@ -413,7 +416,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -442,13 +445,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _getPermissionTypeColor(permission.type).withOpacity(0.1),
+              color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               permission.type,
               style: TextStyle(
-                color: _getPermissionTypeColor(permission.type).withOpacity(0.8),
+                color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.8),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -502,7 +505,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -520,13 +523,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Widget _buildChatToolChip(ChatTool tool) {
-    final color = Colors.grey;
+    const color = Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
       child: Text(
         _formatToolName(tool.name),
-        style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+        style: const TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -569,7 +572,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               width: 36,
               height: 36,
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
                 onPressed: () {
@@ -585,7 +588,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   width: 36,
                   height: 36,
                   margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     onPressed: chatButtonLoading
@@ -620,7 +623,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
 
                               // Navigate directly to chat page
-                              if (mounted) {
+                              if (context.mounted) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
@@ -650,7 +653,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   width: 36,
                   height: 36,
                   margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
@@ -669,7 +672,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
@@ -686,7 +689,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
                               await Share.share(
-                                'https://h.omi.me/apps/${app.id}',
+                                appShareUrl(app.id),
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
@@ -702,7 +705,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
@@ -752,162 +758,110 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ),
                         ),
                         placeholder: (context, url) => const CircularProgressIndicator(),
-                        errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
+                        errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
                       Expanded(
-                        child: SizedBox(
-                          height: 108,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    app.name.decodeString,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          app.author.decodeString,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (app.official) ...[
-                                        const SizedBox(width: 4),
-                                        const FaIcon(
-                                          FontAwesomeIcons.solidCircleCheck,
-                                          size: 14,
-                                          color: Colors.deepPurpleAccent,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  // Rating + installs inline
-                                  const SizedBox(height: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
-                                        Scrollable.ensureVisible(
-                                          _reviewsSectionKey.currentContext!,
-                                          duration: const Duration(milliseconds: 300),
-                                          curve: Curves.easeInOut,
-                                        );
-                                      }
-                                    },
-                                    child: Row(
-                                      children: [
-                                        if (app.ratingCount > 0) ...[
-                                          const Icon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${app.getRatingAvg()} (${app.ratingCount})',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                                          ),
-                                          if (app.installs > 0) ...[
-                                            Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                          ],
-                                        ],
-                                        if (app.installs > 0)
-                                          Text(
-                                            '${(app.installs / 10).round() * 10}+ users',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isLoading
+                        child: AppDetailSummary(
+                          name: app.name.decodeString,
+                          author: app.author.decodeString,
+                          official: app.official,
+                          ratingCount: app.ratingCount,
+                          rating: app.getRatingAvg(),
+                          installs: app.installs,
+                          onRatingTap: () {
+                            if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                              Scrollable.ensureVisible(
+                                _reviewsSectionKey.currentContext!,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            }
+                          },
+                          action: isLoading
+                              ? AnimatedLoadingButton(
+                                  text: '',
+                                  width: 32,
+                                  height: 32,
+                                  onPressed: () async {},
+                                  color: const Color(0xFF35343B),
+                                )
+                              : app.enabled
                                   ? AnimatedLoadingButton(
-                                      text: '',
-                                      width: 32,
+                                      text: 'Disable',
+                                      width: 90,
                                       height: 32,
-                                      onPressed: () async {},
-                                      color: const Color(0xFF35343B),
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.grey.shade700,
                                     )
-                                  : app.enabled
+                                  : (app.isPaid && !app.isUserPaid
                                       ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
+                                          width: 100,
                                           height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
+                                          text: "Subscribe",
+                                          onPressed: () async {
+                                            // Track subscribe button clicked
+                                            PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                              appId: app.id,
+                                              appName: app.name,
+                                            );
 
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
+                                            if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                              final uri = Uri.tryParse(app.paymentLink!);
+                                              if (uri == null) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
+                                                );
+                                                return;
+                                              }
+                                              _checkPaymentStatus(app.id);
+                                              await _launchUrlSafely(uri);
+                                            } else {
+                                              await _toggleApp(app.id, true);
+                                            }
+                                          },
+                                          color: Colors.white,
+                                          // AnimatedLoadingButton defaults both to white; on a
+                                          // white surface the label and spinner vanish.
+                                          textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                          loaderColor: Colors.black,
+                                        )
+                                      : AnimatedLoadingButton(
+                                          width: 75,
+                                          height: 32,
+                                          text: 'Enable',
+                                          onPressed: () async {
+                                            if (app.worksExternally()) {
+                                              showDialog(
+                                                context: context,
+                                                builder: (ctx) {
+                                                  return StatefulBuilder(
+                                                    builder: (ctx, setState) {
+                                                      return ConfirmationDialog(
+                                                        title: context.l10n.dataAccessNotice,
+                                                        description: context.l10n.dataAccessNoticeDescription,
+                                                        onConfirm: () {
+                                                          _toggleApp(app.id, true);
+                                                          Navigator.pop(context);
+                                                        },
+                                                        onCancel: () {
+                                                          Navigator.pop(context);
                                                         },
                                                       );
                                                     },
                                                   );
-                                                } else {
-                                                  _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )),
-                            ],
-                          ),
+                                                },
+                                              );
+                                            } else {
+                                              _toggleApp(app.id, true);
+                                            }
+                                          },
+                                          color: Colors.white,
+                                          // AnimatedLoadingButton defaults both to white; on a
+                                          // white surface the label and spinner vanish.
+                                          textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                          loaderColor: Colors.black,
+                                        )),
                         ),
                       ),
                       const SizedBox(width: 20),
@@ -982,7 +936,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1003,7 +957,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1024,7 +978,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
+                                const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
                                 const SizedBox(width: 10),
                                 SizedBox(
                                   width: MediaQuery.of(context).size.width * 0.78,
@@ -1038,6 +992,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           ],
                         )
                       : const SizedBox.shrink(),
+                  app.isDisabled() ? _buildDisabledNotice() : const SizedBox.shrink(),
                   const SizedBox(height: 24),
                   ...(hasAuthSteps
                       ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
@@ -1048,10 +1003,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               bottom: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25).withOpacity(0.8),
+                              color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
                               borderRadius: BorderRadius.circular(16.0),
                               border: Border.all(
-                                color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
+                                color: setupCompleted ? Colors.green.withValues(alpha: 0.3) : Colors.transparent,
                                 width: 1,
                               ),
                             ),
@@ -1080,8 +1035,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         height: 32,
                                         decoration: BoxDecoration(
                                           color: setupCompleted
-                                              ? Colors.green.withOpacity(0.2)
-                                              : Colors.grey.withOpacity(0.2),
+                                              ? Colors.green.withValues(alpha: 0.2)
+                                              : Colors.grey.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: Center(
@@ -1171,7 +1126,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           },
                           trailing: const Padding(
                             padding: EdgeInsets.only(right: 12.0),
-                            child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
+                            child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
                           ),
                           title: const Text(
                             'Integration Instructions',
@@ -1202,7 +1157,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => FullScreenImageViewer(imageUrl: app.thumbnailUrls[index]),
+                                  builder: (context) => MediaViewerPage(
+                                    items: app.thumbnailUrls
+                                        .map((url) => MediaViewerItem(
+                                              imageUrl: url,
+                                            ))
+                                        .toList(),
+                                    initialIndex: index,
+                                    maxScaleMultiplier: 2,
+                                    showCloseButton: true,
+                                    wrapBodyInSafeArea: false,
+                                  ),
                                 ),
                               );
                             },
@@ -1242,7 +1207,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           color: Colors.grey[900],
                                           borderRadius: BorderRadius.circular(12),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.circleExclamation),
+                                        child: const FaIcon(FontAwesomeIcons.circleExclamation),
                                       ),
                                     ),
                                   ),
@@ -1365,7 +1330,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   bottom: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F25).withOpacity(0.8),
+                                  color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(16.0),
                                 ),
                                 child: Column(
@@ -1374,7 +1339,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
+                                        const Text(
                                           'Reviews',
                                           style: TextStyle(
                                             color: Colors.white,
@@ -1424,6 +1389,97 @@ class _AppDetailPageState extends State<AppDetailPage> {
           ),
         );
       },
+    );
+  }
+
+  /// Shown when the backend has latched `disabled` on the app.
+  ///
+  /// Nothing surfaced this state before, so a disabled app read as healthy here
+  /// while every install failed, and the owner had no control that could clear it.
+  Widget _buildDisabledNotice() {
+    final isOwner = app.isOwner(SharedPreferencesUtil().uid);
+    final reason = app.disabledReason == 'webhook_failures'
+        ? context.l10n.appDisabledWebhookFailures
+        : context.l10n.appDisabledGeneric;
+    final when = app.disabledAt != null && app.disabledAt!.length >= 10
+        ? ' ${context.l10n.appDisabledOn(app.disabledAt!.substring(0, 10))}'
+        : '';
+    final lastError = app.disabledError != null && app.disabledError!.isNotEmpty
+        ? ' ${context.l10n.appDisabledLastError(app.disabledError!)}'
+        : '';
+
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.grey, size: 18),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width * 0.78,
+              child: Text(
+                '${context.l10n.appDisabledTitle} $reason$when$lastError',
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+        if (isOwner) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.78,
+            child: Text(
+              context.l10n.appDisabledOwnerHint,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: _reEnabling ? null : _reEnableApp,
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.grey.shade900,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _reEnabling
+                ? const SizedBox(
+                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Text(context.l10n.appReEnable, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _reEnableApp() async {
+    setState(() => _reEnabling = true);
+    final (ok, detail) = await reEnableAppServer(app.id);
+    if (!mounted) return;
+    setState(() => _reEnabling = false);
+
+    if (ok) {
+      setState(() {
+        app.disabled = false;
+        app.disabledReason = null;
+        app.disabledAt = null;
+        app.disabledError = null;
+      });
+      context.read<AppProvider>().getApps();
+      return;
+    }
+
+    // The rejection names the URL to fix, so it is shown verbatim rather than
+    // replaced with a generic retry prompt.
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () => Navigator.pop(context),
+        context.l10n.appReEnableFailedTitle,
+        detail.isNotEmpty ? detail : context.l10n.appReEnableFailedBody,
+        singleButton: true,
+      ),
     );
   }
 
@@ -1499,12 +1555,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
     setState(() => appLoading = true);
 
     if (isEnabled) {
-      var enabled = await enableAppServer(appId);
+      var (enabled, detail) = await enableAppServer(appId);
 
       if (!mounted) return;
 
       if (!enabled) {
-        if (app.worksExternally()) {
+        // Setup is only the right guess when the backend gave no reason. A
+        // disabled app used to land here and get sent to setup instructions,
+        // so the developer re-ran a setup that was never the problem.
+        if (app.worksExternally() && detail.isEmpty) {
           setState(() => appLoading = false);
           await _navigateToSetup();
           return;
@@ -1515,8 +1574,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the app',
-              'There was an issue activating this app. Please try again.',
+              context.l10n.errorActivatingApp,
+              detail.isNotEmpty ? detail : context.l10n.issueActivatingApp,
               singleButton: true,
             ),
           );
@@ -1568,440 +1627,4 @@ class _PermissionItem {
   final String description;
 
   _PermissionItem({required this.title, required this.type, required this.description});
-}
-
-class RatingDistributionWidget extends StatelessWidget {
-  final double ratingAvg;
-  final int ratingCount;
-  final List<AppReview> reviews;
-
-  const RatingDistributionWidget({
-    super.key,
-    required this.ratingAvg,
-    required this.ratingCount,
-    required this.reviews,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          ratingAvg.toStringAsFixed(1),
-          style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: List.generate(5, (index) {
-                return Padding(
-                  padding: EdgeInsets.only(right: index < 4 ? 4 : 0),
-                  child: Icon(
-                    FontAwesomeIcons.solidStar,
-                    size: 14,
-                    color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class RecentReviewsSection extends StatefulWidget {
-  final List<AppReview> reviews;
-  final AppReview? userReview;
-  final App app;
-  final VoidCallback? onReviewUpdated;
-
-  const RecentReviewsSection({
-    super.key,
-    required this.reviews,
-    required this.app,
-    this.userReview,
-    this.onReviewUpdated,
-  });
-
-  @override
-  State<RecentReviewsSection> createState() => _RecentReviewsSectionState();
-}
-
-class _RecentReviewsSectionState extends State<RecentReviewsSection> {
-  bool isEditing = false;
-  double editRating = 0;
-  late TextEditingController reviewController;
-  bool isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    reviewController = TextEditingController(text: widget.userReview?.review ?? '');
-    editRating = widget.userReview?.score ?? 0;
-  }
-
-  @override
-  void dispose() {
-    reviewController.dispose();
-    super.dispose();
-  }
-
-  String _getAvatarUrl(String seed, String? username) {
-    // Using Avatar Placeholder API for random avatars
-    // If username is available, use username-based avatar for consistency
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    // Otherwise use a seeded random avatar
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
-  }
-
-  Future<void> _submitReview() async {
-    if (editRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
-      return;
-    }
-
-    setState(() => isSubmitting = true);
-
-    try {
-      final prefs = SharedPreferencesUtil();
-      final userName = widget.userReview?.username.isNotEmpty == true
-          ? widget.userReview!.username
-          : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
-
-      final rev = AppReview(
-        uid: prefs.uid,
-        review: reviewController.text,
-        score: editRating,
-        ratedAt: widget.userReview?.ratedAt ?? DateTime.now(),
-        response: widget.userReview?.response ?? '',
-        username: userName,
-      );
-
-      bool isSuccessful;
-      if (widget.userReview == null) {
-        isSuccessful = await reviewApp(widget.app.id, rev);
-        if (isSuccessful) {
-          widget.app.ratingCount += 1;
-        }
-      } else {
-        isSuccessful = await updateAppReview(widget.app.id, rev);
-      }
-
-      if (isSuccessful) {
-        widget.app.userReview = AppReview(
-          uid: prefs.uid,
-          ratedAt: DateTime.now(),
-          review: reviewController.text,
-          score: editRating,
-          username: userName,
-          response: widget.userReview?.response ?? '',
-        );
-
-        var appsList = SharedPreferencesUtil().appsList;
-        var index = appsList.indexWhere((element) => element.id == widget.app.id);
-        if (index != -1) {
-          appsList[index] = widget.app;
-          SharedPreferencesUtil().appsList = appsList;
-        }
-
-        PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.userReview == null
-                    ? context.l10n.reviewAddedSuccessfully
-                    : context.l10n.reviewUpdatedSuccessfully,
-              ),
-            ),
-          );
-          setState(() => isEditing = false);
-          widget.onReviewUpdated?.call();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
-        }
-      }
-    } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Filter out user's review from the list if it exists
-    final filteredReviews = widget.userReview != null
-        ? widget.reviews.where((r) => r.uid != widget.userReview!.uid).take(3).toList()
-        : widget.reviews.take(3).toList();
-
-    final showUserReviewSection =
-        widget.userReview != null || (!widget.app.isOwner(SharedPreferencesUtil().uid) && widget.app.enabled);
-
-    if (filteredReviews.isEmpty && !showUserReviewSection) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Recent reviews from others
-        ...filteredReviews.map((review) => _buildReviewItem(context, review)),
-        // User's review section (editable)
-        if (showUserReviewSection) ...[
-          if (filteredReviews.isNotEmpty) const SizedBox(height: 8),
-          _buildUserReviewSection(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildUserReviewSection() {
-    final userReview = widget.userReview;
-
-    if (isEditing || userReview == null) {
-      // Edit mode or no review yet
-      return _buildEditableReview();
-    } else {
-      // Display mode with tap to edit
-      return GestureDetector(
-        onTap: () {
-          setState(() {
-            isEditing = true;
-            reviewController.text = userReview.review;
-            editRating = userReview.score;
-          });
-        },
-        child: _buildReviewItem(context, userReview, isUserReview: true),
-      );
-    }
-  }
-
-  Widget _buildEditableReview() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                widget.userReview == null ? 'Add Your Review' : 'Edit Your Review',
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              const Spacer(),
-              if (widget.userReview != null)
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      isEditing = false;
-                      reviewController.text = widget.userReview?.review ?? '';
-                      editRating = widget.userReview?.score ?? 0;
-                    });
-                  },
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Star rating
-          Row(
-            children: List.generate(5, (index) {
-              return GestureDetector(
-                onTap: () {
-                  setState(() => editRating = index + 1.0);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(
-                    FontAwesomeIcons.solidStar,
-                    size: 24,
-                    color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 12),
-          // Review text field
-          TextField(
-            controller: reviewController,
-            maxLines: 3,
-            maxLength: 250,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: context.l10n.writeReviewOptional,
-              hintStyle: TextStyle(color: Colors.grey.shade500),
-              filled: true,
-              fillColor: Colors.black.withOpacity(0.3),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.all(12),
-              counterStyle: TextStyle(color: Colors.grey.shade500),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: isSubmitting ? null : _submitReview,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Text(
-                      widget.userReview == null
-                          ? AppLocalizations.of(context)!.submitReview
-                          : AppLocalizations.of(context)!.updateReview,
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
-    final l10n = AppLocalizations.of(context)!;
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
-    final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Random Avatar
-              ClipOval(
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isUserReview ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade800,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: TextStyle(
-                              color: isUserReview ? Colors.deepPurple : Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Name, date, and stars
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          displayName,
-                          style: TextStyle(
-                            color: isUserReview ? Colors.deepPurple : Colors.grey,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          timeago.format(review.ratedAt),
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                        ),
-                        if (isUserReview) ...[const Spacer(), Icon(Icons.edit, size: 14, color: Colors.grey.shade500)],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Star rating
-                    Row(
-                      children: List.generate(5, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            FontAwesomeIcons.solidStar,
-                            size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          // Review text - limited to 2 lines
-          if (review.review.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 48),
-              child: Text(
-                review.review.decodeString,
-                style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }

@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -18,10 +17,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/audio/foreground.dart';
-import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -35,9 +34,38 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String deviceId = '';
   String? connectingToDeviceId;
   List<BtDevice> deviceList = [];
-  late Timer _didNotMakeItTimer;
+  List<BtDevice> savedDeviceList = [];
+  Timer? _didNotMakeItTimer;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
+
+  OnboardingProvider() {
+    _syncSavedDevices();
+  }
+
+  List<BtDevice> get visibleDeviceList {
+    final visibleDevices = <BtDevice>[];
+    for (final savedDevice in savedDeviceList) {
+      final onlineDevice = foundDevicesMap[savedDevice.id];
+      visibleDevices.add(onlineDevice ?? savedDevice);
+    }
+    for (final device in deviceList) {
+      if (!visibleDevices.any((visibleDevice) => visibleDevice.id == device.id)) {
+        visibleDevices.add(device);
+      }
+    }
+    return visibleDevices;
+  }
+
+  bool isSavedDevice(BtDevice device) => savedDeviceList.any((savedDevice) => savedDevice.id == device.id);
+
+  bool isDeviceOnline(BtDevice device) => foundDevicesMap.containsKey(device.id);
+
+  int get nearbyDeviceCount => deviceList.length;
+
+  void _syncSavedDevices() {
+    savedDeviceList = SharedPreferencesUtil().btDevices.where((device) => device.id.isNotEmpty).toList();
+  }
 
   //----------------- Onboarding Permissions -----------------
   bool hasBluetoothPermission = false;
@@ -97,27 +125,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-
     if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       Logger.debug('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
-      if (Platform.isAndroid) {
-        if (!(await BluetoothAdapter.isSupported) ||
-            FlutterBluePlus.adapterStateNow != BluetoothAdapterStateHelper.on) {
-          try {
-            await FlutterBluePlus.turnOn();
-          } catch (e) {
-            if (e is FlutterBluePlusException) {
-              if (e.code == 11) {
-                //  onShowDialog();
-              }
-            }
-          }
-        }
-      }
       PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
       PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
       updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
@@ -129,6 +141,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           updateLocationPermission(locationStatus.isGranted);
         }
       }
+    }
+    if (hasBluetoothPermission) {
+      await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery);
     }
     notifyListeners();
   }
@@ -206,6 +221,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
+      _syncSavedDevices();
       deviceName = device.name;
       deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
@@ -223,6 +239,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       notifyListeners();
       await Future.delayed(const Duration(seconds: 2));
       SharedPreferencesUtil().btDevice = connectedDevice!;
+      _syncSavedDevices();
       SharedPreferencesUtil().deviceName = connectedDevice.name;
 
       foundDevicesMap.clear();
@@ -234,8 +251,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     } catch (e) {
       Logger.debug('Error connecting to device: $e');
-      foundDevicesMap.remove(device.id);
-      deviceList.removeWhere((element) => element.id == device.id);
+      if (!isSavedDevice(device)) {
+        foundDevicesMap.remove(device.id);
+        deviceList.removeWhere((element) => element.id == device.id);
+      }
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
       deviceProvider!.setIsConnected(false);
@@ -269,6 +288,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceAlreadyUnpaired();
     }
 
+    // Subscribe before checking the adapter so a successful enable action can
+    // retry discovery and publish its results back to this page.
+    ServiceManager.instance().device.subscribe(this, this);
+
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();
@@ -291,18 +314,21 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     }
 
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      return;
+    }
+
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
       enableInstructions = true;
       notifyListeners();
     });
 
-    ServiceManager.instance().device.subscribe(this, this);
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
   @override
   void dispose() {
-    _didNotMakeItTimer.cancel();
+    _didNotMakeItTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -314,6 +340,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   @override
   void onDevices(List<BtDevice> devices) {
+    _syncSavedDevices();
     List<BtDevice> foundDevices = devices;
 
     // Update foundDevicesMap with new devices and remove the ones not found anymore
@@ -331,10 +358,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
-    if (orderedDevices.isNotEmpty) {
-      deviceList = orderedDevices;
+    deviceList = orderedDevices;
+    if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
       notifyListeners();
-      _didNotMakeItTimer.cancel();
+      _didNotMakeItTimer?.cancel();
     }
   }
 

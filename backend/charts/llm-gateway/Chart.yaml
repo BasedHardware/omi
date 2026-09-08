@@ -1,0 +1,6 @@
+apiVersion: v2
+name: llm-gateway
+description: Internal Omi LLM Gateway service
+type: application
+version: 0.1.0
+appVersion: "1.16.0"

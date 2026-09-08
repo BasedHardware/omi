@@ -21,11 +21,13 @@ export function HighlightsSection({
   const displayHighlights = highlights.slice(0, 4);
 
   return (
-    <div className={cn(
-      'noise-overlay rounded-xl overflow-hidden',
-      'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-      'border border-white/[0.04]'
-    )}>
+    <div
+      className={cn(
+        'noise-overlay rounded-xl overflow-hidden',
+        'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+        'border border-white/[0.04]',
+      )}
+    >
       <div className="grid grid-cols-4">
         {displayHighlights.map((highlight, idx) => (
           <HighlightCard
@@ -47,7 +49,8 @@ interface HighlightCardProps {
 }
 
 function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCardProps) {
-  const hasConversations = highlight.conversation_ids && highlight.conversation_ids.length > 0;
+  const hasConversations =
+    highlight.conversation_ids && highlight.conversation_ids.length > 0;
 
   const handleConversationClick = () => {
     if (hasConversations && onConversationClick) {
@@ -57,10 +60,12 @@ function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCard
   };
 
   return (
-    <div className={cn(
-      'p-4 flex flex-col min-h-[160px]',
-      !isLast && 'border-r border-white/[0.04]'
-    )}>
+    <div
+      className={cn(
+        'p-4 flex flex-col min-h-[160px]',
+        !isLast && 'border-r border-white/[0.04]',
+      )}
+    >
       {/* Emoji + Topic + Conversation icon */}
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xl">{highlight.emoji}</span>
@@ -72,8 +77,8 @@ function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCard
             onClick={handleConversationClick}
             className={cn(
               'p-1.5 rounded-lg flex-shrink-0',
-              'text-text-quaternary hover:text-purple-primary',
-              'hover:bg-purple-primary/10 transition-colors'
+              'text-text-quaternary hover:text-text-primary',
+              'hover:bg-white/[0.14] transition-colors',
             )}
             title={`${highlight.conversation_ids!.length} conversation${highlight.conversation_ids!.length > 1 ? 's' : ''}`}
           >

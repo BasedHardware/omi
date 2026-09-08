@@ -1,0 +1,7 @@
+{
+  "version": "0.12.209",
+  "date": "2026-08-23",
+  "changes": [
+    "Fixed the old Home design becoming transparent when enabled"
+  ]
+}

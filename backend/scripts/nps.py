@@ -1,48 +1,37 @@
-import os
 from collections import defaultdict
-
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
-llm_mini = ChatOpenAI(model="gpt-4o-mini")
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+from typing import Any, Dict, List, Sequence, Tuple
 
 from database.users import get_all_ratings
-from database.auth import get_user_from_uid
+
+
+def summarize_chat_ratings(ratings: Sequence[Dict[str, Any]]) -> Tuple[int, int, int]:
+    """Count rating *acts*. 1 is thumbs-up, -1 is thumbs-down, 0 is a user clearing a rating."""
+    shown = len(ratings)
+    good = bad = 0
+    for rating in ratings:
+        value = rating.get("value")
+        if value == 1:
+            good += 1
+        elif value == -1:
+            bad += 1
+    return shown, good, bad
 
 
 def calculate_nps():
     ratings = get_all_ratings(rating_type="chat_message")
-    uid_to_ratings = defaultdict(list)
-    shown = len(ratings)
-    good = bad = 0
+    uid_to_ratings: defaultdict[str, List[Dict[str, Any]]] = defaultdict(list)
     for r in ratings:
         uid_to_ratings[r["uid"]].append(r)
-        if r["value"] == 1:
-            good += 1
-        elif r["value"] == 0:
-            bad += 1
+    shown, good, bad = summarize_chat_ratings(ratings)
 
     print(f"Shown: {shown}, Good: {good}, Bad: {bad}")
-    print(f"Answered: {(good + bad) / shown * 100:.2f}%")
-    print(f"NPS: {(good - bad) / (good + bad) * 100:.2f} * (Do not rely)")
+    answered = good + bad
+    if shown:
+        print(f"Answered: {answered / shown * 100:.2f}%")
+    if answered:
+        print(f"NPS: {(good - bad) / answered * 100:.2f} * (Do not rely)")
 
     print("------------------")
-    # user_to_avg = {}
-    # for uid, ratings in uid_to_ratings.items():
-    #     cleaned = [r["value"] for r in ratings if r["value"] != -1]
-    #     if not cleaned:
-    #         continue
-
-    #     print(uid, cleaned)
-    #     print(get_user_from_uid(uid))
-    #     user_to_avg[uid] = sum(cleaned) / len(cleaned)
-
-    # print(user_to_avg)
-
-    # First analytics at October 30, 2024 at 11:24:23PM UTC-7
-    # memory opened event to viewed
-    # memory created to viewed
 
 
 if __name__ == "__main__":

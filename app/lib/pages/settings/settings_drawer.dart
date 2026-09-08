@@ -17,7 +17,6 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -141,18 +140,23 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               SizedBox(width: 24, height: 24, child: icon),
               const SizedBox(width: 16),
               Expanded(
-                child: Row(
+                // Wrap so a long or enlarged title wraps by word and the tags
+                // flow beside or below it instead of overflowing the row
+                // (#12898).
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text(
                       title,
                       style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
-                    if (showBetaTag) ...[
-                      const SizedBox(width: 8),
+                    if (showBetaTag)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.2),
+                          color: Colors.orange.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -165,13 +169,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ),
                         ),
                       ),
-                    ],
-                    if (showNewTag) ...[
-                      const SizedBox(width: 8),
+                    if (showNewTag)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
+                          color: Colors.green.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -184,8 +186,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ),
                         ),
                       ),
-                    ],
-                    if (trailingChip != null) ...[const SizedBox(width: 8), trailingChip],
+                    if (trailingChip != null) trailingChip,
                   ],
                 ),
               ),
@@ -260,7 +261,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
               child: Text(
                 context.l10n.appAndDeviceCopied,
@@ -322,9 +325,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       _SearchableItem(title: context.l10n.speechProfile, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.identifyingOthers, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.voiceResponseMode, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.paymentMethods, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.conversationDisplay, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.dataPrivacy, icon: profileIcon, onTap: goToProfile),
+      if (Platform.isAndroid)
+        _SearchableItem(title: context.l10n.backgroundModeTitle, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.paymentMethods, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.conversationDisplay, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.dataPrivacy, icon: devIcon, onTap: goToDeveloper),
       _SearchableItem(title: context.l10n.deleteAccountTitle, icon: profileIcon, onTap: goToProfile),
       // --- Notifications ---
       _SearchableItem(title: context.l10n.notifications, icon: notifIcon, onTap: goToNotifications),
@@ -341,7 +346,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _SearchableItem(title: context.l10n.deviceName, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.firmware, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.sdCardSync, icon: deviceIcon, onTap: goToDevice),
-        _SearchableItem(title: context.l10n.wifiSync, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.doubleTap, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.ledBrightness, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.micGain, icon: deviceIcon, onTap: goToDevice),
@@ -401,15 +405,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
         },
       ),
-      // --- Mac app ---
-      _SearchableItem(
-        title: context.l10n.getOmiForMac,
-        icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-        onTap: () async {
-          final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        },
-      ),
       // --- Referral ---
       _SearchableItem(
         title: context.l10n.referralProgram,
@@ -419,7 +414,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       // --- Sign Out ---
       _SearchableItem(
         title: context.l10n.signOut,
-        icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+        icon: const FaIcon(FontAwesomeIcons.rightFromBracket, color: Color(0xFF8E8E93), size: 20),
         onTap: () async {
           final navigator = Navigator.of(context);
           navigator.pop();
@@ -459,12 +454,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     final filtered = allItems.where((item) => item.title.toLowerCase().contains(query)).toList();
 
     if (filtered.isEmpty) {
-      return Center(
+      return const Center(
         child: Padding(
-          padding: const EdgeInsets.only(top: 48),
+          padding: EdgeInsets.only(top: 48),
           child: Text(
             'No results',
-            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16, fontWeight: FontWeight.w400),
+            style: TextStyle(color: Color(0xFF8E8E93), fontSize: 16, fontWeight: FontWeight.w400),
           ),
         ),
       );
@@ -487,7 +482,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 // Wrapped 2025 - temporarily disabled
                 // _buildSettingsItem(
                 //   title: context.l10n.wrapped2025,
-                //   icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                //   icon: FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 //   showNewTag: true,
                 //   onTap: () {
                 //     Navigator.of(context).push(
@@ -517,7 +512,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
                     final sp = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited = sp == PlanType.unlimited || sp == PlanType.operator || sp == PlanType.architect;
+                    final isUnlimited = sp?.isPaid ?? false;
                     return _buildSettingsItem(
                       title: context.l10n.planAndUsage,
                       icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
@@ -525,7 +520,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ? Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.amber.withOpacity(0.2),
+                                color: Colors.amber.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(
@@ -599,14 +594,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     routeToPage(context, const PermissionsPage());
                   },
                 ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildSettingsItem(
-                  title: context.l10n.memories,
-                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const MemoriesPage());
-                  },
-                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -658,21 +645,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Share & Get Section
-            _buildSectionContainer(
-              children: [
-                _buildSettingsItem(
-                  title: context.l10n.getOmiForMac,
-                  icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  },
-                ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
                   title: context.l10n.referralProgram,
@@ -691,7 +663,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               children: [
                 _buildSettingsItem(
                   title: context.l10n.signOut,
-                  icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.rightFromBracket, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     final navigator = Navigator.of(context);
 
@@ -777,7 +749,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               style: const TextStyle(color: Colors.white, fontSize: 14),
                               cursorColor: Colors.white,
                               decoration: InputDecoration(
-                                hintText: 'Search settings…',
+                                hintText: context.l10n.searchSettings,
                                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                                 filled: true,
                                 fillColor: const Color(0xFF1C1C1E),
@@ -818,7 +790,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               });
                               _searchFocusNode.unfocus();
                             },
-                            child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white, fontSize: 16)),
                           ),
                         ],
                       ),

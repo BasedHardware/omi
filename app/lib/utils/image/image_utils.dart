@@ -35,7 +35,6 @@ Uint8List rotateImage(OrientedImage orientedImage) {
       rotatedImage = img.copyRotate(image, angle: -90);
       break;
     case ImageOrientation.orientation0:
-    default:
       // No rotation needed
       return orientedImage.imageBytes;
   }

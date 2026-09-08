@@ -1,23 +1,33 @@
-import asyncio
 import io
 import logging
 import os
 import struct
 import wave
-from typing import Optional, Tuple
+from typing import Any
 
 import numpy as np
 import httpx
 from scipy.spatial.distance import cdist
 
-from utils.executors import storage_executor
+from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
 
 logger = logging.getLogger(__name__)
 
-# Cosine distance threshold for speaker matching
-# Based on VoxCeleb 1 test set EER of 2.8%
-SPEAKER_MATCH_THRESHOLD = 0.45
+# The verification operating point lives in speaker_match.py (numpy-only) so the
+# decision policy can be shared and unit-tested without this module's HTTP client.
+# Re-exported here because callers and tests historically import it from this module.
+from utils.stt.speaker_match import SPEAKER_MATCH_THRESHOLD  # noqa: E402
+
+__all__ = [
+    'SPEAKER_MATCH_THRESHOLD',
+    'MIN_EMBEDDING_AUDIO_DURATION',
+    'extract_embedding',
+    'extract_embedding_from_bytes',
+    'async_extract_embedding',
+    'async_extract_embedding_from_bytes',
+    'compare_embeddings',
+]
 
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes pyannote wespeaker fbank (see issue #4572).
@@ -44,7 +54,7 @@ def _get_api_url() -> str:
     return url
 
 
-def extract_embedding(audio_path: str) -> np.ndarray:
+def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from an audio file using hosted API.
 
@@ -76,7 +86,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray:
+def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
@@ -120,13 +130,12 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def async_extract_embedding(audio_path: str) -> np.ndarray:
+async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """Async version of extract_embedding using httpx.AsyncClient."""
     api_url = _get_api_url()
     client = get_stt_client()
 
-    loop = asyncio.get_running_loop()
-    file_data = await loop.run_in_executor(storage_executor, _read_file, audio_path)
+    file_data = await run_blocking(storage_executor, _read_file, audio_path)
 
     files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
     try:
@@ -147,7 +156,7 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray:
     return embedding
 
 
-async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray:
+async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
     """Async version of extract_embedding_from_bytes using httpx.AsyncClient."""
     duration = _get_wav_duration(audio_data)
     if duration < MIN_EMBEDDING_AUDIO_DURATION:
@@ -175,7 +184,7 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
     return embedding
 
 
-def compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+def compare_embeddings(embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[Any, Any]) -> float:
     """
     Compare two speaker embeddings using cosine distance.
 
@@ -192,81 +201,3 @@ def compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         return 2.0
     distance = cdist(embedding1, embedding2, metric="cosine")[0, 0]
     return float(distance)
-
-
-def is_same_speaker(
-    embedding1: np.ndarray, embedding2: np.ndarray, threshold: float = SPEAKER_MATCH_THRESHOLD
-) -> Tuple[bool, float]:
-    """
-    Determine if two embeddings belong to the same speaker.
-
-    Args:
-        embedding1: First embedding array
-        embedding2: Second embedding array
-        threshold: Cosine distance threshold for matching
-
-    Returns:
-        Tuple of (is_match, distance)
-    """
-    distance = compare_embeddings(embedding1, embedding2)
-    return distance < threshold, distance
-
-
-def embedding_to_bytes(embedding: np.ndarray) -> bytes:
-    """
-    Serialize embedding to bytes for storage.
-
-    Args:
-        embedding: numpy array embedding
-
-    Returns:
-        Bytes representation of the embedding
-    """
-    return embedding.astype(np.float32).tobytes()
-
-
-def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray:
-    """
-    Deserialize embedding from bytes.
-
-    Args:
-        data: Bytes representation of embedding
-        dim: Embedding dimension (default 512 for pyannote/embedding)
-
-    Returns:
-        numpy array of shape (1, D)
-    """
-    embedding = np.frombuffer(data, dtype=np.float32)
-    return embedding.reshape(1, -1)
-
-
-def find_best_match(
-    query_embedding: np.ndarray, candidate_embeddings: list[np.ndarray], threshold: float = SPEAKER_MATCH_THRESHOLD
-) -> Optional[Tuple[int, float]]:
-    """
-    Find the best matching speaker from a list of candidates.
-
-    Args:
-        query_embedding: Embedding to match
-        candidate_embeddings: List of candidate embeddings
-        threshold: Maximum distance for a valid match
-
-    Returns:
-        Tuple of (best_index, distance) or None if no match found
-    """
-    if not candidate_embeddings:
-        return None
-
-    best_idx = -1
-    best_distance = float('inf')
-
-    for idx, candidate in enumerate(candidate_embeddings):
-        distance = compare_embeddings(query_embedding, candidate)
-        if distance < best_distance:
-            best_distance = distance
-            best_idx = idx
-
-    if best_distance < threshold:
-        return best_idx, best_distance
-
-    return None

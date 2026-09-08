@@ -1,5 +1,6 @@
 {
     "@@locale": "be",
+    "sessionExpiredSignInAgain": "Сеанс скончыўся — увайдзіце зноў.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мае дадатыі",
+    "myApps": "Створана мной",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Аўтаномная сінхранізацыя",
+    "autoSync": "Аўтасінхранізацыя",
+    "autoSyncDescription": "Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Ваш план аднаўляецца на {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Бясплатны план",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "{used} з {limit} ўсвідомленняў атрыманы гэты месяц",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} з {limit} ўспаміны створаны гэты месяц",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "Экспартаваць канфігурацыю",
     "bringYourOwn": "Прынясіце ваше",
     "payYourSttProvider": "Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.",
-    "freeMinutesMonth": "1200 свабодных мінут/месяц уключана. Неабмежавана з ",
+    "freeMinutesMonth": "300 свабодных мінут/месяц уключана. Неабмежавана з ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост абавязаны",
     "validPortRequired": "Абавязаны сапраўдны порт",
@@ -1580,7 +1562,7 @@
     "designingApp": "Дызайн прыкладання",
     "generatingIconStep": "Генерацыя значка",
     "finalTouches": "Канцовыя штахы",
-    "processing": "Апрацоўка...",
+    "processing": "Апрацоўка",
     "features": "Функцыі",
     "creatingYourApp": "Стварэнне вашага прыкладання...",
     "generatingIcon": "Генерацыя значка...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Нравіцца вам Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў App Store. Ваш водгук значыць шмат для нас!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Дапамажыце нам дасягнуць больш людзей, пакідаючы водгук ў Google Play Store. Ваш водгук значыць шмат для нас!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Агранізавіць ў App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Агранізавіць ў Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Магчыма пазней",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Параметры Сінхранізацыі WiFi",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Уведзіце меркаванні гарячай тачкі вашага тэлефона",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "Сінхранізацыя WiFi выкарыстоўвае ваш тэлефон як гарячую тачку. Знайдзіце імя гарячай тачкі і пароль у Параметрах > Персанальная гарячая тачка.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Імя Гарячай Тачкі (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "напр. iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Пароль",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Уведзіце пароль гарячай тачкі",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Сахаваць Меркаванні",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "Очыстіць Меркаванні",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Калі ласка, уведзіце імя гарячай тачкі",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "Меркаванні WiFi сахаваны",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "Меркаванні WiFi очышчаны",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Рэзюмэ генеравана для {date}",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1 200 прэміум мін + неабмежавана на прыладзе",
+    "basicPlanDescription": "300 прэміум мін + неабмежавана на прыладзе",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Хуткі пераноса",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Синхранізацыя",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Метад передачы",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Хуткі",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Тэлефон",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Не вышло ўключыць WiFi на прыборы. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Ваш прыбор не падтрымлівае хуткі пераноса. Выкарыстайце Bluetooth замест гэтага.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Пожалуйста, ўключыце хотспот вашага тэлефона і паспрабуйце яшчэ раз.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Не вышло запусціць пераноса. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Прыбор не адрэагаваў. Пожалуйста, паспрабуйце яшчэ раз.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Няправільныя запалогінванні WiFi. Праверце налады хотспота.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Не удалося падлучыцца да WiFi. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Апрацаванне SD картка",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "Апрацаваць",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi синхранізацыя не вышла",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Апрацаванне не вышло",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1200 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
+    "premiumMinutesInfo": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1200 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
+    "premiumMinutesMonth": "300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi синхранізацыя",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} скапіяваны ў буфер абмену",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Сувязь не вышла",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Падлучэнне да {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Ўключыць WiFi на {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Пераклучана на хуткую пераноску",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Пераноска завершана! Вы можаце граць гэты запіс.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Хутка пераноска ўключана",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Синхранізацыя Bluetooth ўключана",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Ўключыць хуткую пераноску",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Хутка пераноска выкарыстоўвае WiFi для ~5х больш хуткага хуткасці. Ваш тэлефон часова падключыцца да сеткі WiFi вашага прыстасавання Omi падчас пераносы.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Доступ у інтэрнет паставлены на паўзу падчас пераносы",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Выберыце спосаб пераносы запісаў з вашага прыстасавання Omi на ваш тэлефон.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s праз WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ХУТЧЭЙ",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Стварае прамую злучэнне WiFi з вашым прыстасаваннем Omi. Ваш тэлефон часова адключаецца ад звычайнай сеткі WiFi падчас пераносы.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Ваша прыстасаванне буквальна вычарпвае батарэю. Час пазарадзіць! 🔋",
+    "lowBatteryAlertBody": "Ваша батарэя на {level}%. Час пазарадзіць! 🔋",
     "batteryFullyChargedTitle": "Omi поўнасцю зараджаны",
     "batteryFullyChargedBody": "Ваш прылада Omi поўнасцю зараджана. Можаце адключыць!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Ваша прыстасаванне Omi адключылося",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Дозвол на месцазнаходжанне патрэбны",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Хутка пераноска патрэбуе дозвол на месцазнаходжанне, каб прапаноўваць WiFi злучэнне. Калі ласка, разрэшыце дозвол на месцазнаходжанне, каб адкіць.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Экспорт транскрыпцыі",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "Штодзённых рэзюмэ яшчэ нема",
     "dailyRecapsDescription": "Ваша штодзённыя рэзюмэ з'явяцца тут пасля стварэння",
-    "chooseTransferMethod": "Выберыце спосаб пераносы",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s праз WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Вялікі часовы разрыў выяўлены ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Прыстасаванне не падтрымлівае WiFi синхранізацыю, мяняем на Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health недаступна на гэтым прыстасаванні",
     "downloadAudio": "Загрузіць аўдыё",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Паглядзець ўсё",
+    "expand": "Разгарнуць",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Бяспечна зарэзервавана на вашым тэлефоне",
+    "safelyBackedUp": "Размовы створаны",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "Абнавіць план",
     "billingMonthly": "Штомесяц",
     "billingYearly": "Штогод",
-    "savePercent": "Зэканомце ~17%",
+    "savePercent": "Зэканомце ~{percent}%",
     "popular": "Папулярны",
     "currentPlan": "Бягучы",
     "neoSubtitle": "{count} пытанняў у месяц",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "Пачаць запіс званка",
     "startVoiceRecording": "Пачаць галасавы запіс",
     "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
-    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.",
+    "deleteRecap": "Выдаліць агляд",
+    "deleteRecapConfirmTitle": "Выдаліць гэты агляд?",
+    "deleteRecapConfirmBody": "Гэты агляд будзе выдалены назаўсёды. Зыходныя размовы за той дзень не будуць закрануты.",
+    "deleteRecapAction": "Выдаліць",
+    "recapDeletedSnackbar": "Агляд выдалены",
+    "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней.",
+    "syncStatusBackedUp": "Рэзервова захавана",
+    "syncStatusBackingUp": "Сінхранізацыя…",
+    "syncStatusWaiting": "Чакае сінхранізацыі",
+    "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
+    "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
+    "syncStatusTooOld": "Занадта старое для сінхранізацыі — Omi не можа яго прыняць",
+    "syncStatusFileUnavailable": "Файл недаступны",
+    "syncStatusUploaded": "Запампавана · апрацоўка ў Omi",
+    "noRecordingsYet": "Запісаў пакуль няма",
+    "syncInProgress": "Сінхранізацыя выконваецца",
+    "deleteWhileProcessingTitle": "Усё яшчэ апрацоўваецца",
+    "deleteWhileProcessingMessage": "Гэты запіс запампаваны, але Omi яшчэ стварае размову. Калі выдаліць зараз і апрацоўка не атрымаецца, аднавіць будзе немагчыма. Усё роўна выдаліць?",
+    "syncCardAllBackedUp": "Усе запісы сінхранізаваны",
+    "syncCardReadyCount": "{count, plural, one{1 запіс гатовы да сінхранізацыі} few{{count} запісы гатовыя да сінхранізацыі} many{{count} запісаў гатовыя да сінхранізацыі} other{{count} запісу гатовыя да сінхранізацыі}}",
+    "syncCardProcessing": "Апрацоўка ў Omi…",
+    "syncCardWaitingInternet": "Чаканне інтэрнэту",
+    "syncCardNeedsAttention": "{count, plural, one{{count} запіс патрабуе ўвагі} few{{count} запісы патрабуюць увагі} many{{count} запісаў патрабуюць увагі} other{{count} запісу патрабуе ўвагі}}",
+    "syncFlowIntro": "Запісы перадаюцца з вашага прыбора на гэты тэлефон і захоўваюцца лакальна, а потым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.",
+    "syncStepUpload": "Сінхранізацыя",
+    "syncStepUploadDesc": "Ваш запіс адпраўляецца на сервер Omi",
+    "syncStepProcess": "Транскрыпцыя",
+    "syncStepProcessDesc": "Omi ператварае аўдыя ў размову",
+    "syncStepBackedUp": "Размова гатовая",
+    "syncStepBackedUpDesc": "Знайдзіце яе ў раздзеле «Разнамовы»",
+    "syncFailureFootnote": "Калі апрацоўка не атрымаецца, запіс будзе аўтаматычна паўторны падчас наступнай сінхранізацыі.",
+    "syncStatusConversationCreated": "Размова створана",
+    "syncCardUploadingTitle": "Запампоўка ў Omi",
+    "syncCardDownloadingTitle": "Загрузка з вашага прыбора",
+    "syncCardProgressOf": "{current} з {total}",
+    "syncStatusOnDevice": "На вашым прыборы",
+    "syncStatusDownloadingFromDevice": "Загрузка з вашага прыбора",
+    "newestFirst": "Спачатку новыя",
+    "noSyncedRecordingsYet": "Пакуль няма сінхранізаваных запісаў",
+    "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.",
+    "syncCardRateLimited": "Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна",
+    "syncCardBackendBusy": "Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з'явіцца магчымасць",
+    "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
+    "promoCode": "Промакод",
+    "enterPromoCode": "Увядзіце промакод",
+    "invalidPromotionCode": "Няправільны промакод.",
+    "backgroundModeTitle": "Фонавы рэжым",
+    "backgroundModeDescription": "Працягвайце запіс Omi, нават калі праграма цалкам закрыта.",
+    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.",
+    "regenerateRecap": "Згенераваць рэзюмэ паўторна",
+    "recapRegeneratedSnackbar": "Рэзюмэ перагенеравана",
+    "recapRegenerateFailed": "Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.",
+    "recapRegenerateCooldown": "Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.",
+    "recapRegenerateNoConversations": "Няма размоў для рэзюмавання гэтага дня.",
+    "syncCustomSttWarningTitle": "Сінхранізацыя выкарыстоўвае транскрыпцыю Omi",
+    "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.",
+    "transcribeLaterTitle": "Транскрыпцыя пазней",
+    "transcribeLaterDescription": "Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.",
+    "transcribeLaterNote": "Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
+    "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
+    "unmute": "Уключыць гук",
+    "newRecording": "Новы запіс",
+    "transcribeLaterPaused": "Прыпынена — аўдыя не запісваецца",
+    "recordingMode": "Рэжым запісу",
+    "captureModeLater": "Пазней",
+    "captureModeLiveDescription": "Транскрыбаванне ў рэальным часе падчас размовы.",
+    "captureModeLaterDescription": "Захавайце аўдыя зараз і транскрыбуйце калі заўгодна.",
+    "backgroundModeUnavailable": "Фонавы рэжым недаступны, бо не падключана сумяшчальная прылада. Падключыце Omi, OpenGlass або Friend Pendant, каб выкарыстоўваць гэту функцыю.",
+    "memoryThisDevice": "Гэта прылада",
+    "memoryThisIphone": "Гэты iPhone",
+    "memoryThisPhone": "Гэты тэлефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Як карыстацца Omi",
+    "deviceOnboardingTranscriptionTitle": "Скажыце нешта свайму Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Скажыце некалькі слоў і паглядзіце, як яны з'яўляюцца ў рэальным часе",
+    "deviceOnboardingGoodJob": "Выдатна!",
+    "deviceOnboardingStartSpeaking": "Пачніце гаварыць...",
+    "deviceOnboardingAskQuestionTitle": "Задайце Omi пытанне",
+    "deviceOnboardingAskQuestionSubtitle": "Націсніце кнопку адзін раз, задайце пытанне, а пасля скончыўшы націсніце зноў",
+    "deviceOnboardingProcessingQuestion": "Апрацоўка вашага пытання...",
+    "deviceOnboardingListening": "Слухаю...",
+    "deviceOnboardingTurnOffTitle": "Выключыць",
+    "deviceOnboardingTurnOnTitle": "Уключыць",
+    "deviceOnboardingTurnOffSubtitle": "Утрымлівайце кнопку 3 секунды",
+    "deviceOnboardingTurnOnSubtitle": "Націсніце кнопку, каб уключыць зноў",
+    "deviceOnboardingHoldButtonHint": "Моцна ўтрымлівайце кнопку, пакуль не патухне індыкатар",
+    "deviceOnboardingStatusConnected": "Падключана",
+    "deviceOnboardingStatusConnectedDone": "Падключана!",
+    "deviceOnboardingStatusDisconnected": "Адключана",
+    "deviceOnboardingStatusTurningOff": "Выключэнне...",
+    "deviceOnboardingDoubleTapTitle": "Налада двайнога націску",
+    "deviceOnboardingEndConversation": "Завяршыць размову",
+    "deviceOnboardingEndConversationDesc": "Захаваць і завяршыць бягучую размову",
+    "deviceOnboardingMuteUnmute": "Мікрафон укл./выкл.",
+    "deviceOnboardingMuteUnmuteDesc": "Уключыць або выключыць мікрафон",
+    "deviceOnboardingStarConversation": "Пазначыць бягучую размову",
+    "deviceOnboardingStarConversationDesc": "Пазначыць размову як важную",
+    "deviceOnboardingSingleTapHint": "Гэта быў адзіночны націск — паспрабуйце націснуць двойчы хутка!",
+    "deviceOnboardingTryDoubleTap": "Паспрабуйце цяпер! Двойчы націсніце свой Omi",
+    "deviceOnboardingContinue": "Працягнуць",
+    "deviceOnboardingFinish": "Гатова",
+    "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
+    "deviceOnboardingIntroSubtitle": "Хуткі практычны агляд усяго, што ўмее ваш Omi.",
+    "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
+    "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
+    "latest": "Апошні",
+    "flashFirmware": "Усталяваць прашыўку",
+    "pendantRecordingTitle": "Запіс на кулоне",
+    "pendantRecordingNote": "Ваш кулон запісвае самастойна. Запісы сінхранізуюцца з тэлефонам, пакуль праграма адкрыта.",
+    "pendantSyncingRecordings": "Сінхранізацыя запісаў з вашага кулона…",
+    "pendantMinutesStored": "~{minutes} хв захавана",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі.",
+    "connectRayBanMeta": "Падключыць Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Выкарыстоўвайце свае акуляры Ray-Ban Meta ў якасці прылады захопу Omi для размоў і візуальнага кантэксту. Omi адкрые праграму Meta AI, каб звязаць вашы акуляры.",
+    "raybanMetaOpenMetaAI": "Падключыцца праз Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завяршыце падключэнне ў праграме Meta AI, а потым вярніцеся сюды.",
+    "raybanMetaCheckAgain": "Праверыць зноў",
+    "raybanMetaAllowCamera": "Дазволіць камеру на акулярах",
+    "raybanMetaCameraExplanation": "Omi выкарыстоўвае камеру вашых акуляраў, каб дадаваць фота ў вашы размовы. Вы можаце прапусціць гэта і выкарыстоўваць толькі гук.",
+    "raybanMetaSkipForNow": "Прапусціць пакуль",
+    "raybanMetaAudioOnlyTitle": "Рэжым толькі гук для Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Гэтая версія Omi можа выкарыстоўваць мікрафон вашых акуляраў праз Bluetooth. Захоп фота патрабуе версіі распрацоўшчыка Omi ад Meta.",
+    "raybanMetaMusicPauseNote": "Музыка на вашым тэлефоне прыпыняецца, пакуль выкарыстоўваецца мікрафон акуляраў.",
+    "raybanMetaContinue": "Працягнуць",
+    "raybanMetaCapturePhoto": "Зрабіць фота",
+    "raybanMetaPhotoRequested": "Фота запытана — яно з'явіцца ў вашай размове.",
+    "raybanMetaMicrophoneReady": "Мікрафон гатовы",
+    "raybanMetaImageCaptureReady": "Захоп выявы гатовы",
+    "raybanMetaImageCaptureUnavailable": "Недаступна ў рэжыме толькі гук",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Памылка падключэння да Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Сховішча прылады",
+    "deviceStoragePercentFull": "запоўнена {percent}%",
+    "deviceStorageUsedOfTotal": "{used} з {total} выкарыстана",
+    "deviceStorageFree": "{free} вольна",
+    "deviceStorageNearlyFull": "Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.",
+    "phoneMicOfflineFallbackMessage": "Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.",
+    "dataEncryptedBanner": "Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.",
+    "rayBanMetaMicPickerTitle": "Выберыце мікрафон Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Выберыце Bluetooth-мікрафон акуляраў. Музыка прыпыніцца, пакуль Omi яго выкарыстоўвае.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth-мікрафоны не знойдзены. Падключыце акуляры ў наладах iPhone і паўтарыце спробу.",
+    "rayBanMetaMicPickerLoadError": "Не ўдалося загрузіць Bluetooth-мікрафоны. Праверце, ці ўключаны Bluetooth, і паўтарыце спробу.",
+    "rayBanMetaMicPickerConnectError": "Не ўдалося падключыцца да гэтага мікрафона. Праверце, ці падключаны ён у наладах iPhone.",
+    "cloudTranscription": "Воблачная транскрыпцыя",
+    "copyMessage": "Капіяваць паведамленне",
+    "deleteOnDeviceModel": "Выдаліць мадэль",
+    "deleteOnDeviceModelConfirm": "Вы сапраўды хочаце выдаліць гэту мадэль?",
+    "downgradeAnyway": "Усё роўна перайсці",
+    "downgradeLimitBattery": "У 7 разоў большы расход батарэі",
+    "downgradeLimitDelay": "Затрымка 5–7 секунд",
+    "downgradeLimitQuality": "На 30% горшая якасць транскрыпцыі",
+    "downgradeLimitSpeakers": "Немагчыма распазнаць дыктараў",
+    "downgradeLimitationsHeading": "Вы сутыкнецеся з такімі абмежаваннямі:",
+    "downgradeToFreemiumTitle": "Перайсці на бясплатны план?",
+    "errorLoadingAudio": "Памылка загрузкі аўдыя",
+    "failedToLinkCalendarEvent": "Не ўдалося звязаць падзею календара",
+    "googleCalendarConnectPrompt": "Падключыце Google Calendar, каб звязваць размовы з падзеямі календара.",
+    "googleCalendarNotConnected": "Google Calendar не падключаны",
+    "linkedToEvent": "Звязана з «{title}»",
+    "onDeviceModelDeleted": "Мадэль выдалена",
+    "onDeviceModelDownloadFailed": "Не ўдалося загрузіць мадэль",
+    "onDeviceModelDownloadFailedDesc": "Не ўдалося загрузіць мадэль Whisper. Паспрабуйце яшчэ раз.",
+    "onDeviceModelDownloadSuccess": "Мадэль загружана",
+    "onDeviceModelDownloadSuccessDesc": "Мадэль Whisper паспяхова загружана",
+    "onDeviceModelDownloaded": "Загружана",
+    "onDeviceModelSize": "Памер мадэлі",
+    "onDeviceTranscription": "Транскрыпцыя на прыладзе",
+    "onDeviceTranscriptionDesc": "Транскрыпцыя апрацоўваецца лакальна на вашай прыладзе",
+    "searchSettings": "Пошук у параметрах…",
+    "speechToTextProvider": "Пастаўшчык распазнавання маўлення",
+    "speechToTextProviderDesc": "Выберыце сэрвіс для транскрыпцыі",
+    "sttFilterAuto": "Аўта",
+    "sttModelAccuracy": "Дакладнасць",
+    "sttModelFaster": "Хутчэй",
+    "sttModelHigher": "Вышэй",
+    "sttModelLower": "Ніжэй",
+    "sttModelSlower": "Павольней",
+    "sttModelSpeed": "Хуткасць",
+    "sttNone": "Няма",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Дзякуй за ваш водгук!",
+    "transcriptionLanguage": "Мова транскрыпцыі",
+    "transcriptionLanguageDesc": "Выберыце мову для транскрыпцыі маўлення",
+    "whisperModel": "Мадэль Whisper",
+    "whisperModelDesc": "Выберыце мадэль для транскрыпцыі на прыладзе",
+    "whisperModelSizeBase": "Базавая",
+    "whisperModelSizeLarge": "Вялікая",
+    "whisperModelSizeMedium": "Сярэдняя",
+    "whisperModelSizeSmall": "Малая",
+    "whisperModelSizeTiny": "Мініяцюрная",
+    "planSheetChooseYourPlan": "Выберыце свой план, каб адкрыць безмежны Omi.",
+    "availableOnMacMobileWeb": "Даступна на Mac, мабільным і ў вэбе",
+    "popularBadge": "ПАПУЛЯРНЫ",
+    "worksOnDesktop": "Працуе на камп'ютары",
+    "noDesktopAccess": "Не працуе на камп'ютары",
+    "annualBillingSummary": "{months} мес. / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} месяц бясплатна} few{{count} месяцы бясплатна} many{{count} месяцаў бясплатна} other{{count} месяца бясплатна}}",
+    "freemiumLimitsIntro": "Omi бясплатны, але бясплатная версія мае абмежаванні, якія ўплываюць на ваш вопыт:",
+    "downgradeLimitDelayNotRealTime": "Затрымка 5-7 секунд (не ў рэальным часе)",
+    "downgradeToFreemiumAction": "Перайсці на бясплатны план",
+    "getFreeUnlimitedAccess": "Атрымайце бязмежны доступ бясплатна",
+    "shareDataForTraining": "Дзяліцца дадзенымі для навучання",
+    "yourRequestUnderReview": "Ваш запыт разглядаецца",
+    "pinAsBaseline": "Замацаваць як базавае",
+    "unpinAsBaseline": "Адмацаваць ад базавага",
+    "baselineMemory": "Базавая памяць",
+    "alwaysInContext": "Заўсёды ў кантэксце",
+    "accountCutoverUpdateRequiredTitle": "Требуется обновление",
+    "accountCutoverUpdateRequiredMessage": "Установите последнее приложение Omi, чтобы продолжить после миграции аккаунта.",
+    "accountCutoverMigrationInProgressTitle": "Идёт миграция",
+    "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
+    "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
+    "accountCutoverOpenStore": "Открыть магазин",
+    "chatScopeAbout": "Пра: {title}",
+    "askAboutThisConversation": "Спытаць пра гэта",
+    "sendRawAudioToOmi": "Адпраўляць неапрацаванае аўдыя ў Omi",
+    "sendRawAudioToOmiDescription": "Выключыце, каб не адпраўляць у Omi неапрацаванае аўдыя. Расшыфроўкі і даныя, патрэбныя воблачным функцыям, усё яшчэ могуць адпраўляцца ў Omi.",
+    "findDevice": "Знайсці",
+    "diagnosticsShareFailed": "Не ўдалося падзяліцца дыягностыкай. Паспрабуйце яшчэ раз.",
+    "appDisabledTitle": "Гэта праграма адключана, і яе нельга ўсталяваць.",
+    "appDisabledWebhookFailures": "Яе endpoint не працаваў 72 гадзіны запар, таму дастаўка спынена.",
+    "appDisabledGeneric": "Яе адключыла Omi.",
+    "appDisabledOwnerHint": "Спачатку выправіце endpoint — паўторнае ўключэнне зноў правярае кожны наладжаны URL.",
+    "appReEnable": "Уключыць зноў",
+    "appReEnableFailedTitle": "Не ўдалося ўключыць зноў",
+    "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
+    "appDisabledOn": "Адключана {date}.",
+    "appDisabledLastError": "Апошняя памылка: {error}.",
+    "prerecordedTranscript": "Папярэдне запісанае",
+    "pendantRecordingSyncBlocked": "Pendant усё яшчэ запісвае, таму захаваны гук нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а потым сінхранізуйце зноў.",
+    "pendantFullSyncBlocked": "Памяць Pendant запоўнена, і ён усё яшчэ ў рэжыме запісу, таму захаванае аўдыя нельга перадаць. Націсніце кнопку Pendant, каб спыніць запіс, а затым сінхранізуйце зноў.",
+    "conversationsNotCapturedCount": "Не запісана ({count})",
+    "transcriptionNoAudio": "Транскрыпцыя не атрымлівае аўдыё",
+    "chatBlockTask": "Задача",
+    "chatBlockGoal": "Мэта",
+    "chatBlockConversation": "Размова",
+    "chatBlockMemory": "Успамін",
+    "chatBlockQuestion": "Пытанне",
+    "chatBlockOpenInGoals": "Адкрыць у мэтах",
+    "chatBlockOpenConversation": "Адкрыць размову",
+    "chatBlockOpenInMemories": "Адкрыць ва ўспамінах",
+    "chatBlockUnavailable": "Больш недаступна",
+    "chatBlockRecommendedNextSteps": "Рэкамендаваныя наступныя крокі",
+    "couldNotLoadMemories": "Не ўдалося загрузіць успаміны",
+    "couldNotLoadKnowledgeGraph": "Не ўдалося загрузіць граф ведаў",
+    "speechProfileOwnerTitle": "Галасавы профіль: {name}",
+    "play": "Прайграць",
+    "redo": "Перазапісаць",
+    "answerWithYourVoice": "Адкажыце голасам:",
+    "speechProfileTopicLocation": "Дзе вы жывяце?",
+    "speechProfileTopicWork": "Кім вы працуеце?",
+    "speechProfileTopicGoal": "Якая ваша доўгатэрміновая мэта?",
+    "speechToTextUnavailableDesc": "Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.",
+    "memoryHistoryPartial": "Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.",
+    "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс"
 }

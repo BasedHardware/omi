@@ -539,8 +539,8 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
         color: isActive
             ? Colors.white
             : isPast
-            ? Colors.white54
-            : ResponsiveHelper.backgroundTertiary,
+                ? Colors.white54
+                : ResponsiveHelper.backgroundTertiary,
         borderRadius: BorderRadius.circular(4),
       ),
     );

@@ -1,12 +1,13 @@
 import os
-from typing import Optional
+from typing import List, Optional
 
 import av
 
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from pydantic import BaseModel
 from pydub import AudioSegment
 
-from database.redis_db import set_speech_profile_duration
+from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
 from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -18,23 +19,82 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
+from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
-from utils.stt.vad import apply_vad_for_speech_profile
+from utils.stt.streaming import is_stt_available
+from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
-@router.get('/v3/speech-profile', tags=['v3'])
+class HasSpeechProfileResponse(BaseModel):
+    has_profile: bool
+
+
+class SpeechProfileResponse(BaseModel):
+    url: Optional[str] = None
+
+
+class SpeechProfileUploadResponse(BaseModel):
+    url: str
+
+
+class SpeechProfileMutationResponse(BaseModel):
+    status: str
+
+
+class SpeechProfileStatusResponse(BaseModel):
+    has_profile: bool
+    duration_seconds: float
+    sample_count: int
+    url: Optional[str] = None
+
+
+class SttAvailabilityResponse(BaseModel):
+    available: bool
+
+
+@router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': get_user_has_speech_profile(uid, max_age_days=90)}
+    return {'has_profile': get_user_has_speech_profile(uid)}
 
 
-@router.get('/v4/speech-profile', tags=['v3'])
+@router.get('/v3/speech-profile/stt-availability', tags=['v3'], response_model=SttAvailabilityResponse)
+def get_speech_profile_stt_availability(uid: str = Depends(auth.get_current_user_uid)):
+    """Pre-flight check the client uses before entering the recording UI, so a
+    known-down streaming primary (whichever provider STT_SERVICE_MODELS
+    currently leads with) surfaces as an upfront error dialog instead of a
+    dead recording screen with no questions/progress.
+    """
+    return {'available': is_stt_available()}
+
+
+@router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
+
+
+@router.get('/v3/speech-profile/status', tags=['v3'], response_model=SpeechProfileStatusResponse)
+def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Consolidated speech-profile status for the settings UI.
+
+    Folds together data split across GET /v3/speech-profile (existence), GET
+    /v4/speech-profile (url), and GET /v3/speech-profile/expand (extra sample
+    recordings), plus the cached duration written on upload.
+    """
+    has_profile = get_user_has_speech_profile(uid)
+    # Gate the cached duration on the actual profile existing. The cached value can
+    # outlive a deleted profile, so surfacing it when has_profile is False would report
+    # an inconsistent state (no profile but a positive duration) to the settings UI.
+    return {
+        'has_profile': has_profile,
+        'duration_seconds': (get_speech_profile_duration(uid) or 0.0) if has_profile else 0.0,
+        'sample_count': len(get_additional_profile_recordings(uid) or []),
+        'url': get_profile_audio_if_exists(uid, download=False),
+    }
 
 
 # ******************************************
@@ -42,31 +102,43 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # ******************************************
 
 # Consist of bytes (for initiating deepgram)
-# and audio itself, which we use on post-processing to use speechbrain model
+# and audio itself, which post-processing embeds for speaker identification
 
 
-@router.post('/v3/upload-audio', tags=['v3'])
+@router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
+@max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
-    aseg = AudioSegment.from_wav(file_path)
+    try:
+        aseg = AudioSegment.from_wav(file_path)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
-    if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
-        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-120 seconds)")
+    # Upper bound must stay >= the app's onboarding recording cap (maxDuration = 150 in
+    # app/lib/providers/speech_profile_provider.dart) plus headroom: a 120s cap rejected
+    # ~28% of prod onboarding uploads (users whose Q&A ran past 2 minutes).
+    if aseg.duration_seconds < 5 or aseg.duration_seconds > 180:
+        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-180 seconds)")
 
-    apply_vad_for_speech_profile(file_path)
+    try:
+        apply_vad_for_speech_profile(file_path)
+    except VADEmptyError:
+        raise HTTPException(status_code=400, detail="Audio is empty")
 
     # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
     with av.open(file_path) as container:
         duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
-    set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
+    # Cache the duration only once the profile blob is actually stored: a failed
+    # overwrite must not leave the cache describing an upload that never landed.
+    set_speech_profile_duration(uid, duration)
 
     # Extract and store speaker embedding for user identification in listen sessions
     try:
@@ -84,7 +156,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ******************************************************
 
 
-@router.delete('/v3/speech-profile/expand', tags=['v3'])
+@router.delete('/v3/speech-profile/expand', tags=['v3'], response_model=SpeechProfileMutationResponse)
 def delete_extra_speech_profile_sample(
     memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -101,7 +173,7 @@ def delete_extra_speech_profile_sample(
     return {'status': 'ok'}
 
 
-@router.get('/v3/speech-profile/expand', tags=['v3'])
+@router.get('/v3/speech-profile/expand', tags=['v3'], response_model=List[str])
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if person_id:
         return get_user_person_speech_samples(uid, person_id)

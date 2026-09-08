@@ -1,0 +1,8 @@
+{
+  "version": "0.12.14",
+  "date": "2026-07-05",
+  "changes": [
+    "Screen capture now starts within seconds of launch instead of staying paused for 30-60 seconds",
+    "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted"
+  ]
+}

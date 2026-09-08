@@ -7,8 +7,10 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/app_detail/reviews_section.dart';
+import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -78,7 +80,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     hintText: context.l10n.writeYourReply,
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     filled: true,
-                    fillColor: Colors.black.withOpacity(0.3),
+                    fillColor: Colors.black.withValues(alpha: 0.3),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.all(12),
                   ),
@@ -103,14 +105,16 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         isSubmitting.value = true;
                         try {
                           await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
-                          context.read<AppProvider>().updateLocalAppReviewResponse(
-                            widget.app.id,
-                            controller.text.trim(),
-                            review.uid,
-                          );
+                          if (context.mounted) {
+                            context.read<AppProvider>().updateLocalAppReviewResponse(
+                                  widget.app.id,
+                                  controller.text.trim(),
+                                  review.uid,
+                                );
+                          }
                           review.response = controller.text.trim();
                           review.respondedAt = DateTime.now();
-                          if (mounted) {
+                          if (context.mounted) {
                             Navigator.pop(context);
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -121,10 +125,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                             );
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(context.l10n.failedToSendReply(e.toString())),
+                                content: Text(context.l10n.failedToSendReply(readableError(e))),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -133,14 +137,15 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           isSubmitting.value = false;
                         }
                       },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
                 child: submitting
                     ? const SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          // The button surface is now white, so a white spinner would be invisible.
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                         ),
                       )
                     : Text(context.l10n.send),
@@ -150,13 +155,6 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
         ],
       ),
     );
-  }
-
-  String _getAvatarUrl(String seed, String? username) {
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
   }
 
   Map<int, int> _getRatingDistribution(List<AppReview> reviews) {
@@ -182,7 +180,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           width: 36,
           height: 36,
           margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
@@ -244,7 +242,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       padding: const EdgeInsets.only(top: 60.0),
                       child: Column(
                         children: [
-                          Icon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
+                          FaIcon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.noReviewsFound,
@@ -277,9 +275,9 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.deepPurple : Colors.grey.shade800.withOpacity(0.5),
+          color: selected ? Colors.white.withValues(alpha: 0.22) : Colors.grey.shade800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? Colors.deepPurple : Colors.grey.shade700, width: 1),
+          border: Border.all(color: selected ? Colors.white : Colors.grey.shade700, width: 1),
         ),
         child: Text(
           label,
@@ -301,7 +299,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -311,33 +309,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Avatar
-              ClipOval(
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(color: Colors.grey.shade800, shape: BoxShape.circle),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+              ReviewAvatar(seed: avatarSeed, username: review.username, size: 40),
               const SizedBox(width: 12),
               // Name, date, and stars
               Expanded(
@@ -363,10 +335,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       children: List.generate(5, (index) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
+                          child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),
@@ -386,7 +358,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -421,14 +396,14 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: () => _showReplyDialog(review),
-                icon: Icon(
+                icon: FaIcon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
-                  color: Colors.deepPurple,
+                  color: Colors.white,
                 ),
                 label: Text(
                   review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
-                  style: const TextStyle(color: Colors.deepPurple, fontSize: 13),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
                 ),
               ),
             ),

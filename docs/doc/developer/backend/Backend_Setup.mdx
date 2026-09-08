@@ -12,7 +12,7 @@ The Omi backend powers all AI capabilities including transcription, conversation
 flowchart LR
     subgraph External["External Services"]
         OAI[OpenAI]
-        DG[Deepgram]
+        STT[Parakeet / Modulate]
         Pine[Pinecone]
         Redis[Redis]
     end
@@ -69,7 +69,8 @@ Before starting, gather these API keys and credentials:
   | Service | Purpose | Get Key |
   |---------|---------|---------|
   | OpenAI | AI language models | [Get Key](https://platform.openai.com/settings/organization/api-keys) |
-  | Deepgram | Speech-to-text | [Get Key](https://console.deepgram.com/api-keys) |
+  | Modulate | Speech-to-text fallback | Provision `MODULATE_API_KEY` |
+  | Parakeet | Self-hosted speech-to-text | Configure `HOSTED_PARAKEET_API_URL` |
   | Redis (Upstash) | Caching & sessions | [Get Key](https://console.upstash.com/) |
   | Pinecone | Vector database | [Get Key](https://app.pinecone.io/organizations/-/projects/-/api-keys) |
   | Hugging Face | Voice detection | [Get Key](https://huggingface.co/settings/tokens) |
@@ -132,21 +133,24 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
     gcloud auth application-default login --project <project-id>
     ```
 
-    This generates credentials at `~/.config/gcloud/application_default_credentials.json`.
-  </Step>
-  <Step title="Copy Credentials to Backend" icon="copy">
-    <Tabs>
-      <Tab title="macOS/Linux">
-        ```bash
-        cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
-        ```
-      </Tab>
-      <Tab title="Windows">
-        ```powershell
-        copy %APPDATA%\gcloud\application_default_credentials.json google-credentials.json
-        ```
-      </Tab>
-    </Tabs>
+    This installs **Application Default Credentials** (ADC) for the Google client
+    libraries. Do **not** copy a service-account JSON key into the repo — long-lived
+    keys are the #6800 anti-pattern. Prefer plain user ADC for local work.
+
+    Impersonation is an advanced, time-limited option (ADC tokens from
+    `--impersonate-service-account` expire in about an hour). Only use it when you
+    already have an org-provisioned lower-privilege SA and hold
+    `roles/iam.serviceAccountTokenCreator` on that account — replace the
+    placeholder below with a real SA email from your team; there is no default
+    `dev-readonly@…` account in this repo:
+
+    ```bash
+    gcloud auth application-default login \
+      --impersonate-service-account=<YOUR_DEV_SA>@<project-id>.iam.gserviceaccount.com
+    ```
+
+    Firebase Admin and Firestore discover ADC automatically when
+    `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are unset.
   </Step>
 </Steps>
 
@@ -242,53 +246,72 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
   </Step>
   <Step title="Install System Dependencies" icon="box">
+    The backend Docker images run Python 3.11, so use Python 3.11 locally as well. If your package manager installs a newer default Python, install or select Python 3.11 before creating the virtual environment.
+
     <Tabs>
       <Tab title="macOS">
         ```bash
-        brew install python git ffmpeg opus
+        brew install python@3.11 git ffmpeg opus uv
+        uv --version
         ```
       </Tab>
       <Tab title="Windows">
+        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools and `uv`:
+
         ```powershell
-        choco install python git.install ffmpeg
+        choco install git.install ffmpeg
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        python --version  # should print 3.11.x
+        uv --version
         ```
-        <Note>Opus is included in Windows 10 version 1903 and above.</Note>
+        <Note>
+          The Python `opuslib` package still needs a native `libopus` DLL on `PATH`. One common setup is MSYS2 UCRT64:
+          install MSYS2, run `pacman -S mingw-w64-ucrt-x86_64-opus`, add `C:\msys64\ucrt64\bin` to `PATH`,
+          then open a new shell and verify with `where.exe opus.dll`.
+        </Note>
       </Tab>
       <Tab title="Linux/Nix">
-        Python, Git, and FFmpeg are typically pre-installed. Install opus via your package manager if needed.
+        Python, Git, and FFmpeg are typically pre-installed. Install opus and `uv` via your package manager if needed, or use the standalone installer:
+
+        ```bash
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv --version
+        ```
       </Tab>
     </Tabs>
   </Step>
   <Step title="Set Up Python Virtual Environment" icon="python">
     <Tip>
-    Using a virtual environment is strongly recommended to avoid dependency conflicts.
+    The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
     </Tip>
-
-    ```bash
-    # Create virtual environment (use Python 3.9-3.12)
-    python -m venv venv
-    ```
 
     <Tabs>
       <Tab title="macOS/Linux">
         ```bash
-        source venv/bin/activate
+        # From backend/
+        ./scripts/sync-python-deps.sh
+        source .venv/bin/activate
         ```
       </Tab>
-      <Tab title="Windows">
+      <Tab title="Windows PowerShell">
         ```powershell
-        venv\Scripts\activate
+        # From backend/
+        bash ./scripts/sync-python-deps.sh
+        .venv\Scripts\Activate.ps1
         ```
       </Tab>
     </Tabs>
 
-    You should see `(venv)` at the beginning of your command prompt.
+    You should see `(.venv)` at the beginning of your command prompt.
   </Step>
-  <Step title="Install Python Dependencies" icon="download">
+  <Step title="Update Python Dependencies" icon="download">
+    When intentionally changing backend dependencies, edit the relevant `requirements*.txt` input, then refresh the locks:
+
     ```bash
-    pip install PyOgg
-    pip install -r requirements.txt
+    ./scripts/update-python-lock.sh
     ```
+
+    The refresh preserves already-locked package versions by default. Use `PYLOCK_UPGRADE=1 ./scripts/update-python-lock.sh` only when intentionally upgrading dependency versions.
   </Step>
   <Step title="Create Environment File" icon="file">
     ```bash
@@ -296,6 +319,25 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
 
     Edit `.env` and fill in your API keys (see [Environment Variables](#environment-variables) below).
+
+    For a self-hosted backend used by an existing Omi mobile build, set the
+    Firebase token audience separately from your data project:
+
+    ```dotenv
+    # Stock development/community Omi mobile builds mint tokens for this project.
+    FIREBASE_AUTH_PROJECT_ID=based-hardware-dev
+
+    # Your own Google Cloud/Firebase project for Firestore and other backend data.
+    FIREBASE_PROJECT_ID=your-self-hosted-project
+    ```
+
+    Firebase ID tokens are verified with the issuer's public signing keys, so
+    `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
+    When it is unset, Firebase Admin uses its default project selection instead;
+    set the auth project explicitly when it differs from your data-project setup,
+    or stock mobile-build tokens will be rejected.
+    Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
+    mode intentionally bypasses authentication for local harnesses.
   </Step>
 </Steps>
 
@@ -312,7 +354,9 @@ OAuth is required for user authentication. You need to configure both Google and
     cp .env.template .env
     ```
 
-    Edit the `.env` file and set `SERVICE_ACCOUNT_JSON` to your Google credentials string.
+    Prefer ADC from `gcloud auth application-default login` (leave
+    `SERVICE_ACCOUNT_JSON` unset). Only use a scoped secret for Modal/CI
+    compatibility paths that have not yet moved to Workload Identity (#6800).
 
     Start the service:
     ```bash
@@ -422,12 +466,12 @@ OAuth is required for user authentication. You need to configure both Google and
     Try reinstalling dependencies:
 
     ```bash
-    pip install -r requirements.txt --upgrade --force-reinstall
+    ./scripts/sync-python-deps.sh
     ```
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
     - On Windows, you may need to enable script execution: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-    - Make sure you're using Python 3.9-3.12
+    - Make sure you're using Python 3.11
   </Accordion>
 </AccordionGroup>
 
@@ -442,14 +486,15 @@ Complete reference for all `.env` variables:
     | Variable | Description |
     |----------|-------------|
     | `OPENAI_API_KEY` | OpenAI API key for AI models |
-    | `DEEPGRAM_API_KEY` | Deepgram API key for transcription |
+    | `MODULATE_API_KEY` | Modulate API key for transcription fallback |
+    | `HOSTED_PARAKEET_API_URL` | Parakeet endpoint for transcription |
     | `HUGGINGFACE_TOKEN` | Hugging Face token for voice detection models |
     | `REDIS_DB_HOST` | Redis host address |
     | `REDIS_DB_PORT` | Redis port number |
     | `REDIS_DB_PASSWORD` | Redis password (blank if none) |
     | `PINECONE_API_KEY` | Pinecone API key for vector database |
     | `PINECONE_INDEX_NAME` | Name of your Pinecone index |
-    | `GOOGLE_APPLICATION_CREDENTIALS` | Path to `google-credentials.json` |
+    | `GOOGLE_APPLICATION_CREDENTIALS` | Optional. Leave unset to use ADC from `gcloud auth application-default login`. Do not point this at a long-lived service-account JSON key (#6800). |
     | `ADMIN_KEY` | Temporary key for local dev (e.g., `123`) |
     | `ENCRYPTION_SECRET` | At least 32 bytes for encrypting user data |
   </Tab>
@@ -463,6 +508,12 @@ Complete reference for all `.env` variables:
     | `APPLE_KEY_ID` | Apple private key ID |
     | `APPLE_PRIVATE_KEY` | Apple .p8 file contents (with BEGIN/END lines) |
     | `BASE_API_URL` | Your backend URL (e.g., Ngrok URL) |
+  </Tab>
+  <Tab title="Firebase projects" icon="fire">
+    | Variable | Description |
+    |----------|-------------|
+    | `FIREBASE_AUTH_PROJECT_ID` | Firebase project whose ID-token audience the backend accepts; set this explicitly when it differs from the data project. |
+    | `FIREBASE_PROJECT_ID` | Google Cloud/Firebase project used for the backend's Firestore and other data services. |
   </Tab>
   <Tab title="Storage" icon="database">
     | Variable | Description |
@@ -483,7 +534,7 @@ Complete reference for all `.env` variables:
 </Tabs>
 
 <Warning>
-The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a new secure key for production!**
+`.env.template` intentionally leaves `ENCRYPTION_SECRET` blank. Generate a unique securely managed value of at least 32 bytes for every real environment.
 </Warning>
 
 ---
@@ -493,7 +544,8 @@ The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a
 We use `black` for code formatting with a line length of 120 characters.
 
 ```bash
-pip install black
+source .venv/bin/activate
+uv pip install black
 ```
 
 To auto-format on commit, install the pre-commit hook from the repository root:

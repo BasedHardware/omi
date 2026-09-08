@@ -134,7 +134,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.deepPurple),
+                borderSide: const BorderSide(color: Colors.white),
               ),
             ),
           ),
@@ -154,9 +154,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
 
                       return ListTile(
                         title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                        selectedTileColor: Colors.white.withValues(alpha: 0.12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {
@@ -263,6 +263,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   }
 
   @override
+  void dispose() {
+    _languageScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
@@ -348,7 +354,18 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                             // Update the user's primary language
                             final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                             final userProvider = Provider.of<UserProvider>(context, listen: false);
-                            await homeProvider.updateUserPrimaryLanguage(selectedLanguage!, userProvider: userProvider);
+                            final success = await homeProvider.updateUserPrimaryLanguage(
+                              selectedLanguage!,
+                              userProvider: userProvider,
+                            );
+
+                            if (!context.mounted) return;
+                            if (!success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(context.l10n.failedToSetLanguage), backgroundColor: Colors.red),
+                              );
+                              return;
+                            }
 
                             widget.goNext();
                           },

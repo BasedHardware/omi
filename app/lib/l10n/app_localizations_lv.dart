@@ -9,6 +9,9 @@ class AppLocalizationsLv extends AppLocalizations {
   AppLocalizationsLv([String locale = 'lv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesija ir beigusies — pierakstieties vēlreiz.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -320,7 +323,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchApps => 'Meklēt lietotnes...';
 
   @override
-  String get myApps => 'Manas lietotnes';
+  String get myApps => 'Man radīts';
 
   @override
   String get installedApps => 'Instalētās lietotnes';
@@ -428,6 +431,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get offlineSync => 'Bezsaistes sinhronizācija';
+
+  @override
+  String get autoSync => 'Automātiska sinhronizācija';
+
+  @override
+  String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
   String get deviceSettings => 'Ierīces iestatījumi';
@@ -738,11 +747,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsu plāns atjaunojas $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezmaksas plāns';
 
   @override
@@ -962,11 +966,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '$used no $limit ieskatiem iegūts šomēnes';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used no $limit atmiņām izveidots šomēnes';
   }
 
   @override
@@ -1466,7 +1465,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payYourSttProvider => 'Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.';
 
   @override
-  String get freeMinutesMonth => '1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
+  String get freeMinutesMonth => '300 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
   String get omiUnlimited => 'Omi Neierobežots';
@@ -1645,7 +1644,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get finalTouches => 'Pēdējie pieskārieni';
 
   @override
-  String get processing => 'Apstrādā...';
+  String get processing => 'Apstrāde';
 
   @override
   String get features => 'Funkcijas';
@@ -1790,20 +1789,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lovingOmi => 'Patīk Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get rateOnAppStore => 'Novērtēt App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Novērtēt Google Play';
-
-  @override
   String get maybeLater => 'Varbūt vēlāk';
 
   @override
@@ -1876,9 +1861,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openSettings => 'Atvērt iestatījumus';
-
-  @override
-  String get wantDifferentName => 'Vēlaties, lai jūs uzrunā citādi?';
 
   @override
   String get whatsYourName => 'Kā tevi sauc?';
@@ -2062,6 +2044,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryDeleted => 'Atmiņa izdzēsta.';
 
   @override
+  String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -2140,6 +2125,18 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediģēt atmiņu';
+
+  @override
+  String get pinAsBaseline => 'Piespraust kā pamatu';
+
+  @override
+  String get unpinAsBaseline => 'Atspraust no pamata';
+
+  @override
+  String get baselineMemory => 'Pamata atmiņa';
+
+  @override
+  String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';
@@ -4637,41 +4634,13 @@ class AppLocalizationsLv extends AppLocalizations {
       'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi sinhronizācijas iestatījumi';
-
-  @override
-  String get enterHotspotCredentials => 'Ievadiet tālruņa tīklāja akreditācijas datus';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sinhronizācija izmanto jūsu tālruni kā tīklāju. Atrodiet nosaukumu un paroli sadaļā Iestatījumi > Personālais tīklājs.';
-
-  @override
-  String get hotspotNameSsid => 'Tīklāja nosaukums (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'piem. iPhone Hotspot';
-
-  @override
   String get password => 'Parole';
-
-  @override
-  String get enterHotspotPassword => 'Ievadiet tīklāja paroli';
 
   @override
   String get saveCredentials => 'Saglabāt akreditācijas datus';
 
   @override
   String get clearCredentials => 'Notīrīt akreditācijas datus';
-
-  @override
-  String get pleaseEnterHotspotName => 'Lūdzu, ievadiet tīklāja nosaukumu';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi akreditācijas dati saglabāti';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi akreditācijas dati notīrīti';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4740,7 +4709,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 
   @override
-  String get basicPlanDescription => '1200 premium minūtes + neierobežots ierīcē';
+  String get basicPlanDescription => '300 premium minūtes + neierobežots ierīcē';
 
   @override
   String get minutes => 'minūtes';
@@ -5820,9 +5789,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Ātrā pārsūtīšana';
-
-  @override
   String get syncingStatus => 'Sinhronizē';
 
   @override
@@ -5832,15 +5798,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String etaLabel(String time) {
     return 'Aptuvens laiks: $time';
   }
-
-  @override
-  String get transferMethod => 'Pārsūtīšanas metode';
-
-  @override
-  String get fast => 'Ātrs';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Tālrunis';
@@ -5861,25 +5818,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processedFilesDeleted => 'Apstrādātie faili dzēsti';
 
   @override
-  String get wifiEnableFailed => 'Neizdevās iespējot WiFi ierīcē. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
-  String get deviceNoFastTransfer => 'Jūsu ierīce neatbalsta ātro pārsūtīšanu. Tā vietā izmantojiet Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Lūdzu, iespējojiet tālruņa piekļuves punktu un mēģiniet vēlreiz.';
-
-  @override
-  String get transferStartFailed => 'Neizdevās sākt pārsūtīšanu. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
   String get deviceNotResponding => 'Ierīce nereaģē. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
-  String get invalidWifiCredentials => 'Nederīgi WiFi akreditācijas dati. Pārbaudiet piekļuves punkta iestatījumus.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi savienojums neizdevās. Lūdzu, mēģiniet vēlreiz.';
 
   @override
   String get sdCardProcessing => 'SD kartes apstrāde';
@@ -5891,9 +5830,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get process => 'Apstrādāt';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sinhronizācija neizdevās';
 
   @override
   String get processingFailed => 'Apstrāde neizdevās';
@@ -6068,7 +6004,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '300 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6150,7 +6086,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '300 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6674,24 +6610,13 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sinhronizācija';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item nokopēts starpliktuvē';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Savienojums neizdevās';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Savienojas ar $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Iespējot $deviceName WiFi';
   }
 
   @override
@@ -6787,9 +6712,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get statusUnprocessed => 'Neapstrādāts';
 
   @override
-  String get switchedToFastTransfer => 'Pārslēgts uz ātro pārsūtīšanu';
-
-  @override
   String get transferCompleteMessage => 'Pārsūtīšana pabeigta! Tagad varat atskaņot šo ierakstu.';
 
   @override
@@ -6801,33 +6723,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transferCancelled => 'Pārsūtīšana atcelta';
 
   @override
-  String get fastTransferEnabled => 'Ātrā pārsūtīšana iespējota';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth sinhronizācija iespējota';
-
-  @override
-  String get enableFastTransfer => 'Iespējot ātro pārsūtīšanu';
-
-  @override
-  String get fastTransferDescription =>
-      'Ātrā pārsūtīšana izmanto WiFi ~5x ātrākam ātrumam. Pārsūtīšanas laikā tālrunis īslaicīgi pieslēgsies Omi ierīces WiFi tīklam.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Interneta piekļuve ir apturēta pārsūtīšanas laikā';
-
-  @override
-  String get chooseTransferMethodDescription => 'Izvēlieties, kā ieraksti tiek pārsūtīti no Omi ierīces uz tālruni.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s caur WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X ĀTRĀK';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Izveido tiešu WiFi savienojumu ar Omi ierīci. Pārsūtīšanas laikā tālrunis īslaicīgi atvienojas no parastā WiFi.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6849,7 +6745,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Zema akumulatora brīdinājums';
 
   @override
-  String get lowBatteryAlertBody => 'Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Tavs akumulators ir $level%. Laiks uzlādēt! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi ir pilnībā uzlādēts';
@@ -7529,13 +7427,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Neizdevās transkribēt audio';
 
   @override
-  String get locationPermissionRequired => 'Nepieciešama atrašanās vietas atļauja';
-
-  @override
-  String get locationPermissionContent =>
-      'Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu.';
-
-  @override
   String get pdfTranscriptExport => 'Transkripcijas eksports';
 
   @override
@@ -7680,12 +7571,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dailyRecapsDescription => 'Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti';
 
   @override
-  String get chooseTransferMethod => 'Izvēlieties pārsūtīšanas metodi';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s caur WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Konstatēta liela laika starpība ($gap)';
   }
@@ -7694,9 +7579,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Konstatētas lielas laika starpības ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nav pieejams šajā ierīcē';
@@ -7895,6 +7777,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get viewAll => 'Skatīt visu';
+
+  @override
+  String get expand => 'Izvērst';
 
   @override
   String get addTask => 'Pievienot uzdevumu';
@@ -8461,7 +8346,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get manageStorage => 'Pārvaldīt krātuvi';
 
   @override
-  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+  String get safelyBackedUp => 'Izveidotās sarunas';
 
   @override
   String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
@@ -9115,7 +9000,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get billingYearly => 'Gadā';
 
   @override
-  String get savePercent => 'Ietaupiet ~17%';
+  String savePercent(int percent) {
+    return 'Ietaupiet ~$percent%';
+  }
 
   @override
   String get popular => 'Populārs';
@@ -9264,4 +9151,855 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get deleteRecap => 'Dzēst kopsavilkumu';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Dzēst šo kopsavilkumu?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Šis kopsavilkums tiks neatgriezeniski noņemts. Tās dienas oriģinālās sarunas netiks ietekmētas.';
+
+  @override
+  String get deleteRecapAction => 'Dzēst';
+
+  @override
+  String get recapDeletedSnackbar => 'Kopsavilkums dzēsts';
+
+  @override
+  String get recapDeleteFailed => 'Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.';
+
+  @override
+  String get syncStatusBackedUp => 'Dublēts';
+
+  @override
+  String get syncStatusBackingUp => 'Sinhronizē…';
+
+  @override
+  String get syncStatusWaiting => 'Gaida sinhronizāciju';
+
+  @override
+  String get syncStatusRetrying => 'Neizdevās apstrādāt — mēģina vēlreiz';
+
+  @override
+  String get syncStatusFailed => 'Neizdevās — pieskarieties Mēģināt vēlreiz';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fails nav pieejams';
+
+  @override
+  String get noRecordingsYet => 'Vēl nav ierakstu';
+
+  @override
+  String get syncInProgress => 'Notiek sinhronizācija';
+
+  @override
+  String get syncStatusUploaded => 'Augšupielādēts · tiek apstrādāts Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Vēl tiek apstrādāts';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
+
+  @override
+  String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti gatavi sinhronizācijai',
+      one: '$count ieraksts gatavs sinhronizācijai',
+      zero: '$count ierakstu gatavi sinhronizācijai',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Apstrādā Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Gaida internetu';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ierakstiem nepieciešama uzmanība',
+      one: '$count ierakstam nepieciešama uzmanība',
+      zero: '$count ierakstu nepieciešama uzmanība',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Ieraksti tiek pārsūtīti no jūsu ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.';
+
+  @override
+  String get syncStepUpload => 'Sinhronizēt';
+
+  @override
+  String get syncStepUploadDesc => 'Jūsu ieraksts tiek nosūtīts uz Omi serveri';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi pārvērš audio sarunā';
+
+  @override
+  String get syncStepBackedUp => 'Saruna gatava';
+
+  @override
+  String get syncStepBackedUpDesc => 'Atrodi to sadaļā Sarunas';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ja apstrāde neizdodas, ieraksts tiek automātiski mēģināts vēlreiz nākamajā sinhronizācijā.';
+
+  @override
+  String get syncStatusConversationCreated => 'Saruna izveidota';
+
+  @override
+  String get syncCardUploadingTitle => 'Augšupielādē Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Lejupielāde no jūsu ierīces';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current no $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Jūsu ierīcē';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Lejupielāde no jūsu ierīces';
+
+  @override
+  String get newestFirst => 'Vispirms jaunākie';
+
+  @override
+  String get noSyncedRecordingsYet => 'Vēl nav sinhronizētu ierakstu';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Drīzumā vairāk maksājumu veidu';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tas turpinās fonā — varat pamest šo ekrānu.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nevar noteikt pašreizējo programmaparatūras versiju';
+
+  @override
+  String get promoCode => 'Reklāmas kods';
+
+  @override
+  String get enterPromoCode => 'Ievadiet reklāmas kodu';
+
+  @override
+  String get invalidPromotionCode => 'Nederīgs reklāmas kods.';
+
+  @override
+  String get backgroundModeTitle => 'Fona režīms';
+
+  @override
+  String get backgroundModeDescription => 'Saglabājiet Omi ierakstīšanu pat tad, kad lietotne ir pilnībā aizvērta.';
+
+  @override
+  String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.';
+
+  @override
+  String get regenerateRecap => 'Atjaunot kopsavilkumu';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Kopsavilkums atjaunots';
+
+  @override
+  String get recapRegenerateFailed => 'Kopsavilkumu neizdevās atjaunot. Mēģiniet vēlāk vēlreiz.';
+
+  @override
+  String get recapRegenerateCooldown => 'Lūdzu, pagaidiet dažas sekundes pirms atkārtotas ģenerēšanas.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Šajā dienā nav sarunu, ko apkopot.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinhronizācija izmanto Omi transkripciju';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribēt vēlāk';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Darbojas ar tālruņa mikrofonu un Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.';
+
+  @override
+  String get recordingMode => 'Ierakstīšanas režīms';
+
+  @override
+  String get captureModeLater => 'Vēlāk';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribējiet reāllaikā, kamēr runājat.';
+
+  @override
+  String get captureModeLaterDescription => 'Saglabājiet audio tagad un transkribējiet, kad vēlaties.';
+
+  @override
+  String get unmute => 'Ieslēgt skaņu';
+
+  @override
+  String get newRecording => 'Jauns ieraksts';
+
+  @override
+  String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
+
+  @override
+  String get memoryThisDevice => 'Šī ierīce';
+
+  @override
+  String get memoryThisIphone => 'Šis iPhone';
+
+  @override
+  String get memoryThisPhone => 'Šis tālrunis';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Kā lietot Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Runā savā Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Pasaki dažus vārdus un vēro, kā tie parādās reāllaikā';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Lieliski!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Sāc runāt...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Uzdod Omi jautājumu';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nospied pogu vienu reizi, uzdod jautājumu un beigās nospied vēlreiz';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Apstrādā tavu jautājumu...';
+
+  @override
+  String get deviceOnboardingListening => 'Klausās...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Izslēgt';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Ieslēgt';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Turi pogu 3 sekundes';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nospied pogu, lai to atkal ieslēgtu';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Stingri turi pogu, līdz gaismiņa nodziest';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Savienots';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Savienots!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Atvienots';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Izslēdzas...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Pielāgo dubultpieskārienu';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beigt sarunu';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Saglabā un beidz pašreizējo sarunu';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Izslēgt / ieslēgt skaņu';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Ieslēdz vai izslēdz mikrofonu';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Atzīmēt notiekošo sarunu';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Atzīmē sarunu kā svarīgu';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Tas bija viens pieskāriens — pamēģini ātri pieskarties divreiz!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Pamēģini tagad! Dubultpieskaries savai Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Turpināt';
+
+  @override
+  String get deviceOnboardingFinish => 'Pabeigt';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Iepazīsti savu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Ātrs, praktisks ieskats visā, ko spēj tavs Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
+
+  @override
+  String get jumpToLatestMessage => 'Pārlēkt uz jaunāko ziņojumu';
+
+  @override
+  String get latest => 'Jaunākais';
+
+  @override
+  String get flashFirmware => 'Instalēt aparātprogrammatūru';
+
+  @override
+  String get pendantRecordingTitle => 'Ierakstīšana kulonā';
+
+  @override
+  String get pendantRecordingNote =>
+      'Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Notiek ierakstu sinhronizēšana no jūsu kulona…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min saglabāts';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.';
+
+  @override
+  String get connectRayBanMeta => 'Savienot Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Izmantojiet savas Ray-Ban Meta brilles kā Omi tveršanas ierīci sarunām un vizuālajam kontekstam. Omi atvērs Meta AI lietotni, lai savienotu jūsu brilles.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Savienot, izmantojot Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Pabeidziet savienošanu Meta AI lietotnē un pēc tam atgriezieties šeit.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Pārbaudīt vēlreiz';
+
+  @override
+  String get raybanMetaAllowCamera => 'Atļaut kameru brillēs';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi izmanto jūsu briļļu kameru, lai pievienotu fotoattēlus jūsu sarunām. Jūs varat to izlaist un izmantot tikai audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Izlaist pagaidām';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta tikai audio režīms';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Šī Omi versija var izmantot jūsu briļļu mikrofonu, izmantojot Bluetooth. Fotoattēlu tveršanai nepieciešama Omi Meta izstrādātāja versija.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Mūzika jūsu tālrunī tiek pauzēta, kamēr tiek izmantots briļļu mikrofons.';
+
+  @override
+  String get raybanMetaContinue => 'Turpināt';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Uzņemt fotoattēlu';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotoattēls pieprasīts — tas parādīsies jūsu sarunā.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofons gatavs';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Attēlu tveršana gatava';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nav pieejams tikai audio režīmā';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Kļūda, veidojot savienojumu ar Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Ierīces krātuve';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% aizpildīts';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'izmantoti $used no $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free brīvi';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
+
+  @override
+  String get sttModelAccuracy => 'Precizitāte';
+
+  @override
+  String get whisperModelSizeBase => 'Pamata';
+
+  @override
+  String get cloudTranscription => 'Mākoņa transkripcija';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Dzēst modeli';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Vai tiešām vēlaties dzēst šo modeli?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Lejupielādēts';
+
+  @override
+  String get sttModelFaster => 'Ātrāks';
+
+  @override
+  String get sttFilterAuto => 'Automātiski';
+
+  @override
+  String get sttModelHigher => 'Augstāka';
+
+  @override
+  String get whisperModelSizeLarge => 'Liels';
+
+  @override
+  String get sttModelLower => 'Zemāka';
+
+  @override
+  String get whisperModelSizeMedium => 'Vidējs';
+
+  @override
+  String get onDeviceModelDeleted => 'Modelis dzēsts';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Modeļa lejupielāde neizdevās';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Neizdevās lejupielādēt Whisper modeli. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modelis lejupielādēts';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modelis veiksmīgi lejupielādēts';
+
+  @override
+  String get onDeviceModelSize => 'Modeļa izmērs';
+
+  @override
+  String get sttNone => 'Nav';
+
+  @override
+  String get onDeviceTranscription => 'Ierīces transkripcija';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija tiek apstrādāta lokāli jūsu ierīcē';
+
+  @override
+  String get sttModelSlower => 'Lēnāks';
+
+  @override
+  String get whisperModelSizeSmall => 'Mazs';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Runas-teksta nodrošinātājs';
+
+  @override
+  String get speechToTextProviderDesc => 'Izvēlieties transkripcijas pakalpojumu';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Ātrums';
+
+  @override
+  String get whisperModelSizeTiny => 'Sīks';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijas valoda';
+
+  @override
+  String get transcriptionLanguageDesc => 'Izvēlieties runas transkripcijas valodu';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Izvēlieties modeli ierīces transkripcijai';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Pāriet uz bezmaksas plānu?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Jūs saskarsieties ar šiem ierobežojumiem:';
+
+  @override
+  String get downgradeLimitBattery => '7x lielāks akumulatora patēriņš';
+
+  @override
+  String get downgradeLimitQuality => 'Par 30% zemāka transkripcijas kvalitāte';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekunžu aizkave';
+
+  @override
+  String get downgradeLimitSpeakers => 'Nevar atpazīt runātājus';
+
+  @override
+  String get downgradeAnyway => 'Tomēr pazemināt';
+
+  @override
+  String get googleCalendarNotConnected => 'Google kalendārs nav savienots';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Savienojiet savu Google kalendāru, lai saistītu sarunas ar kalendāra notikumiem.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Saistīts ar „$title“';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Neizdevās saistīt kalendāra notikumu';
+
+  @override
+  String get thanksForYourFeedback => 'Paldies par atsauksmi!';
+
+  @override
+  String get copyMessage => 'Kopēt ziņojumu';
+
+  @override
+  String get searchSettings => 'Meklēt iestatījumos…';
+
+  @override
+  String get errorLoadingAudio => 'Kļūda, ielādējot audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Izvēlieties Ray-Ban Meta mikrofonu';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Izvēlieties briļļu Bluetooth mikrofonu. Mūzika tiek apturēta, kamēr Omi to izmanto.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofoni nav atrasti. Pievienojiet brilles iPhone iestatījumos un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofonus nevarēja ielādēt. Pārbaudiet, vai Bluetooth ir ieslēgts, un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
+
+  @override
+  String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
+
+  @override
+  String get planSheetChooseYourPlan => 'Izvēlieties savu plānu, lai atbloķētu neierobežotu Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pieejams Mac, mobilajā ierīcē un tīmeklī';
+
+  @override
+  String get popularBadge => 'POPULĀRS';
+
+  @override
+  String get worksOnDesktop => 'Darbojas datorā';
+
+  @override
+  String get noDesktopAccess => 'Nedarbojas datorā';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mēneši / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mēneši bez maksas',
+      one: '$count mēnesis bez maksas',
+      zero: '$count mēnešu bez maksas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi ir bez maksas, taču bezmaksas versijai ir ierobežojumi, kas ietekmē jūsu pieredzi:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunžu aizkave (nav reāllaikā)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+
+  @override
+  String get shareDataForTraining => 'Kopīgot datus apmācībai';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsu pieprasījums tiek izskatīts';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Wymagana aktualizacja';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Zainstaluj najnowszą aplikację Omi, aby kontynuować po migracji konta.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Trwa migracja';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'Par: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Jautāt par šo';
+
+  @override
+  String get sendRawAudioToOmi => 'Sūtīt neapstrādātu audio uz Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.';
+
+  @override
+  String get findDevice => 'Atrast';
+
+  @override
+  String get diagnosticsShareFailed => 'Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz.';
+
+  @override
+  String get appDisabledTitle => 'Šī lietotne ir atspējota, un to nevar instalēt.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Tās galapunkts neizdevās 72 stundas pēc kārtas, tāpēc piegādes tika apturētas.';
+
+  @override
+  String get appDisabledGeneric => 'To atspējoja Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Vispirms izlabojiet galapunktu — atkārtoti iespējojot, katrs konfigurētais URL tiek pārbaudīts vēlreiz.';
+
+  @override
+  String get appReEnable => 'Iespējot atkārtoti';
+
+  @override
+  String get appReEnableFailedTitle => 'Neizdevās iespējot atkārtoti';
+
+  @override
+  String get appReEnableFailedBody => 'Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Atspējota $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Pēdējā kļūda: $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Iepriekš ierakstīts';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant joprojām ieraksta, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant atmiņa ir pilna, un tas joprojām ir ierakstīšanas režīmā, tāpēc saglabāto audio nevar pārsūtīt. Nospiediet Pendant pogu, lai apturētu ierakstīšanu, un pēc tam sinhronizējiet vēlreiz.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nav ierakstīts ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name balss profils';
+  }
+
+  @override
+  String get play => 'Atskaņot';
+
+  @override
+  String get redo => 'Ierakstīt vēlreiz';
+
+  @override
+  String get answerWithYourVoice => 'Atbildiet ar balsi:';
+
+  @override
+  String get speechProfileTopicLocation => 'Kur jūs dzīvojat?';
+
+  @override
+  String get speechProfileTopicWork => 'Kādu darbu jūs darāt?';
+
+  @override
+  String get speechProfileTopicGoal => 'Kāds ir jūsu ilgtermiņa mērķis?';
+
+  @override
+  String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Pieskarieties +, lai sāktu ierakstīšanu';
+
+  @override
+  String get chatBlockTask => 'Uzdevums';
+
+  @override
+  String get chatBlockGoal => 'Mērķis';
+
+  @override
+  String get chatBlockConversation => 'Saruna';
+
+  @override
+  String get chatBlockMemory => 'Atmiņa';
+
+  @override
+  String get chatBlockQuestion => 'Jautājums';
+
+  @override
+  String get chatBlockOpenInGoals => 'Atvērt sadaļā “Mērķi”';
+
+  @override
+  String get chatBlockOpenConversation => 'Atvērt sarunu';
+
+  @override
+  String get chatBlockOpenInMemories => 'Atvērt sadaļā “Atmiņas”';
+
+  @override
+  String get chatBlockUnavailable => 'Vairs nav pieejams';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Ieteicamie nākamie soļi';
+
+  @override
+  String get couldNotLoadMemories => 'Neizdevās ielādēt atmiņas';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Neizdevās ielādēt zināšanu grafu';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
 }

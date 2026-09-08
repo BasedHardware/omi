@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Portuguese (Brazil) and Portuguese (Portugal) are now separate language choices, so replies match your variant instead of defaulting to European Portuguese."
+  ]
+}

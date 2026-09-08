@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
 import { Star, Download, Loader2, Check, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { enableApp, disableApp } from '@/lib/api';
@@ -46,12 +46,12 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
 
   return (
     <Link
-      href={`/my-apps/${app.id}`}
+      href={`/connectors/${app.id}`}
       className={cn(
         'noise-overlay block p-4 rounded-xl',
         'bg-white/[0.02] border border-white/[0.06]',
-        'hover:bg-white/[0.05] hover:border-purple-primary/30',
-        'transition-all group'
+        'hover:bg-white/[0.05] hover:border-white/30',
+        'transition-all group',
       )}
     >
       <div className="flex gap-3">
@@ -94,8 +94,8 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
                 'transition-colors',
                 isEnabled
                   ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
-                  : 'bg-purple-primary text-white hover:bg-purple-secondary',
-                'disabled:opacity-50'
+                  : 'bg-white text-black hover:bg-white/90',
+                'disabled:opacity-50',
               )}
             >
               {isLoading ? (

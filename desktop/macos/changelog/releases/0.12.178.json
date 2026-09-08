@@ -1,0 +1,7 @@
+{
+  "version": "0.12.178",
+  "date": "2026-08-16",
+  "changes": [
+    "With the Ask Omi bar turned off, the \"Screen Recording Needs Reset\" prompt is delivered as a real macOS notification again instead of a card that pops the hidden bar open for a few seconds — that notice is sent only once per broken-capture episode, so a missed card left screen capture off with no further warning"
+  ]
+}

@@ -1,5 +1,8 @@
 'use server';
 
+import { createHmac } from 'node:crypto';
+import { isIP } from 'node:net';
+import { headers } from 'next/headers';
 import envConfig from '@/src/constants/envConfig';
 
 interface ChatMessage {
@@ -8,168 +11,123 @@ interface ChatMessage {
 }
 
 interface ChatWithMemoryRequest {
-  messages: ChatMessage[];
-  transcript: string;
+  conversationId: string;
+  question: string;
+  history: ChatMessage[];
 }
 
-export interface ChatWithMemoryResponse {
-  message: string;
-}
+export type ChatWithMemoryResponse =
+  | { status: 'ok'; message: string }
+  | { status: 'rate_limited'; message: string; retryAfterSeconds?: number }
+  | { status: 'unavailable'; message: string };
 
-const OPENAI_API_KEY = envConfig.OPENAI_API_KEY;
+const FRONTEND_CLOUD_RUN_SERVICE = 'frontend';
+const HMAC_KEY_ENV_VAR = 'PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY';
+const AUDIENCE_ENV_VAR = 'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE';
+const METADATA_IDENTITY_URL =
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
+const UNAVAILABLE: ChatWithMemoryResponse = {
+  status: 'unavailable',
+  message: 'Chat with this shared conversation is currently unavailable.',
+};
 
-if (!OPENAI_API_KEY) {
-  throw new Error(
-    'OPENAI_API_KEY is not configured. Please set it in your environment variables.',
-  );
-}
-
-// Rough token estimation: ~4 characters per token
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-// Truncate transcript to fit within token budget
-function truncateTranscript(transcript: string, maxTokens: number): string {
-  const estimatedTokens = estimateTokens(transcript);
-  if (estimatedTokens <= maxTokens) {
-    return transcript;
+function googleLoadBalancerClientIp(forwardedFor: string | null): string | null {
+  if (process.env.K_SERVICE !== FRONTEND_CLOUD_RUN_SERVICE || !forwardedFor) {
+    return null;
   }
 
-  // If transcript is too long, take the beginning and end
-  const targetLength = maxTokens * 4; // Convert tokens back to characters
-  const startLength = Math.floor(targetLength * 0.6); // 60% from start
-  const endLength = Math.floor(targetLength * 0.4); // 40% from end
+  // Google External Application Load Balancing appends
+  // <client-ip>,<load-balancer-ip>. Earlier values are caller-controlled.
+  const addresses = forwardedFor.split(',').map((address) => address.trim());
+  if (addresses.length < 2) return null;
+  const clientIp = addresses.at(-2);
+  const loadBalancerIp = addresses.at(-1);
+  if (
+    !clientIp ||
+    !loadBalancerIp ||
+    isIP(clientIp) === 0 ||
+    isIP(loadBalancerIp) === 0
+  ) {
+    return null;
+  }
+  return clientIp;
+}
 
-  const start = transcript.substring(0, startLength);
-  const end = transcript.substring(transcript.length - endLength);
+async function mintIdentityToken(audience: string): Promise<string | null> {
+  const url = new URL(METADATA_IDENTITY_URL);
+  url.searchParams.set('audience', audience);
+  url.searchParams.set('format', 'full');
+  const response = await fetch(url, {
+    headers: { 'Metadata-Flavor': 'Google' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(3_000),
+  });
+  if (!response.ok) return null;
+  const token = (await response.text()).trim();
+  return token || null;
+}
 
-  return `${start}\n\n[... transcript truncated ...]\n\n${end}`;
+function retryAfterSeconds(value: string | null): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const seconds = Number.parseInt(value, 10);
+  return seconds >= 1 && seconds <= 3600 ? seconds : undefined;
 }
 
 export default async function chatWithMemory(
   data: ChatWithMemoryRequest,
-): Promise<ChatWithMemoryResponse | null> {
+): Promise<ChatWithMemoryResponse> {
   try {
-    // Use gpt-4.1 which has 128k context window, or fallback to gpt-3.5-turbo-16k
-    const model = 'gpt-4.1';
+    const backendUrl = envConfig.API_URL?.replace(/\/$/, '');
+    const hmacKey = process.env[HMAC_KEY_ENV_VAR];
+    const audience = process.env[AUDIENCE_ENV_VAR];
+    const requestHeaders = await headers();
+    const clientIp = googleLoadBalancerClientIp(requestHeaders.get('x-forwarded-for'));
+    if (!backendUrl || !hmacKey || !audience || !clientIp) return UNAVAILABLE;
 
-    // Estimate tokens for conversation messages (reserve ~2000 tokens for system message and response)
-    const conversationTokens = data.messages.reduce(
-      (sum, msg) => sum + estimateTokens(msg.content),
-      0,
-    );
+    const identityToken = await mintIdentityToken(audience);
+    if (!identityToken) return UNAVAILABLE;
+    const opaqueSubject = createHmac('sha256', hmacKey).update(clientIp).digest('hex');
 
-    // Reserve tokens: 2000 for system message overhead, 2000 for response, 2000 for conversation
-    const maxTranscriptTokens = 120000 - conversationTokens - 2000 - 2000;
-
-    // Truncate transcript if needed
-    const processedTranscript = truncateTranscript(data.transcript, maxTranscriptTokens);
-
-    // Create system message with transcript context
-    const systemMessage = {
-      role: 'system' as const,
-      content: `You are a helpful chatbot assistant. You have access to the following conversation transcript. Use this context to answer questions accurately and helpfully.
-
-Important: As a chatbot, provide short and concise answers. Be direct and to the point while still being helpful.
-
-Critical: Always try to reference things from the conversation transcript, even when the user asks questions that seem unrelated to the conversation. Find connections, examples, or relevant details from the transcript that relate to their question, and incorporate those references into your response.
-
-Transcript:
-${processedTranscript}
-
-Please answer questions based on the transcript above. Even if a question seems unrelated, always try to find and reference relevant information from the conversation.`,
-    };
-
-    // Keep only recent conversation messages to avoid token limit issues
-    // Keep last 10 messages (5 exchanges) to maintain context
-    const recentMessages = data.messages.slice(-10);
-    const messages = [systemMessage, ...recentMessages];
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(`${backendUrl}/v1/conversations/shared/chat`, {
       method: 'POST',
       headers: {
+        Authorization: `Bearer ${identityToken}`,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'X-Omi-Public-Chat-Subject': opaqueSubject,
       },
       body: JSON.stringify({
-        model: model,
-        messages: messages,
-        temperature: 0.7,
+        conversation_id: data.conversationId,
+        question: data.question,
+        history: data.history.slice(-8),
       }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('OpenAI API error:', response.status, errorData);
-
-      // If context length error, try with gpt-3.5-turbo-16k as fallback
-      if (errorData.error?.code === 'context_length_exceeded') {
-        const fallbackModel = 'gpt-3.5-turbo-16k';
-        const fallbackMaxTokens = 14000 - conversationTokens - 2000 - 2000;
-        const fallbackTranscript = truncateTranscript(data.transcript, fallbackMaxTokens);
-
-        const fallbackSystemMessage = {
-          role: 'system' as const,
-          content: `You are a helpful chatbot assistant. You have access to the following conversation transcript. Use this context to answer questions accurately and helpfully.
-
-Important: As a chatbot, provide short and concise answers. Be direct and to the point while still being helpful.
-
-Critical: Always try to reference things from the conversation transcript, even when the user asks questions that seem unrelated to the conversation. Find connections, examples, or relevant details from the transcript that relate to their question, and incorporate those references into your response.
-
-Try to say things like "like mentioned by x"
-
-Transcript:
-${fallbackTranscript}
-
-Please answer questions based on the transcript above. Even if a question seems unrelated, always try to find and reference relevant information from the conversation.`,
-        };
-
-        const fallbackResponse = await fetch(
-          'https://api.openai.com/v1/chat/completions',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${OPENAI_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model: fallbackModel,
-              messages: [fallbackSystemMessage, ...recentMessages],
-              temperature: 0.7,
-            }),
-          },
-        );
-
-        if (!fallbackResponse.ok) {
-          const fallbackErrorData = await fallbackResponse.json().catch(() => ({}));
-          console.error(
-            'OpenAI API fallback error:',
-            fallbackResponse.status,
-            fallbackErrorData,
-          );
-          return null;
-        }
-
-        const fallbackResult = await fallbackResponse.json();
-        const assistantMessage =
-          fallbackResult.choices[0]?.message?.content ||
-          'Sorry, I could not generate a response.';
-        return { message: assistantMessage };
-      }
-
-      return null;
+    if (response.status === 429) {
+      const retryAfter = retryAfterSeconds(response.headers.get('Retry-After'));
+      return {
+        status: 'rate_limited',
+        message: retryAfter
+          ? `Too many requests. Please try again in ${retryAfter} seconds.`
+          : 'Too many requests. Please try again shortly.',
+        ...(retryAfter ? { retryAfterSeconds: retryAfter } : {}),
+      };
     }
+    if (response.status === 503 || !response.ok) return UNAVAILABLE;
 
-    const result = await response.json();
-    const assistantMessage =
-      result.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
-
-    return {
-      message: assistantMessage,
-    };
-  } catch (error) {
-    console.error('Error chatting with memory:', error);
-    return null;
+    const payload: unknown = await response.json();
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      !('message' in payload) ||
+      typeof payload.message !== 'string' ||
+      !payload.message.trim()
+    ) {
+      return UNAVAILABLE;
+    }
+    return { status: 'ok', message: payload.message.trim() };
+  } catch {
+    return UNAVAILABLE;
   }
 }

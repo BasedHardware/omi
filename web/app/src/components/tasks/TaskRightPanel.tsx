@@ -45,7 +45,7 @@ export function TaskRightPanel({
   onDragToDate,
 }: TaskRightPanelProps) {
   const noDueDateItems = groupedItems.noDueDate;
-  const noDueDateIds = noDueDateItems.map(i => i.id);
+  const noDueDateIds = noDueDateItems.map((i) => i.id);
 
   const handleSetAllToday = () => {
     onBulkSetDueDate(noDueDateIds, new Date());

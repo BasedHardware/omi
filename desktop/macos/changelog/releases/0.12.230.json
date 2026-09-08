@@ -1,0 +1,7 @@
+{
+  "version": "0.12.230",
+  "date": "2026-08-27",
+  "changes": [
+    "Voice replies keep the same deep male voice even when the assistant fails over between providers"
+  ]
+}

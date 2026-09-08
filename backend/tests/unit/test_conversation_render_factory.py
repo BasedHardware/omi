@@ -226,7 +226,7 @@ class TestConversationModelNoRenderMethod:
 
     def test_render_module_not_imported_in_conversation_model(self):
         model_path = os.path.join(os.path.dirname(__file__), '../../models/conversation.py')
-        with open(model_path) as f:
+        with open(model_path, encoding='utf-8') as f:
             tree = ast.parse(f.read())
         imports = [
             node
@@ -253,7 +253,7 @@ class TestProductionCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in self.RENDER_CONSUMERS:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'Conversation.conversations_to_string' not in content
@@ -263,6 +263,6 @@ class TestProductionCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in self.RENDER_CONSUMERS:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert 'from utils.conversations.render import' in content, f"{rel_path} does not import from render module"

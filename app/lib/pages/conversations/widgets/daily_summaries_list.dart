@@ -7,6 +7,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
@@ -21,7 +22,6 @@ class _DailySummariesListState extends State<DailySummariesList> {
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
-  int _offset = 0;
   static const int _limit = 20;
   bool _hasMore = true;
 
@@ -38,7 +38,6 @@ class _DailySummariesListState extends State<DailySummariesList> {
       setState(() {
         _summaries = summaries;
         _isLoading = false;
-        _offset = summaries.length;
         _hasMore = summaries.length >= _limit;
       });
     }
@@ -47,18 +46,19 @@ class _DailySummariesListState extends State<DailySummariesList> {
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
-    final moreSummaries = await getDailySummaries(limit: _limit, offset: _offset);
+    // Derive the offset from the current list length so swipe-deletions don't
+    // cause the next page to skip rows (a standalone counter would drift).
+    final moreSummaries = await getDailySummaries(limit: _limit, offset: _summaries.length);
     if (mounted) {
       setState(() {
         _summaries.addAll(moreSummaries);
-        _offset += moreSummaries.length;
         _hasMore = moreSummaries.length >= _limit;
         _isLoadingMore = false;
       });
     }
   }
 
-  void _openSummary(DailySummary summary) {
+  Future<void> _openSummary(DailySummary summary) async {
     // Track recap card click
     final cardIndex = _summaries.indexOf(summary);
     PlatformManager.instance.analytics.recapSummaryCardClicked(
@@ -67,12 +67,57 @@ class _DailySummariesListState extends State<DailySummariesList> {
       cardIndex: cardIndex,
     );
 
-    Navigator.push(
+    // Detail page pops with ``{deleted: true, summaryId}`` when the user deletes
+    // from there — drop the row so they don't see a ghost card on return.
+    final result = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(
         builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
       ),
     );
+    if (!mounted) return;
+    if (result is Map && result['deleted'] == true) {
+      final deletedId = result['summaryId'] as String?;
+      if (deletedId != null) {
+        setState(() => _summaries.removeWhere((s) => s.id == deletedId));
+      }
+    }
+  }
+
+  /// Optimistic swipe-to-delete handler. Removes from the in-memory list
+  /// before the API completes; on failure we restore the row + toast.
+  Future<bool> _handleSwipeDelete(DailySummary summary) async {
+    final confirmed = await showDeleteRecapConfirmDialog(context);
+    if (confirmed != true) return false;
+
+    // The await above can suspend long enough for the widget to be disposed,
+    // and a concurrent list refresh can drop ``summary`` from ``_summaries``
+    // (indexOf -> -1, which would make removeAt throw).
+    if (!mounted) return false;
+    final removedIndex = _summaries.indexOf(summary);
+    if (removedIndex == -1) return false;
+    setState(() => _summaries.removeAt(removedIndex));
+
+    final ok = await deleteDailySummary(summary.id);
+    if (!mounted) return ok;
+    if (ok) {
+      PlatformManager.instance.analytics.dailySummaryDeleted(
+        summaryId: summary.id,
+        date: summary.date,
+        source: 'recap_list_swipe',
+      );
+      AppSnackbar.showSnackbar(context.l10n.recapDeletedSnackbar);
+    } else {
+      // Restore so the user doesn't lose data we couldn't actually delete.
+      setState(() => _summaries.insert(removedIndex, summary));
+      PlatformManager.instance.analytics.dailySummaryDeleteFailed(
+        summaryId: summary.id,
+        date: summary.date,
+        source: 'recap_list_swipe',
+      );
+      AppSnackbar.showSnackbarError(context.l10n.recapDeleteFailed);
+    }
+    return ok;
   }
 
   @override
@@ -197,73 +242,106 @@ class _DailySummariesListState extends State<DailySummariesList> {
   }
 
   Widget _buildSummaryCard(DailySummary summary) {
-    return GestureDetector(
-      onTap: () => _openSummary(summary),
-      child: Padding(
+    return Dismissible(
+      key: ValueKey('daily-summary-${summary.id}'),
+      direction: DismissDirection.endToStart,
+      // The confirm dialog is the actual decision point — return false so the
+      // framework doesn't ALSO remove the row (we manage ``_summaries``
+      // ourselves so we can restore on API failure).
+      confirmDismiss: (_) async {
+        await _handleSwipeDelete(summary);
+        return false;
+      },
+      background: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Emoji container - matches conversation list item
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
-                  alignment: Alignment.center,
-                  child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
-                ),
-                const SizedBox(width: 12),
-                // Title and metadata
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        summary.headline,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      // Date and stats with icons
-                      Row(
-                        children: [
-                          Text(
-                            _formatCondensedDate(summary.date),
-                            style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                            maxLines: 1,
-                          ),
-                          if (summary.stats.totalConversations > 0) ...[
-                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                            const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${summary.stats.totalConversations}',
-                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              maxLines: 1,
-                            ),
-                          ],
-                          if (summary.stats.actionItemsCount > 0) ...[
-                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                            const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${summary.stats.actionItemsCount}',
-                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              maxLines: 1,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF6B6B).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          alignment: Alignment.centerRight,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                context.l10n.deleteRecap,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.delete_outline, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+      child: GestureDetector(
+        onTap: () => _openSummary(summary),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+          child: Container(
+            width: double.maxFinite,
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Emoji container - matches conversation list item
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                    alignment: Alignment.center,
+                    child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  // Title and metadata
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          summary.headline,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        // Date and stats with icons
+                        Row(
+                          children: [
+                            Text(
+                              _formatCondensedDate(summary.date),
+                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                              maxLines: 1,
+                            ),
+                            if (summary.stats.totalConversations > 0) ...[
+                              const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                              const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${summary.stats.totalConversations}',
+                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                maxLines: 1,
+                              ),
+                            ],
+                            if (summary.stats.actionItemsCount > 0) ...[
+                              const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                              const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${summary.stats.actionItemsCount}',
+                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                maxLines: 1,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

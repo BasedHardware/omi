@@ -282,7 +282,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                     ? Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.2),
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -336,7 +336,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                                    ? const Color(0xFF6366F1).withValues(alpha: 0.2)
                                     : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
@@ -752,7 +752,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -797,7 +797,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withOpacity(0.15),
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
@@ -826,7 +826,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withOpacity(0.15),
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Row(
@@ -848,7 +848,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withOpacity(0.15),
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
@@ -922,7 +922,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     );
   }
 
-  Widget _buildFeatureRow({required IconData icon, required String description}) {
+  Widget _buildFeatureRow({required FaIconData icon, required String description}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1018,7 +1018,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   }
 
   Widget _buildSettingRow({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String subtitle,
     required bool value,
@@ -1047,7 +1047,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeColor: activeColor),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: activeColor),
       ],
     );
   }

@@ -41,6 +41,19 @@ only has `memories:read`.
 Generate a new key in the Omi web app under **Developer → API Keys** with the
 scope you need, then `omi auth login` to swap it in.
 
+## "Developer Memory API access is not ready" (exit 2)
+
+```text
+✗ Developer Memory API access is not enabled for this account
+```
+
+If a memory command returns `403` with code `developer_memory_access_not_ready`, the key has passed
+authentication and can already have the required memory scope. Omi also checks a server-side account
+readiness gate before exposing the canonical memory layer.
+
+Do not rotate or recreate the key to resolve this response. Retry after the account is enabled, or contact Omi
+support if it persists.
+
 ## "Rate limited" (exit 4)
 
 ```text

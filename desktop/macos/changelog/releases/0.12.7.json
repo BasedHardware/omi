@@ -1,0 +1,7 @@
+{
+  "version": "0.12.7",
+  "date": "2026-07-04",
+  "changes": [
+    "Notch chat and app chat now share the same live transcript, so typed notch responses stream into the main chat immediately instead of waiting for backend history sync"
+  ]
+}

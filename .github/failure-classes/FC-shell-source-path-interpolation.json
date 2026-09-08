@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-shell-source-path-interpolation",
+  "violated_contract": "A repository checkout path must never be interpolated into shell program text where path characters can change shell syntax or execute commands.",
+  "canonical_prevention": "Derive the resolver path inside the shell program or pass paths as shell data, and exercise the real Make target from a quote-containing temporary checkout with a controlled marker command.",
+  "evidence_prs": [10017],
+  "scope_hints": [
+    "Makefile",
+    "scripts/dev-harness/_resolve_python.sh",
+    "scripts/dev-harness/tests/test_python_resolver.py"
+  ],
+  "status": "open"
+}

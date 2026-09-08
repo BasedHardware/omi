@@ -32,3 +32,13 @@ export const echo = (word: string): string => {
   console.log('Omi SDK: Echo function called');
   return `Hello from Omi SDK! You said: ${word}`;
 };
+
+// STT engines (deepgram / whisper / parakeet) — parity with Python & Swift
+export {
+  createTranscriber,
+  createDeepgramTranscriber,
+  createParakeetTranscriber,
+  createWhisperTranscriber,
+  parakeetWsUrl,
+} from './stt';
+export type { SttEngine, StreamingTranscriber, TranscriptHandler } from './stt';

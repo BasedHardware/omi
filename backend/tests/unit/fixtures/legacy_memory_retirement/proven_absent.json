@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "identity": {"project": "sanitized-project", "region": "us-central1", "cloud_run_job": "memory-maintenance-job", "scheduler_job": "memory-maintenance-hourly"},
+  "inventories": {
+    "cloud_run_jobs": {"complete": true, "resources": []},
+    "executions": {"complete": true, "resources": []},
+    "scheduler_jobs": {"complete": true, "resources": []}
+  }
+}

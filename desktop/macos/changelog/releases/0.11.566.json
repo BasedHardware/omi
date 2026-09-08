@@ -1,0 +1,9 @@
+{
+  "version": "0.11.566",
+  "date": "2026-06-29",
+  "changes": [
+    "Fixed push-to-talk getting stuck with silent audio until relogin",
+    "Improved voice response recovery when sign-in or provider credentials become stale",
+    "Added privacy-safe desktop diagnostics for push-to-talk audio and realtime voice reliability"
+  ]
+}

@@ -4,6 +4,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
 COPY plugins/requirements.txt /tmp/requirements.txt
+COPY plugins/omi-plugin-sdk /app/omi-plugin-sdk
+WORKDIR /app
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
@@ -11,7 +13,10 @@ FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
+# Patch OS packages in this layer before installing runtime deps (#7136).
+RUN apt-get update && apt-get -y dist-upgrade \
+    && apt-get -y install --no-install-recommends ffmpeg curl unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY plugins/ .

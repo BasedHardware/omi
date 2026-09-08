@@ -15,12 +15,15 @@ holds bearer credentials.
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 import tomli_w
+
+from omi_cli._secure_file import open_owner_only
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -33,6 +36,8 @@ DEFAULT_PROFILE_NAME = "default"
 ENV_CONFIG_PATH = "OMI_CONFIG"
 ENV_API_KEY = "OMI_API_KEY"
 ENV_API_BASE = "OMI_API_BASE"
+ENV_LOCAL_API_URL = "OMI_LOCAL_API_URL"
+ENV_LOCAL_TOKEN = "OMI_LOCAL_TOKEN"
 ENV_PROFILE = "OMI_PROFILE"
 
 
@@ -55,6 +60,8 @@ class Profile:
     refresh_token: Optional[str] = None
     id_token_expires_at: Optional[float] = None  # unix epoch seconds
     api_base: str = DEFAULT_API_BASE
+    local_api_url: Optional[str] = None
+    local_token: Optional[str] = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def is_authenticated(self) -> bool:
@@ -76,6 +83,10 @@ class Profile:
             out["refresh_token"] = self.refresh_token
         if self.id_token_expires_at is not None:
             out["id_token_expires_at"] = self.id_token_expires_at
+        if self.local_api_url:
+            out["local_api_url"] = self.local_api_url
+        if self.local_token:
+            out["local_token"] = self.local_token
         # Round-trip preserve unknown keys for forward compatibility.
         for k, v in self.extra.items():
             if k not in out:
@@ -91,6 +102,8 @@ class Profile:
             "refresh_token",
             "id_token_expires_at",
             "api_base",
+            "local_api_url",
+            "local_token",
         }
         extra = {k: v for k, v in data.items() if k not in known}
         return cls(
@@ -101,6 +114,8 @@ class Profile:
             refresh_token=data.get("refresh_token"),
             id_token_expires_at=data.get("id_token_expires_at"),
             api_base=data.get("api_base", DEFAULT_API_BASE),
+            local_api_url=data.get("local_api_url"),
+            local_token=data.get("local_token"),
             extra=extra,
         )
 
@@ -112,6 +127,12 @@ class Profile:
             return _mask_token(self.id_token)
         return "(none)"
 
+    def masked_local_token(self) -> str:
+        """Return a redacted form of the local Desktop API token."""
+        if self.local_token:
+            return _mask_token(self.local_token)
+        return "(none)"
+
 
 @dataclass
 class Config:
@@ -120,6 +141,7 @@ class Config:
     path: Path
     active_profile: str = DEFAULT_PROFILE_NAME
     profiles: dict[str, Profile] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def get_profile(self, name: Optional[str] = None) -> Profile:
         target = name or self.active_profile
@@ -152,18 +174,16 @@ def load(path: Optional[Path] = None) -> Config:
     profiles_data = data.get("profiles", {})
     profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
 
-    return Config(path=p, active_profile=active, profiles=profiles)
+    extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
+    return Config(path=p, active_profile=active, profiles=profiles, extra=extra)
 
 
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
-    The temp file is **created** with mode ``0o600`` via :func:`os.open`, not
-    chmodded after the fact — this closes a TOCTOU window where another local
-    user could read bearer credentials between file creation (default umask,
-    typically ``0o644``) and the chmod call. We also temporarily clamp the
-    process umask to ``0o077`` so any platform that ANDs the requested mode
-    against the umask still ends up with owner-only perms.
+    The temp file is created with owner-only access before any credential is
+    written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
+    DACL supplied directly to ``CreateFileW``.
     """
     config.path.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir perms too — credentials live underneath. Best-effort:
@@ -174,21 +194,28 @@ def save(config: Config) -> None:
         pass
 
     payload: dict[str, Any] = {
+        **config.extra,
         "active_profile": config.active_profile,
         "profiles": {name: p.to_toml_dict() for name, p in config.profiles.items()},
     }
 
-    tmp_path = config.path.with_suffix(config.path.suffix + ".tmp")
-    # Belt-and-suspenders: clamp umask AND pass an explicit 0o600 mode to os.open.
+    # Unique temp path per invocation: two concurrent save() calls must not
+    # share (and unlink) each other's temp file. O_EXCL still guards against
+    # following an attacker-planted symlink at this path.
+    # On FileExistsError we loop and pick a fresh name; we never unlink the
+    # existing file because it may be another live writer's temp (concurrent
+    # saves share the pid). The loop terminates on success; a pathological
+    # run of collisions only re-rolls a 64-bit name, and the raised error at
+    # exhaustion is the caller's real failure signal.
     old_umask = os.umask(0o077)
     try:
-        # O_EXCL guards against following an attacker-planted symlink at this path.
-        try:
-            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            # Stale temp from a previous interrupted save — remove and retry once.
-            os.unlink(tmp_path)
-            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        while True:
+            tmp_path = config.path.with_suffix(config.path.suffix + f".{os.getpid()}.{secrets.token_hex(8)}.tmp")
+            try:
+                fd = open_owner_only(tmp_path)
+                break
+            except FileExistsError:
+                continue
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)

@@ -6,31 +6,120 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
-from typing import List, Optional, Callable, Any, Dict
+from typing import Any, Dict, List, Optional, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from langchain_core.runnables import RunnableConfig
 
-from database.redis_db import get_cached_user_geolocation
-from models.app import ChatTool
+from database.apps import get_app_by_id_db
+from database.redis_db import (
+    get_cached_user_geolocation,
+    delete_app_cache_by_id,
+    get_enabled_apps,
+)
+from database.webhook_health import (
+    ACTION_REDIRECT_NOT_FOLLOWED,
+    record_app_webhook_failure,
+    record_app_webhook_success,
+    is_app_webhook_disabled,
+    disable_app_in_firestore,
+    ENDPOINT_CHAT_TOOL,
+    ENDPOINT_MCP_TOOL,
+)
+from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
+from utils.http_client import get_webhook_circuit_breaker
+from utils.executors import db_executor, run_blocking
+from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_app_owner(app_id: str, title: str, body: str):
+    """Send a push notification to the app owner about webhook health."""
+    try:
+        app_data = get_app_by_id_db(app_id)
+        if app_data and app_data.get('uid'):
+            send_notification(app_data['uid'], title, body)
+    except Exception as e:
+        logger.warning(f'Failed to notify app owner for {app_id}: {e}')
+
+
+def _handle_app_webhook_disable(app_id: str, action: int, error: str):
+    if action == ACTION_REDIRECT_NOT_FOLLOWED:
+        logger.warning(f'App {app_id} webhook redirected and was not delivered: {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Endpoint Redirects',
+            f'Your app endpoint returned a redirect ({error[:40]}), so the request was not delivered. '
+            'Update the endpoint to its final destination.',
+        )
+    elif action == 1:
+        logger.warning(f'App {app_id} webhook failing for 24h+ (day 1 warning): {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Failing',
+            f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 48 hours if failures continue.',
+        )
+    elif action == 2:
+        logger.warning(f'App {app_id} webhook failing for 48h+ (day 2 final warning): {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Final Warning',
+            f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 24 hours if failures continue.',
+        )
+    elif action == 3:
+        logger.warning(f'App {app_id} auto-disabled after 72h of webhook failures: {error}')
+        disable_app_in_firestore(app_id, error, 72)
+        delete_app_cache_by_id(app_id)
+        _notify_app_owner(
+            app_id,
+            'Webhook Auto-Disabled',
+            f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
+            'Please fix your endpoint and re-enable from your developer dashboard.',
+        )
+
 
 # Import agent_config_context for accessing user context
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
-    # Fallback if import fails
+    # Fallback if import fails (circular-import guard)
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
-# Global mapping of tool names to status messages
+
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
+def _sync_noop(**kwargs: Any) -> None:
+    """Synchronous placeholder for async-only StructuredTools (never invoked at runtime)."""
+    return None
+
+
+# Global mapping of tool names to status messages. Bounded so a long-lived worker that loads app
+# tools for many distinct apps over its process lifetime cannot grow this map without limit.
+_MAX_TOOL_STATUS_MESSAGES = 2048
 _tool_status_messages: Dict[str, str] = {}
 
 
-def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type:
+def _remember_tool_status(tool_name: str, status_message: str) -> None:
+    # Re-inserting refreshes recency; evict the oldest entry once the cap is reached.
+    _tool_status_messages.pop(tool_name, None)
+    while len(_tool_status_messages) >= _MAX_TOOL_STATUS_MESSAGES:
+        _tool_status_messages.pop(next(iter(_tool_status_messages)), None)
+    _tool_status_messages[tool_name] = status_message
+
+
+def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type[BaseModel]:
     """
     Create a Pydantic model from a JSON schema parameters definition.
 
@@ -44,7 +133,7 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     properties = parameters.get('properties', {})
     required = set(parameters.get('required', []))
 
-    field_definitions = {}
+    field_definitions: Dict[str, Any] = {}
 
     for param_name, param_schema in properties.items():
         param_type = param_schema.get('type', 'string')
@@ -84,8 +173,8 @@ def create_app_tool(
     app_id: str,
     app_name: str,
     mcp_server_url: Optional[str] = None,
-    mcp_oauth_tokens: Optional[Dict] = None,
-) -> Callable:
+    mcp_oauth_tokens: Optional[Dict[str, Any]] = None,
+) -> StructuredTool:
     """
     Dynamically create a LangChain tool from an app tool definition.
 
@@ -106,10 +195,10 @@ def create_app_tool(
 
     # Store status message in global mapping for UI display (if provided)
     if app_tool.status_message:
-        _tool_status_messages[tool_name] = app_tool.status_message
+        _remember_tool_status(tool_name, app_tool.status_message)
 
     # Create a Pydantic model from the schema (or empty model if no parameters)
-    if app_tool.parameters and isinstance(app_tool.parameters, dict) and app_tool.parameters.get('properties'):
+    if app_tool.parameters and app_tool.parameters.get('properties'):
         args_schema = _create_pydantic_model_from_schema(app_tool.name, app_tool.parameters)
     else:
         # Create an empty schema for tools with no parameters
@@ -117,36 +206,70 @@ def create_app_tool(
         args_schema = create_model(model_name)
 
     if app_tool.is_mcp and mcp_server_url:
-        # MCP tool — call via JSON-RPC instead of HTTP endpoint
-        _mcp_url = mcp_server_url
-        _mcp_tokens = mcp_oauth_tokens
-        _access_token = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
-        _transport = app_tool.transport
+        _mcp_url: str = mcp_server_url
+        _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
+        _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
+        _transport: str = app_tool.transport
 
-        async def mcp_tool_function(**kwargs) -> str:
+        async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
-            return await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+            if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
+                return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
+            cb = get_webhook_circuit_breaker(_mcp_url)
+            if not cb.allow_request():
+                return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+            try:
+                result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+                if result.startswith('Error') or result.startswith('MCP error'):
+                    cb.record_failure()
+                    action = await run_blocking(
+                        db_executor, record_app_webhook_failure, app_id, 0, result[:200], ENDPOINT_MCP_TOOL
+                    )
+                    await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, result[:200])
+                else:
+                    cb.record_success()
+                    await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_MCP_TOOL)
+                return result
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                action = await run_blocking(
+                    db_executor,
+                    record_app_webhook_failure,
+                    app_id,
+                    status_code,
+                    f'HTTP {status_code}',
+                    ENDPOINT_MCP_TOOL,
+                )
+                await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {status_code}')
+                return f'Error calling MCP tool {app_tool.name}: HTTP {status_code}'
+            except Exception as e:
+                cb.record_failure()
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_MCP_TOOL
+                )
+                await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
+                return f"Error calling MCP tool {app_tool.name}: {e}"
 
         return StructuredTool(
             name=tool_name,
             description=f"{app_tool.description} (from {app_name} app)",
-            func=lambda **kwargs: None,
+            func=_sync_noop,
             coroutine=mcp_tool_function,
             args_schema=args_schema,
         )
 
     # Standard HTTP tool
-    async def tool_function(**kwargs) -> str:
+    async def tool_function(**kwargs: Any) -> str:
         """Tool dynamically created from app definition."""
-        config_param = kwargs.pop('config', None)
+        config_param: Optional[RunnableConfig] = kwargs.pop('config', None)
         return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
     return StructuredTool(
         name=tool_name,
         description=f"{app_tool.description} (from {app_name} app)",
-        func=lambda **kwargs: None,  # Sync placeholder (won't be used)
+        func=_sync_noop,  # Sync placeholder (async coroutine is used instead)
         coroutine=tool_function,
         args_schema=args_schema,
     )
@@ -165,28 +288,31 @@ def get_tool_status_message(tool_name: str) -> Optional[str]:
     return _tool_status_messages.get(tool_name)
 
 
-async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str) -> str:
+async def _call_tool_endpoint(
+    kwargs: Dict[str, Any], config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str
+) -> str:
     """Helper function to call the tool endpoint asynchronously."""
     # Get user ID from config
     if config is None:
-        try:
-            config = agent_config_context.get()
-        except LookupError:
+        ctx = _agent_config()
+        if ctx is None:
             return f"Error: Configuration not available for {app_tool.name}"
+        config = cast(RunnableConfig, ctx)
 
-    uid = config['configurable'].get('user_id') if config else None
+    configurable: Dict[str, Any] = config.get('configurable') or {}
+    uid = configurable.get('user_id')
     if not uid:
         return f"Error: User ID not found for {app_tool.name}"
 
-    # Get geolocation from cache
+    # Get geolocation from cache (offloaded: the Redis read is sync and blocks the event loop)
     geolocation = None
     try:
-        geolocation = get_cached_user_geolocation(uid)
+        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
     except Exception:
         pass
 
     # Prepare request payload
-    payload = {
+    payload: Dict[str, Any] = {
         **kwargs,
         'uid': uid,
         'app_id': app_id,
@@ -207,12 +333,17 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
         # In the future, you might want to store app-specific tokens
         pass
 
+    if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
+        return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
+
+    cb = get_webhook_circuit_breaker(app_tool.endpoint)
+    if not cb.allow_request():
+        return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+
     try:
-        # Call the app's endpoint asynchronously
-        # Increased timeout to 120s for AI-powered tools that need more time (code generation, etc.)
         async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
-            request_kwargs = {
+            request_kwargs: Dict[str, Any] = {
                 'headers': headers,
             }
 
@@ -223,25 +354,37 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
             response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
 
-            if response.status_code == 200:
-                # Try to parse JSON response, fallback to text
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_CHAT_TOOL)
                 try:
-                    result = response.json()
-                    if isinstance(result, dict) and 'result' in result:
-                        return str(result['result'])
-                    elif isinstance(result, dict) and 'message' in result:
-                        return str(result['message'])
-                    elif isinstance(result, str):
-                        return result
-                    else:
-                        return str(result)
+                    loaded: object = response.json()
+                    if isinstance(loaded, dict):
+                        data = cast(Dict[str, Any], loaded)
+                        if 'result' in data:
+                            return str(data['result'])
+                        if 'message' in data:
+                            return str(data['message'])
+                        return str(data)
+                    if isinstance(loaded, str):
+                        return loaded
+                    return str(loaded)
                 except ValueError:
                     return response.text
             else:
-                # Auth errors (401/403) almost always mean the app's API key or
-                # credentials are misconfigured on the app developer's side.
-                # Return a clean message so Claude doesn't echo raw API key errors
-                # (like "Invalid API key · Fix external API key") back to the user.
+                cb.record_failure()
+                action = await run_blocking(
+                    db_executor,
+                    record_app_webhook_failure,
+                    app_id,
+                    response.status_code,
+                    f'HTTP {response.status_code}',
+                    ENDPOINT_CHAT_TOOL,
+                )
+                await run_blocking(
+                    db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {response.status_code}'
+                )
+
                 if response.status_code in (401, 403):
                     return (
                         f"The {app_tool.name} tool is temporarily unavailable due to a "
@@ -249,24 +392,43 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                     )
                 error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
                 try:
-                    error_detail = response.json()
-                    if isinstance(error_detail, dict) and 'error' in error_detail:
-                        error_msg += f" - {error_detail['error']}"
+                    loaded_err: object = response.json()
+                    if isinstance(loaded_err, dict):
+                        err_data = cast(Dict[str, Any], loaded_err)
+                        if 'error' in err_data:
+                            error_msg += f" - {err_data['error']}"
+                        else:
+                            error_msg += f" - {str(err_data)}"
                     else:
-                        error_msg += f" - {str(error_detail)}"
+                        error_msg += f" - {str(loaded_err)}"
                 except ValueError:
                     error_msg += f" - {response.text[:200]}"
                 return error_msg
 
     except httpx.TimeoutException:
+        cb.record_failure()
+        action = await run_blocking(
+            db_executor, record_app_webhook_failure, app_id, 0, 'TimeoutException', ENDPOINT_CHAT_TOOL
+        )
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, 'TimeoutException')
         return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 120 seconds."
     except httpx.ConnectError:
+        cb.record_failure()
+        action = await run_blocking(
+            db_executor, record_app_webhook_failure, app_id, 0, 'ConnectError', ENDPOINT_CHAT_TOOL
+        )
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, 'ConnectError')
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
+        cb.record_failure()
+        action = await run_blocking(
+            db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_CHAT_TOOL
+        )
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
         return f"Error calling {app_tool.name}: {str(e)}"
 
 
-def load_app_tools(uid: str) -> List[Callable]:
+def load_app_tools(uid: str) -> List[BaseTool]:
     """
     Load all tools from enabled apps for a user.
 
@@ -276,16 +438,15 @@ def load_app_tools(uid: str) -> List[Callable]:
     Returns:
         List of LangChain tool functions
     """
-    from database.redis_db import get_enabled_apps
-    from database.apps import get_app_by_id_db
-    from models.app import App
-
     enabled_app_ids = get_enabled_apps(uid)
-    tools = []
+    tools: List[BaseTool] = []
 
     for app_id in enabled_app_ids:
         app_data = get_app_by_id_db(app_id)
         if not app_data:
+            continue
+
+        if app_data.get('disabled'):
             continue
 
         try:
@@ -297,8 +458,8 @@ def load_app_tools(uid: str) -> List[Callable]:
         # Only load tools if app has chat_tools defined
         if app.chat_tools and len(app.chat_tools) > 0:
             # Extract MCP config from external_integration if present
-            mcp_server_url = None
-            mcp_oauth_tokens = None
+            mcp_server_url: Optional[str] = None
+            mcp_oauth_tokens: Optional[Dict[str, Any]] = None
             if app.external_integration:
                 mcp_server_url = app.external_integration.mcp_server_url
                 mcp_oauth_tokens = app.external_integration.mcp_oauth_tokens

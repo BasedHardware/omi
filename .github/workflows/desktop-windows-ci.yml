@@ -1,0 +1,189 @@
+name: Desktop Windows CI
+
+# The Windows desktop app had no CI: its typecheck and ~550-test suite never ran
+# on a PR. This workflow gates every change under desktop/windows/.
+#
+# - `checks` runs on ubuntu (fast; the vitest electron stub lets the suite run
+#   without the electron binary) and BLOCKS merge on typecheck/test failures.
+# - `build-windows` proves the app still packages on a real Windows runner,
+#   exercising the native paths (better-sqlite3 rebuild, OCR/automation helpers)
+#   that ubuntu cannot.
+#
+# Lint runs as a blocking check: ESLint errors fail the build; Prettier
+# formatting warnings remain non-blocking (formatting is not enforced here).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/windows/**'
+      - '.github/workflows/desktop-windows-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/windows/**'
+      - '.github/workflows/desktop-windows-ci.yml'
+
+defaults:
+  run:
+    working-directory: desktop/windows
+
+jobs:
+  checks:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # Checks need no native modules; --ignore-scripts skips the electron-rebuild
+      # / OCR-helper postinstall. The vitest electron stub (test/electronStub.ts)
+      # lets the suite run without the electron binary.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck
+        run: pnpm run typecheck
+      # Errors block; Prettier formatting warnings remain non-blocking,
+      # matching the repo's current state (formatting is not enforced here).
+      - name: Lint
+        run: pnpm run lint
+      - name: Test
+        run: pnpm test
+
+  build-windows:
+    name: Windows build smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # Same network-flake surface as the Linux job: electron-builder pulls
+      # nsis/winCodeSign tooling and Electron's postinstall pulls the release
+      # archive from github.com on every uncached run.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-windows-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-windows-
+      # OCR + UI-automation helpers are .NET projects built during install/build.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+      - name: Provision .env (ships public Firebase/PostHog config)
+        shell: pwsh
+        run: Copy-Item .env.example .env
+      # Full install: runs postinstall (electron-builder install-app-deps,
+      # electron-rebuild better-sqlite3, ensure-ocr-helper).
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build unpacked app
+        run: pnpm run build:unpack
+      - name: Upload unpacked build
+        uses: actions/upload-artifact@v7
+        with:
+          name: omi-windows-unpacked
+          path: desktop/windows/dist/win-unpacked
+          if-no-files-found: warn
+          retention-days: 7
+
+  build-linux:
+    name: Linux package · helper smoke
+    runs-on: ubuntu-latest
+    # A successful run finishes in ~10 minutes; 20 gives headroom while still
+    # failing fast instead of riding out the 6h GitHub Actions job ceiling.
+    # This job has hung for the full 6h on multiple unrelated PRs and on
+    # main (apt's mirror lookup in "Install Linux runtime dependencies"
+    # stalls with no output and no built-in timeout) -- a pre-existing,
+    # recurring infra flake, not specific to any one change.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # electron-builder fetches its packaging tools (AppImage runtime, 7zip,
+      # fpm) from github.com at build time, and Electron's postinstall fetches
+      # the release archive; a transient resolver or socket failure there fails
+      # the whole job (EAI_AGAIN on main, ECONNRESET on PRs). With the tool
+      # downloads cached, steady-state builds never touch those endpoints.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-linux-
+      - name: Install Linux runtime dependencies
+        # Bound apt's network calls explicitly: a stalled mirror connection
+        # (observed against the azure.archive.ubuntu.com mirror) otherwise
+        # hangs with no output and no built-in timeout, burning the full 6h
+        # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
+        # avoids any possibility of a debconf prompt blocking on stdin.
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+      - name: Provision .env
+        run: cp .env.example .env
+      - name: Install dependencies
+        # Electron's postinstall downloads a release archive. Retry only this
+        # idempotent install boundary so a transient CDN socket reset does not
+        # discard the otherwise healthy package/helper smoke run.
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+      - name: Build Linux packages
+        run: pnpm run build:linux
+      - name: Verify Debian package contents
+        run: |
+          dpkg-deb -I dist/*.deb | grep -F 'tesseract-ocr'
+          dpkg-deb -I dist/*.deb | grep -F 'x11-utils'
+          dpkg-deb -c dist/*.deb | grep -F 'resources/linux-ocr-helper/omi-ocr-helper'
+      - name: Launch unpacked app on X11
+        run: |
+          # shellcheck disable=SC2016
+          xvfb-run -a bash -euo pipefail -c '
+            dist/linux-unpacked/omi-windows --no-sandbox &
+            app_pid=$!
+            sleep 10
+            kill -0 "$app_pid"
+            kill "$app_pid"
+            wait "$app_pid" || true
+          '
+      - name: Smoke X11 helper protocol
+        run: |
+          convert -size 480x120 xc:white -font DejaVu-Sans -pointsize 40 -fill black -gravity center -annotate 0 'Omi OCR smoke' /tmp/omi-ocr-smoke.jpg
+          xvfb-run -a bash -euo pipefail -c 'OMI_HELPER_OCR_FIXTURE=/tmp/omi-ocr-smoke.jpg OMI_HELPER_EXPECT_TEXT="Omi OCR smoke" pnpm exec vitest run src/main/ocr/linuxHelper.integration.test.ts'
+      - name: Verify Wayland degradation contracts
+        run: pnpm exec vitest run src/main/rewind/rewindSettings.wayland.test.ts src/main/usage/nativeForeground.degrade.test.ts

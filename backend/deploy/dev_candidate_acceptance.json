@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "services": {
+    "backend": {
+      "contract": "what_matters_now",
+      "command": [
+        "python3",
+        "backend/scripts/smoke_what_matters_now.py",
+        "--base-url",
+        "{base_url}",
+        "--cloud-run-identity-token-env",
+        "CLOUD_RUN_IDENTITY_TOKEN"
+      ]
+    },
+    "backend-integration": {
+      "contract": "health",
+      "command": [
+        "python3",
+        "backend/scripts/smoke_cloud_run_health.py",
+        "--base-url",
+        "{base_url}",
+        "--cloud-run-identity-token-env",
+        "CLOUD_RUN_IDENTITY_TOKEN"
+      ]
+    },
+    "backend-sync": {
+      "contract": "health",
+      "command": [
+        "python3",
+        "backend/scripts/smoke_cloud_run_health.py",
+        "--base-url",
+        "{base_url}",
+        "--cloud-run-identity-token-env",
+        "CLOUD_RUN_IDENTITY_TOKEN"
+      ]
+    },
+    "backend-sync-backfill": {
+      "contract": "health",
+      "command": [
+        "python3",
+        "backend/scripts/smoke_cloud_run_health.py",
+        "--base-url",
+        "{base_url}",
+        "--cloud-run-identity-token-env",
+        "CLOUD_RUN_IDENTITY_TOKEN"
+      ]
+    }
+  }
+}

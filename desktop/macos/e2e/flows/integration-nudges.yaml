@@ -1,0 +1,120 @@
+version: 2
+name: integration-nudges
+tier: 2
+description: Opening an app Omi integrates with but has not connected offers the connection once, with budgets that stop it repeating.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectOrigin.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectionInspector.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeAutomation.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCard.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCatalog.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeMatcher.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgePolicy.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeStore.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeTelemetry.swift
+  - desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationValueSection.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+
+steps:
+  - id: S1
+    name: A native integration app is recognized and would be offered
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: com.apple.Notes
+    expect:
+      ok: true
+      detail:
+        matched: "true"
+        telemetry_id: "import:apple-notes"
+        trigger_kind: native_app
+
+  - id: S2
+    name: A browser window is recognized by the site it is showing
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: com.google.Chrome
+        window_title: "Inbox (12) - me@example.com - Gmail"
+    expect:
+      ok: true
+      detail:
+        matched: "true"
+        telemetry_id: "import:email"
+        trigger_kind: browser_site
+
+  - id: S3
+    name: A site Omi has no integration for is not recognized
+    # LinkedIn has no macOS connector. Offering a connection that does not exist
+    # is the worst failure this feature can have, so it gets its own step.
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: com.google.Chrome
+        window_title: "Feed | LinkedIn"
+    expect:
+      ok: true
+      detail:
+        matched: "false"
+
+  - id: S4
+    name: A window title outside a browser is not a site signal
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: com.apple.TextEdit
+        window_title: "Gmail integration notes.txt"
+    expect:
+      ok: true
+      detail:
+        matched: "false"
+
+  - id: S5
+    name: The connect card presents on the floating bar
+    # Goes through the coordinator's real delivery path, so this spends Notion's
+    # budget exactly as a real nudge would — which is what S7 then asserts on.
+    bridge.action:
+      name: integration_nudge_present
+      params:
+        telemetry_id: "export:notion"
+    expect:
+      ok: true
+      detail:
+        presented: "true"
+        # The cooldown S7 asserts comes from the budget, not from admission to
+        # the bar's queue, so the flow asserts the budget directly.
+        spent_budget: "true"
+        integration: Notion
+
+  - id: S6
+    name: Accepting the offer lands on the matching connector sheet
+    do: "With the card presented, click Connect and verify the main window opens on Apps with the Notion destination sheet visible, showing its 'What you get' section."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S7
+    name: A second offer for the same integration is suppressed
+    # S5 delivered a Notion card through the real path, which spends that
+    # integration's cooldown. The assertion is on the decision, not on operator
+    # interaction: a regression that stopped suppressing would otherwise pass.
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: notion.id
+    expect:
+      ok: true
+      detail:
+        matched: "true"
+        telemetry_id: "export:notion"
+        would_nudge: "false"
+        suppression_reason: connector_cooldown
+
+  - id: S8
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

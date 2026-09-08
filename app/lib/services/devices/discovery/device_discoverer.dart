@@ -4,7 +4,12 @@ class DeviceDiscoveryResult {
   final List<BtDevice> devices;
   final Map<String, dynamic>? metadata;
 
-  const DeviceDiscoveryResult({required this.devices, this.metadata});
+  /// True when discovery was intentionally not started because the BLE radio
+  /// or its required permission was unavailable. This is distinct from a scan
+  /// that completed without finding a device.
+  final bool isBlocked;
+
+  const DeviceDiscoveryResult({required this.devices, this.metadata, this.isBlocked = false});
 }
 
 abstract class DeviceDiscoverer {

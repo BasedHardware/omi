@@ -1,7 +1,7 @@
 aenum==3.1.15
 aiofiles==24.1.0
 aiohappyeyeballs==2.5.0
-aiohttp==3.13.4
+aiohttp==3.14.1
 aiosignal==1.4.0
 aiostream==0.5.2
 alembic==1.13.2
@@ -28,7 +28,7 @@ coloredlogs==15.0.1
 colorlog==6.8.2
 contourpy==1.2.1
 croniter==1.4.1
-cryptography==46.0.7
+cryptography==48.0.1
 cycler==0.12.1
 dataclasses-json==0.6.7
 decorator==5.1.1
@@ -39,7 +39,6 @@ dnspython==2.6.1
 docopt==0.6.2
 email_validator==2.2.0
 executing==2.0.1
-fal_client==0.4.1
 fastapi==0.121.0
 fastapi-cli==0.0.5
 fastapi-utilities==0.2.0
@@ -51,7 +50,7 @@ fonttools==4.60.2
 frozenlist==1.4.1
 fsspec==2024.6.1
 gitdb==4.0.11
-GitPython==3.1.47
+GitPython==3.1.55
 google-ai-generativelanguage==0.11.0
 google-api-core==2.19.1
 google-api-python-client==2.139.0
@@ -60,6 +59,8 @@ google-auth-httplib2==0.2.0
 google-cloud-core==2.4.1
 google-cloud-firestore==2.20.0
 google-cloud-storage==2.18.0
+google-cloud-kms==3.6.0
+google-cloud-tasks==2.16.4
 google-crc32c==1.5.0
 google-resumable-media==2.7.1
 googleapis-common-protos==1.63.2
@@ -73,18 +74,18 @@ h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
 httpcore==1.0.9
-httplib2==0.22.0
+httplib2==0.32.0
 httptools==0.6.1
 httpx==0.28.0
 httpx-sse==0.4.0
 huggingface-hub==0.24.5
 humanfriendly==10.0
 hyperframe==6.1.0
-idna==3.7
+idna==3.15
 ipython==8.26.0
 jedi==0.19.1
 Jinja2==3.1.6
-jiter==0.6.1
+jiter==0.15.0
 jiwer==3.0.4
 joblib==1.4.2
 jsonpatch==1.33
@@ -92,22 +93,23 @@ jsonpointer==3.0.0
 jsonschema==4.23.0
 jsonschema-specifications==2023.12.1
 kiwisolver==1.4.5
-langchain==1.2.9
+langchain==1.2.10
+langchain-anthropic==1.1.0
 langchain-community==0.4.1
-langchain-core==1.3.2
+langchain-core==1.3.3
 langchain-google-genai==3.2.0
-langchain-openai==1.1.9
+langchain-openai==1.1.14
 langchain-pinecone==0.2.13
 pinecone==7.3.0
 langchain-text-splitters==1.1.2
 langgraph==1.0.10
-langgraph-checkpoint==4.0.0
-langgraph-prebuilt==1.0.8
-langgraph-sdk==0.3.0
-langsmith==0.7.31
+langgraph-checkpoint==4.0.3
+langgraph-prebuilt==1.0.13
+langgraph-sdk==0.3.15
+langsmith==0.8.5
 lazy_loader==0.4
 llvmlite==0.43.0
-Mako==1.3.11
+Mako==1.3.12
 markdown-it-py==3.0.0
 MarkupSafe==2.1.5
 marshmallow==3.26.2
@@ -117,7 +119,7 @@ monotonic==1.6
 more-itertools==10.5.0
 mplcursors==0.5.3
 mpld3==0.5.10
-msgpack==1.1.0
+msgpack==1.2.1
 multidict==6.0.5
 mypy-extensions==1.0.0
 narwhals==1.14.2
@@ -127,7 +129,7 @@ numba==0.60.0
 numpy==1.26.4
 omegaconf==2.3.0
 onnxruntime==1.19.0
-openai==1.109.1
+openai==2.38.0
 scipy==1.14.0
 optuna==3.6.1
 opuslib==3.0.1
@@ -136,7 +138,7 @@ prometheus-client==0.21.1
 packaging==24.2
 parso==0.8.4
 pexpect==4.9.0
-pillow==12.2.0
+pillow==12.3.0
 platformdirs==4.2.2
 plotly==5.23.0
 polling2==0.5.0
@@ -149,8 +151,11 @@ proto-plus==1.24.0
 protobuf==5.29.6
 ptyprocess==0.7.0
 pure_eval==0.2.3
-pyarrow==17.0.0
-pyasn1==0.6.3
+# TODO(#12758): pin for GCP Functions Framework buildpack (rmgpgab) — pyarrow>=23
+# only ships manylinux_2_28 wheels so the builder falls back to sdist and fails.
+# Remove this pin when rmgpgab is retargeted/disabled to backend/Dockerfile (uv/pylock).
+pyarrow==19.0.1
+pyasn1==0.6.4
 pyasn1_modules==0.4.0
 pycparser==2.22
 pydantic==2.11.10
@@ -158,14 +163,17 @@ pydantic-settings==2.10.1
 pydantic_core==2.33.2
 pydeck==0.9.1
 pydub==0.25.1
-Pygments==2.18.0
-PyJWT==2.12.0
+Pygments==2.20.0
+PyJWT==2.13.0
+pyright==1.1.403
 pynndescent==0.5.13
-PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
+PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
-python-multipart==0.0.26
+pytest-asyncio==1.4.0
+pytest-xdist==3.8.0
+python-multipart==0.0.31
 python-slugify==8.0.4
 python-ulid==3.0.0
 pytz==2024.1
@@ -194,14 +202,14 @@ soundfile==0.12.1
 soxr==0.4.0
 SQLAlchemy==2.0.32
 stack-data==0.6.3
-starlette==0.49.1
+starlette==0.49.3
 streamlit==1.54.0
 tabulate==0.9.0
 tenacity==8.2.3
 threadpoolctl==3.5.0
 tiktoken==0.7.0
 toml==0.10.2
-tornado==6.5.5
+tornado==6.5.7
 tqdm==4.66.5
 traitlets==5.14.3
 typer==0.12.3
@@ -212,9 +220,9 @@ typing_extensions==4.15.0
 tzdata==2024.1
 umap-learn==0.5.6
 uritemplate==4.1.1
-urllib3==2.6.3
+urllib3==2.7.0
 uvicorn==0.30.5
-uvloop==0.20.0
+uvloop==0.20.0; sys_platform != "win32"
 watchdog==4.0.2
 watchfiles==0.22.0
 wcwidth==0.2.13
@@ -224,7 +232,6 @@ yarl==1.17.0
 stripe==11.3.0
 typesense==0.21.0
 pycountry==24.6.1
-google-cloud-translate==3.20.2
 langdetect==1.0.9
-lc3py==1.1.3
+lc3py==1.1.3; sys_platform == "linux" and platform_machine == "x86_64"
 twilio==9.5.0

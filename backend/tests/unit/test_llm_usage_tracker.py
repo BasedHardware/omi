@@ -2,30 +2,7 @@
 Unit tests for LLM usage tracking.
 """
 
-import os
-import sys
-import types
 from unittest.mock import MagicMock
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-# Mock the database client to avoid needing GCP credentials
-mock_db = MagicMock()
-mock_client_module = MagicMock()
-mock_client_module.db = mock_db
-sys.modules["database._client"] = mock_client_module
-sys.modules["stripe"] = MagicMock()
-
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
-_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-_google_firestore_module = types.ModuleType("google.cloud.firestore")
-_google_firestore_module.Increment = lambda x: {"__increment": x}
-sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
-setattr(_google_module, "cloud", _google_cloud_module)
-setattr(_google_cloud_module, "firestore", _google_firestore_module)
 
 from langchain_core.outputs import Generation, LLMResult
 

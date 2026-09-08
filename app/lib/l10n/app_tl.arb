@@ -1,5 +1,6 @@
 {
     "@@locale": "tl",
+    "sessionExpiredSignInAgain": "Nag-expire ang session — mag-sign in ulit.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Aking Mga App",
+    "myApps": "Likha ko",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Awtomatikong pag-sync",
+    "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Ang iyong plan ay magre-renew sa {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Free Plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "{used} ng {limit} insights na nakuha sa buwan na ito",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} ng {limit} alaala na nabuo sa buwan na ito",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "I-export ang configuration",
     "bringYourOwn": "Dalhin ang iyong sarili",
     "payYourSttProvider": "Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
-    "freeMinutesMonth": "1,200 libreng minuto/buwan kasama. Unlimited sa ",
+    "freeMinutesMonth": "300 libreng minuto/buwan kasama. Unlimited sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Ang Host ay kinakailangan",
     "validPortRequired": "Ang Valid port ay kinakailangan",
@@ -1580,7 +1562,7 @@
     "designingApp": "Dinadala ang app",
     "generatingIconStep": "Bumubuo ng icon",
     "finalTouches": "Huling touchup",
-    "processing": "Nagpoproseso...",
+    "processing": "Pinoproseso",
     "features": "Mga Features",
     "creatingYourApp": "Lumilikha ng iyong app...",
     "generatingIcon": "Bumubuo ng icon...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Gusto mo ba ang Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa App Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa Google Play Store. Ang iyong feedback ay napakahalagang para sa amin!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Mag-rate sa App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Mag-rate sa Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Siguro mamaya",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi Sync Settings",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Ipasok ang iyong phone hotspot credentials",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "Ang WiFi sync ay gumagamit ng iyong phone bilang hotspot. Hanapin ang iyong hotspot name at password sa Settings > Personal Hotspot.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Hotspot Name (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "halimbawa iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Password",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Ipasok ang hotspot password",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "I-save ang Credentials",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "I-clear ang Credentials",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Mangyaring ipasok ang isang hotspot name",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi credentials na na-save",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi credentials na na-clear",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Summary na nabuo para sa {date}",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 premium mins + unlimited on-device",
+    "basicPlanDescription": "300 premium mins + unlimited on-device",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Fast Transfer",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Sine-sync",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Transfer Method",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Mabilis",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Telepono",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Nabigo ang pagpapagana ng WiFi sa device. Subukan ulit.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Ang iyong device ay hindi sumusuporta sa Fast Transfer. Gumamit ng Bluetooth sa halip.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Pakipagana ang hotspot ng iyong telepono at subukan ulit.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Nabigo ang pagsisimula ng transfer. Subukan ulit.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Ang device ay hindi tumugon. Subukan ulit.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Invalid na WiFi credentials. Suriin ang iyong hotspot settings.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Nabigo ang WiFi connection. Subukan ulit.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD Card Processing",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "Proseso",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "Nabigo ang WiFi Sync",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Nabigo ang Pagpoproseso",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1,200 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
+    "premiumMinutesInfo": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1,200 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
+    "premiumMinutesMonth": "300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi Sync",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ay kinopya sa clipboard",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Connection Failed",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Kumokonekta sa {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Paganahin ang {deviceName}'s WiFi",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Lumipat sa Fast Transfer",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Tapos na ang paglipat! Maaari mo na ngayong i-play ang recording na ito.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Fast Transfer ay naka-enable",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth sync ay naka-enable",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "I-enable ang Fast Transfer",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Gumagamit ang Fast Transfer ng WiFi para sa humigit-kumulang na 5x na mas mabilis na bilis. Ang iyong telepono ay pansamantalang magkonekta sa WiFi network ng iyong Omi device sa panahon ng paglipat.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Ang internet access ay napigil sa panahon ng paglipat",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Pumili kung paano ang mga recording ay ilipat mula sa iyong Omi device patungo sa iyong telepono.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s sa pamamagitan ng WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X MAS MABILIS",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Lumilikha ng direktang WiFi connection sa iyong Omi device. Ang iyong telepono ay pansamantalang nadadiskonekta mula sa iyong regular na WiFi sa panahon ng paglipat.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋",
+    "lowBatteryAlertBody": "Ang iyong baterya ay nasa {level}%. Panahon na para mag-recharge! 🔋",
     "batteryFullyChargedTitle": "Naka-charge na ang Omi",
     "batteryFullyChargedBody": "Ang iyong Omi device ay ganap nang na-charge. Maaari mo na itong i-unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Ang Iyong Omi Device ay Nadiskonekta",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Ang Location Permission ay Kinakailangan",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Ang Fast Transfer ay nangangailangan ng location permission upang ma-verify ang WiFi connection. Mangyaring bigyan ng location permission upang magpatuloy.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Transcript Export",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "Walang daily recaps pa",
     "dailyRecapsDescription": "Ang iyong daily recaps ay lilitaw dito kapag na-generate na",
-    "chooseTransferMethod": "Pumili ng Transfer Method",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s sa pamamagitan ng WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Malaking time gap na natuklasan ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Ang device ay hindi sumusuporta sa WiFi sync, lumipat sa Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Ang Apple Health ay hindi available sa device na ito",
     "downloadAudio": "I-download ang Audio",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Tingnan Lahat",
+    "expand": "Palawakin",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up sa iyong phone",
+    "safelyBackedUp": "Mga conversation na nalikha",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "I-upgrade ang plan",
     "billingMonthly": "Buwanan",
     "billingYearly": "Taunan",
-    "savePercent": "Makatipid ~17%",
+    "savePercent": "Makatipid ~{percent}%",
     "popular": "Sikat",
     "currentPlan": "Kasalukuyan",
     "neoSubtitle": "{count} tanong bawat buwan",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",
     "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
-    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli.",
+    "deleteRecap": "Burahin ang recap",
+    "deleteRecapConfirmTitle": "Burahin ang recap na ito?",
+    "deleteRecapConfirmBody": "Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.",
+    "deleteRecapAction": "Burahin",
+    "recapDeletedSnackbar": "Burado na ang recap",
+    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
+    "syncStatusBackedUp": "Na-back up na",
+    "syncStatusBackingUp": "Sine-sync…",
+    "syncStatusWaiting": "Naghihintay na mag-sync",
+    "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
+    "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusTooOld": "Masyadong luma para i-sync — hindi ito matatanggap ng Omi",
+    "syncStatusFileUnavailable": "Hindi available ang file",
+    "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
+    "noRecordingsYet": "Wala pang mga recording",
+    "syncInProgress": "Kasalukuyang nagsi-sync",
+    "deleteWhileProcessingTitle": "Pinoproseso pa rin",
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?",
+    "syncCardAllBackedUp": "Lahat ng recording ay na-sync na",
+    "syncCardReadyCount": "{count, plural, one{1 recording ang handa nang i-sync} other{{count} na recording ang handa nang i-sync}}",
+    "syncCardProcessing": "Pinoproseso sa Omi…",
+    "syncCardWaitingInternet": "Naghihintay ng internet",
+    "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
+    "syncFlowIntro": "Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.",
+    "syncStepUpload": "I-sync",
+    "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
+    "syncStepProcess": "I-transcribe",
+    "syncStepProcessDesc": "Ginagawang conversation ng Omi ang audio",
+    "syncStepBackedUp": "Handa na ang conversation",
+    "syncStepBackedUpDesc": "Hanapin sa ilalim ng Mga Conversation",
+    "syncFailureFootnote": "Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.",
+    "syncStatusConversationCreated": "Nagawa ang usapan",
+    "syncCardUploadingTitle": "Ina-upload sa Omi",
+    "syncCardDownloadingTitle": "Dina-download mula sa iyong device",
+    "syncCardProgressOf": "{current} ng {total}",
+    "syncStatusOnDevice": "Nasa iyong device",
+    "syncStatusDownloadingFromDevice": "Dina-download mula sa iyong device",
+    "newestFirst": "Pinakabago muna",
+    "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
+    "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.",
+    "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync",
+    "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
+    "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
+    "promoCode": "Promo code",
+    "enterPromoCode": "Ilagay ang promo code",
+    "invalidPromotionCode": "Hindi valid na promo code.",
+    "backgroundModeTitle": "Background Mode",
+    "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
+    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
+    "regenerateRecap": "Buuin muli ang buod",
+    "recapRegeneratedSnackbar": "Nabuo muli ang buod",
+    "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
+    "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
+    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito.",
+    "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
+    "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
+    "transcribeLaterTitle": "I-transcribe Mamaya",
+    "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
+    "transcribeLaterNote": "Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
+    "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
+    "unmute": "I-unmute",
+    "newRecording": "Bagong recording",
+    "transcribeLaterPaused": "Naka-pause — hindi nire-record ang audio",
+    "recordingMode": "Mode ng pag-record",
+    "captureModeLater": "Mamaya",
+    "captureModeLiveDescription": "I-transcribe nang real time habang nagsasalita ka.",
+    "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.",
+    "backgroundModeUnavailable": "Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.",
+    "memoryThisDevice": "Device na ito",
+    "memoryThisIphone": "iPhone na ito",
+    "memoryThisPhone": "Teleponong ito",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Paano Gamitin ang Omi",
+    "deviceOnboardingTranscriptionTitle": "Magsalita sa Iyong Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Magsabi ng ilang salita at panoorin itong lumitaw nang real-time",
+    "deviceOnboardingGoodJob": "Magaling!",
+    "deviceOnboardingStartSpeaking": "Magsimulang magsalita...",
+    "deviceOnboardingAskQuestionTitle": "Magtanong sa Omi",
+    "deviceOnboardingAskQuestionSubtitle": "Pindutin ang button nang isang beses, sabihin ang iyong tanong, pagkatapos ay pindutin muli kapag tapos na",
+    "deviceOnboardingProcessingQuestion": "Pinoproseso ang iyong tanong...",
+    "deviceOnboardingListening": "Nakikinig...",
+    "deviceOnboardingTurnOffTitle": "Patayin",
+    "deviceOnboardingTurnOnTitle": "Buksan",
+    "deviceOnboardingTurnOffSubtitle": "Pindutin nang matagal ang button sa loob ng 3 segundo",
+    "deviceOnboardingTurnOnSubtitle": "Pindutin ang button para muling buksan ito",
+    "deviceOnboardingHoldButtonHint": "Pindutin nang matatag ang button hanggang mamatay ang ilaw",
+    "deviceOnboardingStatusConnected": "Nakakonekta",
+    "deviceOnboardingStatusConnectedDone": "Nakakonekta!",
+    "deviceOnboardingStatusDisconnected": "Nadiskonekta",
+    "deviceOnboardingStatusTurningOff": "Pinapatay...",
+    "deviceOnboardingDoubleTapTitle": "I-customize ang Double Tap",
+    "deviceOnboardingEndConversation": "Tapusin ang Usapan",
+    "deviceOnboardingEndConversationDesc": "I-save at tapusin ang kasalukuyang usapan",
+    "deviceOnboardingMuteUnmute": "I-mute / I-unmute",
+    "deviceOnboardingMuteUnmuteDesc": "I-on o i-off ang mikropono",
+    "deviceOnboardingStarConversation": "I-star ang Kasalukuyang Usapan",
+    "deviceOnboardingStarConversationDesc": "Markahan ang usapan bilang mahalaga",
+    "deviceOnboardingSingleTapHint": "Isang tap lang iyon — subukang mag-tap nang dalawang beses nang mabilis!",
+    "deviceOnboardingTryDoubleTap": "Subukan mo ngayon! I-double tap ang iyong Omi",
+    "deviceOnboardingContinue": "Magpatuloy",
+    "deviceOnboardingFinish": "Tapusin",
+    "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
+    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroDuration": "Mga 1 minuto",
+    "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
+    "latest": "Pinakabago",
+    "flashFirmware": "I-flash ang Firmware",
+    "pendantRecordingTitle": "Nagre-record sa pendant",
+    "pendantRecordingNote": "Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.",
+    "pendantSyncingRecordings": "Sini-sync ang mga recording mula sa iyong pendant…",
+    "pendantMinutesStored": "~{minutes} min ang nakaimbak",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync.",
+    "connectRayBanMeta": "Ikonekta ang Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Gamitin ang iyong Ray-Ban Meta glasses bilang iyong Omi capture device para sa mga conversation at visual na konteksto. Bubuksan ng Omi ang Meta AI app upang i-link ang iyong glasses.",
+    "raybanMetaOpenMetaAI": "Kumonekta sa pamamagitan ng Meta AI",
+    "raybanMetaWaitingForMetaAI": "Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik dito.",
+    "raybanMetaCheckAgain": "Tingnan Muli",
+    "raybanMetaAllowCamera": "Payagan ang Camera sa Glasses",
+    "raybanMetaCameraExplanation": "Ginagamit ng Omi ang camera ng iyong glasses upang magdagdag ng mga larawan sa iyong mga conversation. Maaari mong laktawan ito at gumamit ng audio lamang.",
+    "raybanMetaSkipForNow": "Laktawan Muna",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta audio-only mode",
+    "raybanMetaAudioOnlyExplanation": "Magagamit ng bersyong ito ng Omi ang mikropono ng iyong glasses sa pamamagitan ng Bluetooth. Kailangan ng Meta developer build ng Omi para sa photo capture.",
+    "raybanMetaMusicPauseNote": "Na-pause ang musika sa iyong telepono habang ginagamit ang mikropono ng glasses.",
+    "raybanMetaContinue": "Magpatuloy",
+    "raybanMetaCapturePhoto": "Kumuha ng Photo",
+    "raybanMetaPhotoRequested": "Hiniling ang photo — lalabas ito sa iyong conversation.",
+    "raybanMetaMicrophoneReady": "Handa na ang mikropono",
+    "raybanMetaImageCaptureReady": "Handa na ang image capture",
+    "raybanMetaImageCaptureUnavailable": "Hindi available sa audio-only mode",
+    "raybanMetaCamera": "Camera",
+    "errorConnectingRayBanMeta": "Error sa pagkonekta sa Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Storage ng device",
+    "deviceStoragePercentFull": "{percent}% puno",
+    "deviceStorageUsedOfTotal": "{used} sa {total} ang nagamit",
+    "deviceStorageFree": "{free} ang libre",
+    "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo.",
+    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.",
+    "dataEncryptedBanner": "Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.",
+    "rayBanMetaMicPickerTitle": "Piliin ang mikropono ng Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Piliin ang Bluetooth na mikropono ng salamin. Hihinto muna ang musika habang ginagamit ito ng Omi.",
+    "rayBanMetaMicPickerEmpty": "Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerLoadError": "Hindi ma-load ang mga Bluetooth na mikropono. Tiyaking naka-on ang Bluetooth, pagkatapos ay subukan muli.",
+    "rayBanMetaMicPickerConnectError": "Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.",
+    "cloudTranscription": "Transkripsyon sa Cloud",
+    "copyMessage": "Kopyahin ang mensahe",
+    "deleteOnDeviceModel": "Tanggalin ang Modelo",
+    "deleteOnDeviceModelConfirm": "Sigurado ka bang gusto mong tanggalin ang modelong ito?",
+    "downgradeAnyway": "I-downgrade Pa Rin",
+    "downgradeLimitBattery": "7x na paggamit ng baterya",
+    "downgradeLimitDelay": "5-7 segundong pagkaantala",
+    "downgradeLimitQuality": "30% na mas mababang kalidad ng transkripsyon",
+    "downgradeLimitSpeakers": "Hindi makikilala ang mga nagsasalita",
+    "downgradeLimitationsHeading": "Mararanasan mo ang mga limitasyong ito:",
+    "downgradeToFreemiumTitle": "I-downgrade sa libreng plano?",
+    "errorLoadingAudio": "Nagkaproblema sa pag-load ng audio",
+    "failedToLinkCalendarEvent": "Nabigong i-link ang kaganapan sa kalendaryo",
+    "googleCalendarConnectPrompt": "Ikonekta ang iyong Google Calendar upang mai-link ang mga pag-uusap sa mga kaganapan sa kalendaryo.",
+    "googleCalendarNotConnected": "Hindi Nakakonekta ang Google Calendar",
+    "linkedToEvent": "Naka-link sa \"{title}\"",
+    "onDeviceModelDeleted": "Natanggal ang modelo",
+    "onDeviceModelDownloadFailed": "Nabigo ang pag-download ng modelo",
+    "onDeviceModelDownloadFailedDesc": "Nabigong i-download ang modelong Whisper. Pakisubukan muli.",
+    "onDeviceModelDownloadSuccess": "Na-download ang modelo",
+    "onDeviceModelDownloadSuccessDesc": "Matagumpay na na-download ang modelong Whisper",
+    "onDeviceModelDownloaded": "Na-download",
+    "onDeviceModelSize": "Laki ng Modelo",
+    "onDeviceTranscription": "Transkripsyon sa Device",
+    "onDeviceTranscriptionDesc": "Ang transkripsyon ay pinoproseso lokal sa iyong device",
+    "searchSettings": "Maghanap ng setting…",
+    "speechToTextProvider": "Serbisyo ng Boses-sa-Teksto",
+    "speechToTextProviderDesc": "Piliin ang serbisyong gagamitin para sa transkripsyon",
+    "sttFilterAuto": "Awtomatiko",
+    "sttModelAccuracy": "Katumpakan",
+    "sttModelFaster": "Mas mabilis",
+    "sttModelHigher": "Mas mataas",
+    "sttModelLower": "Mas mababa",
+    "sttModelSlower": "Mas mabagal",
+    "sttModelSpeed": "Bilis",
+    "sttNone": "Wala",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Salamat sa iyong puna!",
+    "transcriptionLanguage": "Wika ng Transkripsyon",
+    "transcriptionLanguageDesc": "Piliin ang wika para sa transkripsyon ng pagsasalita",
+    "whisperModel": "Modelong Whisper",
+    "whisperModelDesc": "Piliin ang modelo para sa transkripsyon sa device",
+    "whisperModelSizeBase": "Batayan",
+    "whisperModelSizeLarge": "Malaki",
+    "whisperModelSizeMedium": "Katamtaman",
+    "whisperModelSizeSmall": "Maliit",
+    "whisperModelSizeTiny": "Napakaliit",
+    "planSheetChooseYourPlan": "Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.",
+    "availableOnMacMobileWeb": "Available sa Mac, mobile, at web",
+    "popularBadge": "SIKAT",
+    "worksOnDesktop": "Gumagana sa desktop",
+    "noDesktopAccess": "Hindi gumagana sa desktop",
+    "annualBillingSummary": "{months} buwan / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 buwang libre} other{{count} buwang libre}}",
+    "freemiumLimitsIntro": "Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:",
+    "downgradeLimitDelayNotRealTime": "5-7 segundong delay (hindi real-time)",
+    "downgradeToFreemiumAction": "Lumipat sa libreng bersyon",
+    "getFreeUnlimitedAccess": "Kumuha ng libreng walang limitasyong access",
+    "shareDataForTraining": "Magbahagi ng data para sa training",
+    "yourRequestUnderReview": "Sinusuri ang iyong kahilingan",
+    "pinAsBaseline": "I-pin bilang baseline",
+    "unpinAsBaseline": "Alisin sa baseline",
+    "baselineMemory": "Baseline na memorya",
+    "alwaysInContext": "Palaging nasa konteksto",
+    "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
+    "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
+    "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
+    "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
+    "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
+    "accountCutoverOpenStore": "Buka toko",
+    "chatScopeAbout": "Tungkol sa: {title}",
+    "askAboutThisConversation": "Itanong tungkol dito",
+    "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
+    "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.",
+    "findDevice": "Hanapin",
+    "diagnosticsShareFailed": "Hindi maibahagi ang diagnostics. Pakisubukan ulit.",
+    "appDisabledTitle": "Naka-disable ang app na ito at hindi ito mai-install.",
+    "appDisabledWebhookFailures": "Nabigo ang endpoint nito nang 72 oras na sunod-sunod, kaya itinigil ang mga paghahatid.",
+    "appDisabledGeneric": "I-nadisable ito ng Omi.",
+    "appDisabledOwnerHint": "Ayusin muna ang endpoint — sinusuri muli ng pag-enable ang bawat naka-configure na URL.",
+    "appReEnable": "I-enable muli",
+    "appReEnableFailedTitle": "Hindi ma-enable muli",
+    "appReEnableFailedBody": "Hindi ma-enable muli ang app na ito. Pakisubukan ulit.",
+    "appDisabledOn": "Na-disable noong {date}.",
+    "appDisabledLastError": "Huling error: {error}.",
+    "prerecordedTranscript": "Paunang-rekord",
+    "pendantRecordingSyncBlocked": "Nagre-record pa rin ang Pendant, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
+    "conversationsNotCapturedCount": "Hindi na-record ({count})",
+    "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
+    "chatBlockTask": "Gawain",
+    "chatBlockGoal": "Layunin",
+    "chatBlockConversation": "Pag-uusap",
+    "chatBlockMemory": "Alaala",
+    "chatBlockQuestion": "Tanong",
+    "chatBlockOpenInGoals": "Buksan sa Mga Layunin",
+    "chatBlockOpenConversation": "Buksan ang pag-uusap",
+    "chatBlockOpenInMemories": "Buksan sa Mga Alaala",
+    "chatBlockUnavailable": "Hindi na available",
+    "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
+    "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph",
+    "speechProfileOwnerTitle": "Profile ng Boses ni {name}",
+    "play": "I-play",
+    "redo": "I-record muli",
+    "answerWithYourVoice": "Sumagot gamit ang iyong boses:",
+    "speechProfileTopicLocation": "Saan ka nakatira?",
+    "speechProfileTopicWork": "Ano ang trabaho mo?",
+    "speechProfileTopicGoal": "Ano ang pangmatagalan mong layunin?",
+    "speechToTextUnavailableDesc": "Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.",
+    "memoryHistoryPartial": "Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.",
+    "tapPlusToStartRecording": "I-tap ang + para magsimulang mag-record"
 }

@@ -1,15 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth";
+import { withRowLimit } from "@/lib/posthog";
+import {
+  desktopReleaseLifecycle,
+  desktopStableCandidateFromMetadata,
+  newestSparkleVersion,
+  tagBuildNumber,
+  type DesktopReleaseChannel,
+  type DesktopReleaseLifecycle,
+} from "@/lib/desktop-release-lifecycle";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-const GITHUB_REPO = 'BasedHardware/omi';
-const RELEASE_TAG_SUFFIX = '-macos';
+const GITHUB_REPO = "BasedHardware/omi";
+const RELEASE_TAG_SUFFIX = "-macos";
 const RELEASE_LIMIT = 30;
 
 const POSTHOG_API_KEY = process.env.POSTHOG_PERSONAL_API_KEY;
-const POSTHOG_PROJECT_ID = process.env.POSTHOG_PROJECT_ID || '302298';
-const POSTHOG_BASE = 'https://us.posthog.com';
+const POSTHOG_PROJECT_ID = process.env.POSTHOG_PROJECT_ID || "302298";
+const POSTHOG_BASE = "https://us.posthog.com";
 
 // --- Types ---
 
@@ -25,44 +34,96 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
+  beta_live: boolean;
+  stable_candidate: boolean;
+  stable_candidate_at: string | null;
+  stable_candidate_by: string | null;
+  lifecycle_state: DesktopReleaseLifecycle;
+  channel: DesktopReleaseChannel;
 }
 
 // --- GitHub ---
 
 async function fetchGithubReleases(): Promise<any[]> {
   const headers: Record<string, string> = {
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
   };
   if (process.env.GITHUB_TOKEN) {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
   const res = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`,
-    { headers, cache: 'no-store' }
+    { headers, cache: "no-store" },
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
+async function fetchBetaAppcast(): Promise<string> {
+  const res = await fetch(
+    "https://api.omi.me/v2/desktop/appcast.xml?identity=beta",
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Beta appcast ${res.status}: ${await res.text()}`);
+  return res.text();
+}
+
 function parseVersion(tag: string): string | null {
-  const m = tag.match(/^v(\d+\.\d+\.\d+)\+\d+-macos$/);
+  const m = tag.match(/^v(\d+\.\d+(?:\.\d+)?)\+\d+-macos$/);
   return m ? m[1] : null;
+}
+
+function parseReleaseMetadata(
+  body: string | null | undefined,
+): Record<string, string> {
+  if (!body) return {};
+  const metadata: Record<string, string> = {};
+  let inBlock = false;
+  for (const line of body.split("\n")) {
+    let stripped = line.trim();
+    if (stripped.startsWith("<!--")) stripped = stripped.slice(4).trim();
+    if (stripped.endsWith("-->")) stripped = stripped.slice(0, -3).trim();
+    if (stripped === "KEY_VALUE_START") {
+      inBlock = true;
+      continue;
+    }
+    if (stripped === "KEY_VALUE_END") break;
+    if (
+      !inBlock ||
+      !stripped ||
+      stripped.startsWith("#") ||
+      !stripped.includes(":")
+    )
+      continue;
+    const [key, ...rest] = stripped.split(":");
+    metadata[key.trim()] = rest.join(":").trim();
+  }
+  return metadata;
 }
 
 // --- PostHog ---
 
 async function posthogQuery(query: string): Promise<any> {
   if (!POSTHOG_API_KEY) return null;
-  const res = await fetch(`${POSTHOG_BASE}/api/projects/${POSTHOG_PROJECT_ID}/query/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${POSTHOG_API_KEY}`,
-      'Content-Type': 'application/json',
+  const res = await fetch(
+    `${POSTHOG_BASE}/api/projects/${POSTHOG_PROJECT_ID}/query/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${POSTHOG_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      // This route has its own fetch (bypasses lib/posthog's posthogFetch), so
+      // it applies the same shared row-limit guard directly — the version×event
+      // query has no LIMIT and 5 events × ~40-80 versions exceeds the silent
+      // default 100, dropping per-version counts to 0 (#10190).
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
+      cache: "no-store",
     },
-    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
-    cache: 'no-store',
-  });
+  );
   if (!res.ok) {
     const text = await res.text();
     console.error(`PostHog query error ${res.status}: ${text}`);
@@ -80,14 +141,20 @@ interface VersionMetrics {
 }
 
 async function fetchPostHogMetrics(
-  versions: string[]
+  versions: string[],
 ): Promise<Map<string, VersionMetrics>> {
   const results = new Map<string, VersionMetrics>();
   if (!POSTHOG_API_KEY || versions.length === 0) return results;
 
   // Initialize all versions
   for (const v of versions) {
-    results.set(v, { crashes: 0, launches: 0, feedbacks: 0, brokens: 0, resets: 0 });
+    results.set(v, {
+      crashes: 0,
+      launches: 0,
+      feedbacks: 0,
+      brokens: 0,
+      resets: 0,
+    });
   }
 
   // Single query: counts per event per version, last 60 days
@@ -117,11 +184,21 @@ async function fetchPostHogMetrics(
     if (!version || !results.has(version)) continue;
     const m = results.get(version)!;
     switch (event) {
-      case 'App Crash Detected': m.crashes = count; break;
-      case 'App Launched': m.launches = count; break;
-      case 'Feedback Submitted': m.feedbacks = count; break;
-      case 'Screen Capture Broken Detected': m.brokens = count; break;
-      case 'Screen Capture Reset Clicked': m.resets = count; break;
+      case "App Crash Detected":
+        m.crashes = count;
+        break;
+      case "App Launched":
+        m.launches = count;
+        break;
+      case "Feedback Submitted":
+        m.feedbacks = count;
+        break;
+      case "Screen Capture Broken Detected":
+        m.brokens = count;
+        break;
+      case "Screen Capture Reset Clicked":
+        m.resets = count;
+        break;
     }
   }
 
@@ -130,9 +207,10 @@ async function fetchPostHogMetrics(
 
 // --- Rating + Summary ---
 
-function computeRatingAndSummary(
-  m: VersionMetrics
-): { rating: number; summary: string } {
+function computeRatingAndSummary(m: VersionMetrics): {
+  rating: number;
+  summary: string;
+} {
   const crashRate = m.launches > 0 ? m.crashes / m.launches : 0;
   const issues: string[] = [];
   let score = 5.0;
@@ -170,7 +248,7 @@ function computeRatingAndSummary(
     issues.push(`${m.feedbacks} user complaints`);
   } else if (m.feedbacks > 0) {
     score -= 0.25;
-    issues.push(`${m.feedbacks} user complaint${m.feedbacks === 1 ? '' : 's'}`);
+    issues.push(`${m.feedbacks} user complaint${m.feedbacks === 1 ? "" : "s"}`);
   }
 
   // Reset clicks
@@ -183,12 +261,12 @@ function computeRatingAndSummary(
 
   let summary: string;
   if (m.launches === 0) {
-    summary = 'No usage data yet';
+    summary = "No usage data yet";
     score = 0;
   } else if (issues.length === 0) {
     summary = `Clean release — ${m.launches} sessions, no significant issues`;
   } else {
-    summary = issues.join(', ');
+    summary = issues.join(", ");
     // Capitalize first letter
     summary = summary.charAt(0).toUpperCase() + summary.slice(1);
   }
@@ -204,21 +282,37 @@ export async function GET(request: NextRequest) {
 
   let github_error: string | null = null;
   let posthog_error: string | null = null;
+  let appcast_error: string | null = null;
 
-  // 1. GitHub releases
+  const [githubResult, appcastResult] = await Promise.allSettled([
+    fetchGithubReleases(),
+    fetchBetaAppcast(),
+  ]);
+
   let githubReleases: any[] = [];
-  try {
-    githubReleases = await fetchGithubReleases();
-  } catch (err: any) {
-    github_error = err?.message || String(err);
+  if (githubResult.status === "fulfilled") {
+    githubReleases = githubResult.value;
+  } else {
+    github_error = githubResult.reason?.message || String(githubResult.reason);
     return NextResponse.json(
       { releases: [], github_error, posthog_error: null, partial: true },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
+  let liveBetaBuild: number | null = null;
+  if (appcastResult.status === "fulfilled") {
+    liveBetaBuild = newestSparkleVersion(appcastResult.value);
+  } else {
+    appcast_error = appcastResult.reason?.message || String(appcastResult.reason);
+  }
+
   const desktopReleases = githubReleases
-    .filter((r) => typeof r.tag_name === 'string' && r.tag_name.endsWith(RELEASE_TAG_SUFFIX))
+    .filter(
+      (r) =>
+        typeof r.tag_name === "string" &&
+        r.tag_name.endsWith(RELEASE_TAG_SUFFIX),
+    )
     .filter((r) => parseVersion(r.tag_name) !== null)
     .slice(0, RELEASE_LIMIT);
 
@@ -236,21 +330,46 @@ export async function GET(request: NextRequest) {
   const rows: ReleaseRow[] = desktopReleases.map((r) => {
     const version = parseVersion(r.tag_name)!;
     const m = metricsMap.get(version);
-    const crashRate = m && m.launches > 0 ? m.crashes / m.launches : null;
-    const { rating, summary } = m ? computeRatingAndSummary(m) : { rating: null, summary: null };
+    const { rating, summary } = m
+      ? computeRatingAndSummary(m)
+      : { rating: null, summary: null };
+    const metadata = parseReleaseMetadata(r.body);
+    const channelRaw = metadata.channel;
+    const channel: DesktopReleaseChannel =
+      channelRaw === "candidate" ||
+      channelRaw === "beta" ||
+      channelRaw === "stable"
+        ? channelRaw
+        : null;
+    const stableCandidate = desktopStableCandidateFromMetadata(metadata, {
+      releaseTag: r.tag_name,
+    });
+    const build = tagBuildNumber(r.tag_name);
+    const betaLive =
+      liveBetaBuild !== null && build !== null && build === liveBetaBuild;
 
     return {
       version,
       tag: r.tag_name,
       published_at: r.published_at,
       html_url: r.html_url,
-      crash_rate: crashRate,
+      crash_rate: m && m.launches > 0 ? m.crashes / m.launches : null,
       crash_count: m?.crashes ?? null,
       session_count: m?.launches ?? null,
       feedback_count: m?.feedbacks ?? null,
       broken_count: m?.brokens ?? null,
       rating,
       summary,
+      beta_live: betaLive,
+      stable_candidate: stableCandidate.complete,
+      stable_candidate_at: stableCandidate.nominatedAt,
+      stable_candidate_by: stableCandidate.nominatedBy,
+      lifecycle_state: desktopReleaseLifecycle(
+        channel,
+        betaLive,
+        stableCandidate,
+      ),
+      channel,
     };
   });
 
@@ -258,6 +377,7 @@ export async function GET(request: NextRequest) {
     releases: rows,
     github_error: null,
     posthog_error,
-    partial: posthog_error !== null,
+    appcast_error,
+    partial: posthog_error !== null || appcast_error !== null,
   });
 }

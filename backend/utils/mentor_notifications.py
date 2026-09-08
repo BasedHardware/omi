@@ -115,7 +115,12 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
 
         text = segment['text'].strip()
         if text:
-            timestamp = segment.get('start', 0) or current_time
+            # `start` is an offset into the recording, so the first segment of every
+            # conversation is 0.0 — falsy but perfectly valid. `or current_time` replaced
+            # it with wall-clock time, which sorted the opening line last (and broke the
+            # 2-second coalescing below). Only a genuinely absent start should fall back.
+            start_offset = segment.get('start')
+            timestamp = current_time if start_offset is None else start_offset
             is_user = segment.get('is_user', False)
 
             # Count words after silence

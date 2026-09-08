@@ -1,0 +1,35 @@
+{
+  "name": "@basedhardware/omi-device",
+  "version": "0.1.0",
+  "description": "Omi device BLE protocol + optional noble transport + STT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@stoprocent/noble": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@stoprocent/noble": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "@stoprocent/noble": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}

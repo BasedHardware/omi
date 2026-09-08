@@ -1,23 +1,77 @@
 import json
 import logging
 import os
+from collections.abc import Mapping
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
-logging.basicConfig(level=logging.INFO)
+from utils.logging_config import configure_split_stream_logging
+
+# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
+configure_split_stream_logging(level=logging.INFO)
 
 import firebase_admin
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
+from firebase_admin import credentials
 
 from routers import pusher, metrics
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
+from utils.executors import drain_background_tasks, log_executor_health, start_background_task
+from utils.readiness import ReadinessGate
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
+    firebase_credentials = credentials.Certificate(service_account_info)
+    firebase_admin_sdk: Any = firebase_admin
+    firebase_admin_sdk.initialize_app(firebase_credentials)
 else:
-    firebase_admin.initialize_app()
+    firebase_admin_sdk = firebase_admin
+    firebase_admin_sdk.initialize_app()
 
-app = FastAPI()
+
+def _validate_static_capabilities(env: Mapping[str, str] | None = None) -> None:
+    """Reject a Pusher revision that cannot complete its mandatory finalizer.
+
+    This is a static configuration admission check only. Transient memory or
+    datastore availability must not flap process readiness.
+    """
+
+    memory_mode = rollout_mode_env_value(env)
+    if memory_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
+        raise RuntimeError(
+            'pusher static capability admission failed: '
+            'conversation.finalize.persisted requires memory.canonical.mutate'
+        )
+
+
+async def startup_event() -> None:
+    _validate_static_capabilities()
+    start_background_task(log_executor_health(), name='pusher:executor_health')
+
+
+async def shutdown_event() -> None:
+    # Defense-in-depth: close readiness FIRST so the LB stops sending NEW traffic
+    # even if the chart preStop hook did not run. Existing in-flight sessions are
+    # then drained by drain_background_tasks within the bounded grace period.
+    ReadinessGate.begin_drain()
+    await drain_background_tasks(timeout=10.0)
+    await close_all_clients()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    del app
+    await startup_event()
+    try:
+        yield
+    finally:
+        await shutdown_event()
+
+
+app = FastAPI(lifespan=lifespan)
 app.include_router(pusher.router)
 app.include_router(metrics.router)
 
@@ -27,11 +81,31 @@ for path in paths:
         os.makedirs(path)
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    await close_all_clients()
-
-
 @app.get('/health')
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+@app.get('/ready')
+async def ready() -> Response:
+    # Readiness for the LB: 200 while serving new traffic, 503 once drain begins.
+    # Distinct from /health (liveness), which stays 200 as long as the process is alive.
+    if ReadinessGate.is_serving():
+        return JSONResponse(content={"status": "ready"}, status_code=200)
+    return JSONResponse(content={"status": "draining"}, status_code=503)
+
+
+@app.post('/__internal/drain')
+async def drain(request: Request) -> Response:
+    # Trust boundary: accept ONLY loopback peers (the preStop hook curls this from
+    # within the pod). The barrier is request.client.host being 127.0.0.1/::1, NOT
+    # network isolation: the Ingress path:/ Prefix does route this path, but an
+    # off-pod caller (internal LB) presents a non-loopback peer and is 403'd. This
+    # relies on uvicorn NOT running --proxy-headers, so request.client.host is the
+    # real TCP peer rather than a spoofable X-Forwarded-For.
+    client_host = request.client.host if request.client else None
+    if client_host not in {'127.0.0.1', '::1'}:
+        return Response(status_code=403)
+    # Idempotent: safe to call from both preStop and the lifespan shutdown path.
+    ReadinessGate.begin_drain()
+    return JSONResponse(content={"status": "draining"}, status_code=200)

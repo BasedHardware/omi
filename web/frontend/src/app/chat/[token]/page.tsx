@@ -1,5 +1,6 @@
 import getSharedChat from '@/src/actions/chat/get-shared-chat';
 import envConfig from '@/src/constants/envConfig';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -10,13 +11,14 @@ interface ChatParams {
 }
 
 interface ChatPageProps {
-  params: ChatParams;
+  params: Promise<ChatParams>;
 }
 
 export async function generateMetadata(
-  { params }: { params: ChatParams },
+  props: { params: Promise<ChatParams> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const params = await props.params;
   const prevData = (await parent) as Metadata;
   let data: { sender_name?: string; count?: number } | null = null;
 
@@ -61,16 +63,7 @@ export async function generateMetadata(
 }
 
 function getPlatformLink(userAgent: string, token: string) {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  return isAndroid
-    ? `intent://h.omi.me/chat/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
-        'https://play.google.com/store/apps/details?id=com.friend.ios',
-      )};end`
-    : isIOS
-      ? `omi://h.omi.me/chat/${token}`
-      : 'https://omi.me';
+  return getOmiPlatformDeepLink(userAgent, `chat/${token}`);
 }
 
 function formatTimestamp(timestamp: string | null) {
@@ -91,14 +84,15 @@ function formatTimestamp(timestamp: string | null) {
   });
 }
 
-export default async function SharedChatPage({ params }: ChatPageProps) {
+export default async function SharedChatPage(props: ChatPageProps) {
+  const params = await props.params;
   const token = params.token;
   const data = await getSharedChat(token);
   if (!data) {
     notFound();
   }
 
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent, token);
 
   return (

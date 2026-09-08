@@ -8,11 +8,13 @@ Covers:
 5. Completion notification fires for shared tasks
 """
 
+import importlib.util
 import json
 import os
 import sys
 import types
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 os.environ.setdefault(
@@ -40,6 +42,7 @@ for sub in [
     "tasks",
     "trends",
     "action_items",
+    "action_items_cache",
     "folders",
     "calendar_meetings",
     "vector_db",
@@ -47,14 +50,37 @@ for sub in [
     "llm_usage",
     "_client",
     "chat",
+    "chat_first_intents",
+    "task_intelligence_control",
     "goals",
     "knowledge_graph",
     "daily_summaries",
     "mem_db",
     "notifications",
+    "workstreams",
+    "firestore_transaction_retry",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
+
+sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted = type(
+    "FirestoreContentionExhausted",
+    (RuntimeError,),
+    {},
+)
+sys.modules["database.task_intelligence_control"].get_task_workflow_control = MagicMock()
+
+# The action-items router imports the list-cache seams at module scope. Keep
+# this sharing test's database package stubbed and provide inert implementations
+# for the unrelated list endpoint cache.
+action_items_cache_mod = sys.modules["database.action_items_cache"]
+action_items_cache_mod.compute_etag = MagicMock()
+action_items_cache_mod.get_action_items_list_version = MagicMock(return_value=None)
+action_items_cache_mod.if_none_match_matches = MagicMock(return_value=False)
+action_items_cache_mod.list_cache_key = MagicMock()
+action_items_cache_mod.list_cache_ttl_seconds = MagicMock(return_value=0)
+action_items_cache_mod.read_cached_list = MagicMock(return_value=None)
+action_items_cache_mod.write_cached_list = MagicMock()
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]
@@ -80,6 +106,8 @@ notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
 notif_mod.send_action_item_update_message = MagicMock()
 notif_mod.send_action_item_deletion_message = MagicMock()
+notif_mod.send_action_items_batch_deletion_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 _stub_module("utils.task_sync")
 sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
@@ -87,6 +115,7 @@ sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
 # Stub redis_db.r so Redis helper tests can patch it
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.r = MagicMock()
+redis_mod.check_rate_limit = MagicMock(return_value=(True, 0, 0))
 redis_mod.try_catch_decorator = lambda f: f
 redis_mod.TASK_SHARE_TTL = 60 * 60 * 24 * 30
 redis_mod.json = __import__("json")
@@ -94,6 +123,7 @@ redis_mod.json = __import__("json")
 # Stub database.users with get_user_profile (legacy — still needed by other imports)
 users_mod = sys.modules["database.users"]
 users_mod.get_user_profile = MagicMock(return_value={"name": "TestUser"})
+sys.modules["database.workstreams"].get_workstream_goal_id = MagicMock(return_value=None)
 
 # Stub database.auth with get_user_name (used by utils.users.get_user_display_name)
 auth_db_mod = _stub_module("database.auth")
@@ -107,8 +137,31 @@ utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
+# The action-items router wraps its list auth dependency at module level:
+#   Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list"))
+# so the stub has to expose it or importing the router raises AttributeError
+# during collection. Pass the dependency straight through: these tests assert
+# sharing behavior, and the real wrapper only adds a Redis rate-limit check.
+sys.modules["utils.other.endpoints"].with_rate_limit = lambda auth_dependency, policy_name: auth_dependency
+
+# The action-items router imports the list-read budget seam at module level
+# (#11831). Delegate the stubbed submodule to the real (stdlib-only) module so
+# the import binds real symbols without pulling heavy dependencies.
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 
 import database.redis_db as redis_db
+import routers.action_items as action_items_router
 from routers.action_items import (
     share_action_items,
     get_shared_action_items,
@@ -667,7 +720,19 @@ class TestSyncBatchSkipsLocked:
                 {"id": "t1", "description": "OK", "is_locked": False},
                 {"id": "t2", "description": "Secret", "is_locked": True},
             ]
-            mock_db.batch_sync_update_action_items = MagicMock()
+            batch_result = types.SimpleNamespace(
+                updated_ids=["t1"],
+                missing_ids=[],
+                noop_ids=[],
+                updated_count=1,
+            )
+            batch_result.model = lambda: {
+                "updated_count": 1,
+                "updated_ids": ["t1"],
+                "missing_ids": [],
+                "noop_ids": [],
+            }
+            mock_db.batch_sync_update_action_items = MagicMock(return_value=batch_result)
 
             request = SyncBatchRequest(
                 items=[
@@ -683,3 +748,45 @@ class TestSyncBatchSkipsLocked:
         call_args = mock_db.batch_sync_update_action_items.call_args[0]
         assert len(call_args[1]) == 1
         assert call_args[1][0]['id'] == 't1'
+
+    def test_sync_batch_distinguishes_explicit_due_date_clear_from_omission(self):
+        batch_result = types.SimpleNamespace(
+            updated_ids=["t1"],
+            missing_ids=[],
+            noop_ids=[],
+            updated_count=1,
+        )
+        batch_result.model = lambda: {
+            "updated_count": 1,
+            "updated_ids": ["t1"],
+            "missing_ids": [],
+            "noop_ids": [],
+        }
+
+        with patch.object(action_items_router, 'action_items_db') as mock_db:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Clear the deadline",
+                    "is_locked": False,
+                },
+                {
+                    "id": "t2",
+                    "description": "Leave the deadline unchanged",
+                    "is_locked": False,
+                },
+            ]
+            mock_db.batch_sync_update_action_items.return_value = batch_result
+            request = action_items_router.SyncBatchRequest(
+                items=[
+                    action_items_router.SyncBatchItem.model_validate({'id': 't1', 'due_at': None}),
+                    action_items_router.SyncBatchItem.model_validate({'id': 't2'}),
+                ]
+            )
+
+            action_items_router.sync_batch_update(request, uid='test-uid')
+
+        updates = mock_db.batch_sync_update_action_items.call_args.args[1]
+        assert updates == [
+            {'id': 't1', 'data': {'due_at': None}}
+        ], 'an explicit null due_at must reach storage instead of being treated as an omitted field'

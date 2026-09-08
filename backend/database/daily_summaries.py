@@ -16,18 +16,85 @@ users/{uid}/daily_summaries/{summary_id}
     ├── stats: DayStats
     ├── tomorrow_focus: str
     └── overall_sentiment: str
+
+users/{uid}/desktop_daily_usage/{date}__{client_device_id}
+    ├── date/timezone/client_device_id
+    ├── watching_seconds/listening_seconds
+    ├── proactive_cards_shown/proactive_cards_acted/ptt_turns
+    └── updated_at
 """
 
-from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
+
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
+from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
+DESKTOP_DAILY_USAGE_COLLECTION = 'desktop_daily_usage'
+DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
+    'watching_seconds',
+    'listening_seconds',
+    'proactive_cards_shown',
+    'proactive_cards_acted',
+    'ptt_turns',
+)
 
 
-def create_daily_summary(uid: str, summary_data: dict) -> str:
+def upsert_desktop_daily_usage(
+    uid: str,
+    date: str,
+    timezone_name: str,
+    client_device_id: str,
+    counters: Dict[str, int],
+) -> None:
+    """Atomically merge one device's running daily counters by maximum value."""
+    user_ref = db.collection('users').document(uid)
+    usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def merge_running_totals(write_transaction: Any) -> None:
+        snapshot = usage_ref.get(transaction=write_transaction)
+        existing_raw = snapshot.to_dict() if getattr(snapshot, 'exists', False) else {}
+        existing = existing_raw if isinstance(existing_raw, dict) else {}
+        payload: Dict[str, Any] = {
+            'date': date,
+            'timezone': timezone_name,
+            'client_device_id': client_device_id,
+            'updated_at': datetime.now(timezone.utc),
+        }
+        for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
+            previous = existing.get(field, 0)
+            previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
+            payload[field] = max(previous_value, counters[field])
+        write_transaction.set(usage_ref, payload)
+
+    merge_running_totals(transaction)
+
+
+def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
+    """Sum every device's counters for one local calendar date.
+
+    A date with no usage documents returns every counter as zero.
+    """
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', date))
+    totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
+    for doc in query.stream():
+        raw = doc.to_dict()
+        if not isinstance(raw, dict):
+            continue
+        for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
+            value = raw.get(field)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                totals[field] += value
+    return totals
+
+
+def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     """
     Create a new daily summary document.
 
@@ -44,7 +111,7 @@ def create_daily_summary(uid: str, summary_data: dict) -> str:
     return summary_data['id']
 
 
-def get_daily_summary(uid: str, summary_id: str) -> Optional[dict]:
+def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     """
     Get a single daily summary by ID.
 
@@ -59,12 +126,13 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[dict]:
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     doc = summary_ref.get()
 
-    if doc.exists:
-        return doc.to_dict()
+    if getattr(doc, "exists", False):
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     return None
 
 
-def get_daily_summary_by_date(uid: str, date: str) -> Optional[dict]:
+def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     """
     Get a daily summary by date (YYYY-MM-DD format).
 
@@ -80,7 +148,8 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[dict]:
 
     docs = list(query.stream())
     if docs:
-        return docs[0].to_dict()
+        raw: object = docs[0].to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     return None
 
 
@@ -90,7 +159,7 @@ def get_daily_summaries(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Get list of daily summaries for a user, ordered by date descending.
 
@@ -115,8 +184,29 @@ def get_daily_summaries(
     query = query.order_by('date', direction=firestore.Query.DESCENDING)
     query = query.limit(limit).offset(offset)
 
-    summaries = [doc.to_dict() for doc in query.stream()]
+    summaries: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        raw: object = doc.to_dict()
+        if isinstance(raw, dict):
+            summaries.append(cast(Dict[str, Any], raw))
     return summaries
+
+
+def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]) -> None:
+    """
+    Overwrite an existing daily summary in place, preserving the original id.
+
+    Used by the regenerate flow so that re-running generation replaces the
+    contents of the summary the user is looking at instead of spawning a
+    duplicate doc for the same date.
+    """
+    user_ref = db.collection('users').document(uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    # Force id back to the existing doc id: the generator always allocates a
+    # fresh UUID, and we don't want that leaking into the stored payload
+    # where readers key off summary['id'].
+    payload: Dict[str, Any] = {**summary_data, 'id': summary_id}
+    summary_ref.set(payload)
 
 
 def delete_daily_summary(uid: str, summary_id: str) -> bool:
@@ -133,7 +223,14 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.delete()
+    redis_db.remove_daily_summary_to_uid(summary_id)
     return True
+
+
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
+    user_ref = db.collection('users').document(uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref.update({'visibility': visibility})
 
 
 def get_summaries_count(uid: str) -> int:
@@ -149,4 +246,4 @@ def get_summaries_count(uid: str) -> int:
     user_ref = db.collection('users').document(uid)
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
-    return result[0][0].value
+    return int(result[0][0].value or 0)

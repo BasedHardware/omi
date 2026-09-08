@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import time
 
 import httpx
@@ -163,11 +165,22 @@ def test_exchange_code_for_custom_token_happy_path(monkeypatch) -> None:
         "https://api.test.omi.local",
         code="auth_code",
         redirect_uri="http://127.0.0.1:5555/callback",
+        code_verifier="verifier-123",
     )
     assert token == "ct_abc"
     assert captured["url"] == "https://api.test.omi.local/v1/auth/token"
     assert captured["data"]["grant_type"] == "authorization_code"
     assert captured["data"]["use_custom_token"] == "true"
+    assert captured["data"]["code_verifier"] == "verifier-123"
+
+
+def test_generate_pkce_pair_uses_s256_challenge() -> None:
+    code_verifier, code_challenge = oauth._generate_pkce_pair()
+    expected = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    )
+    assert 43 <= len(code_verifier) <= 128
+    assert code_challenge == expected
 
 
 def test_exchange_code_raises_on_non_200(monkeypatch) -> None:
@@ -177,7 +190,10 @@ def test_exchange_code_raises_on_non_200(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     with pytest.raises(AuthError):
         oauth._exchange_code_for_custom_token(
-            "https://api.test.omi.local", code="bad", redirect_uri="http://127.0.0.1:5555/callback"
+            "https://api.test.omi.local",
+            code="bad",
+            redirect_uri="http://127.0.0.1:5555/callback",
+            code_verifier="verifier-123",
         )
 
 
@@ -188,7 +204,10 @@ def test_exchange_code_raises_when_custom_token_missing(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     with pytest.raises(AuthError) as info:
         oauth._exchange_code_for_custom_token(
-            "https://api.test.omi.local", code="ok", redirect_uri="http://127.0.0.1:5555/callback"
+            "https://api.test.omi.local",
+            code="ok",
+            redirect_uri="http://127.0.0.1:5555/callback",
+            code_verifier="verifier-123",
         )
     assert "custom token" in str(info.value).lower()
 
@@ -215,3 +234,76 @@ def test_firebase_signin_raises_on_missing_tokens(monkeypatch) -> None:
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     with pytest.raises(AuthError):
         oauth._firebase_signin_with_custom_token("ct")
+
+
+# ---- Firebase session -> dev API key exchange -----------------------------
+
+
+def test_exchange_firebase_token_mints_key_and_replaces_own(monkeypatch) -> None:
+    calls: dict = {"deleted": [], "post": None}
+    name = oauth._cli_key_name()
+
+    def fake_get(self, url, **kwargs):  # noqa: ANN001
+        # One key that's ours (exact name match) + one unrelated key.
+        return httpx.Response(
+            200,
+            json=[
+                {"id": "ours-1", "name": name},
+                {"id": "other", "name": "someone elses key"},
+            ],
+        )
+
+    def fake_delete(self, url, **kwargs):  # noqa: ANN001
+        calls["deleted"].append(url)
+        return httpx.Response(204)
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        calls["post"] = (url, kwargs.get("json"), kwargs.get("headers"))
+        return httpx.Response(200, json={"id": "new", "name": name, "key": "omi_dev_minted"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(httpx.Client, "delete", fake_delete)
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    key = oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local/", "fb_id_tok")
+
+    assert key == "omi_dev_minted"
+    # Only our own key was deleted; the unrelated one was left alone.
+    assert calls["deleted"] == ["https://api.test.omi.local/v1/dev/keys/ours-1"]
+    url, body, headers = calls["post"]
+    assert url == "https://api.test.omi.local/v1/dev/keys"
+    assert body["name"] == name
+    assert body["scopes"] == oauth._CLI_KEY_SCOPES
+    assert headers["Authorization"] == "Bearer fb_id_tok"
+
+
+def test_exchange_firebase_token_proceeds_when_listing_fails(monkeypatch) -> None:
+    def fake_get(self, url, **kwargs):  # noqa: ANN001
+        raise httpx.ConnectError("listing unavailable")
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json={"key": "omi_dev_after_failed_list"})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    key = oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert key == "omi_dev_after_failed_list"
+
+
+def test_exchange_firebase_token_raises_on_non_200(monkeypatch) -> None:
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
+    monkeypatch.setattr(httpx.Client, "post", lambda self, url, **kw: httpx.Response(403, json={"detail": "nope"}))
+    with pytest.raises(AuthError) as info:
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert "create an api key" in str(info.value).lower()
+
+
+def test_exchange_firebase_token_raises_when_key_field_missing(monkeypatch) -> None:
+    monkeypatch.setattr(httpx.Client, "get", lambda self, url, **kw: httpx.Response(200, json=[]))
+    monkeypatch.setattr(
+        httpx.Client, "post", lambda self, url, **kw: httpx.Response(200, json={"id": "x", "name": "y"})
+    )
+    with pytest.raises(AuthError) as info:
+        oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
+    assert "missing the api key" in str(info.value).lower()

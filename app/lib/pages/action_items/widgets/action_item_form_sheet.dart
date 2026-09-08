@@ -15,6 +15,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
   final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
@@ -207,7 +208,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     if (result != null && result['url'] != null) {
       final url = result['url'] as String;
       HapticFeedback.lightImpact();
-      await Share.share(url);
+      await Share.share(url, sharePositionOrigin: shareSheetOrigin());
       PlatformManager.instance.analytics.track(
         'Action Item Shared',
         properties: {'actionItemId': widget.actionItem!.id},
@@ -425,7 +426,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

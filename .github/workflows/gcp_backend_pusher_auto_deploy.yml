@@ -3,9 +3,42 @@ name: Auto Deploy Backend Pusher to GKE (Development)
 on:
   push:
     branches: [ "main" ]
+    # Keep this list in lockstep with the final-stage COPY source closure
+    # emitted by backend/scripts/verify_pusher_source_closure.py. A change to
+    # any copied source invalidates the development qualification artifact.
     paths:
+      - 'backend/config/**'
+      - 'backend/database/**'
+      - 'backend/models/**'
+      - 'backend/routers/**'
+      - 'backend/services/**'
+      - 'backend/testing/parity_pack_v0/**'
+      - 'backend/utils/**'
       - 'backend/pusher/**'
       - 'backend/charts/pusher/**'
+      - '.dockerignore'
+      - 'backend/scripts/verify_pusher_source_closure.py'
+      - 'backend/scripts/verify_pusher_live_deployment_gate.py'
+      - 'backend/scripts/verify_pusher_dev_observability.py'
+      - 'backend/scripts/verify_pusher_promotion_evidence.py'
+      - 'backend/scripts/pusher_release_receipt.py'
+      - 'backend/scripts/pusher_semantic_probe.py'
+      - 'backend/scripts/pusher_prod_canary.py'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
+      - 'backend/scripts/runtime_env_capability_contracts.py'
+      - 'backend/scripts/runtime_env_validation/**'
+      - 'backend/scripts/validate-backend-runtime-env.py'
+      - 'backend/deploy/runtime_env/**'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'backend/testing/release_fixtures/transcription-release-probe.json'
+      - 'backend/testing/release_fixtures/transcription-release-probe.wav'
+      - '.github/workflows/gcp_backend_pusher_auto_deploy.yml'
+      - '.github/workflows/gcp_backend_pusher.yml'
+
+# Share the development pusher lock with manual deployments.
+concurrency:
+  group: deploy-gke-pusher-development
+  cancel-in-progress: false
 
 env:
   SERVICE: pusher
@@ -25,38 +58,182 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Login to GCR
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
+      - name: Validate Pusher runtime capability admission before publishing
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env "${{ vars.ENV }}"
+
+      - name: Verify live finalization alert route before publishing
+        env:
+          # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
+          # token belongs to the TV Cloud Run instance.
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase prepublish
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+          PUSHER_IMAGE_REPOSITORY="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}"
+          docker build -t "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}" -f backend/pusher/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/pusher/Dockerfile \
+            --image "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}"
+          docker push "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}"
+          PUSHER_IMAGE_DIGEST="$(gcloud container images describe "${PUSHER_IMAGE_REPOSITORY}:${GITHUB_SHA::7}" --format='value(image_summary.digest)')"
+          if [[ ! "$PUSHER_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Pusher image did not resolve to an exact digest after push." >&2
+            exit 1
+          fi
+          {
+            echo "PUSHER_IMAGE_REPOSITORY=$PUSHER_IMAGE_REPOSITORY"
+            echo "PUSHER_IMAGE_DIGEST=$PUSHER_IMAGE_DIGEST"
+            echo "PUSHER_IMAGE_REFERENCE=${PUSHER_IMAGE_REPOSITORY}@${PUSHER_IMAGE_DIGEST}"
+          } >> "$GITHUB_ENV"
 
-      - name: Connect to GKE cluster
+      - name: Verify Pusher static rollout controls
         run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+          python3 backend/scripts/verify_pusher_rollout_budget.py
+          python3 backend/scripts/verify_pusher_rollout_gate.py preflight
+          python3 backend/scripts/verify_pusher_cohost_env_diff.py
+          python3 backend/scripts/verify_pusher_dev_observability.py
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Preflight pusher ConfigMap and Secret references
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
+      - name: Verify live Pusher surge capacity and digest render
+        run: |
+          python3 backend/scripts/verify_pusher_live_deployment_gate.py \
+            --environment ${{ vars.ENV }} \
+            --namespace ${{ vars.ENV }}-omi-backend \
+            --image "$PUSHER_IMAGE_REFERENCE"
 
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
+          # Must cover the chart-derived Pusher rollout budget; the CI guard
+          # recalculates the required value from committed chart inputs.
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
+
+      - name: Record exact live development Pusher deployment receipt
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-live \
+            --environment "${{ vars.ENV }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --repository "$PUSHER_IMAGE_REPOSITORY" \
+            --digest "$PUSHER_IMAGE_DIGEST" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-deployment-receipt.json
+
+      - name: Verify deployed development finalization telemetry and alert route
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-postrollout-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url https://monitor.omiapi.com \
+            --token-file "$token_file" \
+            --phase postrollout \
+            --attempts 12
+
+      - name: Probe deployed development Pusher finalization semantics
+        env:
+          FIREBASE_SIGNER_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m pip install -q websockets==12.0
+          token_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-token.XXXXXX")"
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-pusher-probe-signer.XXXXXX")"
+          cleanup() {
+            rm -f "$token_file" "$signer_file"
+            unset FIREBASE_SIGNER_CREDENTIALS
+          }
+          trap cleanup EXIT
+          if [[ -z "$FIREBASE_SIGNER_CREDENTIALS" ]]; then
+            echo "Development Pusher semantic probe requires the existing GCP_CREDENTIALS Firebase signer." >&2
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SIGNER_CREDENTIALS" > "$signer_file"
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "${{ vars.GCP_PROJECT_ID }}" \
+            --firebase-project based-hardware \
+            --signer-credentials-file "$signer_file" \
+            --token-output "$token_file"
+          rm -f "$signer_file"
+          python3 backend/scripts/pusher_semantic_probe.py \
+            --api-url https://api.omiapi.com \
+            --bearer-token-file "$token_file" \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --namespace "${{ vars.ENV }}-omi-backend" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output pusher-dev-semantic-probe.json
+
+      - name: Record development Pusher qualification evidence
+        run: |
+          python3 backend/scripts/pusher_release_receipt.py record-qualification \
+            --deployment-receipt pusher-dev-deployment-receipt.json \
+            --semantic-probe-evidence pusher-dev-semantic-probe.json \
+            --output pusher-dev-qualification.json
+
+      - name: Upload development Pusher qualification
+        uses: actions/upload-artifact@v7
+        with:
+          name: pusher-dev-qualification
+          path: |
+            pusher-dev-qualification.json
+            pusher-dev-deployment-receipt.json
+            pusher-dev-semantic-probe.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Show Output
-        run: echo "Pusher deployed to development environment"
+        run: echo "Pusher deployed and semantically qualified in development; production still requires a protected attributable-canary receipt"

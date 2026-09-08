@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { cn } from '@/lib/utils';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import Image from '@tschk/moonshine-next/image';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 
 interface LoginPanelProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
     try {
       await signInWithGoogle();
       onClose();
-      router.push('/conversations');
+      router.push('/home');
     } catch (err) {
       console.error('Google sign-in failed:', err);
       setError('Failed to sign in with Google. Please try again.');
@@ -40,7 +40,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
     try {
       await signInWithApple();
       onClose();
-      router.push('/conversations');
+      router.push('/home');
     } catch (err) {
       console.error('Apple sign-in failed:', err);
       setError('Failed to sign in with Apple. Please try again.');
@@ -73,11 +73,11 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
               'fixed right-0 top-0 h-full z-50',
               'w-full sm:w-[420px]',
               'bg-[#0B0F17] border-l border-white/10',
-              'flex flex-col shadow-2xl'
+              'flex flex-col shadow-2xl',
             )}
           >
-            {/* Subtle purple glow at top */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-primary/50 to-transparent" />
+            {/* Subtle glow at top */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
             {/* Close button */}
             <div className="absolute top-4 right-4 z-10">
@@ -104,9 +104,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       className="h-12 w-auto"
                     />
                   </div>
-                  <h2 className="text-2xl font-semibold text-white mb-2">
-                    Welcome back
-                  </h2>
+                  <h2 className="text-2xl font-semibold text-white mb-2">Welcome back</h2>
                   <p className="text-gray-400 text-sm">
                     Sign in to access your conversations, memories, and apps
                   </p>
@@ -129,7 +127,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       'bg-white text-gray-900 font-medium',
                       'hover:bg-gray-100 transition-all',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'shadow-lg shadow-white/5'
+                      'shadow-lg shadow-white/5',
                     )}
                   >
                     {isLoading === 'google' ? (
@@ -164,7 +162,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                       'w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl',
                       'bg-white/5 text-white font-medium border border-white/10',
                       'hover:bg-white/10 hover:border-white/20 transition-all',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {isLoading === 'apple' ? (
@@ -197,7 +195,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/terms"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-text-primary hover:text-text-secondary transition-colors"
                   >
                     Terms of Service
                   </a>{' '}
@@ -206,7 +204,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/privacy"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-text-primary hover:text-text-secondary transition-colors"
                   >
                     Privacy Policy
                   </a>
@@ -215,7 +213,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
             </div>
 
             {/* Bottom gradient accent */}
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-purple-primary/5 to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white/[0.05] to-transparent pointer-events-none" />
           </motion.div>
         </>
       )}

@@ -1,0 +1,11 @@
+{
+  "version": "0.11.597",
+  "date": "2026-07-02",
+  "changes": [
+    "Apps: fixed Installed and category filters and cached filter results for faster switching",
+    "Displays without a notch now get the full subagent experience: a status gem on the idle pill, an agents row on hover, and the same agent list and chat surface as notched displays",
+    "Onboarding: pressing Enter now activates available Continue actions",
+    "Unified the floating chat experience across notched and non-notched displays while keeping the compact pill on displays without a notch",
+    "Fixed memory labels appearing incorrectly after stale fetches or local cache updates"
+  ]
+}

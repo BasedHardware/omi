@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/device_speech_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 Future<Map> getLatestFirmwareVersion({
@@ -21,7 +22,7 @@ Future<Map> getLatestFirmwareVersion({
     return {};
   }
 
-  return jsonDecode(res.body);
+  return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();
 }
 
 Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async {
@@ -36,5 +37,5 @@ Future<Map> getStableFirmwareVersion({required String deviceModelNumber}) async 
     return {};
   }
 
-  return jsonDecode(res.body);
+  return wire.GeneratedFirmwareVersionResponse.fromJson(jsonDecode(res.body) as Map<String, dynamic>).toJson();
 }

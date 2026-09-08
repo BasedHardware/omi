@@ -1,11 +1,32 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<ActionItemsResponse> getActionItems({
+  int limit = 50,
+  int offset = 0,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+}) async {
+  return await tryGetActionItems(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+      ) ??
+      const ActionItemsResponse(actionItems: [], hasMore: false);
+}
+
+/// Returns null when the action-items request fails instead of conflating a failure with an empty list.
+Future<ActionItemsResponse?> tryGetActionItems({
   int limit = 50,
   int offset = 0,
   bool? completed,
@@ -28,16 +49,16 @@ Future<ActionItemsResponse> getActionItems({
     url += '&end_date=${endDate.toUtc().toIso8601String()}';
   }
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '', retries: 0);
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return null;
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return ActionItemsResponse.fromJson(jsonDecode(body));
+    return wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+    return null;
   }
 }
 
@@ -67,7 +88,7 @@ Future<ActionItemWithMetadata?> createActionItem({
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
+    return wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('createActionItem error ${response.statusCode}');
     return null;
@@ -131,7 +152,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
+    return wire.GeneratedActionItemResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('updateActionItem error ${response.statusCode}');
     return null;
@@ -166,9 +187,10 @@ Future<List<String>?> bulkDeleteActionItems(List<String> ids) async {
     return null;
   }
 
-  final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-  final deleted = (body['deleted_ids'] as List?)?.cast<String>() ?? const [];
-  return deleted;
+  final generated = wire.GeneratedBatchDeleteActionItemsResponse.fromJson(
+    jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+  );
+  return generated.deletedIds;
 }
 
 // Task sharing
@@ -184,7 +206,7 @@ Future<Map<String, dynamic>?> shareActionItems(List<String> taskIds) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedShareActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('shareActionItems error ${response.statusCode}');
     return null;
@@ -203,7 +225,7 @@ Future<Map<String, dynamic>?> getSharedActionItems(String token) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedSharedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('getSharedActionItems error ${response.statusCode}');
     return null;
@@ -222,7 +244,7 @@ Future<Map<String, dynamic>?> acceptSharedActionItems(String token) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedAcceptSharedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('acceptSharedActionItems error ${response.statusCode}');
     return null;
@@ -241,6 +263,7 @@ Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    wire.GeneratedBatchMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } else {
     Logger.debug('batchUpdateActionItems error ${response.statusCode}');
@@ -261,7 +284,7 @@ Future<PendingSyncResponse?> getPendingSyncItems({String platform = 'apple_remin
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return PendingSyncResponse.fromJson(jsonDecode(body));
+    return wire.GeneratedPendingSyncResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getPendingSyncItems error ${response.statusCode}');
     return null;
@@ -279,6 +302,7 @@ Future<bool> syncBatchUpdate(List<Map<String, dynamic>> items) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    wire.GeneratedBatchMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } else {
     Logger.debug('syncBatchUpdate error ${response.statusCode}');

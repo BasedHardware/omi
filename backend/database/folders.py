@@ -1,15 +1,19 @@
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Set, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
-from models.folder import Folder
+from database.document_ids import system_folder_doc_id
+
+logger = logging.getLogger(__name__)
 
 # System folders that are created for new users
-SYSTEM_FOLDERS = [
+SYSTEM_FOLDERS: List[Dict[str, Any]] = [
     {
         'name': 'Work',
         'category_mapping': 'work',
@@ -34,7 +38,7 @@ SYSTEM_FOLDERS = [
 ]
 
 # Map all categories to one of the 3 system folders
-CATEGORY_TO_FOLDER_MAPPING = {
+CATEGORY_TO_FOLDER_MAPPING: Dict[str, str] = {
     # Work folder - professional/business/career related
     'work': 'work',
     'business': 'work',
@@ -71,31 +75,62 @@ CATEGORY_TO_FOLDER_MAPPING = {
     'weather': 'social',
     'environment': 'social',
     'real': 'social',
-    'other': 'personal',
+    # 'other' is intentionally omitted: it is the catch-all category and routes to the
+    # user's default folder, not a category bucket (handled in resolve_category_folder_id, #4043).
 }
 
 
-def get_folders(uid: str) -> List[dict]:
+def resolve_category_folder_id(category: Optional[str], user_folders: List[dict]) -> Optional[str]:
+    """Folder id of the system folder that owns a conversation's category.
+
+    Every meaningful conversation category folds onto one of the three system buckets via
+    ``CATEGORY_TO_FOLDER_MAPPING``; this returns the user's folder for that bucket so AI
+    folder assignment can fall back to the category-aligned folder instead of the
+    catch-all default when the model is unsure (issue #4043). Returns None for the
+    catch-all ``other`` category (so genuinely uncertain conversations stay in the default
+    folder rather than Personal), when the category is unknown, or when the user has no
+    folder for that bucket (e.g. they deleted a system folder).
+    """
+    # 'other' is the catch-all category, not a meaningful topic. Treat it like a missing
+    # category so an uncertain conversation falls back to the user's default folder rather
+    # than the Personal bucket 'other' would otherwise fold onto (issue #4043).
+    if not category or str(category).lower() == 'other':
+        return None
+    bucket = CATEGORY_TO_FOLDER_MAPPING.get(str(category).lower())
+    if not bucket:
+        return None
+    for folder in user_folders or []:
+        if folder.get('category_mapping') == bucket:
+            return folder.get('id')
+    return None
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def get_folders(uid: str) -> List[Dict[str, Any]]:
     """Get all folders for a user, sorted by order."""
     user_ref = db.collection('users').document(uid)
     folders_ref = user_ref.collection('folders')
 
-    folders = []
+    folders: List[Dict[str, Any]] = []
     for doc in folders_ref.order_by('order').stream():
-        folder_data = doc.to_dict()
+        folder_data = _typed_doc(doc)
         folder_data['id'] = doc.id
         folders.append(folder_data)
 
     return folders
 
 
-def get_folder(uid: str, folder_id: str) -> Optional[dict]:
+def get_folder(uid: str, folder_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific folder by ID."""
     user_ref = db.collection('users').document(uid)
     folder_doc = user_ref.collection('folders').document(folder_id).get()
 
-    if folder_doc.exists:
-        folder_data = folder_doc.to_dict()
+    if getattr(folder_doc, "exists", False):
+        folder_data = _typed_doc(folder_doc)
         folder_data['id'] = folder_doc.id
         return folder_data
 
@@ -108,19 +143,19 @@ def create_folder(
     description: Optional[str] = None,
     color: Optional[str] = None,
     icon: Optional[str] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Create a new custom folder for a user."""
     user_ref = db.collection('users').document(uid)
     folders_ref = user_ref.collection('folders')
 
     # Get the highest order number
     existing_folders = list(folders_ref.order_by('order', direction=firestore.Query.DESCENDING).limit(1).stream())
-    max_order = existing_folders[0].to_dict().get('order', 0) if existing_folders else 0
+    max_order = _typed_doc(existing_folders[0]).get('order', 0) if existing_folders else 0
 
     folder_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
-    folder_data = {
+    folder_data: Dict[str, Any] = {
         'id': folder_id,
         'name': name,
         'description': description,
@@ -139,7 +174,7 @@ def create_folder(
     return folder_data
 
 
-def update_folder(uid: str, folder_id: str, update_data: dict) -> bool:
+def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool:
     """Update a folder's metadata."""
     user_ref = db.collection('users').document(uid)
     folder_ref = user_ref.collection('folders').document(folder_id)
@@ -160,33 +195,37 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
     folder_ref = user_ref.collection('folders').document(folder_id)
 
     # Find target folder
-    target_folder_id = move_to_folder_id
+    target_folder_id: Optional[str] = move_to_folder_id
     if not target_folder_id:
         # Find the default folder (usually 'Other')
         folders = get_folders(uid)
         default_folder = next((f for f in folders if f.get('is_default')), None)
         if default_folder:
-            target_folder_id = default_folder['id']
+            target_folder_id = str(default_folder['id'])
 
-    # Move all conversations from this folder to the target folder
-    if target_folder_id:
-        conversations_ref = user_ref.collection('conversations')
-        conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
+    # Repoint every conversation off this folder. target_folder_id is None for
+    # users with no default folder (accounts created after the 'Other' system
+    # folder was removed) — they get unfiled, not left pointing at the document
+    # deleted below. A stale pointer used to survive here and 500 every later
+    # move of that conversation.
+    conversations_ref = user_ref.collection('conversations')
+    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
 
-        batch = db.batch()
-        count = 0
-        for conv_doc in conversations:
-            batch.update(conv_doc.reference, {'folder_id': target_folder_id})
-            count += 1
-            if count >= 450:
-                batch.commit()
-                batch = db.batch()
-                count = 0
-
-        if count > 0:
+    batch = db.batch()
+    count = 0
+    for conv_doc in conversations:
+        batch.update(conv_doc.reference, {'folder_id': target_folder_id})
+        count += 1
+        if count >= 450:
             batch.commit()
+            batch = db.batch()
+            count = 0
 
-        # Update target folder count
+    if count > 0:
+        batch.commit()
+
+    # Update target folder count
+    if target_folder_id:
         update_folder_conversation_count(uid, target_folder_id)
 
     # Delete the folder
@@ -208,7 +247,7 @@ def reorder_folders(uid: str, folder_ids: List[str]) -> bool:
     return True
 
 
-def initialize_system_folders(uid: str) -> List[dict]:
+def initialize_system_folders(uid: str) -> List[Dict[str, Any]]:
     """
     Create system folders for a new user or user without folders.
     Returns the list of created folders.
@@ -221,12 +260,12 @@ def initialize_system_folders(uid: str) -> List[dict]:
     if existing:
         return get_folders(uid)
 
-    created_folders = []
+    created_folders: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
 
     for i, folder_config in enumerate(SYSTEM_FOLDERS):
-        folder_id = str(uuid.uuid4())
-        folder_data = {
+        folder_id = system_folder_doc_id(uid, str(folder_config['category_mapping']))
+        folder_data: Dict[str, Any] = {
             'id': folder_id,
             'name': folder_config['name'],
             'description': folder_config['description'],
@@ -252,7 +291,7 @@ def get_conversations_in_folder(
     limit: int = 100,
     offset: int = 0,
     include_discarded: bool = False,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """Get all conversations in a specific folder."""
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
@@ -265,9 +304,9 @@ def get_conversations_in_folder(
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
     query = query.offset(offset).limit(limit)
 
-    conversations = []
+    conversations: List[Dict[str, Any]] = []
     for doc in query.stream():
-        conv_data = doc.to_dict()
+        conv_data = _typed_doc(doc)
         conv_data['id'] = doc.id
         conversations.append(conv_data)
 
@@ -285,17 +324,19 @@ def move_conversation_to_folder(
 
     # Get the old folder_id to update counts
     conv_doc = conv_ref.get()
-    if not conv_doc.exists:
+    if not getattr(conv_doc, "exists", False):
         return False
 
-    old_folder_id = conv_doc.to_dict().get('folder_id')
+    old_folder_id = _typed_doc(conv_doc).get('folder_id')
 
-    # Update the conversation's folder_id
-    conv_ref.update({'folder_id': folder_id})
+    # Update the conversation's folder_id. folder_user_set marks this as an
+    # explicit user decision so processing upserts preserve it even when the
+    # user cleared the folder (folder_id None).
+    conv_ref.update({'folder_id': folder_id, 'folder_user_set': True})
 
     # Update folder counts
     if old_folder_id:
-        update_folder_conversation_count(uid, old_folder_id)
+        update_folder_conversation_count(uid, str(old_folder_id))
     if folder_id:
         update_folder_conversation_count(uid, folder_id)
 
@@ -317,20 +358,20 @@ def bulk_move_conversations_to_folder(
     conv_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
     conv_docs = db.get_all(conv_refs)
 
-    affected_folders = set()
+    affected_folders: Set[str] = set()
     batch = db.batch()
     count = 0
     moved = 0
 
     for conv_doc in conv_docs:
-        if conv_doc is None or not conv_doc.exists:
+        if conv_doc is None or not getattr(conv_doc, "exists", False):
             continue
 
-        old_folder_id = conv_doc.to_dict().get('folder_id')
+        old_folder_id = _typed_doc(conv_doc).get('folder_id')
         if old_folder_id:
-            affected_folders.add(old_folder_id)
+            affected_folders.add(str(old_folder_id))
 
-        batch.update(conv_doc.reference, {'folder_id': folder_id})
+        batch.update(conv_doc.reference, {'folder_id': folder_id, 'folder_user_set': True})
         moved += 1
         count += 1
 
@@ -360,15 +401,23 @@ def update_folder_conversation_count(uid: str, folder_id: str) -> int:
 
     count_query = query.count()
     result = count_query.get()
-    count = result[0][0].value
+    count = int(result[0][0].value or 0)
 
     folder_ref = user_ref.collection('folders').document(folder_id)
-    folder_ref.update({'conversation_count': count})
+    try:
+        folder_ref.update({'conversation_count': count})
+    except NotFound:
+        # conversation_count is derived state on a document the folders
+        # collection owns. A refresh for a folder that no longer exists has
+        # nothing to write — it must not fail the move that triggered it.
+        # Callers reach here only via a conversation still pointing at a
+        # deleted folder, which delete_folder no longer leaves behind.
+        logger.warning(f"folder {folder_id} no longer exists; skipping conversation_count refresh")
 
     return count
 
 
-def get_folder_by_category_mapping(uid: str, category_mapping: str) -> Optional[dict]:
+def get_folder_by_category_mapping(uid: str, category_mapping: str) -> Optional[Dict[str, Any]]:
     """Get a folder by its category_mapping value."""
     folders = get_folders(uid)
     return next((f for f in folders if f.get('category_mapping') == category_mapping), None)

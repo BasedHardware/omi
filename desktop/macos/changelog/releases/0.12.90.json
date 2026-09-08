@@ -1,0 +1,12 @@
+{
+  "version": "0.12.90",
+  "date": "2026-07-20",
+  "changes": [
+    "Improved reliability of macOS beta update qualification so a temporary release-service outage does not create duplicate checks or silently promote an unqualified build.",
+    "Omi Beta uses the production backend while retaining its separate app identity and update feed",
+    "Fixed the chat fault suite so injected backend errors surface the real HTTP 500 instead of a generic bridge failure",
+    "Repaired live transcription routing so Parakeet admission failures fall back to Modulate instead of leaving the stream without a provider",
+    "Added Mac-specific provenance to synced screen activity so multi-Mac captures stay distinct",
+    "Improved the reliability of macOS beta release verification"
+  ]
+}

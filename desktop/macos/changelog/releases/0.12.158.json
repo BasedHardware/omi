@@ -1,0 +1,10 @@
+{
+  "version": "0.12.158",
+  "date": "2026-08-11",
+  "changes": [
+    "Focus nudges now name the task you actually committed to, in plain language, and fire while you're on TikTok or YouTube instead of going quiet",
+    "Insights are sharper again — they run on the stronger model for everyone, not just the top tier",
+    "Chat shortcuts and automations now land on the conversation instead of leaving their result hidden behind an active search",
+    "Fixed a freeze that could make the whole app unclickable — including the sign-in buttons — right after launch"
+  ]
+}

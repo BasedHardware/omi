@@ -1,0 +1,13 @@
+name: Test macOS Installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to test (e.g., v0.0.10+10-macos)'
+        required: false
+        default: 'latest'
+  repository_dispatch:
+    types: [test-release]
+
+jobs:

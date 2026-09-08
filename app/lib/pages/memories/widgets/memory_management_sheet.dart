@@ -17,9 +17,9 @@ class MemoryManagementSheet extends StatelessWidget {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, child) {
         return Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppStyles.backgroundSecondary,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: SafeArea(
             child: Column(
@@ -65,16 +65,26 @@ class MemoryManagementSheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
           child: Text(context.l10n.filterMemories, style: AppStyles.title),
         ),
-        _buildFilterOption(context, context.l10n.filterAll, null),
-        _buildFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
-        _buildFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
-        _buildFilterOption(context, context.l10n.filterManual, MemoryCategory.manual),
+        _buildCategoryFilterOption(context, context.l10n.filterAll, null),
+        _buildCategoryFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
+        _buildCategoryFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
+        _buildCategoryFilterOption(context, context.l10n.filterManual, MemoryCategory.manual),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Divider(height: 1, color: Colors.white10),
+        ),
+        _buildFilterOption(
+          context,
+          context.l10n.memoryThisDevice,
+          isSelected: provider.filterThisDeviceOnly,
+          onTap: () => provider.setFilterThisDeviceOnly(!provider.filterThisDeviceOnly),
+        ),
         const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildFilterOption(BuildContext context, String label, MemoryCategory? category) {
+  Widget _buildCategoryFilterOption(BuildContext context, String label, MemoryCategory? category) {
     // If category is null, it represents "All"
     // For "All", it is selected if the set is empty.
     final bool isSelected;
@@ -84,7 +94,10 @@ class MemoryManagementSheet extends StatelessWidget {
       isSelected = provider.selectedCategories.contains(category);
     }
 
-    return InkWell(
+    return _buildFilterOption(
+      context,
+      label,
+      isSelected: isSelected,
       onTap: () {
         if (category == null) {
           provider.clearCategoryFilter();
@@ -93,6 +106,17 @@ class MemoryManagementSheet extends StatelessWidget {
         }
         // Do NOT pop here to allow multiple selections
       },
+    );
+  }
+
+  Widget _buildFilterOption(
+    BuildContext context,
+    String label, {
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
@@ -156,7 +180,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.makeAllPrivate,
             Icons.lock_outline,
-            Colors.white.withOpacity(0.1),
+            Colors.white.withValues(alpha: 0.1),
             () => _makeAllMemoriesPrivate(context),
           ),
           const SizedBox(height: 12),
@@ -164,7 +188,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.makeAllPublic,
             Icons.public,
-            Colors.white.withOpacity(0.1),
+            Colors.white.withValues(alpha: 0.1),
             () => _makeAllMemoriesPublic(context),
           ),
           const SizedBox(height: 24),
@@ -174,7 +198,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.deleteAllMemories,
             Icons.delete_outline,
-            Colors.red.withOpacity(0.1),
+            Colors.red.withValues(alpha: 0.1),
             () => _confirmDeleteAllMemories(context),
             textColor: Colors.red,
             iconColor: Colors.red,

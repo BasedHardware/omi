@@ -1,0 +1,14 @@
+{
+  "version": "0.12.288",
+  "date": "2026-09-04",
+  "changes": [
+    "An answer that Omi speaks after deferring a voice question (\"Let me verify...\") is now written to the conversation journal, so a follow-up no longer gets answered from the earlier reply it already corrected.",
+    "Bring your own MCP servers and skills: browse the official MCP registry and skill catalogs on the Apps page, or add your own local command or remote URL, and chat sees a compact index of each server's tools and loads full details on demand — all stored as plain files under ~/.omi",
+    "MCP servers work on both transports; chat discovers their tools through a compact sorted index instead of hundreds of tool definitions (mcp_tools_info / mcp_call), published prompts stay usable, local servers spawn with a minimal environment instead of Omi's full process env, and dropped SSE servers reconnect before giving up. Installing a skill brings its scripts and references instead of just the instructions, skills load a section at a time with parts returned by default, and the disable toggle now fully hides a skill from the assistant",
+    "Added or removed MCP servers now reach an open chat right away instead of waiting for a restart, and hand-edits to ~/.omi/mcp.json are picked up on the Apps page",
+    "Fixed an MCP server change being dropped when it landed while the agent runtime was already restarting, and task chat now applies pending server changes too",
+    "Tightened permissions on ~/.omi and its mcp.json, which can hold OAuth tokens, so they are now readable only by your user account",
+    "Quoted paths and arguments now survive when adding a local command server instead of being split at every space",
+    "Renaming or deleting a skill now keeps its disabled state in sync instead of silently re-enabling it or leaving stale entries"
+  ]
+}

@@ -148,11 +148,20 @@ class BleDeviceDiagnostics {
   /// silent-failure path separately from established-then-dropped disconnects.
   final int failToConnectCount;
 
+  /// BLE bytes consumed by native offline writers since the app most recently
+  /// entered the background. These packets intentionally never reach Dart.
+  final int nativeBackgroundBytesConsumed;
+
+  /// BLE notification packets represented by [nativeBackgroundBytesConsumed].
+  final int nativeBackgroundPacketsConsumed;
+
   BleDeviceDiagnostics({
     required this.disconnectHistory,
     required this.reconnectionCount,
     required this.connectedAt,
     required this.failToConnectCount,
+    required this.nativeBackgroundBytesConsumed,
+    required this.nativeBackgroundPacketsConsumed,
   });
 }
 
@@ -193,6 +202,12 @@ abstract class BleHostApi {
   // State
   @SwiftFunction('getBluetoothState()')
   String getBluetoothState();
+
+  /// (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
+  /// once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
+  @async
+  @SwiftFunction('enableBluetooth()')
+  bool enableBluetooth();
 
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
@@ -242,4 +257,131 @@ abstract class BleFlutterApi {
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  void onBatchRecordingFinalized(String fileName);
+}
+
+// =============================================================================
+// Ray-Ban Meta (Meta Wearables Device Access Toolkit) APIs
+// =============================================================================
+
+/// A pair of Ray-Ban Meta glasses reported by the Meta Wearables toolkit.
+class RayBanMetaGlasses {
+  final String id;
+  final String name;
+
+  RayBanMetaGlasses({required this.id, required this.name});
+}
+
+/// A Bluetooth Hands-Free Profile input exposed by iOS.
+class BluetoothHfpInput {
+  final String uid;
+  final String name;
+
+  BluetoothHfpInput({required this.uid, required this.name});
+}
+
+/// Dart → native. Camera/photo capture goes through the Meta Wearables Device
+/// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
+/// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
+/// are safe to call on builds without the DAT SDK — getAvailabilityMode()
+/// reports which mode this build supports.
+@HostApi()
+abstract class RayBanMetaHostAPI {
+  /// 'full' (DAT SDK linked + Meta app credentials configured),
+  /// 'audio_only' (no DAT — platform Bluetooth audio route only), or 'none'.
+  @SwiftFunction('getAvailabilityMode()')
+  String getAvailabilityMode();
+
+  @SwiftFunction('initialize()')
+  void initialize();
+
+  /// 'unregistered' | 'registering' | 'registered' ('unavailable' without DAT).
+  @SwiftFunction('getRegistrationState()')
+  String getRegistrationState();
+
+  /// Launches the Meta AI companion app to authorize this app for the glasses.
+  @SwiftFunction('startRegistration()')
+  void startRegistration();
+
+  @SwiftFunction('unregister()')
+  void unregister();
+
+  @async
+  @SwiftFunction('getAvailableGlasses()')
+  List<RayBanMetaGlasses> getAvailableGlasses();
+
+  @SwiftFunction('connect(deviceId:)')
+  void connect(String deviceId);
+
+  @SwiftFunction('disconnect()')
+  void disconnect();
+
+  /// 'disconnected' | 'connecting' | 'connected'.
+  @SwiftFunction('getConnectionState()')
+  String getConnectionState();
+
+  /// DAT camera permission for the glasses: resolves 'granted' | 'denied'.
+  @async
+  @SwiftFunction('requestCameraPermission()')
+  String requestCameraPermission();
+
+  /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
+  @async
+  @SwiftFunction('getCameraPermissionStatus()')
+  String getCameraPermissionStatus();
+
+  /// Starts capturing the glasses microphone over the Bluetooth HFP route and
+  /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
+  @SwiftFunction('startAudioCapture(inputUid:)')
+  void startAudioCapture(String? inputUid);
+
+  @SwiftFunction('stopAudioCapture()')
+  void stopAudioCapture();
+
+  /// True when the active audio input route is the glasses' Bluetooth HFP mic.
+  @SwiftFunction('isGlassesAudioRouteActive()')
+  bool isGlassesAudioRouteActive();
+
+  /// Bluetooth HFP input ports currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build. The UID is the
+  /// stable identity; the user-visible name may change.
+  @SwiftFunction('getBluetoothHfpInputs()')
+  List<BluetoothHfpInput> getBluetoothHfpInputs();
+
+  /// Starts the DAT camera stream session so photo capture is ready. While
+  /// active the glasses' capture LED is on (hardware-enforced by Meta).
+  @SwiftFunction('startCamera()')
+  void startCamera();
+
+  @SwiftFunction('stopCamera()')
+  void stopCamera();
+
+  /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
+  @SwiftFunction('capturePhoto()')
+  void capturePhoto();
+}
+
+/// Native → Dart events for Ray-Ban Meta.
+@FlutterApi()
+abstract class RayBanMetaFlutterAPI {
+  void onRegistrationStateChanged(String state);
+  void onGlassesDiscovered(RayBanMetaGlasses glasses);
+  void onConnectionStateChanged(String deviceId, String state);
+
+  /// PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic.
+  void onAudioFrame(Uint8List pcm16Frame, double sampleRate);
+
+  /// Whether the glasses' HFP mic is the active input route right now.
+  void onAudioRouteChanged(bool glassesRouteActive);
+
+  /// JPEG bytes plus clockwise orientation in degrees (0/90/180/270).
+  void onPhotoCaptured(Uint8List jpegBytes, int orientationDegrees);
+
+  /// 'stopped' | 'starting' | 'streaming' | 'paused'.
+  void onCameraStateChanged(String state);
+  void onCameraPermissionChanged(String status);
+  void onError(String code, String message);
 }

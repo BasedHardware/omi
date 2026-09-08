@@ -1,5 +1,6 @@
 {
     "@@locale": "bn",
+    "sessionExpiredSignInAgain": "সেশনের মেয়াদ শেষ হয়েছে — আবার সাইন ইন করুন।",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "আমার অ্যাপস",
+    "myApps": "আমার তৈরি",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "অফলাইন সিঙ্ক",
+    "autoSync": "স্বয়ংক্রিয় সিঙ্ক",
+    "autoSyncDescription": "আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "আপনার প্ল্যান {date} এ নবায়ন হয়।",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "বিনামূল্যে পরিকল্পনা",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "এই মাসে {limit} অন্তর্দৃষ্টির মধ্যে {used} প্রাপ্ত হয়েছে",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "এই মাসে {limit} স্মৃতির মধ্যে {used} তৈরি হয়েছে",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "কনফিগারেশন রপ্তানি করুন",
     "bringYourOwn": "নিজের নিয়ে আসুন",
     "payYourSttProvider": "Omi অবাধে ব্যবহার করুন। আপনি শুধুমাত্র আপনার STT প্রদানকারীকে সরাসরি অর্থ প্রদান করেন।",
-    "freeMinutesMonth": "প্রতি মাসে 1,200 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ",
+    "freeMinutesMonth": "প্রতি মাসে 300 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ",
     "omiUnlimited": "Omi আনলিমিটেড",
     "hostRequired": "হোস্ট প্রয়োজন",
     "validPortRequired": "বৈধ পোর্ট প্রয়োজন",
@@ -1580,7 +1562,7 @@
     "designingApp": "অ্যাপ ডিজাইন করছেন",
     "generatingIconStep": "আইকন তৈরি করছেন",
     "finalTouches": "চূড়ান্ত স্পর্শ",
-    "processing": "প্রক্রিয়া করছেন...",
+    "processing": "প্রক্রিয়াধীন",
     "features": "বৈশিষ্ট্য",
     "creatingYourApp": "আপনার অ্যাপ তৈরি করছেন...",
     "generatingIcon": "আইকন তৈরি করছেন...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Omi ভালোবাসছেন?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "অ্যাপ স্টোরে রেটিং দিন",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play তে রেটিং দিন",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "হয়তো পরে",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi সিঙ্ক সেটিংস",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "আপনার ফোনের হটস্পট শংসাপত্র প্রবেশ করুন",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi সিঙ্ক আপনার ফোনকে হটস্পট হিসাবে ব্যবহার করে। আপনার হটস্পট নাম এবং পাসওয়ার্ড খুঁজুন সেটিংস > ব্যক্তিগত হটস্পট এ।",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "হটস্পট নাম (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "যেমন iPhone হটস্পট",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "পাসওয়ার্ড",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "হটস্পট পাসওয়ার্ড প্রবেশ করুন",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "শংসাপত্র সংরক্ষণ করুন",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "শংসাপত্র সাফ করুন",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "দয়া করে একটি হটস্পট নাম প্রবেশ করুন",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi শংসাপত্র সংরক্ষিত",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi শংসাপত্র সাফ করা হয়েছে",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} এর জন্য সারাংশ তৈরি হয়েছে",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
+    "basicPlanDescription": "৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "দ্রুত স্থানান্তর",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "সিঙ্ক করা হচ্ছে",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "স্থানান্তর পদ্ধতি",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "দ্রুত",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "ফোন",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "ডিভাইসে Wi-Fi সক্ষম করতে ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "আপনার ডিভাইস দ্রুত স্থানান্তর সমর্থন করে না। পরিবর্তে Bluetooth ব্যবহার করুন।",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "আপনার ফোনের হটস্পট সক্ষম করুন এবং আবার চেষ্টা করুন।",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "স্থানান্তর শুরু করতে ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "ডিভাইস সাড়া দেয় না। দয়া করে আবার চেষ্টা করুন।",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "অবৈধ Wi-Fi শংসাপত্র। আপনার হটস্পট সেটিংস পরীক্ষা করুন।",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Wi-Fi সংযোগ ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD কার্ড প্রক্রিয়াকরণ",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "প্রক্রিয়া",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "Wi-Fi সিঙ্ক ব্যর্থ",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "প্রক্রিয়াকরণ ব্যর্থ",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesInfo": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesMonth": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "Wi-Fi সিঙ্ক",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ক্লিপবোর্ডে কপি করা হয়েছে",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "সংযোগ ব্যর্থ",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} এর সাথে সংযুক্ত হচ্ছে",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} এর Wi-Fi সক্ষম করুন",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "দ্রুত ট্রান্সফারে স্যুইচ করা হয়েছে",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ট্রান্সফার সম্পূর্ণ! এখন আপনি এই রেকর্ডিং চালাতে পারেন।",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "দ্রুত ট্রান্সফার সক্ষম",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "ব্লুটুথ সিঙ্ক সক্ষম",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "দ্রুত ট্রান্সফার সক্ষম করুন",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "দ্রুত ট্রান্সফার WiFi ব্যবহার করে ~৫ গুণ দ্রুত গতি প্রদান করে। ট্রান্সফারের সময় আপনার ফোন আপনার Omi ডিভাইসের WiFi নেটওয়ার্কের সাথে সাময়িকভাবে সংযুক্ত হবে।",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "ট্রান্সফারের সময় ইন্টারনেট অ্যাক্সেস বন্ধ রয়েছে",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "আপনার Omi ডিভাইস থেকে আপনার ফোনে রেকর্ডিং কীভাবে স্থানান্তরিত হবে তা নির্বাচন করুন।",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi এর মাধ্যমে ~১৫০ কেবি/সেক",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "৫ গুণ দ্রুত",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "আপনার Omi ডিভাইসের সাথে সরাসরি WiFi সংযোগ তৈরি করে। ট্রান্সফারের সময় আপনার ফোন আপনার নিয়মিত WiFi থেকে সাময়িকভাবে সংযোগ বিচ্ছিন্ন হয়।",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "ব্লুটুথ",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "আপনার ডিভাইসের ব্যাটারি কম হয়ে যাচ্ছে। চার্জ করার সময় এসেছে! 🔋",
+    "lowBatteryAlertBody": "আপনার ব্যাটারি {level}% এ আছে। চার্জ করার সময় এসেছে! 🔋",
     "batteryFullyChargedTitle": "Omi সম্পূর্ণ চার্জ হয়েছে",
     "batteryFullyChargedBody": "আপনার Omi ডিভাইস সম্পূর্ণ চার্জ হয়েছে। আনপ্লাগ করতে পারেন!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "আপনার Omi ডিভাইস সংযোগ বিচ্ছিন্ন হয়েছে",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "অবস্থান অনুমতি প্রয়োজন",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "দ্রুত ট্রান্সফার WiFi সংযোগ যাচাই করতে অবস্থান অনুমতি প্রয়োজন। এগিয়ে যেতে অবস্থান অনুমতি দিন।",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "প্রতিলেখ রপ্তানি",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "এখনো কোনো দৈনিক সংক্ষেপ নেই",
     "dailyRecapsDescription": "আপনার দৈনিক সংক্ষেপ এখানে উপস্থিত হবে একবার তৈরি হয়ে গেলে",
-    "chooseTransferMethod": "ট্রান্সফার পদ্ধতি নির্বাচন করুন",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi এর মাধ্যমে ~১৫০ কেবি/সেক",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "বড় সময়ের ব্যবধান সনাক্ত হয়েছে ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ডিভাইস WiFi সিঙ্ক সমর্থন করে না, ব্লুটুথে স্যুইচ করছি",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "এই ডিভাইসে Apple Health উপলব্ধ নয়",
     "downloadAudio": "অডিও ডাউনলোড করুন",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "সব দেখুন",
+    "expand": "প্রসারিত করুন",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "আপনার ফোনে নিরাপদে ব্যাকআপ করা হয়েছে",
+    "safelyBackedUp": "কথোপকথন তৈরি হয়েছে",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "প্ল্যান আপগ্রেড করুন",
     "billingMonthly": "মাসিক",
     "billingYearly": "বার্ষিক",
-    "savePercent": "~17% সাশ্রয়",
+    "savePercent": "~{percent}% সাশ্রয়",
     "popular": "জনপ্রিয়",
     "currentPlan": "বর্তমান",
     "neoSubtitle": "মাসে {count}টি প্রশ্ন",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
     "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
-    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।",
+    "deleteRecap": "রিক্যাপ মুছুন",
+    "deleteRecapConfirmTitle": "এই রিক্যাপ মুছবেন?",
+    "deleteRecapConfirmBody": "এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।",
+    "deleteRecapAction": "মুছুন",
+    "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
+    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।",
+    "syncStatusBackedUp": "ব্যাকআপ হয়েছে",
+    "syncStatusBackingUp": "সিঙ্ক করা হচ্ছে…",
+    "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
+    "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
+    "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusTooOld": "সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না",
+    "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
+    "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
+    "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",
+    "syncInProgress": "সিঙ্ক চলছে",
+    "deleteWhileProcessingTitle": "এখনও প্রক্রিয়াধীন",
+    "deleteWhileProcessingMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?",
+    "syncCardAllBackedUp": "সব রেকর্ডিং সিঙ্ক হয়েছে",
+    "syncCardReadyCount": "{count, plural, one{1টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত} other{{count}টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত}}",
+    "syncCardProcessing": "Omi-তে প্রক্রিয়াজাত হচ্ছে…",
+    "syncCardWaitingInternet": "ইন্টারনেটের জন্য অপেক্ষা",
+    "syncCardNeedsAttention": "{count, plural, one{১টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন} other{{count}টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন}}",
+    "syncFlowIntro": "রেকর্ডিংগুলো আপনার ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, এরপর Omi এর সার্ভারে আপলোড করা হয় যেখানে সেগুলো প্রতিলিপি করা হয় এবং কথোপকথনে পরিণত হয়।",
+    "syncStepUpload": "সিঙ্ক",
+    "syncStepUploadDesc": "আপনার রেকর্ডিং Omi-এর সার্ভারে পাঠানো হয়",
+    "syncStepProcess": "ট্রান্সক্রিপশন",
+    "syncStepProcessDesc": "Omi অডিওকে কথোপকথনে রূপ দেয়",
+    "syncStepBackedUp": "কথোপকথন প্রস্তুত",
+    "syncStepBackedUpDesc": "কথোপকথন-এ খুঁজে পাবেন",
+    "syncFailureFootnote": "প্রক্রিয়াজাতকরণ ব্যর্থ হলে, পরবর্তী সিঙ্কে রেকর্ডিংটি স্বয়ংক্রিয়ভাবে পুনরায় চেষ্টা করা হয়।",
+    "syncStatusConversationCreated": "কথোপকথন তৈরি হয়েছে",
+    "syncCardUploadingTitle": "Omi-তে আপলোড হচ্ছে",
+    "syncCardDownloadingTitle": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
+    "syncCardProgressOf": "{total}-এর মধ্যে {current}",
+    "syncStatusOnDevice": "আপনার ডিভাইসে",
+    "syncStatusDownloadingFromDevice": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
+    "newestFirst": "নতুনগুলি আগে",
+    "noSyncedRecordingsYet": "এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই",
+    "morePaymentMethodsComingSoon": "শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।",
+    "syncCardRateLimited": "ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে",
+    "syncCardBackendBusy": "Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে",
+    "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি",
+    "promoCode": "প্রোমো কোড",
+    "enterPromoCode": "প্রোমো কোড লিখুন",
+    "invalidPromotionCode": "অবৈধ প্রোমো কোড।",
+    "backgroundModeTitle": "ব্যাকগ্রাউন্ড মোড",
+    "backgroundModeDescription": "অ্যাপ সম্পূর্ণ বন্ধ থাকলেও আপনার Omi রেকর্ডিং চালু রাখুন।",
+    "backgroundModeNote": "আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।",
+    "regenerateRecap": "রিক্যাপ পুনরায় তৈরি করুন",
+    "recapRegeneratedSnackbar": "রিক্যাপ পুনরায় তৈরি হয়েছে",
+    "recapRegenerateFailed": "রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।",
+    "recapRegenerateCooldown": "পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।",
+    "recapRegenerateNoConversations": "এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।",
+    "syncCustomSttWarningTitle": "সিঙ্ক Omi-এর ট্রান্সক্রিপশন ব্যবহার করে",
+    "syncCustomSttWarningMessage": "আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।",
+    "transcribeLaterTitle": "পরে ট্রান্সক্রাইব করুন",
+    "transcribeLaterDescription": "এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।",
+    "transcribeLaterNote": "ফোনের মাইক্রোফোন, Omi এবং Limitless ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।",
+    "transcribeLaterStorageFull": "আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।",
+    "unmute": "আনমিউট করুন",
+    "newRecording": "নতুন রেকর্ডিং",
+    "transcribeLaterPaused": "বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না",
+    "recordingMode": "রেকর্ডিং মোড",
+    "captureModeLater": "পরে",
+    "captureModeLiveDescription": "আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।",
+    "captureModeLaterDescription": "এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।",
+    "backgroundModeUnavailable": "কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।",
+    "memoryThisDevice": "এই ডিভাইস",
+    "memoryThisIphone": "এই iPhone",
+    "memoryThisPhone": "এই ফোন",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Omi কীভাবে ব্যবহার করবেন",
+    "deviceOnboardingTranscriptionTitle": "আপনার Omi-তে কথা বলুন",
+    "deviceOnboardingTranscriptionSubtitle": "কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন",
+    "deviceOnboardingGoodJob": "দারুণ!",
+    "deviceOnboardingStartSpeaking": "কথা বলা শুরু করুন...",
+    "deviceOnboardingAskQuestionTitle": "Omi-কে একটি প্রশ্ন করুন",
+    "deviceOnboardingAskQuestionSubtitle": "একবার বোতাম চাপুন, আপনার প্রশ্ন বলুন, তারপর শেষ হলে আবার চাপুন",
+    "deviceOnboardingProcessingQuestion": "আপনার প্রশ্ন প্রসেস করা হচ্ছে...",
+    "deviceOnboardingListening": "শুনছি...",
+    "deviceOnboardingTurnOffTitle": "বন্ধ করুন",
+    "deviceOnboardingTurnOnTitle": "চালু করুন",
+    "deviceOnboardingTurnOffSubtitle": "৩ সেকেন্ড বোতামটি চেপে ধরে রাখুন",
+    "deviceOnboardingTurnOnSubtitle": "আবার চালু করতে বোতামটি চাপুন",
+    "deviceOnboardingHoldButtonHint": "আলো নিভে না যাওয়া পর্যন্ত বোতামটি শক্ত করে চেপে ধরে রাখুন",
+    "deviceOnboardingStatusConnected": "সংযুক্ত",
+    "deviceOnboardingStatusConnectedDone": "সংযুক্ত হয়েছে!",
+    "deviceOnboardingStatusDisconnected": "সংযোগ বিচ্ছিন্ন",
+    "deviceOnboardingStatusTurningOff": "বন্ধ করা হচ্ছে...",
+    "deviceOnboardingDoubleTapTitle": "ডাবল ট্যাপ কাস্টমাইজ করুন",
+    "deviceOnboardingEndConversation": "কথোপকথন শেষ করুন",
+    "deviceOnboardingEndConversationDesc": "বর্তমান কথোপকথন সংরক্ষণ করে শেষ করুন",
+    "deviceOnboardingMuteUnmute": "মিউট / আনমিউট",
+    "deviceOnboardingMuteUnmuteDesc": "মাইক্রোফোন চালু বা বন্ধ করুন",
+    "deviceOnboardingStarConversation": "চলমান কথোপকথন স্টার করুন",
+    "deviceOnboardingStarConversationDesc": "কথোপকথনটি গুরুত্বপূর্ণ হিসেবে চিহ্নিত করুন",
+    "deviceOnboardingSingleTapHint": "এটি একবার ট্যাপ ছিল — দ্রুত দুবার ট্যাপ করে দেখুন!",
+    "deviceOnboardingTryDoubleTap": "এখনই করে দেখুন! আপনার Omi-তে ডাবল ট্যাপ করুন",
+    "deviceOnboardingContinue": "চালিয়ে যান",
+    "deviceOnboardingFinish": "সম্পন্ন করুন",
+    "deviceOnboardingIntroTitle": "আপনার Omi-কে জানুন",
+    "deviceOnboardingIntroSubtitle": "আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।",
+    "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
+    "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
+    "latest": "সর্বশেষ",
+    "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন",
+    "pendantRecordingTitle": "পেনড্যান্টে রেকর্ডিং চলছে",
+    "pendantRecordingNote": "আপনার পেনড্যান্ট নিজে থেকেই রেকর্ড করছে। অ্যাপ খোলা থাকাকালীন রেকর্ডিং আপনার ফোনে সিঙ্ক হয়।",
+    "pendantSyncingRecordings": "আপনার পেনড্যান্ট থেকে রেকর্ডিং সিঙ্ক হচ্ছে…",
+    "pendantMinutesStored": "~{minutes} মিনিট সংরক্ষিত",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।",
+    "connectRayBanMeta": "Ray-Ban Meta সংযুক্ত করুন",
+    "raybanMetaSetupDescription": "কথোপকথন এবং ভিজ্যুয়াল প্রসঙ্গের জন্য আপনার Ray-Ban Meta চশমা Omi ক্যাপচার ডিভাইস হিসেবে ব্যবহার করুন। Omi আপনার চশমা লিঙ্ক করতে Meta AI অ্যাপ খুলবে।",
+    "raybanMetaOpenMetaAI": "Meta AI-এর মাধ্যমে সংযুক্ত করুন",
+    "raybanMetaWaitingForMetaAI": "Meta AI অ্যাপে সংযোগ সম্পূর্ণ করুন, তারপর এখানে ফিরে আসুন।",
+    "raybanMetaCheckAgain": "আবার পরীক্ষা করুন",
+    "raybanMetaAllowCamera": "চশমায় ক্যামেরা অনুমতি দিন",
+    "raybanMetaCameraExplanation": "Omi আপনার কথোপকথনে ছবি যোগ করতে আপনার চশমার ক্যামেরা ব্যবহার করে। আপনি এটি এড়িয়ে গিয়ে শুধুমাত্র অডিও ব্যবহার করতে পারেন।",
+    "raybanMetaSkipForNow": "আপাতত এড়িয়ে যান",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta শুধুমাত্র অডিও মোড",
+    "raybanMetaAudioOnlyExplanation": "Omi-এর এই সংস্করণটি Bluetooth-এর মাধ্যমে আপনার চশমার মাইক্রোফোন ব্যবহার করতে পারে। ছবি ক্যাপচারের জন্য Omi-এর Meta ডেভেলপার বিল্ড প্রয়োজন।",
+    "raybanMetaMusicPauseNote": "চশমার মাইক্রোফোন ব্যবহারের সময় আপনার ফোনের সঙ্গীত থেমে যায়।",
+    "raybanMetaContinue": "চালিয়ে যান",
+    "raybanMetaCapturePhoto": "ছবি তুলুন",
+    "raybanMetaPhotoRequested": "ছবির অনুরোধ করা হয়েছে — এটি আপনার কথোপকথনে প্রদর্শিত হবে।",
+    "raybanMetaMicrophoneReady": "মাইক্রোফোন প্রস্তুত",
+    "raybanMetaImageCaptureReady": "ছবি ক্যাপচার প্রস্তুত",
+    "raybanMetaImageCaptureUnavailable": "শুধুমাত্র অডিও মোডে অনুপলব্ধ",
+    "raybanMetaCamera": "ক্যামেরা",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta-তে সংযোগ করতে ত্রুটি: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "ডিভাইস স্টোরেজ",
+    "deviceStoragePercentFull": "{percent}% পূর্ণ",
+    "deviceStorageUsedOfTotal": "{total}-এর মধ্যে {used} ব্যবহৃত",
+    "deviceStorageFree": "{free} খালি",
+    "deviceStorageNearlyFull": "ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।",
+    "phoneMicOfflineFallbackMessage": "সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।",
+    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।",
+    "rayBanMetaMicPickerTitle": "আপনার Ray-Ban Meta মাইক্রোফোন বেছে নিন",
+    "rayBanMetaMicPickerDescription": "আপনার চশমার Bluetooth মাইক্রোফোন নির্বাচন করুন। Omi এটি ব্যবহার করার সময় গান থেমে থাকবে।",
+    "rayBanMetaMicPickerEmpty": "কোনো Bluetooth মাইক্রোফোন পাওয়া যায়নি। iPhone সেটিংসে আপনার চশমা সংযুক্ত করে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerLoadError": "Bluetooth মাইক্রোফোন লোড করা যায়নি। Bluetooth চালু আছে কিনা দেখে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerConnectError": "ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।",
+    "cloudTranscription": "ক্লাউড ট্রান্সক্রিপশন",
+    "copyMessage": "বার্তা অনুলিপি করুন",
+    "deleteOnDeviceModel": "মডেল মুছুন",
+    "deleteOnDeviceModelConfirm": "আপনি কি নিশ্চিত যে এই মডেলটি মুছতে চান?",
+    "downgradeAnyway": "তবুও ডাউনগ্রেড করুন",
+    "downgradeLimitBattery": "৭ গুণ বেশি ব্যাটারি খরচ",
+    "downgradeLimitDelay": "৫-৭ সেকেন্ড বিলম্ব",
+    "downgradeLimitQuality": "৩০% কম ট্রান্সক্রিপশন মান",
+    "downgradeLimitSpeakers": "বক্তা শনাক্ত করা যাবে না",
+    "downgradeLimitationsHeading": "আপনি এই সীমাবদ্ধতাগুলির সম্মুখীন হবেন:",
+    "downgradeToFreemiumTitle": "বিনামূল্যের প্ল্যানে ডাউনগ্রেড করবেন?",
+    "errorLoadingAudio": "অডিও লোড করতে সমস্যা হয়েছে",
+    "failedToLinkCalendarEvent": "ক্যালেন্ডার ইভেন্ট লিঙ্ক করা যায়নি",
+    "googleCalendarConnectPrompt": "কথোপকথনকে ক্যালেন্ডার ইভেন্টের সাথে লিঙ্ক করতে আপনার Google ক্যালেন্ডার সংযুক্ত করুন।",
+    "googleCalendarNotConnected": "Google ক্যালেন্ডার সংযুক্ত নয়",
+    "linkedToEvent": "“{title}”-এর সাথে লিঙ্ক করা হয়েছে",
+    "onDeviceModelDeleted": "মডেল মুছে ফেলা হয়েছে",
+    "onDeviceModelDownloadFailed": "মডেল ডাউনলোড ব্যর্থ হয়েছে",
+    "onDeviceModelDownloadFailedDesc": "Whisper মডেল ডাউনলোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "onDeviceModelDownloadSuccess": "মডেল ডাউনলোড হয়েছে",
+    "onDeviceModelDownloadSuccessDesc": "Whisper মডেল সফলভাবে ডাউনলোড হয়েছে",
+    "onDeviceModelDownloaded": "ডাউনলোড হয়েছে",
+    "onDeviceModelSize": "মডেলের আকার",
+    "onDeviceTranscription": "ডিভাইসে ট্রান্সক্রিপশন",
+    "onDeviceTranscriptionDesc": "ট্রান্সক্রিপশন আপনার ডিভাইসেই স্থানীয়ভাবে প্রক্রিয়া করা হয়",
+    "searchSettings": "সেটিংস অনুসন্ধান করুন…",
+    "speechToTextProvider": "স্পিচ-টু-টেক্সট প্রদানকারী",
+    "speechToTextProviderDesc": "ট্রান্সক্রিপশনের জন্য ব্যবহৃত পরিষেবা বেছে নিন",
+    "sttFilterAuto": "স্বয়ংক্রিয়",
+    "sttModelAccuracy": "নির্ভুলতা",
+    "sttModelFaster": "দ্রুততর",
+    "sttModelHigher": "বেশি",
+    "sttModelLower": "কম",
+    "sttModelSlower": "ধীরতর",
+    "sttModelSpeed": "গতি",
+    "sttNone": "কোনোটি নয়",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "আপনার মতামতের জন্য ধন্যবাদ!",
+    "transcriptionLanguage": "ট্রান্সক্রিপশনের ভাষা",
+    "transcriptionLanguageDesc": "কথা ট্রান্সক্রিপশনের জন্য ভাষা বেছে নিন",
+    "whisperModel": "Whisper মডেল",
+    "whisperModelDesc": "ডিভাইসে ট্রান্সক্রিপশনের জন্য মডেল বেছে নিন",
+    "whisperModelSizeBase": "বেস",
+    "whisperModelSizeLarge": "বড়",
+    "whisperModelSizeMedium": "মাঝারি",
+    "whisperModelSizeSmall": "ছোট",
+    "whisperModelSizeTiny": "অতি ছোট",
+    "planSheetChooseYourPlan": "সীমাহীন Omi আনলক করতে আপনার প্ল্যান বেছে নিন।",
+    "availableOnMacMobileWeb": "Mac, মোবাইল এবং ওয়েবে উপলব্ধ",
+    "popularBadge": "জনপ্রিয়",
+    "worksOnDesktop": "ডেস্কটপে কাজ করে",
+    "noDesktopAccess": "ডেস্কটপে কাজ করে না",
+    "annualBillingSummary": "{months} মাস / {price}",
+    "monthsFreeBadge": "{count, plural, =1{১ মাস ফ্রি} other{{count} মাস ফ্রি}}",
+    "freemiumLimitsIntro": "Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:",
+    "downgradeLimitDelayNotRealTime": "৫-৭ সেকেন্ড বিলম্ব (রিয়েল-টাইম নয়)",
+    "downgradeToFreemiumAction": "ফ্রি সংস্করণে নেমে যান",
+    "getFreeUnlimitedAccess": "ফ্রি আনলিমিটেড অ্যাক্সেস পান",
+    "shareDataForTraining": "প্রশিক্ষণের জন্য ডেটা শেয়ার করুন",
+    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন",
+    "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
+    "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
+    "baselineMemory": "বেসলাইন মেমরি",
+    "alwaysInContext": "সর্বদা প্রসঙ্গে",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeAbout": "{title} সম্পর্কে",
+    "askAboutThisConversation": "এটি সম্পর্কে জিজ্ঞাসা করুন",
+    "sendRawAudioToOmi": "Omi-তে কাঁচা অডিও পাঠান",
+    "sendRawAudioToOmiDescription": "Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।",
+    "findDevice": "খুঁজুন",
+    "diagnosticsShareFailed": "ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।",
+    "appDisabledTitle": "এই অ্যাপটি নিষ্ক্রিয় এবং ইনস্টল করা যাবে না।",
+    "appDisabledWebhookFailures": "এর এন্ডপয়েন্ট টানা ৭২ ঘণ্টা ব্যর্থ হয়েছে, তাই ডেলিভারি বন্ধ করা হয়েছে।",
+    "appDisabledGeneric": "এটি Omi নিষ্ক্রিয় করেছে।",
+    "appDisabledOwnerHint": "প্রথমে এন্ডপয়েন্ট ঠিক করুন — পুনরায় সক্রিয় করলে কনফিগার করা প্রতিটি URL আবার যাচাই করা হয়।",
+    "appReEnable": "পুনরায় সক্রিয় করুন",
+    "appReEnableFailedTitle": "পুনরায় সক্রিয় করা যায়নি",
+    "appReEnableFailedBody": "এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।",
+    "appDisabledOn": "{date} তারিখে নিষ্ক্রিয় করা হয়েছে।",
+    "appDisabledLastError": "শেষ ত্রুটি: {error}",
+    "prerecordedTranscript": "প্রি-রেকর্ডেড",
+    "pendantRecordingSyncBlocked": "Pendant এখনও রেকর্ড করছে, তাই এর সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।",
+    "pendantFullSyncBlocked": "Pendant-এর স্টোরেজ পূর্ণ এবং এটি এখনও রেকর্ডিং মোডে আছে, তাই সংরক্ষিত অডিও স্থানান্তর করা যাচ্ছে না। রেকর্ডিং বন্ধ করতে Pendant-এর বোতাম টিপুন, তারপর আবার সিঙ্ক করুন।",
+    "conversationsNotCapturedCount": "রেকর্ড করা হয়নি ({count})",
+    "transcriptionNoAudio": "ট্রান্সক্রিপশন অডিও গ্রহণ করছে না",
+    "chatBlockTask": "কাজ",
+    "chatBlockGoal": "লক্ষ্য",
+    "chatBlockConversation": "কথোপকথন",
+    "chatBlockMemory": "স্মৃতি",
+    "chatBlockQuestion": "প্রশ্ন",
+    "chatBlockOpenInGoals": "লক্ষ্যে খুলুন",
+    "chatBlockOpenConversation": "কথোপকথন খুলুন",
+    "chatBlockOpenInMemories": "স্মৃতিতে খুলুন",
+    "chatBlockUnavailable": "আর উপলব্ধ নেই",
+    "chatBlockRecommendedNextSteps": "প্রস্তাবিত পরবর্তী পদক্ষেপ",
+    "couldNotLoadMemories": "স্মৃতি লোড করা যায়নি",
+    "couldNotLoadKnowledgeGraph": "নলেজ গ্রাফ লোড করা যায়নি",
+    "speechProfileOwnerTitle": "{name}-এর ভয়েস প্রোফাইল",
+    "play": "চালান",
+    "redo": "আবার রেকর্ড করুন",
+    "answerWithYourVoice": "মুখে উত্তর দিন:",
+    "speechProfileTopicLocation": "আপনি কোথায় থাকেন?",
+    "speechProfileTopicWork": "আপনি কী কাজ করেন?",
+    "speechProfileTopicGoal": "আপনার দীর্ঘমেয়াদি লক্ষ্য কী?",
+    "speechToTextUnavailableDesc": "এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।",
+    "memoryHistoryPartial": "স্মৃতির ইতিহাসের কিছু অংশ পাওয়া যাচ্ছে না। এখন পর্যন্ত পাওয়া ইতিহাস দেখানো হচ্ছে।",
+    "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে + চাপুন"
 }

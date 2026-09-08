@@ -24,11 +24,11 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/asana_service.dart';
-import 'package:omi/services/clickup_service.dart';
-import 'package:omi/services/google_tasks_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
+import 'package:omi/services/integrations/clickup_service.dart';
+import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/services/todoist_service.dart';
+import 'package:omi/services/integrations/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -77,7 +77,9 @@ class _AppShellState extends State<AppShell> {
           }
         } else {
           Logger.debug('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError(context.l10n.appNotAvailable);
+          if (mounted) {
+            AppSnackbar.showSnackbarError(context.l10n.appNotAvailable);
+          }
         }
       }
     } else if (uri.pathSegments.first == 'wrapped') {
@@ -354,8 +356,11 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
     final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
     if (isSignedIn) {
-      context.read<HomeProvider>().setupHasSpeakerProfile();
-      context.read<HomeProvider>().setupUserPrimaryLanguage();
+      final homeProvider = context.read<HomeProvider>();
+      homeProvider.setupHasSpeakerProfile();
+      // Not awaited: the picker must not open on the bundled list while the
+      // served one is in flight, but the rest of startup should not wait.
+      homeProvider.loadLanguagesThenSetupPrimary();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
       try {
@@ -370,6 +375,9 @@ class _AppShellState extends State<AppShell> {
       context.read<MessageProvider>().refreshMessages();
       context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
+      // Same fire-and-forget as task integrations: chat/settings must not
+      // treat an empty in-memory map as "not connected" after process death.
+      context.read<IntegrationProvider>().loadFromBackend();
 
       NotificationService.instance.saveNotificationToken();
     } else {

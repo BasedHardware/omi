@@ -11,6 +11,19 @@ import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Keep integer stepping for small goals without asking RenderSlider to paint
+/// one division per unit for arbitrarily large targets.
+///
+/// A target of one billion previously produced one billion divisions. Flutter
+/// walks the divisions during every slider paint even when tick marks are
+/// hidden, which can block the UI thread for several seconds.
+@visibleForTesting
+int? goalSliderDivisions(double targetValue) {
+  if (!targetValue.isFinite || targetValue <= 0 || targetValue > 100) return null;
+  final roundedTarget = targetValue.round();
+  return targetValue == roundedTarget ? roundedTarget : null;
+}
+
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
   const GoalsWidget({super.key, this.onRefresh});
@@ -264,7 +277,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(context.l10n.icon, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                      Text(
+                        context.l10n.icon,
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                      ),
                       const SizedBox(height: 8),
                       SizedBox(
                         height: 44,
@@ -285,10 +301,13 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 height: 44,
                                 margin: const EdgeInsets.only(right: 8),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.15)
+                                      : Colors.white.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border:
-                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
+                                  border: isSelected
+                                      ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2)
+                                      : null,
                                 ),
                                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
                               ),
@@ -304,7 +323,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                    Text(
+                      context.l10n.goalTitle,
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
@@ -312,7 +334,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.08),
+                        fillColor: Colors.white.withValues(alpha: 0.08),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -333,7 +355,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.current,
-                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -342,7 +364,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                             decoration: InputDecoration(
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: Colors.white.withValues(alpha: 0.08),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -360,7 +382,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.target,
-                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -369,7 +391,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                             decoration: InputDecoration(
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: Colors.white.withValues(alpha: 0.08),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -509,7 +531,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         final goals = goalsProvider.goals;
 
-        // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
+        // If no goals, hide the widget (the Add Goal entry points live in
+        // ActionItemsPage._buildGoalsRow and this widget's own header, shown
+        // once at least one goal exists).
         if (goals.isEmpty) {
           return const SizedBox.shrink();
         }
@@ -576,8 +600,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       },
       child: GestureDetector(
         onTap: () {
-          PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
           _editGoal(goal);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
+          });
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
@@ -591,7 +617,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
@@ -618,7 +644,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                               data: SliderThemeData(
                                 trackHeight: 6,
                                 activeTrackColor: color,
-                                inactiveTrackColor: Colors.white.withOpacity(0.1),
+                                inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
                                 thumbColor: color,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
@@ -629,7 +655,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 value: goal.currentValue.clamp(0.0, goal.targetValue),
                                 min: 0,
                                 max: goal.targetValue,
-                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
+                                divisions: goalSliderDivisions(goal.targetValue),
                                 onChanged: (value) => _updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) {
                                   PlatformManager.instance.analytics.goalProgressChanged(
@@ -649,7 +675,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                           '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontWeight: FontWeight.w500,
                           ),
                         ),

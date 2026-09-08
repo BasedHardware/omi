@@ -35,7 +35,10 @@ const filterOptions: FilterOption[] = [
   },
 ];
 
-export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFiltersProps) {
+export function MemoryFilters({
+  activeCategories,
+  onCategoriesChange,
+}: MemoryFiltersProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isAllSelected = activeCategories.length === 0;
 
@@ -59,7 +62,9 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
   const getButtonLabel = () => {
     if (isAllSelected) return 'All';
     if (activeCategories.length === 1) {
-      return filterOptions.find(o => o.category === activeCategories[0])?.label || 'Filter';
+      return (
+        filterOptions.find((o) => o.category === activeCategories[0])?.label || 'Filter'
+      );
     }
     return `${activeCategories.length} selected`;
   };
@@ -73,20 +78,19 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
           'bg-bg-tertiary border border-bg-quaternary',
           'text-sm text-text-secondary hover:text-text-primary',
           'transition-colors',
-          activeCategories.length > 0 && 'border-purple-primary/30 text-purple-primary'
+          activeCategories.length > 0 && 'border-white/30 text-white',
         )}
       >
         <Filter className="w-4 h-4" />
         <span>{getButtonLabel()}</span>
-        <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+        />
       </button>
 
       {isOpen && (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
             {filterOptions.map((option) => {
               const isActive =
@@ -101,7 +105,7 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
                   className={cn(
                     'w-full flex items-center gap-2 px-3 py-2 text-sm',
                     'hover:bg-bg-tertiary transition-colors text-left',
-                    isActive ? 'text-purple-primary' : 'text-text-secondary'
+                    isActive ? 'text-white' : 'text-text-secondary',
                   )}
                 >
                   {option.icon}

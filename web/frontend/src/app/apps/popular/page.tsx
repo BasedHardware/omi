@@ -1,29 +1,21 @@
 import envConfig from '@/src/constants/envConfig';
 import { FeaturedPluginCard } from '../components/plugin-card/featured';
 import { CategoryNav } from '../components/category-nav';
-import type { Plugin, PluginStat } from '../components/types';
+import type { Plugin } from '../components/types';
 
 async function getPluginsData() {
-  const [pluginsResponse, statsResponse] = await Promise.all([
-    fetch(`${envConfig.API_URL}/v1/approved-apps?include_reviews=true`, {
-      cache: 'no-store',
-    }),
-    fetch(
-      'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
-      {
-        cache: 'no-store',
-      },
-    ),
-  ]);
+  const pluginsResponse = await fetch(
+    `${envConfig.API_URL}/v1/approved-apps?include_reviews=true`,
+    { cache: 'no-store' },
+  );
 
   const plugins = (await pluginsResponse.json()) as Plugin[];
-  const stats = (await statsResponse.json()) as PluginStat[];
 
-  return { plugins, stats };
+  return { plugins };
 }
 
 export default async function PopularPage() {
-  const { plugins, stats } = await getPluginsData();
+  const { plugins } = await getPluginsData();
 
   // Sort all plugins by installs
   const sortedPlugins = [...plugins].sort((a, b) => b.installs - a.installs);
@@ -82,11 +74,7 @@ export default async function PopularPage() {
             {/* Grid of Featured Cards */}
             <div className="grid grid-cols-4 gap-6">
               {sortedPlugins.map((plugin) => (
-                <FeaturedPluginCard
-                  key={plugin.id}
-                  plugin={plugin}
-                  stat={stats.find((s) => s.id === plugin.id)}
-                />
+                <FeaturedPluginCard key={plugin.id} plugin={plugin} />
               ))}
             </div>
           </div>

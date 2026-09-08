@@ -1,21 +1,24 @@
 import asyncio
 import time
 import uuid
-from typing import Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
+import logging
+
+from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
-import logging
+from utils.llm.conversation_processing import _word_count  # type: ignore[reportPrivateUsage]  # shared word count helper
 
 logger = logging.getLogger(__name__)
 
-ONBOARDING_QUESTIONS = [
-    {'question': "How old are you?", 'category': 'age'},
+# The app shows these three together as "Talk About" topics rather than one at
+# a time, so the user speaks freely; the handler still walks them in order
+# against the accumulated transcript (see _check_answer).
+ONBOARDING_QUESTIONS: List[Dict[str, str]] = [
     {'question': "Where do you live?", 'category': 'location'},
     {'question': "What do you do for work?", 'category': 'work'},
     {'question': "What is your long-term goal?", 'category': 'long_term_goal'},
-    {'question': "What are your goals this month?", 'category': 'monthly_goals'},
-    {'question': "What do you have planned for today?", 'category': 'daily_plans'},
 ]
 
 
@@ -25,22 +28,40 @@ class OnboardingHandler:
     # Special speaker ID for Omi question segments (use 99 to avoid conflicts with real speakers)
     OMI_SPEAKER_ID = 99
 
-    def __init__(self, uid: str, send_message: Callable, stream_transcript: Optional[Callable] = None):
+    def __init__(
+        self,
+        uid: str,
+        send_message: Callable[[Dict[str, Any]], Awaitable[None]],
+        stream_transcript: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
+        session_id: Optional[str] = None,
+    ) -> None:
         self.uid = uid
+        # Server-generated provenance.  Clients may request onboarding mode,
+        # but they cannot choose or forge this session identity; consumers use
+        # it instead of trusting request.source.
+        # The admission/session identity is issued by the authenticated
+        # backend.  Keep the UUID fallback for existing internal callers, but
+        # never accept a client-provided value here.
+        self.session_id = session_id if isinstance(session_id, str) and len(session_id) >= 16 else uuid.uuid4().hex
         self.send_message = send_message
         self.stream_transcript = stream_transcript  # Callback to inject segments into transcript stream
-        self.questions = ONBOARDING_QUESTIONS.copy()
+        self.questions: List[Dict[str, str]] = ONBOARDING_QUESTIONS.copy()
         self.current_question_index = 0
-        self.answers: List[Dict] = []
+        self.answers: List[Dict[str, Any]] = []
         self.current_transcript = ''
-        self.silence_timer: Optional[asyncio.Task] = None
+        self.silence_timer: Optional[asyncio.Task[None]] = None
         self.is_checking_answer = False
+        # Segments that arrive while an AI answer check is awaiting the LLM are
+        # queued here and replayed once the check finishes, so speech covering
+        # later topics is evaluated instead of dropped.
+        self.pending_segments: List[Dict[str, Any]] = []
         self.completed = False
+        self.started = False
         self.start_time: Optional[float] = None  # Track when onboarding started
         self.last_segment_end: float = 0.0  # Track end time for question segment timing
 
     @property
-    def current_question(self) -> Optional[Dict]:
+    def current_question(self) -> Optional[Dict[str, str]]:
         if self.current_question_index < len(self.questions):
             return self.questions[self.current_question_index]
         return None
@@ -51,7 +72,7 @@ class OnboardingHandler:
             self.start_time = time.time()
         return time.time() - self.start_time
 
-    def _create_question_segment(self) -> Optional[Dict]:
+    def _create_question_segment(self) -> Optional[Dict[str, Any]]:
         """Create a transcript segment for the current question."""
         if not self.current_question:
             return None
@@ -74,16 +95,22 @@ class OnboardingHandler:
             'person_id': None,
         }
 
-    def update_segment_timing(self, segments: List[dict]):
+    def update_segment_timing(self, segments: List[Dict[str, Any]]) -> None:
         """Update timing tracking based on received segments."""
         for segment in segments:
             end_time = segment.get('end', 0)
             if end_time > self.last_segment_end:
                 self.last_segment_end = end_time
 
-    def on_segments_received(self, segments: List[dict]):
+    def on_segments_received(self, segments: List[Dict[str, Any]]) -> None:
         """Called when new transcript segments are received"""
-        if self.completed or self.is_checking_answer:
+        if self.completed:
+            return
+        if self.is_checking_answer:
+            # An AI answer check can await up to three LLM calls; speech that
+            # arrives during that window must not be lost. Queue it and replay
+            # it when _check_answer finishes.
+            self.pending_segments.extend(segments)
             return
 
         # Update timing tracking
@@ -104,7 +131,7 @@ class OnboardingHandler:
         # Start new silence timer (2 seconds)
         self.silence_timer = asyncio.create_task(self._silence_check())
 
-    async def _silence_check(self):
+    async def _silence_check(self) -> None:
         """Check answer after 2 seconds of silence"""
         await asyncio.sleep(2.0)
 
@@ -116,7 +143,7 @@ class OnboardingHandler:
 
         await self._check_answer()
 
-    async def skip_current_question(self):
+    async def skip_current_question(self) -> None:
         """Skip the current question and move to the next one"""
         if self.completed or self.is_checking_answer:
             return
@@ -154,7 +181,21 @@ class OnboardingHandler:
         else:
             await self.send_current_question()
 
-    async def _check_answer(self):
+    async def start(self) -> None:
+        """Start the question flow after the client has attached its listener.
+
+        The client explicitly requests this transition so the first question cannot
+        race the WebSocket subscription that consumes it. Repeated requests are safe
+        and do not inject duplicate question segments.
+        """
+        if self.completed or self.started:
+            return
+
+        self.start_time = time.time()
+        await self.send_current_question()
+        self.started = True
+
+    async def _check_answer(self) -> None:
         """Use AI to check if question was answered"""
         if self.is_checking_answer or not self.current_question:
             return
@@ -162,18 +203,19 @@ class OnboardingHandler:
         self.is_checking_answer = True
 
         try:
-            question = self.current_question['question']
             transcript = self.current_transcript.strip()
 
-            # Check with AI if enough content
-            word_count = len(transcript.split())
-            answered = False
+            # The topics are shown to the user all at once, so one stretch of
+            # speech may cover several of them. Keep the transcript across
+            # questions and advance through every question it answers.
+            while self.current_question and not self.completed:
+                question = self.current_question['question']
+                answered = False
+                if _word_count(transcript) >= 2:
+                    answered = await self._ai_check_answer(question, transcript)
+                if not answered:
+                    break
 
-            if word_count >= 2:
-                answered = await self._ai_check_answer(question, transcript)
-
-            if answered:
-                # Save answer
                 self.answers.append(
                     {
                         'question': question,
@@ -181,8 +223,6 @@ class OnboardingHandler:
                         'category': self.current_question['category'],
                     }
                 )
-
-                # Send event to app
                 await self._send_event(
                     'question_answered',
                     {
@@ -190,11 +230,7 @@ class OnboardingHandler:
                         'answered': True,
                     },
                 )
-
-                # Move to next question
                 self.current_question_index += 1
-                self.current_transcript = ''
-
                 if self.current_question_index >= len(self.questions):
                     await self._complete_onboarding()
                 else:
@@ -202,6 +238,12 @@ class OnboardingHandler:
 
         finally:
             self.is_checking_answer = False
+            # Replay what was said while the checks were awaiting the LLM so it
+            # accumulates into the transcript and restarts the silence timer
+            # for the next evaluation.
+            pending, self.pending_segments = self.pending_segments, []
+            if pending and not self.completed:
+                self.on_segments_received(pending)
 
     async def _ai_check_answer(self, question: str, transcript: str) -> bool:
         """Use AI to determine if answer is valid"""
@@ -213,19 +255,19 @@ Transcript: "{transcript}"
 Reply with only "yes" or "no"."""
 
             with track_usage(self.uid, Features.ONBOARDING):
-                response = await asyncio.to_thread(get_llm('onboarding').invoke, prompt)
-            return 'yes' in response.content.lower()
+                response = await run_blocking(llm_executor, get_llm('onboarding').invoke, prompt)
+            return 'yes' in cast(str, cast(Any, response).content).lower()
         except Exception as e:
             logger.error(f"AI check error: {e}")
             # Fallback: 2+ words is an answer
             return len(transcript.split()) >= 2
 
-    async def _send_event(self, event_type: str, data: dict):
+    async def _send_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Send message event to client"""
         event = {'type': event_type, **data}
         await self.send_message(event)
 
-    async def send_current_question(self):
+    async def send_current_question(self) -> None:
         """Send current question to client and inject as transcript segment"""
         if self.current_question:
             # Create and inject question segment into transcript stream
@@ -245,7 +287,7 @@ Reply with only "yes" or "no"."""
                 },
             )
 
-    async def _complete_onboarding(self):
+    async def _complete_onboarding(self) -> None:
         """Signal completion when all questions answered.
 
         The conversation is already being created/updated by the normal
@@ -262,7 +304,7 @@ Reply with only "yes" or "no"."""
             },
         )
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Cleanup resources"""
         if self.silence_timer:
             self.silence_timer.cancel()

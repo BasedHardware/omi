@@ -1,5 +1,5 @@
 import contextvars
-from typing import Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 from datetime import datetime
 
 import database.users as users_db
@@ -13,7 +13,7 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
-def resolve_config_uid(config: Optional[dict]) -> Tuple[Optional[str], Optional[str]]:
+def resolve_config_uid(config: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     if config is None:
         try:
             config = agent_config_context.get()
@@ -22,7 +22,8 @@ def resolve_config_uid(config: Optional[dict]) -> Tuple[Optional[str], Optional[
     if config is None:
         return None, "Error: Configuration not available"
     try:
-        uid = config.get('configurable', {}).get('user_id')
+        configurable: Any = config.get('configurable', {})
+        uid = configurable.get('user_id')
     except Exception:
         return None, "Error: Configuration not available"
     if not uid:
@@ -36,7 +37,7 @@ def get_integration_checked(
     connection_name: str,
     not_connected_msg: str,
     error_prefix: str,
-) -> Tuple[Optional[dict], Optional[str]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
         integration = users_db.get_integration(uid, key)
     except Exception as e:
@@ -46,7 +47,9 @@ def get_integration_checked(
     return integration, None
 
 
-def get_access_token_checked(integration: dict, missing_msg: str) -> Tuple[Optional[str], Optional[str]]:
+def get_access_token_checked(
+    integration: Optional[Dict[str, Any]], missing_msg: str
+) -> Tuple[Optional[str], Optional[str]]:
     token = integration.get('access_token') if integration else None
     if not token:
         return None, missing_msg
@@ -82,16 +85,17 @@ def parse_iso_with_tz(
 
 
 def prepare_access(
-    config: Optional[dict],
+    config: Optional[Dict[str, Any]],
     provider_key: str,
     provider_label: str,
     not_connected_msg: str,
     missing_token_msg: str,
     error_prefix: str,
-) -> Tuple[Optional[str], Optional[dict], Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str], Optional[str]]:
     uid, uid_err = resolve_config_uid(config)
     if uid_err:
         return None, None, None, uid_err
+    assert uid is not None  # resolve_config_uid guarantees uid is non-None when uid_err is None
     integration, int_err = get_integration_checked(
         uid,
         provider_key,
@@ -108,11 +112,11 @@ def prepare_access(
 
 
 def retry_on_auth(
-    call_fn,
-    call_kwargs: dict,
-    refresh_fn,
+    call_fn: Callable[..., Any],
+    call_kwargs: Dict[str, Any],
+    refresh_fn: Callable[..., Any],
     uid: str,
-    integration: dict,
+    integration: Dict[str, Any],
     expired_msg: str,
     markers: Tuple[str, ...] = (
         "Authentication failed",
@@ -120,7 +124,7 @@ def retry_on_auth(
         "token may be expired",
         "token may be expired or invalid",
     ),
-):
+) -> Tuple[Any, Optional[str]]:
     try:
         return call_fn(**call_kwargs), None
     except Exception as e:
@@ -132,6 +136,37 @@ def retry_on_auth(
                 call_kwargs['access_token'] = new_token
                 try:
                     return call_fn(**call_kwargs), None
+                except Exception as e2:
+                    return None, f"Error after token refresh: {str(e2)}"
+            return None, expired_msg
+        return None, f"Error: {msg}"
+
+
+async def retry_on_auth_async(
+    call_fn: Callable[..., Awaitable[Any]],
+    call_kwargs: Dict[str, Any],
+    refresh_fn: Callable[..., Awaitable[Any]],
+    uid: str,
+    integration: Dict[str, Any],
+    expired_msg: str,
+    markers: Tuple[str, ...] = (
+        "Authentication failed",
+        "401",
+        "token may be expired",
+        "token may be expired or invalid",
+    ),
+) -> Tuple[Any, Optional[str]]:
+    try:
+        return await call_fn(**call_kwargs), None
+    except Exception as e:
+        msg = str(e)
+        if any(m in msg for m in markers):
+            new_token = await refresh_fn(uid, integration)
+            if new_token:
+                call_kwargs = dict(call_kwargs)
+                call_kwargs['access_token'] = new_token
+                try:
+                    return await call_fn(**call_kwargs), None
                 except Exception as e2:
                     return None, f"Error after token refresh: {str(e2)}"
             return None, expired_msg

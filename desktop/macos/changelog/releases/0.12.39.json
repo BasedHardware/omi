@@ -1,0 +1,7 @@
+{
+  "version": "0.12.39",
+  "date": "2026-07-07",
+  "changes": [
+    "Added signed desktop artifact smoke checks before beta release publication"
+  ]
+}

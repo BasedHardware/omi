@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-nonmutating-witness-drops-rowid",
+  "violated_contract": "A record's persisted identity must be observable by the code that consumes it after the insert.",
+  "canonical_prevention": "A GRDB record that captures its rowid in a `mutating didInsert` conforms to MutablePersistableRecord, never PersistableRecord: PersistableRecord redeclares didInsert as non-mutating with an empty default, a mutating method cannot witness a non-mutating requirement, and a direct `record.insert(db)` therefore runs the no-op default and leaves `id` nil with no error or warning.",
+  "evidence_prs": [11208],
+  "scope_hints": ["desktop/macos/**"],
+  "status": "open"
+}

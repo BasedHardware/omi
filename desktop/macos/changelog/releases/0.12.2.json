@@ -1,0 +1,7 @@
+{
+  "version": "0.12.2",
+  "date": "2026-07-03",
+  "changes": [
+    "Removed the outdated \"Neo doesn't include desktop access\" banner and upgrade notices — Neo works on desktop with the freemium tier"
+  ]
+}

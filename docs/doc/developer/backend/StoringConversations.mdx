@@ -25,7 +25,7 @@ This separation allows for efficient retrieval of both full conversation context
 flowchart TD
     subgraph Recording["📱 Recording"]
         R[User Recording] --> AS[Audio Stream]
-        AS --> T[Transcription<br/>Deepgram]
+        AS --> T[Transcription<br/>Parakeet / Modulate]
     end
 
     T --> POST[POST /v1/conversations]

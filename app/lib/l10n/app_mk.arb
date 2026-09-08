@@ -1,5 +1,6 @@
 {
     "@@locale": "mk",
+    "sessionExpiredSignInAgain": "Сесијата истече — најавете се повторно.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мои апликации",
+    "myApps": "Создадено од мене",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Синхронизирање без интернет",
+    "autoSync": "Автоматска синхронизација",
+    "autoSyncDescription": "Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Вашиот план се обновува на {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Бесплатен план",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "{used} од {limit} увиди добиени овој месец",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} од {limit} спомени креирани овој месец",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "Извезување конфигурација",
     "bringYourOwn": "Донесете ваше",
     "payYourSttProvider": "Слободно користете omi. Плаќате директно на вашиот STT добавувач.",
-    "freeMinutesMonth": "1,200 слободни минути/месец вклучени. Неограничено со ",
+    "freeMinutesMonth": "300 слободни минути/месец вклучени. Неограничено со ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Домаќин е задолжителен",
     "validPortRequired": "Валиден порт е задолжителен",
@@ -1580,7 +1562,7 @@
     "designingApp": "Дизајнирање апликација",
     "generatingIconStep": "Генерирање икона",
     "finalTouches": "Последни штипови",
-    "processing": "Обработка...",
+    "processing": "Се обработува",
     "features": "Карактеристики",
     "creatingYourApp": "Создавање на вашата апликација...",
     "generatingIcon": "Генерирање икона...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Вам се допаѓа Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во App Store. Вашата повратна информација ни значи многу!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Помогнете ни да дојдеме до повеќе луѓе со оставување рецензија во Google Play Store. Вашата повратна информација ни значи многу!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Оценете во App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Оценете на Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Можеби подоцна",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Поставки за WiFi синхронизација",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Внесете ги врите за личната точка на вашиот телефон",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi синхронизација ја користи вашата телефон како личната точка. Најдете го називот на вашата личната точка и лозинката во Поставки > Лична точка.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Назив на личната точка (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "нпр. iPhone личната точка",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Лозинка",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Внесете лозинка за личната точка",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Зачувај врите",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "Избриши врите",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Внесете назив на личната точка",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi врите зачувани",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi врите избришани",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Резиме генерирано за {date}",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 премиум минути + неограничено на уред",
+    "basicPlanDescription": "300 премиум минути + неограничено на уред",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Брз пренос",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Синхронизирање",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Метод на пренос",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Брз",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Телефон",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Не успеаше да се активира WiFi на уредот. Моля, обидете се повторно.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Вашиот уред не поддржува брз пренос. Користете Bluetooth наместо тоа.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Моля, активирајте го хотспотот на вашиот телефон и обидете се повторно.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Не успеаше да се почне преносот. Моја, обидете се повторно.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Уредот не одговори. Моля, обидете се повторно.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Невалидни kredencijali за WiFi. Проверете ги вашите подесувања на хотспот.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Врската WiFi неуспеа. Моля, обидете се повторно.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Обработка на SD картичка",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "Обработи",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi синхронизирањето неуспеа",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Обработката неуспеа",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
+    "premiumMinutesInfo": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
+    "premiumMinutesMonth": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi синхронизирање",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} е копирано во клипбордот",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Врската неуспеа",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Поврзување со {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Активирај WiFi на {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Пребачено на Брз Трансфер",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Трансфер завршен! Сега можете да го пуштите ово снимање.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Брз трансфер активиран",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Синхронизација преку Bluetooth активирана",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Активирај Брз Трансфер",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Брз трансфер користи WiFi за ~5x побрзи брзини. Вашиот телефон привремено ќе се поврзе со WiFi мрежата на вашиот Omi уред durante трансферот.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Пристапот до интернет е паузиран durante трансферот",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Одберете како снимањата ќе се трансферуваат од вашиот Omi уред на вашиот телефон.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s преку WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ПОБРЗО",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Создава директна WiFi врска со вашиот Omi уред. Вашиот телефон привремено се откачува од вашата редовна WiFi durante трансферот.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Вашиот уред има ниска батерија. Време е за полнење! 🔋",
+    "lowBatteryAlertBody": "Вашата батерија е на {level}%. Време е за полнење! 🔋",
     "batteryFullyChargedTitle": "Omi е целосно наполнет",
     "batteryFullyChargedBody": "Вашиот Omi уред е целосно наполнет. Можете да го исклучите!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Вашиот Omi Уред се Откачи",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Дозвола за Локација Потребна",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Брз трансфер бара дозвола за локација за потврда на WiFi врска. Ве молиме дозволете дозвола за локација за да продолжите.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Извоз на Транскрипт",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "Нема дневни резимеа сѐ пока",
     "dailyRecapsDescription": "Вашите дневни резимеа ќе се појават овде кога ќе бидат генерирани",
-    "chooseTransferMethod": "Одбери Метод за Трансфер",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s преку WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Голем временски јаз детектиран ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Уредот не подржува WiFi синхронизација, смена на Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health не е достапно на овој уред",
     "downloadAudio": "Преземи Аудио",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Преглед на сите",
+    "expand": "Прошири",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Безбедно резервирано на твојот телефон",
+    "safelyBackedUp": "Создадени разговори",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "Надгради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишно",
-    "savePercent": "Заштедете ~17%",
+    "savePercent": "Заштедете ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тековен",
     "neoSubtitle": "{count} прашања месечно",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "Започни снимање повик",
     "startVoiceRecording": "Започни гласовно снимање",
     "bulkExportAlreadyExported": "Сите избрани задачи се веќе извезени",
-    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно."
+    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно.",
+    "deleteRecap": "Избриши преглед",
+    "deleteRecapConfirmTitle": "Да се избрише овој преглед?",
+    "deleteRecapConfirmBody": "Овој преглед ќе биде трајно отстранет. Оригиналните разговори од тој ден остануваат недопрени.",
+    "deleteRecapAction": "Избриши",
+    "recapDeletedSnackbar": "Прегледот е избришан",
+    "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
+    "syncStatusBackedUp": "Резервно зачувано",
+    "syncStatusBackingUp": "Синхронизирање…",
+    "syncStatusWaiting": "Чека синхронизација",
+    "syncStatusRetrying": "Обработката не успеа — нов обид",
+    "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusTooOld": "Премногу стар за синхронизација — Omi не може да го прифати",
+    "syncStatusFileUnavailable": "Датотеката е недостапна",
+    "syncStatusUploaded": "Поставено · се обработува на Omi",
+    "noRecordingsYet": "Сè уште нема снимки",
+    "syncInProgress": "Синхронизацијата е во тек",
+    "deleteWhileProcessingTitle": "Сè уште се обработува",
+    "deleteWhileProcessingMessage": "Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?",
+    "syncCardAllBackedUp": "Сите снимки се синхронизирани",
+    "syncCardReadyCount": "{count, plural, one{1 снимка спремна за синхронизација} other{{count} снимки спремни за синхронизација}}",
+    "syncCardProcessing": "Се обработува во Omi…",
+    "syncCardWaitingInternet": "Се чека интернет",
+    "syncCardNeedsAttention": "{count, plural, one{{count} снимка бара внимание} other{{count} снимки бараат внимание}}",
+    "syncFlowIntro": "Снимките се пренесуваат од вашиот уред на овој телефон и се складираат локално, а потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и се претвораат во разговори.",
+    "syncStepUpload": "Синхронизација",
+    "syncStepUploadDesc": "Вашиот запис се испраќа на серверот на Omi",
+    "syncStepProcess": "Транскрипција",
+    "syncStepProcessDesc": "Omi го претвора звукот во разговор",
+    "syncStepBackedUp": "Разговорот е готов",
+    "syncStepBackedUpDesc": "Најди го во Разговори",
+    "syncFailureFootnote": "Ако обработката не успее, снимката автоматски се повторува при следната синхронизација.",
+    "syncStatusConversationCreated": "Разговорот е создаден",
+    "syncCardUploadingTitle": "Се прикачува на Omi",
+    "syncCardDownloadingTitle": "Се презема од вашиот уред",
+    "syncCardProgressOf": "{current} од {total}",
+    "syncStatusOnDevice": "На вашиот уред",
+    "syncStatusDownloadingFromDevice": "Се презема од вашиот уред",
+    "newestFirst": "Прво најнови",
+    "noSyncedRecordingsYet": "Сè уште нема синхронизирани записи",
+    "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран.",
+    "syncCardRateLimited": "Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи",
+    "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет",
+    "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот",
+    "promoCode": "Промо код",
+    "enterPromoCode": "Внесете промо код",
+    "invalidPromotionCode": "Невалиден промо код.",
+    "backgroundModeTitle": "Режим во заднина",
+    "backgroundModeDescription": "Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.",
+    "backgroundModeNote": "Засега работи само со уреди Omi и постојано се подобрува.",
+    "regenerateRecap": "Регенерирај резиме",
+    "recapRegeneratedSnackbar": "Резимето е регенерирано",
+    "recapRegenerateFailed": "Не успеа регенерирањето на резимето. Обидете се повторно подоцна.",
+    "recapRegenerateCooldown": "Почекајте неколку секунди пред повторно регенерирање.",
+    "recapRegenerateNoConversations": "Нема разговори за сумирање за овој ден.",
+    "syncCustomSttWarningTitle": "Синхронизацијата користи транскрипција од Omi",
+    "syncCustomSttWarningMessage": "Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.",
+    "transcribeLaterTitle": "Транскрибирај подоцна",
+    "transcribeLaterDescription": "Снимај аудио сега, а транскрибирај го подоцна по потреба наместо во живо. Снимките се чуваат на твојот телефон, а потоа ги прикачуваш за да создадеш разговори.",
+    "transcribeLaterNote": "Работи со микрофонот на телефонот и со Omi и Limitless уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.",
+    "transcribeLaterStorageFull": "На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.",
+    "unmute": "Вклучи звук",
+    "newRecording": "Ново снимање",
+    "transcribeLaterPaused": "Паузирано — аудиото не се снима",
+    "recordingMode": "Режим на снимање",
+    "captureModeLater": "Подоцна",
+    "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
+    "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате.",
+    "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.",
+    "memoryThisDevice": "Овој уред",
+    "memoryThisIphone": "Овој iPhone",
+    "memoryThisPhone": "Овој телефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Како да го користите Omi",
+    "deviceOnboardingTranscriptionTitle": "Зборувајте во вашиот Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Кажете неколку зборови и гледајте како се појавуваат во реално време",
+    "deviceOnboardingGoodJob": "Браво!",
+    "deviceOnboardingStartSpeaking": "Почнете да зборувате...",
+    "deviceOnboardingAskQuestionTitle": "Поставете прашање на Omi",
+    "deviceOnboardingAskQuestionSubtitle": "Притиснете го копчето еднаш, изговорете го прашањето, па притиснете повторно кога ќе завршите",
+    "deviceOnboardingProcessingQuestion": "Се обработува вашето прашање...",
+    "deviceOnboardingListening": "Слуша...",
+    "deviceOnboardingTurnOffTitle": "Исклучи",
+    "deviceOnboardingTurnOnTitle": "Вклучи",
+    "deviceOnboardingTurnOffSubtitle": "Држете го копчето 3 секунди",
+    "deviceOnboardingTurnOnSubtitle": "Притиснете го копчето за да го вклучите повторно",
+    "deviceOnboardingHoldButtonHint": "Држете го копчето цврсто додека светлото не се изгасне",
+    "deviceOnboardingStatusConnected": "Поврзано",
+    "deviceOnboardingStatusConnectedDone": "Поврзано!",
+    "deviceOnboardingStatusDisconnected": "Исклучено",
+    "deviceOnboardingStatusTurningOff": "Се исклучува...",
+    "deviceOnboardingDoubleTapTitle": "Прилагодете го двојниот допир",
+    "deviceOnboardingEndConversation": "Заврши разговор",
+    "deviceOnboardingEndConversationDesc": "Зачувај и заврши го тековниот разговор",
+    "deviceOnboardingMuteUnmute": "Исклучи / вклучи звук",
+    "deviceOnboardingMuteUnmuteDesc": "Вклучи или исклучи го микрофонот",
+    "deviceOnboardingStarConversation": "Означи го разговорот со ѕвезда",
+    "deviceOnboardingStarConversationDesc": "Означи го разговорот како важен",
+    "deviceOnboardingSingleTapHint": "Тоа беше еден допир — обидете се да допрете двапати брзо!",
+    "deviceOnboardingTryDoubleTap": "Обидете се сега! Допрете двапати на вашиот Omi",
+    "deviceOnboardingContinue": "Продолжи",
+    "deviceOnboardingFinish": "Заврши",
+    "deviceOnboardingIntroTitle": "Запознајте се со вашиот Omi",
+    "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
+    "deviceOnboardingIntroDuration": "Околу 1 минута",
+    "jumpToLatestMessage": "Оди до последната порака",
+    "latest": "Најново",
+    "flashFirmware": "Инсталирај фирмвер",
+    "pendantRecordingTitle": "Снимање на приврзокот",
+    "pendantRecordingNote": "Твојот приврзок снима самостојно. Снимките се синхронизираат со телефонот додека апликацијата е отворена.",
+    "pendantSyncingRecordings": "Синхронизирање снимки од твојот приврзок…",
+    "pendantMinutesStored": "~{minutes} мин зачувано",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Меморијата на приврзокот е речиси полна — држи ја апликацијата отворена за синхронизација.",
+    "connectRayBanMeta": "Поврзи Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Користете ги вашите Ray-Ban Meta очила како уред за снимање на Omi за разговори и визуелен контекст. Omi ќе ја отвори апликацијата Meta AI за да ги поврзе вашите очила.",
+    "raybanMetaOpenMetaAI": "Поврзи преку Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завршете го поврзувањето во апликацијата Meta AI, а потоа вратете се тука.",
+    "raybanMetaCheckAgain": "Провери повторно",
+    "raybanMetaAllowCamera": "Дозволи камера на очилата",
+    "raybanMetaCameraExplanation": "Omi ја користи камерата на вашите очила за да додаде фотографии во вашите разговори. Можете да го прескокнете ова и да користите само аудио.",
+    "raybanMetaSkipForNow": "Прескокни засега",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta режим само со аудио",
+    "raybanMetaAudioOnlyExplanation": "Оваа верзија на Omi може да го користи микрофонот на вашите очила преку Bluetooth. За снимање фотографии е потребна Meta developer верзијата на Omi.",
+    "raybanMetaMusicPauseNote": "Музиката на вашиот телефон се паузира додека се користи микрофонот на очилата.",
+    "raybanMetaContinue": "Продолжи",
+    "raybanMetaCapturePhoto": "Сними фотографија",
+    "raybanMetaPhotoRequested": "Фотографијата е побарана — ќе се појави во вашиот разговор.",
+    "raybanMetaMicrophoneReady": "Микрофонот е подготвен",
+    "raybanMetaImageCaptureReady": "Снимањето слики е подготвено",
+    "raybanMetaImageCaptureUnavailable": "Недостапно во режим само со аудио",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Грешка при поврзување со Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Меморија на уредот",
+    "deviceStoragePercentFull": "{percent}% полна",
+    "deviceStorageUsedOfTotal": "{used} од {total} искористени",
+    "deviceStorageFree": "{free} слободни",
+    "deviceStorageNearlyFull": "Уредот е речиси полн — синхронизирајте за да ослободите простор.",
+    "phoneMicOfflineFallbackMessage": "Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн.",
+    "dataEncryptedBanner": "Вашите податоци се стандардно заштитени со силна енкрипција, а вие контролирате како се складираат и користат.",
+    "rayBanMetaMicPickerTitle": "Изберете го микрофонот на Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Изберете го Bluetooth микрофонот на очилата. Музиката се паузира додека Omi го користи.",
+    "rayBanMetaMicPickerEmpty": "Не се пронајдени Bluetooth микрофони. Поврзете ги очилата во поставките на iPhone и обидете се повторно.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth микрофоните не можеа да се вчитаат. Проверете дали Bluetooth е вклучен и обидете се повторно.",
+    "rayBanMetaMicPickerConnectError": "Не може да се поврзе со тој микрофон. Проверете дали е поврзан во поставките на iPhone.",
+    "cloudTranscription": "Транскрипција во облак",
+    "copyMessage": "Копирај порака",
+    "deleteOnDeviceModel": "Избриши модел",
+    "deleteOnDeviceModelConfirm": "Дали сте сигурни дека сакате да го избришете овој модел?",
+    "downgradeAnyway": "Сепак намали го планот",
+    "downgradeLimitBattery": "7x поголема потрошувачка на батерија",
+    "downgradeLimitDelay": "Доцнење од 5-7 секунди",
+    "downgradeLimitQuality": "30% послаб квалитет на транскрипцијата",
+    "downgradeLimitSpeakers": "Не може да ги препознае говорниците",
+    "downgradeLimitationsHeading": "Ќе ги имате следниве ограничувања:",
+    "downgradeToFreemiumTitle": "Намалување на бесплатниот план?",
+    "errorLoadingAudio": "Грешка при вчитување на аудиото",
+    "failedToLinkCalendarEvent": "Неуспешно поврзување со настан од календарот",
+    "googleCalendarConnectPrompt": "Поврзете го вашиот Google Calendar за да ги поврзувате разговорите со настани од календарот.",
+    "googleCalendarNotConnected": "Google Calendar не е поврзан",
+    "linkedToEvent": "Поврзано со „{title}“",
+    "onDeviceModelDeleted": "Моделот е избришан",
+    "onDeviceModelDownloadFailed": "Преземањето на моделот не успеа",
+    "onDeviceModelDownloadFailedDesc": "Whisper моделот не можеше да се преземе. Обидете се повторно.",
+    "onDeviceModelDownloadSuccess": "Моделот е преземен",
+    "onDeviceModelDownloadSuccessDesc": "Whisper моделот е успешно преземен",
+    "onDeviceModelDownloaded": "Преземено",
+    "onDeviceModelSize": "Големина на моделот",
+    "onDeviceTranscription": "Транскрипција на уредот",
+    "onDeviceTranscriptionDesc": "Транскрипцијата се обработува локално на вашиот уред",
+    "searchSettings": "Пребарај поставки…",
+    "speechToTextProvider": "Провајдер за говор во текст",
+    "speechToTextProviderDesc": "Изберете ја услугата што се користи за транскрипција",
+    "sttFilterAuto": "Автоматско",
+    "sttModelAccuracy": "Точност",
+    "sttModelFaster": "Побрзо",
+    "sttModelHigher": "Повисока",
+    "sttModelLower": "Пониска",
+    "sttModelSlower": "Побавно",
+    "sttModelSpeed": "Брзина",
+    "sttNone": "Нема",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Ви благодариме за повратната информација!",
+    "transcriptionLanguage": "Јазик на транскрипцијата",
+    "transcriptionLanguageDesc": "Изберете го јазикот за транскрипција на говорот",
+    "whisperModel": "Whisper модел",
+    "whisperModelDesc": "Изберете модел за транскрипција на уредот",
+    "whisperModelSizeBase": "Основен",
+    "whisperModelSizeLarge": "Голем",
+    "whisperModelSizeMedium": "Среден",
+    "whisperModelSizeSmall": "Мал",
+    "whisperModelSizeTiny": "Многу мал",
+    "planSheetChooseYourPlan": "Изберете го вашиот план за да го отклучите неограничениот Omi.",
+    "availableOnMacMobileWeb": "Достапно на Mac, мобилен и веб",
+    "popularBadge": "ПОПУЛАРНО",
+    "worksOnDesktop": "Работи на компјутер",
+    "noDesktopAccess": "Не работи на компјутер",
+    "annualBillingSummary": "{months} месеци / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 месец бесплатно} other{{count} месеци бесплатно}}",
+    "freemiumLimitsIntro": "Omi е бесплатен, но бесплатната верзија има ограничувања што влијаат на вашето искуство:",
+    "downgradeLimitDelayNotRealTime": "Доцнење од 5-7 секунди (не во реално време)",
+    "downgradeToFreemiumAction": "Префрлете се на бесплатна верзија",
+    "getFreeUnlimitedAccess": "Добијте бесплатен неограничен пристап",
+    "shareDataForTraining": "Споделете податоци за обука",
+    "yourRequestUnderReview": "Вашето барање се разгледува",
+    "pinAsBaseline": "Закачи како основа",
+    "unpinAsBaseline": "Откачи од основа",
+    "baselineMemory": "Основна меморија",
+    "alwaysInContext": "Секогаш во контекст",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeAbout": "За: {title}",
+    "askAboutThisConversation": "Прашај за ова",
+    "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
+    "sendRawAudioToOmiDescription": "Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.",
+    "findDevice": "Пронајди",
+    "diagnosticsShareFailed": "Дијагностиката не можеше да се сподели. Обидете се повторно.",
+    "appDisabledTitle": "Оваа апликација е оневозможена и не може да се инсталира.",
+    "appDisabledWebhookFailures": "Нејзината крајна точка не работеше 72 часа по ред, па испораките беа запрени.",
+    "appDisabledGeneric": "Ја оневозможи Omi.",
+    "appDisabledOwnerHint": "Прво поправете ја крајната точка — повторното овозможување повторно ја проверува секоја конфигурирана URL адреса.",
+    "appReEnable": "Овозможи повторно",
+    "appReEnableFailedTitle": "Повторното овозможување не успеа",
+    "appReEnableFailedBody": "Оваа апликација не можеше повторно да се овозможи. Обидете се повторно.",
+    "appDisabledOn": "Оневозможена на {date}.",
+    "appDisabledLastError": "Последна грешка: {error}.",
+    "prerecordedTranscript": "Претходно снимено",
+    "pendantRecordingSyncBlocked": "Pendant сè уште снима, па складираното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
+    "pendantFullSyncBlocked": "Меморијата на Pendant е полна и тој сè уште е во режим на снимање, па зачуваното аудио не може да се пренесе. Притиснете го копчето на Pendant за да го запрете снимањето, а потоа синхронизирајте повторно.",
+    "conversationsNotCapturedCount": "Не е снимено ({count})",
+    "transcriptionNoAudio": "Транскрипцијата не прима аудио",
+    "chatBlockTask": "Задача",
+    "chatBlockGoal": "Цел",
+    "chatBlockConversation": "Разговор",
+    "chatBlockMemory": "Спомен",
+    "chatBlockQuestion": "Прашање",
+    "chatBlockOpenInGoals": "Отвори во Цели",
+    "chatBlockOpenConversation": "Отвори разговор",
+    "chatBlockOpenInMemories": "Отвори во Спомени",
+    "chatBlockUnavailable": "Веќе не е достапно",
+    "chatBlockRecommendedNextSteps": "Препорачани следни чекори",
+    "couldNotLoadMemories": "Не можеа да се вчитаат спомените",
+    "couldNotLoadKnowledgeGraph": "Не можеше да се вчита графот на знаење",
+    "speechProfileOwnerTitle": "Гласовен профил на {name}",
+    "play": "Пушти",
+    "redo": "Сними повторно",
+    "answerWithYourVoice": "Одговорете со глас:",
+    "speechProfileTopicLocation": "Каде живеете?",
+    "speechProfileTopicWork": "Што работите?",
+    "speechProfileTopicGoal": "Која е вашата долгорочна цел?",
+    "speechToTextUnavailableDesc": "Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.",
+    "memoryHistoryPartial": "Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.",
+    "tapPlusToStartRecording": "Допрете + за да започнете со снимање"
 }

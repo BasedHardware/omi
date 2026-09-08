@@ -1,0 +1,713 @@
+{
+  "schema_version": 1,
+  "catalog_revision": 2,
+  "authority": {
+    "plan_identity": "catalog",
+    "price_identity": "repository_ledger",
+    "price_amount": "stripe_live",
+    "stripe_role": "price_amount_authority",
+    "unknown_caller_policy": "legacy_contract"
+  },
+  "open_decisions": {},
+  "allocation_profiles": {
+    "desktop": {
+      "desktop_free": {
+        "full_desktop": false,
+        "cloud_screen_vectors": false,
+        "proactivity_daily": {
+          "proactive_extraction": 150,
+          "proactive_reasoning": 60
+        }
+      },
+      "desktop_full": {
+        "full_desktop": true,
+        "cloud_screen_vectors": true,
+        "proactivity_daily": {
+          "proactive_extraction": 1000,
+          "proactive_reasoning": 500
+        }
+      },
+      "desktop_architect": {
+        "full_desktop": true,
+        "cloud_screen_vectors": true,
+        "proactivity_daily": {
+          "proactive_extraction": 2000,
+          "proactive_reasoning": 1000
+        }
+      }
+    },
+    "fair_use": {
+      "metered_transcription": {
+        "speech_milliseconds": {
+          "rolling_day": 7200000,
+          "rolling_three_days": 28800000,
+          "rolling_week": 36000000
+        }
+      },
+      "unlimited_transcription": {
+        "speech_milliseconds": {
+          "rolling_day": 14400000,
+          "rolling_three_days": 57600000,
+          "rolling_week": 72000000
+        }
+      }
+    },
+    "phone_calls": {
+      "free": {
+        "monthly_calls": {
+          "kind": "finite",
+          "value": 0
+        },
+        "max_duration_seconds": {
+          "kind": "finite",
+          "value": 300
+        },
+        "legacy_runtime_override": "phone_call_config/default.free_plan"
+      },
+      "paid": {
+        "monthly_calls": {
+          "kind": "unlimited"
+        },
+        "max_duration_seconds": {
+          "kind": "unlimited"
+        },
+        "legacy_runtime_override": "phone_call_config/default.paid_plan"
+      }
+    }
+  },
+  "measurement_contracts": {
+    "transcription": {
+      "usage_status": "complete",
+      "usage_source": "backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds",
+      "cost_status": "missing",
+      "cost_source": null,
+      "limitation": "Per-user transcription provider cost is not recorded; provider and BYOK cost are explicitly excluded."
+    },
+    "words_transcribed": {
+      "usage_status": "complete",
+      "usage_source": "backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.words_transcribed",
+      "cost_status": "missing",
+      "cost_source": null,
+      "limitation": "Per-user word processing cost is not recorded; provider and BYOK cost are explicitly excluded."
+    },
+    "insights_gained": {
+      "usage_status": "complete",
+      "usage_source": "backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.insights_gained",
+      "cost_status": "missing",
+      "cost_source": null,
+      "limitation": "Per-user insight generation cost is not recorded; provider and BYOK cost are explicitly excluded."
+    },
+    "memories_created": {
+      "usage_status": "complete",
+      "usage_source": "backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.memories_created",
+      "cost_status": "missing",
+      "cost_source": null,
+      "limitation": "Per-user memory generation cost is not recorded; provider and BYOK cost are explicitly excluded."
+    },
+    "chat": {
+      "usage_status": "complete",
+      "usage_source": "backend/database/user_usage.py:get_usage_by_plan.questions,cost_usd",
+      "cost_status": "partial",
+      "cost_source": "backend/database/llm_usage.py:plan_usage.<plan_id>.*.cost_usd; backend/database/llm_gateway_accounting.py:estimated_cost_micro_usd",
+      "limitation": "Realtime provider cost is complete; direct chat records web-search cost only, managed gateway cost is estimated in its ledger, backend GPT/Gemini token cost is not recorded, and BYOK provider cost is explicitly excluded."
+    }
+  },
+  "plans": [
+    {
+      "id": "basic",
+      "display_name": "Free",
+      "wire_aliases": [],
+      "wire_fallback_plan": null,
+      "lifecycle": "current",
+      "is_paid": false,
+      "storefronts": [],
+      "desktop_profile": "desktop_free",
+      "conditional_desktop_profiles": [],
+      "fair_use_profile": "metered_transcription",
+      "phone_calls_profile": "free",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "finite",
+            "value": 18000
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "question",
+          "limit": {
+            "kind": "finite",
+            "value": 30
+          },
+          "exhaustion": {
+            "kind": "hard_cap"
+          }
+        }
+      },
+      "billing": null
+    },
+    {
+      "id": "unlimited",
+      "display_name": "Neo",
+      "wire_aliases": [],
+      "wire_fallback_plan": null,
+      "lifecycle": "deprecated",
+      "is_paid": true,
+      "storefronts": [],
+      "desktop_profile": "desktop_free",
+      "conditional_desktop_profiles": [
+        {
+          "condition": "neo_billing_period_grandfather",
+          "profile": "desktop_full"
+        }
+      ],
+      "fair_use_profile": "unlimited_transcription",
+      "phone_calls_profile": "paid",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "question",
+          "limit": {
+            "kind": "finite",
+            "value": 200
+          },
+          "exhaustion": {
+            "kind": "overage"
+          }
+        }
+      },
+      "billing": {
+        "prices": [
+          {
+            "interval": "month",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_UNLIMITED_MONTHLY_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_UNLIMITED_MONTHLY_PRICE_ID",
+              "STRIPE_NEO_MONTHLY_PRICE_ID"
+            ]
+          },
+          {
+            "interval": "year",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_UNLIMITED_ANNUAL_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_UNLIMITED_ANNUAL_PRICE_ID",
+              "STRIPE_NEO_ANNUAL_PRICE_ID"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "architect",
+      "display_name": "Architect",
+      "wire_aliases": [
+        "pro"
+      ],
+      "wire_fallback_plan": null,
+      "lifecycle": "current",
+      "is_paid": true,
+      "storefronts": [
+        "macos",
+        "web",
+        "windows"
+      ],
+      "desktop_profile": "desktop_architect",
+      "conditional_desktop_profiles": [],
+      "fair_use_profile": "unlimited_transcription",
+      "phone_calls_profile": "paid",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "usd_cent",
+          "limit": {
+            "kind": "finite",
+            "value": 40000
+          },
+          "exhaustion": {
+            "kind": "overage"
+          }
+        }
+      },
+      "billing": {
+        "prices": [
+          {
+            "interval": "month",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+              "STRIPE_PRO_MONTHLY_PRICE_ID"
+            ]
+          },
+          {
+            "interval": "year",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_ARCHITECT_ANNUAL_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_ARCHITECT_ANNUAL_PRICE_ID",
+              "STRIPE_PRO_ANNUAL_PRICE_ID"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "operator",
+      "display_name": "Operator",
+      "wire_aliases": [],
+      "wire_fallback_plan": null,
+      "lifecycle": "current",
+      "is_paid": true,
+      "storefronts": [
+        "macos",
+        "web",
+        "windows"
+      ],
+      "desktop_profile": "desktop_full",
+      "conditional_desktop_profiles": [],
+      "fair_use_profile": "unlimited_transcription",
+      "phone_calls_profile": "paid",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "question",
+          "limit": {
+            "kind": "finite",
+            "value": 500
+          },
+          "exhaustion": {
+            "kind": "overage"
+          }
+        }
+      },
+      "billing": {
+        "prices": [
+          {
+            "interval": "month",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_OPERATOR_MONTHLY_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_OPERATOR_MONTHLY_PRICE_ID"
+            ]
+          },
+          {
+            "interval": "year",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_OPERATOR_ANNUAL_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_OPERATOR_ANNUAL_PRICE_ID"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "plus",
+      "display_name": "Plus",
+      "wire_aliases": [],
+      "wire_fallback_plan": "unlimited",
+      "lifecycle": "current",
+      "is_paid": true,
+      "storefronts": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "desktop_profile": "desktop_free",
+      "conditional_desktop_profiles": [],
+      "fair_use_profile": "metered_transcription",
+      "phone_calls_profile": "paid",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "finite",
+            "value": 90000
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "question",
+          "limit": {
+            "kind": "finite",
+            "value": 200
+          },
+          "exhaustion": {
+            "kind": "hard_cap"
+          }
+        }
+      },
+      "billing": {
+        "prices": [
+          {
+            "interval": "month",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_PLUS_MONTHLY_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_PLUS_MONTHLY_PRICE_ID"
+            ]
+          },
+          {
+            "interval": "year",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_PLUS_ANNUAL_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_PLUS_ANNUAL_PRICE_ID"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "unlimited_v2",
+      "display_name": "Unlimited",
+      "wire_aliases": [],
+      "wire_fallback_plan": "unlimited",
+      "lifecycle": "current",
+      "is_paid": true,
+      "storefronts": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "desktop_profile": "desktop_free",
+      "conditional_desktop_profiles": [],
+      "fair_use_profile": "unlimited_transcription",
+      "phone_calls_profile": "paid",
+      "allocations": {
+        "transcription": {
+          "period": "month",
+          "unit": "second",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "words_transcribed": {
+          "period": "month",
+          "unit": "word",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "insights_gained": {
+          "period": "month",
+          "unit": "insight",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "memories_created": {
+          "period": "month",
+          "unit": "memory",
+          "limit": {
+            "kind": "unlimited"
+          }
+        },
+        "chat": {
+          "period": "month",
+          "unit": "question",
+          "limit": {
+            "kind": "finite",
+            "value": 1000
+          },
+          "exhaustion": {
+            "kind": "hard_cap"
+          }
+        }
+      },
+      "billing": {
+        "prices": [
+          {
+            "interval": "month",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID"
+            ]
+          },
+          {
+            "interval": "year",
+            "currency": "usd",
+            "primary_env_var": "STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID",
+            "accepted_env_vars": [
+              "STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "recognized_stripe_prices": [
+    {
+      "price_id": "price_1RrxXL1F8wnoWYvwIddzR902",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1RrxXL1F8wnoWYvw3kDbWmjs",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1RtJPm1F8wnoWYvwhVJ38kLb",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1RtJQ71F8wnoWYvwKMPaGlGY",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TNIHd1F8wnoWYvwkIrekcQZ",
+      "plan_id": "unlimited",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TNIHd1F8wnoWYvwlKywJ8TO",
+      "plan_id": "unlimited",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TLFXK1F8wnoWYvwG1TaUkZ3",
+      "plan_id": "architect",
+      "interval": "month",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1TN7s21F8wnoWYvwG6JuEFm6",
+      "plan_id": "architect",
+      "interval": "month",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1TN7sF1F8wnoWYvwd0QaLZNA",
+      "plan_id": "architect",
+      "interval": "year",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1TAfBB1F8wnoWYvw8XBFM1dX",
+      "plan_id": "architect",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TLFac1F8wnoWYvwtPxZhtzE",
+      "plan_id": "architect",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TN7jS1F8wnoWYvwM5GqfxDw",
+      "plan_id": "operator",
+      "interval": "month",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1TN7jo1F8wnoWYvw6Xu1zAtC",
+      "plan_id": "operator",
+      "interval": "year",
+      "environment": "dev"
+    },
+    {
+      "price_id": "price_1TMxVM1F8wnoWYvw9uaoYX7V",
+      "plan_id": "operator",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TMxVM1F8wnoWYvwNfXdF6LW",
+      "plan_id": "operator",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TuH6z1F8wnoWYvw7Siv61SX",
+      "plan_id": "plus",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TuHCw1F8wnoWYvwZvKu86sI",
+      "plan_id": "plus",
+      "interval": "year",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TuIa81F8wnoWYvw0iX0j5M8",
+      "plan_id": "unlimited_v2",
+      "interval": "month",
+      "environment": "prod"
+    },
+    {
+      "price_id": "price_1TuIap1F8wnoWYvwHWq0EvNU",
+      "plan_id": "unlimited_v2",
+      "interval": "year",
+      "environment": "prod"
+    }
+  ],
+  "recognized_stripe_products": [
+    {
+      "product_id": "prod_SmpevIU38nIEUO",
+      "plan_id": "unlimited"
+    },
+    {
+      "product_id": "prod_UM0IIpZ4iOgfk5",
+      "plan_id": "unlimited"
+    },
+    {
+      "product_id": "prod_U8x5HNGnTF50X1",
+      "plan_id": "architect"
+    },
+    {
+      "product_id": "prod_ULep5SEo0pSdaM",
+      "plan_id": "operator"
+    },
+    {
+      "product_id": "prod_Uu5HDt3sygCK8N",
+      "plan_id": "plus"
+    },
+    {
+      "product_id": "prod_Uu6nrHIKWnnTWL",
+      "plan_id": "unlimited_v2"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-single-input-device-release",
+  "violated_contract": "A viewport that auto-follows live content must release that follow on the reader's navigation intent from every input path the platform can deliver (wheel, scrollbar, keyboard, touch), not from one device's event type.",
+  "canonical_prevention": "Decide follow/release from the resulting scroll POSITION and its direction, which every input path produces identically, rather than from a device-specific event; keep that decision in one shared surface so no copy of it can drift.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/transcript_test.dart"
+  ],
+  "evidence_prs": [
+    10515,
+    10562
+  ],
+  "scope_hints": [
+    "desktop/windows/src/renderer/**"
+  ],
+  "status": "open"
+}

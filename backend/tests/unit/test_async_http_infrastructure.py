@@ -9,10 +9,52 @@ Covers:
 """
 
 import asyncio
+import sys
 import time
+import types
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+
+def _drop_stale_module(name, required_attrs):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+    if (
+        isinstance(module, types.ModuleType)
+        and getattr(module, "__file__", None)
+        and all(hasattr(module, attr) for attr in required_attrs)
+    ):
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, attr_name = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr_name, None) is module:
+        delattr(parent, attr_name)
+
+
+_ensure_package("utils", BACKEND_DIR / "utils")
+_drop_stale_module("utils.http_client", ["WebhookCircuitBreaker", "get_webhook_circuit_breaker"])
+_drop_stale_module("utils.executors", ["critical_executor", "storage_executor", "shutdown_executors"])
 
 from utils.http_client import (
     WebhookCircuitBreaker,
@@ -26,6 +68,7 @@ from utils.http_client import (
     _webhook_circuit_breakers,
     _latest_wins_versions,
     _semaphores,
+    _SEMAPHORE_CACHE_MAX,
     _CIRCUIT_BREAKER_FAILURE_THRESHOLD,
     _CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
 )
@@ -243,6 +286,44 @@ class TestSemaphoreGetters:
         sem2 = get_webhook_semaphore()
         assert sem1 is sem2
 
+    @pytest.mark.asyncio
+    async def test_pruning_keeps_the_running_loops_semaphore(self):
+        """Crossing the cache cap must not swap the live loop's existing semaphore.
+
+        The prune used _semaphores.clear(), which dropped the running loop's entries too.
+        A caller already holding permits on the old Semaphore kept them while the next
+        caller received a brand-new one, so the effective concurrency briefly doubled —
+        the opposite of what the cap exists for. The docstring already promised the main
+        loop's semaphores "are stable" and that only short-lived asyncio.run() entries
+        are pruned.
+        """
+        _semaphores.clear()
+        webhook_before = get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+
+        # Fill the cache past the cap with entries from other (destroyed) loops.
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        # A new name for this loop is what triggers the prune.
+        get_maps_semaphore()
+
+        assert get_webhook_semaphore() is webhook_before, 'the running loop lost its semaphore to the prune'
+
+    @pytest.mark.asyncio
+    async def test_pruning_still_bounds_the_cache(self):
+        """The prune must drop the foreign-loop entries it was added for."""
+        _semaphores.clear()
+        get_webhook_semaphore()
+        live_loop_id = id(asyncio.get_running_loop())
+        for i in range(_SEMAPHORE_CACHE_MAX + 5):
+            _semaphores[(live_loop_id + 1 + i, 'webhook')] = asyncio.Semaphore(1)
+
+        get_maps_semaphore()  # crosses the cap, triggering the prune
+
+        assert all(key[0] == live_loop_id for key in _semaphores), 'foreign-loop entries survived'
+        assert len(_semaphores) == 2  # webhook + maps, both for this loop
+
     def test_different_loops_return_different_instances(self):
         """Different asyncio.run() calls get isolated semaphores."""
         sems = []
@@ -348,35 +429,79 @@ class TestWebhookClientConfig:
 
     def test_webhook_client_read_timeout_is_30s(self):
         """Webhook client must use 30s read timeout to match previous per-call behavior."""
-        from utils.http_client import get_webhook_client, _webhook_client
 
-        # Force fresh client creation
-        import utils.http_client as hc
+        async def _read_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
-        try:
-            client = get_webhook_client()
-            assert client.timeout.read == 30.0
-        finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            try:
+                return get_webhook_client().timeout.read
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_read_timeout()) == 30.0
 
     def test_webhook_client_connect_timeout_is_2s(self):
         """Webhook client must use aggressive 2s connect timeout."""
-        from utils.http_client import get_webhook_client as gwc
+
+        async def _connect_timeout():
+            from utils.http_client import close_all_clients, get_webhook_client
+
+            try:
+                return get_webhook_client().timeout.connect
+            finally:
+                await close_all_clients()
+
+        assert asyncio.run(_connect_timeout()) == 2.0
+
+
+class TestClientEventLoopOwnership:
+    """A shared client belongs to the event loop that opened its connections.
+
+    Regression for the prod failure where one process-wide client outlived the
+    `asyncio.run()` loop that pooled its keep-alive connections: the next live
+    loop made the pool discard one, uvloop raised `RuntimeError: ... the
+    handler is closed` from `write_eof()` on the freed handle, and httpcore
+    re-raised it at the caller — intermittent HTTP 500s on `/v1/apps/enable`
+    and dropped app-integration webhook deliveries.
+    """
+
+    def test_each_event_loop_gets_its_own_client(self):
+        """The surviving client of a finished loop is never handed to the next one."""
         import utils.http_client as hc
 
-        old_client = hc._webhook_client
-        hc._webhook_client = None
+        async def _client_id():
+            return id(hc.get_webhook_client())
+
+        # No close in between: this is the prod shape, where the process-wide
+        # client outlived the asyncio.run() loop that pooled its connections.
+        first = asyncio.run(_client_id())
+        second = asyncio.run(_client_id())
         try:
-            client = gwc()
-            assert client.timeout.connect == 2.0
+            assert first != second
         finally:
-            if hc._webhook_client is not None and hc._webhook_client is not old_client:
-                asyncio.run(hc._webhook_client.aclose())
-            hc._webhook_client = old_client
+            asyncio.run(hc.close_all_clients())
+
+    def test_one_loop_reuses_a_single_pooled_client(self):
+        import utils.http_client as hc
+
+        async def _same_client():
+            try:
+                return hc.get_webhook_client() is hc.get_webhook_client()
+            finally:
+                await hc.close_all_clients()
+
+        assert asyncio.run(_same_client()) is True
+
+    def test_finished_loops_do_not_accumulate_clients(self):
+        import utils.http_client as hc
+
+        async def _touch():
+            hc.get_webhook_client()
+
+        for _ in range(5):
+            asyncio.run(_touch())
+
+        assert len(hc._clients) == 1  # only the most recent loop's entry survives
 
 
 class TestExecutorConfiguration:
@@ -386,28 +511,47 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_16_workers(self):
-        """storage_executor sized for 16 workers to handle concurrent private cloud uploads."""
-        assert storage_executor._max_workers == 16
+    def test_storage_executor_has_128_workers(self):
+        """storage_executor sized for 128 workers to handle concurrent private cloud uploads (#7376)."""
+        assert storage_executor._max_workers == 128
 
 
 class TestNotificationWebhookWiring:
-    """Verify async webhook is correctly wired through storage_executor."""
+    """Pin how the daily-summary webhook is owned: run inline, never submitted to a pool.
 
-    def test_send_summary_calls_storage_executor_with_asyncio_run(self):
-        """_send_summary_notification must submit asyncio.run(day_summary_webhook(...)) to storage_executor."""
+    The name predates two rewirings. It was storage_executor, then postprocess_executor
+    (#7387), and is now an inline awaited call bounded by its own budget (#12530) --
+    because the coordinator was already running on postprocess_executor, so submitting
+    back into it made the function its own child and left the coroutine unowned at exit.
+    """
+
+    def test_day_summary_webhook_is_awaited_inline_not_submitted(self):
+        """The daily-summary webhook must run inline, never be submitted to a pool.
+
+        This pin used to require the opposite — ``postprocess_executor.submit(asyncio.run,
+        day_summary_webhook(...))`` (#7387). That wiring turned out to be wrong in both
+        directions (#12530): ``_send_summary_notification`` already runs *on*
+        postprocess_executor, so the submit made it its own child, and the Cloud Run Job
+        exits without joining the pool, so a queued webhook was dropped outright.
+
+        The behavioral coverage lives in test_daily_summary_generation.py; this stays a
+        source pin because the defect is a wiring shape, and it is the negative half —
+        "not submitted anywhere" — that a behavioral test cannot express.
+        """
         import os
-        import sys
-        from unittest.mock import MagicMock, patch
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
+        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
-        # Verify the exact wiring pattern
-        assert 'storage_executor.submit(asyncio.run, day_summary_webhook(' in src
+        assert '.submit(asyncio.run, day_summary_webhook(' not in src
+        assert 'asyncio.run(' in src and 'day_summary_webhook(' in src
+        # Bounded inside the per-user budget it now shares: a slow receiver must not be
+        # able to spend someone else's recap. See DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS.
+        assert 'timeout=DAILY_SUMMARY_WEBHOOK_BUDGET_SECONDS' in src
         assert 'critical_executor' not in src
+        assert 'storage_executor' not in src
 
 
 class TestPrivateCloudQueueCap:
@@ -419,7 +563,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         assert 'deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)' in src
@@ -431,7 +575,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'utils', 'pusher_protocol.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
@@ -449,7 +593,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         # Count occurrences of the overflow warning pattern

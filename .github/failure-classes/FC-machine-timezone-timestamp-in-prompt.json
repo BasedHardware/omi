@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-machine-timezone-timestamp-in-prompt",
+  "violated_contract": "A timestamp rendered into a model prompt whose output reaches the user verbatim is user-facing text, not wire format. Serializing it in UTC (ISO8601 or otherwise) makes the model quote machine time into notifications and misjudge urgency for every user whose local day differs from the UTC day.",
+  "canonical_prevention": "At the point a date enters prompt text, format it in an injected user TimeZone (or as relative phrasing) and tell the model timestamps are already local; pin the zone in tests to a non-UTC identifier so a CI runner in UTC cannot keep a machine-zone regression green.",
+  "evidence_prs": [11392],
+  "scope_hints": ["desktop/macos/Desktop/Sources/ProactiveAssistants/**"],
+  "status": "open",
+  "canonical_prevention_artifact": ["desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"]
+}

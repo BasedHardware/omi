@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "nllb-translation.fullname" . }}-test-connection"
+  labels:
+    {{- include "nllb-translation.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "nllb-translation.fullname" . }}:{{ .Values.service.port }}/health']
+  restartPolicy: Never

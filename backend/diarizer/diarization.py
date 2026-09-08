@@ -1,20 +1,21 @@
 import os
 import uuid
+from typing import Any, Dict, List
 
-import torch
+import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 from fastapi import UploadFile
-from pyannote.audio import Pipeline
+from pyannote.audio import Pipeline  # type: ignore[reportMissingImports]  # pyannote.audio not installed in dev venv
 
 # Instantiate pretrained speaker diarization pipeline
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-diarization_pipeline = Pipeline.from_pretrained(
+device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # type: ignore[reportUnknownMemberType]  # torch untyped
+diarization_pipeline: Any = Pipeline.from_pretrained(  # type: ignore[reportUnknownMemberType]  # pyannote untyped
     "pyannote/speaker-diarization-community-1", token=os.getenv('HUGGINGFACE_TOKEN')
 ).to(device)
 
 os.makedirs('_temp', exist_ok=True)
 
 
-def diarization_endpoint(file: UploadFile):
+def diarization_endpoint(file: UploadFile) -> List[Dict[str, Any]]:
     """
     Perform speaker diarization on an audio file.
 
@@ -33,17 +34,19 @@ def diarization_endpoint(file: UploadFile):
             f.write(file.file.read())
 
         # Run diarization
-        output = diarization_pipeline(file_path)
+        output: Any = diarization_pipeline(file_path)
 
         # Extract segments
-        data = []
+        data: List[Dict[str, Any]] = []
         for turn, speaker in output.speaker_diarization:
+            turn_any: Any = turn
+            speaker_any: Any = speaker
             data.append(
                 {
-                    'speaker': speaker,
-                    'start': turn.start,
-                    'end': turn.end,
-                    'duration': turn.end - turn.start,
+                    'speaker': speaker_any,
+                    'start': float(turn_any.start),
+                    'end': float(turn_any.end),
+                    'duration': float(turn_any.end) - float(turn_any.start),
                 }
             )
 

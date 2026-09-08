@@ -1,0 +1,110 @@
+{
+  "$comment": "Cross-platform task due-date bucketing vectors. Times are LOCAL calendar components [year, month, day, hour, minute] so every platform evaluates them in its own local zone with identical results (all implementations bucket by local calendar day). Two sanctioned models exist today: fold_overdue (macOS TasksPage.categoryFor, Windows taskBuckets.bucketOf) folds past-due tasks into today and has no dateless aging rule; separate_overdue (Flutter action_items_page categorizeTasks) has a fifth overdue bucket and moves dateless tasks created more than 7 days (7*24h from now, instant-based) ago into it. Every case pins BOTH models so any platform switching models is a deliberate fixture edit, not silent drift. Cases assume an incomplete task viewed in the open-tasks list (the Flutter overdue branches are skipped in the completed view). Buckets: today | tomorrow | later | no_deadline | overdue.",
+  "cases": [
+    {
+      "name": "no_due_recent",
+      "now": [2026, 8, 15, 10, 0],
+      "due": null,
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "no_deadline", "separate_overdue": "no_deadline" }
+    },
+    {
+      "name": "no_due_stale_two_weeks",
+      "now": [2026, 8, 15, 10, 0],
+      "due": null,
+      "created": [2026, 8, 1, 10, 0],
+      "expected": { "fold_overdue": "no_deadline", "separate_overdue": "overdue" }
+    },
+    {
+      "name": "no_due_just_inside_seven_day_window",
+      "now": [2026, 8, 15, 10, 0],
+      "due": null,
+      "created": [2026, 8, 8, 11, 0],
+      "expected": { "fold_overdue": "no_deadline", "separate_overdue": "no_deadline" }
+    },
+    {
+      "name": "no_due_missing_created",
+      "now": [2026, 8, 15, 10, 0],
+      "due": null,
+      "created": null,
+      "expected": { "fold_overdue": "no_deadline", "separate_overdue": "no_deadline" }
+    },
+    {
+      "name": "due_yesterday",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 14, 17, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "today", "separate_overdue": "overdue" }
+    },
+    {
+      "name": "due_last_month",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 7, 20, 9, 0],
+      "created": [2026, 7, 19, 9, 0],
+      "expected": { "fold_overdue": "today", "separate_overdue": "overdue" }
+    },
+    {
+      "name": "due_today_midnight",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 15, 0, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "today", "separate_overdue": "today" }
+    },
+    {
+      "name": "due_today_earlier_than_now",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 15, 8, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "today", "separate_overdue": "today" }
+    },
+    {
+      "name": "due_today_last_minute",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 15, 23, 59],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "today", "separate_overdue": "today" }
+    },
+    {
+      "name": "due_tomorrow_start",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 16, 0, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "tomorrow", "separate_overdue": "tomorrow" }
+    },
+    {
+      "name": "due_tomorrow_last_minute",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 16, 23, 59],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "tomorrow", "separate_overdue": "tomorrow" }
+    },
+    {
+      "name": "due_day_after_tomorrow",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 8, 17, 0, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "later", "separate_overdue": "later" }
+    },
+    {
+      "name": "due_next_month",
+      "now": [2026, 8, 15, 10, 0],
+      "due": [2026, 9, 2, 12, 0],
+      "created": [2026, 8, 14, 10, 0],
+      "expected": { "fold_overdue": "later", "separate_overdue": "later" }
+    },
+    {
+      "name": "month_boundary_tomorrow",
+      "now": [2026, 8, 31, 10, 0],
+      "due": [2026, 9, 1, 9, 0],
+      "created": [2026, 8, 30, 10, 0],
+      "expected": { "fold_overdue": "tomorrow", "separate_overdue": "tomorrow" }
+    },
+    {
+      "name": "year_boundary_tomorrow",
+      "now": [2026, 12, 31, 10, 0],
+      "due": [2027, 1, 1, 0, 0],
+      "created": [2026, 12, 30, 10, 0],
+      "expected": { "fold_overdue": "tomorrow", "separate_overdue": "tomorrow" }
+    }
+  ]
+}

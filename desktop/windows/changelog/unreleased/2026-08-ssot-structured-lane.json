@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The automation planner and local agent now run on Omi’s managed model instead of a separate desktop model."
+  ]
+}

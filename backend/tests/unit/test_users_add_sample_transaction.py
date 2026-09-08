@@ -1,38 +1,77 @@
+"""_add_sample_transaction pads/aligns speech_sample_transcripts.
+
+database.users binds ``db`` at import (``from ._client import db``) and pulls the
+``google.cloud.firestore_v1`` chain at top level, so the fake ``database._client``
+must be active before the module is exec'd. This is the sanctioned Tier-2 "fake
+must precede import" case: see backend/docs/test_isolation.md and
+testing.import_isolation.load_module_fresh.
+"""
+
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
 
-# Mock the database client to avoid needing GCP credentials
-sys.modules["database._client"] = MagicMock()
-sys.modules["stripe"] = MagicMock()
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
-class NotFound(Exception):
-    pass
+@pytest.fixture(scope="module")
+def users_db():
+    """Load a fresh database.users against stubbed database._client + firestore chain."""
+    client_stub = ModuleType("database._client")
+    client_stub.db = MagicMock(name="db")
+    client_stub.delete_collection_recursive = MagicMock(name="delete_collection_recursive")
+    client_stub.document_id_from_seed = MagicMock(name="document_id_from_seed")
+    client_stub.get_firestore_client = MagicMock(name="get_firestore_client", return_value=client_stub.db)
+    client_stub.get_customer_firestore_client = MagicMock(
+        name="get_customer_firestore_client", return_value=client_stub.db
+    )
+    client_stub.get_data_plane_firestore_client = MagicMock(
+        name="get_data_plane_firestore_client", return_value=client_stub.db
+    )
+    client_stub.data_plane_db = client_stub.db
 
+    firestore_stub = ModuleType("google.cloud.firestore")
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
 
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
-_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-_google_exceptions_module = types.ModuleType("google.cloud.exceptions")
-_google_exceptions_module.NotFound = NotFound
-sys.modules.setdefault("google.cloud.exceptions", _google_exceptions_module)
-_google_firestore_module = types.ModuleType("google.cloud.firestore")
-sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
-_google_firestore_v1_module = types.ModuleType("google.cloud.firestore_v1")
-_google_firestore_v1_module.FieldFilter = MagicMock()
-_google_firestore_v1_module.transactional = lambda func: func
-sys.modules.setdefault("google.cloud.firestore_v1", _google_firestore_v1_module)
-setattr(_google_module, "cloud", _google_cloud_module)
-setattr(_google_cloud_module, "exceptions", _google_exceptions_module)
-setattr(_google_cloud_module, "firestore", _google_firestore_module)
+    google_exceptions_stub = ModuleType("google.cloud.exceptions")
 
-from database import users as users_db
+    class NotFound(Exception):
+        pass
+
+    google_exceptions_stub.NotFound = NotFound
+
+    firestore_stub.transactional = lambda func: func
+    firestore_stub.DELETE_FIELD = object()
+
+    fv1_stub = ModuleType("google.cloud.firestore_v1")
+    fv1_stub.FieldFilter = MagicMock()
+    fv1_stub.transactional = lambda func: func
+
+    fakes = {
+        "database._client": client_stub,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+        "google.cloud.exceptions": google_exceptions_stub,
+        "google.cloud.firestore_v1": fv1_stub,
+        "stripe": MagicMock(),
+        "firebase_admin": MagicMock(),
+        "firebase_admin.auth": MagicMock(),
+    }
+    with stub_modules(fakes):
+        module = load_module_fresh(
+            "database.users",
+            os.path.join(str(_BACKEND), "database", "users.py"),
+        )
+        yield module
 
 
 class _FakeSnapshot:
@@ -67,6 +106,11 @@ class _FakeTransaction:
         self.updated_ref = person_ref
         self.updated_data = update_data
 
+    def set(self, person_ref, update_data, merge=False):
+        self.updated_ref = person_ref
+        self.updated_data = update_data
+        self.merge = merge
+
     def _clean_up(self):
         self._id = None
 
@@ -80,7 +124,7 @@ class _FakeTransaction:
         self.rolled_back = True
 
 
-def test_add_sample_transaction_pads_transcripts_for_v1_samples():
+def test_add_sample_transaction_pads_transcripts_for_v1_samples(users_db):
     person_data = {
         "speech_samples": ["sample-a.wav", "sample-b.wav"],
         "speech_sample_transcripts": [],
@@ -111,7 +155,7 @@ def test_add_sample_transaction_pads_transcripts_for_v1_samples():
     assert "updated_at" in transaction.updated_data
 
 
-def test_add_sample_transaction_already_aligned_transcripts():
+def test_add_sample_transaction_already_aligned_transcripts(users_db):
     person_data = {
         "speech_samples": ["sample-a.wav", "sample-b.wav"],
         "speech_sample_transcripts": ["first", "second"],
@@ -141,7 +185,25 @@ def test_add_sample_transaction_already_aligned_transcripts():
     assert transaction.updated_data["speech_samples_version"] == 3
 
 
-def test_add_sample_transaction_max_samples_reached():
+def test_byok_activation_replaces_existing_provider_fingerprints(users_db):
+    user_ref = _FakePersonRef(
+        {'byok': {'fingerprints': {'openai': 'openai-fingerprint', 'gemini': 'gemini-fingerprint'}}}
+    )
+    transaction = _FakeTransaction()
+
+    users_db._set_byok_active_transaction(transaction, user_ref, {'openrouter': 'openrouter-fingerprint'})
+
+    assert transaction.updated_ref is user_ref
+    assert transaction.merge is True
+    fingerprints = transaction.updated_data['byok']['fingerprints']
+    assert fingerprints['openrouter'] == 'openrouter-fingerprint'
+    assert fingerprints['openai'] is users_db.firestore.DELETE_FIELD
+    assert fingerprints['gemini'] is users_db.firestore.DELETE_FIELD
+    assert set(fingerprints) == {'openrouter', 'openai', 'gemini'}
+    assert transaction.updated_data['byok']['active'] is True
+
+
+def test_add_sample_transaction_max_samples_reached(users_db):
     person_data = {
         "speech_samples": ["a.wav", "b.wav"],
         "speech_sample_transcripts": ["a", "b"],
@@ -161,7 +223,7 @@ def test_add_sample_transaction_max_samples_reached():
     assert transaction.updated_data is None
 
 
-def test_add_sample_transaction_person_not_found():
+def test_add_sample_transaction_person_not_found(users_db):
     person_ref = _FakePersonRef({}, exists=False)
     transaction = _FakeTransaction()
 

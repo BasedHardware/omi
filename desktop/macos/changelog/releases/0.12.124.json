@@ -1,0 +1,15 @@
+{
+  "version": "0.12.124",
+  "date": "2026-07-25",
+  "changes": [
+    "Voice conversations now learn when a background agent finishes, so Omi can mention the result and answer follow-up questions about it",
+    "Improved conversation navigation reliability when switching between memory and conversation views",
+    "Improved the reliability of macOS Beta qualification on the dedicated M1 Studio",
+    "Improved Memory with full-width conversations, a single navigation menu, consistent search, and tighter chat spacing",
+    "Added privacy-safe analytics for the memory assistant and transcript memory extraction (activation, analysis outcomes, and recording-to-memory success) so their reliability and funnel can be measured; no screen content, memory text, or identifiers are sent",
+    "Refined the top navigation with a tighter pill group and Omi-style Memory menu, narrowed Memories and Conversations for easier reading, and kept copy actions focused on code blocks",
+    "Fixed a failure-diagnostics change that prevented new desktop builds from being produced",
+    "Improved crash-report context when Rewind storage or the AI bridge fails to start",
+    "Fixed chat showing web-search activity for unrelated long prompts and restored live lookup routing for recent news and newly released products"
+  ]
+}

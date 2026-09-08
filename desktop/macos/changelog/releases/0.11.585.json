@@ -1,0 +1,11 @@
+{
+  "version": "0.11.585",
+  "date": "2026-07-01",
+  "changes": [
+    "Fixed repeated macOS keychain permission prompts and device identity churn when a keychain prompt is denied",
+    "Fixed Memories failing to load (\"data couldn't be read\") for long-time users with legacy memory records",
+    "Updated notch chat agent controls so spawned subagents open from tool calls and settings moved to a hover-only right-side control.",
+    "Improved notch chat scrolling so streaming responses follow the bottom only until the user scrolls away",
+    "Improved desktop release checks so agent runtime packaging issues are caught before release"
+  ]
+}

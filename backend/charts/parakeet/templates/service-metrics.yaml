@@ -1,0 +1,17 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "parakeet.fullname" . }}-metrics
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.metrics.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "parakeet.selectorLabels" . | nindent 4 }}
+{{- end }}

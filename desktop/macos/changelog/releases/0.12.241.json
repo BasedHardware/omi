@@ -1,0 +1,7 @@
+{
+  "version": "0.12.241",
+  "date": "2026-08-29",
+  "changes": [
+    "Fixed just-in-time proactive triggers never syncing on launch because the trigger snapshot download waited for a screen-capture context visit; signed-in startups now reconcile the snapshot directly"
+  ]
+}

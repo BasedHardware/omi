@@ -6,14 +6,14 @@ import type { Person } from '@/types/user';
 
 // Speaker avatar colors matching mobile app
 const SPEAKER_COLORS = [
-  'bg-amber-700/30 text-amber-300',    // brown
-  'bg-blue-900/30 text-blue-300',       // navy
+  'bg-amber-700/30 text-amber-300', // brown
+  'bg-blue-900/30 text-blue-300', // navy
   'bg-emerald-800/30 text-emerald-300', // forest green
-  'bg-rose-900/30 text-rose-300',       // burgundy
-  'bg-cyan-700/30 text-cyan-300',       // teal
-  'bg-lime-800/30 text-lime-300',       // olive
-  'bg-purple-800/30 text-purple-300',   // plum
-  'bg-orange-800/30 text-orange-300',   // bronze
+  'bg-rose-900/30 text-rose-300', // burgundy
+  'bg-cyan-700/30 text-cyan-300', // teal
+  'bg-lime-800/30 text-lime-300', // olive
+  'bg-white/[0.14] text-text-secondary', // plum
+  'bg-orange-800/30 text-orange-300', // bronze
 ];
 
 interface PersonChipProps {
@@ -44,15 +44,15 @@ export function PersonChip({
         'text-sm font-medium transition-all duration-150',
         'border',
         selected
-          ? 'bg-purple-primary/20 border-purple-primary text-purple-primary'
+          ? 'bg-white/[0.14] border-white/25 text-text-primary'
           : 'bg-bg-tertiary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
-        className
+        className,
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-full flex items-center justify-center text-xs',
-          selected ? 'bg-purple-primary/30 text-purple-primary' : colorClass
+          selected ? 'bg-white/[0.14] text-text-primary' : colorClass,
         )}
       >
         {person.name.charAt(0).toUpperCase()}
@@ -81,18 +81,18 @@ export function YouChip({ selected = false, onClick, className }: YouChipProps) 
         'text-sm font-medium transition-all duration-150',
         'border',
         selected
-          ? 'bg-purple-primary/20 border-purple-primary text-purple-primary'
+          ? 'bg-white/[0.14] border-white/25 text-text-primary'
           : 'bg-bg-tertiary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
-        className
+        className,
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-full flex items-center justify-center',
-          selected ? 'bg-purple-primary/30' : 'bg-purple-primary/20'
+          selected ? 'bg-white/[0.14]' : 'bg-white/[0.14]',
         )}
       >
-        <User className="w-3 h-3 text-purple-primary" />
+        <User className="w-3 h-3 text-text-primary" />
       </div>
       <span>You</span>
       {selected && <Check className="w-3.5 h-3.5" />}
@@ -118,7 +118,7 @@ export function AddPersonChip({ onClick, className }: AddPersonChipProps) {
         'border border-dashed',
         'bg-bg-tertiary border-bg-quaternary text-text-tertiary',
         'hover:bg-bg-quaternary hover:text-text-secondary hover:border-text-quaternary',
-        className
+        className,
       )}
     >
       <Plus className="w-4 h-4" />

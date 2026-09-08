@@ -1,0 +1,384 @@
+import CryptoKit
+import Foundation
+
+/// Fetches API keys from the backend at runtime instead of bundling them in the app.
+/// Developer overrides (set in Settings) take precedence over backend-provided keys.
+///
+/// Also hosts the Bring-Your-Own-Key (BYOK) free-plan flow: when the user supplies
+/// their own OpenAI, Anthropic, Gemini, and Deepgram keys, the app sends them along
+/// with every request and the backend skips subscription billing. Keys live in
+/// UserDefaults (reusing the existing dev-override AppStorage pattern); the backend
+/// only ever sees SHA-256 fingerprints for state tracking.
+///
+/// NOTE: Deepgram, Gemini, Anthropic keys are NO LONGER fetched from the backend —
+/// they are proxied server-side (issues #5861, #6594).
+/// Firebase and Calendar keys are still served via /v1/config/api-keys.
+
+/// Keys that participate in the BYOK free-plan flow.
+enum BYOKProvider: String, CaseIterable {
+  case openrouter
+  case openai
+  case anthropic
+  case gemini
+  case deepgram
+
+  var storageKey: String {
+    switch self {
+    case .openrouter: return "dev_openrouter_api_key"
+    case .openai: return "dev_openai_api_key"
+    case .anthropic: return "dev_anthropic_api_key"
+    case .gemini: return "dev_gemini_api_key"
+    case .deepgram: return "dev_deepgram_api_key"
+    }
+  }
+
+  var headerName: String {
+    switch self {
+    case .openrouter: return "X-BYOK-OpenRouter"
+    case .openai: return "X-BYOK-OpenAI"
+    case .anthropic: return "X-BYOK-Anthropic"
+    case .gemini: return "X-BYOK-Gemini"
+    case .deepgram: return "X-BYOK-Deepgram"
+    }
+  }
+
+  var displayName: String {
+    switch self {
+    case .openrouter: return "OpenRouter"
+    case .openai: return "OpenAI"
+    case .anthropic: return "Anthropic"
+    case .gemini: return "Gemini"
+    case .deepgram: return "Deepgram"
+    }
+  }
+}
+
+enum BYOKLLMProvider: String, CaseIterable, Identifiable {
+  case openrouter
+  case openai
+  case gemini
+  case anthropic
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .openrouter: return "OpenRouter"
+    case .openai: return "OpenAI Direct"
+    case .gemini: return "Gemini"
+    case .anthropic: return "Anthropic"
+    }
+  }
+
+  var provider: BYOKProvider {
+    switch self {
+    case .openrouter: return .openrouter
+    case .openai: return .openai
+    case .gemini: return .gemini
+    case .anthropic: return .anthropic
+    }
+  }
+}
+@MainActor
+final class APIKeyService: ObservableObject {
+  static let shared = APIKeyService()
+
+  // Backend-provided keys (in-memory only, never persisted to disk)
+  @Published private(set) var geminiApiKey: String?
+  @Published private(set) var firebaseApiKey: String?
+  @Published private(set) var googleCalendarApiKey: String?
+  @Published private(set) var isLoaded: Bool = false
+  @Published private(set) var loadError: String?
+
+  /// The in-flight fetch task, so callers can await it instead of polling.
+  private var fetchTask: Task<Void, Never>?
+
+  /// Start fetching keys in the background. Callers can await via waitForKeys().
+  func startFetchingKeys() {
+    guard !isLoaded else { return }
+    guard fetchTask == nil else { return }
+    fetchTask = Task { await self.fetchKeys() }
+  }
+
+  /// Wait for keys to be loaded. Returns immediately if already loaded.
+  /// If no fetch is in-flight, starts one (handles app-restart-while-signed-in case).
+  /// A previously failed fetch clears fetchTask, so Calendar/Chat callers can retry without restarting.
+  func waitForKeys() async {
+    if isLoaded { return }
+    if fetchTask == nil {
+      log("APIKeyService: waitForKeys called but no fetch in-flight, starting one")
+      fetchTask = Task { await fetchKeys() }
+    }
+    await fetchTask?.value
+    if isLoaded { return }
+    if fetchTask == nil {
+      log("APIKeyService: key fetch completed without loaded keys, retrying once")
+      fetchTask = Task { await fetchKeys() }
+      await fetchTask?.value
+    }
+  }
+
+  var effectiveGeminiKey: String? {
+    nonEmpty(UserDefaults.standard.string(forKey: "dev_gemini_api_key")) ?? geminiApiKey
+  }
+
+  var effectiveFirebaseApiKey: String? {
+    firebaseApiKey
+  }
+
+  var effectiveGoogleCalendarApiKey: String? {
+    googleCalendarApiKey
+  }
+
+  /// Fetch keys from the backend. Call after Firebase auth is ready.
+  func fetchKeys() async {
+    loadError = nil
+
+    // Retry up to 3 times with backoff
+    for attempt in 1...3 {
+      do {
+        let keys = try await APIClient.shared.fetchApiKeys()
+        self.geminiApiKey = keys.geminiApiKey
+        self.firebaseApiKey = keys.firebaseApiKey
+        self.googleCalendarApiKey = keys.googleCalendarApiKey
+        self.isLoaded = true
+
+        // Set env vars so existing getenv() consumers keep working during transition
+        applyToEnvironment()
+
+        // Clear the completed task on the success path too (not just on the
+        // all-attempts-failed path below). Otherwise a stale finished task
+        // lingers; after sign-out (clear() sets isLoaded=false) the fetchTask
+        // == nil guards in startFetchingKeys()/waitForKeys() never fire, so a
+        // re-login can never refetch keys until the app is relaunched.
+        fetchTask = nil
+
+        log(
+          "APIKeyService: Fetched keys from backend (gemini=\(keys.geminiApiKey != nil), firebase=\(keys.firebaseApiKey != nil), calendar=\(keys.googleCalendarApiKey != nil))"
+        )
+        return
+      } catch {
+        let delay = pow(2.0, Double(attempt - 1))
+        log("APIKeyService: Fetch attempt \(attempt)/3 failed: \(error.localizedDescription), retrying in \(delay)s")
+        if attempt < 3 {
+          try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+      }
+    }
+
+    loadError = "Failed to fetch API keys from backend"
+    log("APIKeyService: All fetch attempts failed — features requiring API keys will be unavailable")
+    fetchTask = nil
+
+    // Still apply env vars from developer overrides if set
+    applyToEnvironment()
+  }
+
+  /// Clear all keys (e.g. on sign-out)
+  func clear() {
+    geminiApiKey = nil
+    firebaseApiKey = nil
+    googleCalendarApiKey = nil
+    isLoaded = false
+    loadError = nil
+    // Drop any completed/in-flight fetch task so the next sign-in can start a
+    // fresh fetch — the fetchTask == nil guards would otherwise block it.
+    fetchTask?.cancel()
+    fetchTask = nil
+
+    unsetenv("GEMINI_API_KEY")
+    // NOTE: Do NOT unset FIREBASE_API_KEY — it's needed for the next sign-in
+    // (auth bootstrap requires Firebase key before backend is reachable)
+    unsetenv("GOOGLE_CALENDAR_API_KEY")
+  }
+
+  /// Push effective keys into the process environment for backward compatibility.
+  private func applyToEnvironment() {
+    if let key = effectiveGeminiKey {
+      setenv("GEMINI_API_KEY", key, 1)
+    }
+    if let key = effectiveFirebaseApiKey {
+      setenv("FIREBASE_API_KEY", key, 1)
+    }
+    if let key = effectiveGoogleCalendarApiKey {
+      setenv("GOOGLE_CALENDAR_API_KEY", key, 1)
+    }
+  }
+
+  private func nonEmpty(_ s: String?) -> String? {
+    guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return s
+  }
+
+  // MARK: - Thread-safe key access (for non-MainActor contexts)
+  // These read from UserDefaults (thread-safe) and getenv() (set by applyToEnvironment).
+  // Use these from actors, nonisolated inits, and background threads.
+
+  nonisolated static var currentGeminiKey: String? {
+    nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_gemini_api_key"))
+      ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingCString: $0) })
+  }
+
+  /// True when the app has enough configuration to start transcription and screen analysis.
+  /// In proxy mode (OMI_DESKTOP_API_URL set), no client-side Deepgram/Gemini keys are needed.
+  nonisolated static var keysAvailable: Bool {
+    getenv("GEMINI_API_KEY") != nil || getenv("OMI_DESKTOP_API_URL") != nil
+  }
+
+  private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
+    guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return s
+  }
+
+  // MARK: - BYOK (Bring Your Own Keys) — free plan
+
+  /// Read a BYOK key from UserDefaults. Returns nil if empty/whitespace.
+  nonisolated static func byokKey(_ provider: BYOKProvider) -> String? {
+    nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
+  }
+
+  /// True when the user has supplied a selected LLM key.
+  /// The subscription-bypass gate: when this is true, the user is on the free
+  /// plan and we attach their selected LLM key to every backend request.
+  nonisolated static var isByokActive: Bool {
+    guard let provider = selectedBYOKLLMProvider, let key = byokKey(provider) else { return false }
+    return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
+  }
+
+  nonisolated static var hasTranscriptionBYOK: Bool {
+    guard selectedBYOKLLMProvider != nil, let key = byokKey(.deepgram) else { return false }
+    return enrolledFingerprints()["deepgram"] == byokFingerprint(key)
+  }
+
+  /// Persist fingerprints that passed BYOKValidator and were sent to activateBYOK.
+  nonisolated static func clearPersistedBYOKKeys() {
+    let defaults = UserDefaults.standard
+    for provider in BYOKProvider.allCases {
+      defaults.removeObject(forKey: provider.storageKey)
+    }
+    defaults.removeObject(forKey: DefaultsKey.byokLLMProvider.rawValue)
+    persistEnrolledFingerprints([:])
+  }
+
+  nonisolated static func bindBYOKOwner(_ uid: String?) {
+    guard let uid, !uid.isEmpty else { return }
+    let last = UserDefaults.standard.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
+    if last != uid {
+      // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
+      // signed-in account would otherwise enroll someone else's credentials.
+      clearPersistedBYOKKeys()
+      UserDefaults.standard.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
+    }
+  }
+
+  nonisolated static func persistEnrolledFingerprints(_ fingerprints: [String: String]) {
+    if fingerprints.isEmpty {
+      UserDefaults.standard.removeObject(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    } else {
+      UserDefaults.standard.set(fingerprints, forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    }
+  }
+
+  nonisolated static func enrolledFingerprints() -> [String: String] {
+    UserDefaults.standard.dictionary(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue) as? [String: String]
+      ?? [:]
+  }
+
+  /// Voice/realtime may use a leftover OpenAI/Gemini key only when that provider is selected.
+  nonisolated static func selectedRealtimeBYOKKey(for provider: BYOKProvider) -> String? {
+    guard selectedBYOKLLMProvider == provider else { return nil }
+    return byokKey(provider)
+  }
+
+  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
+    let requested: BYOKLLMProvider
+    if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
+      let selected = BYOKLLMProvider(rawValue: stored)
+    {
+      requested = selected
+    } else if let legacy = BYOKLLMProvider.allCases.first(where: { byokKey($0.provider) != nil }) {
+      requested = legacy
+    } else {
+      requested = .openrouter
+    }
+    return byokKey(requested.provider) == nil ? nil : requested.provider
+  }
+
+  /// SHA-256 fingerprint of a key, used by the backend to detect when the
+  /// user rotated their keys without us ever storing the key itself.
+  nonisolated static func byokFingerprint(_ key: String) -> String {
+    let digest = SHA256.hash(data: Data(key.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
+  }
+
+  /// Map of provider → (key, fingerprint) for every provider the user has configured.
+  nonisolated static var byokSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    var out: [BYOKProvider: (String, String)] = [:]
+    for provider in BYOKProvider.allCases {
+      if let key = byokKey(provider) {
+        out[provider] = (key, byokFingerprint(key))
+      }
+    }
+    return out
+  }
+
+  nonisolated static var activeBYOKSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    var snapshot: [BYOKProvider: (String, String)] = [:]
+    if let provider = selectedBYOKLLMProvider, let key = byokKey(provider) {
+      snapshot[provider] = (key, byokFingerprint(key))
+    }
+    if let key = byokKey(.deepgram) {
+      snapshot[.deepgram] = (key, byokFingerprint(key))
+    }
+    return snapshot
+  }
+
+  private static let reconcileLock = NSLock()
+  private static var reconcileGeneration: UInt64 = 0
+
+  private static func nextReconciliationGeneration() -> UInt64 {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    reconcileGeneration += 1
+    return reconcileGeneration
+  }
+
+  private static func isCurrentReconciliation(_ generation: UInt64) -> Bool {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    return reconcileGeneration == generation
+  }
+
+  func reconcileBYOKActivation() async {
+    Self.bindBYOKOwner(UserDefaults.standard.string(forKey: .authUserId))
+    guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
+    let generation = Self.nextReconciliationGeneration()
+
+    let snapshot = Self.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
+      result[entry.key] = entry.value.key
+    }
+    let statuses = await BYOKValidator.validateAll(snapshot)
+    guard Self.isCurrentReconciliation(generation) else { return }
+    guard statuses[selectedProvider] == .ok else {
+      try? await APIClient.shared.deactivateBYOK()
+      guard Self.isCurrentReconciliation(generation) else { return }
+      Self.persistEnrolledFingerprints([:])
+      return
+    }
+
+    // Fingerprints must come from the captured snapshot, not a later UserDefaults
+    // edit that raced the provider check.
+    let fingerprints = snapshot.reduce(into: [String: String]()) { result, entry in
+      if statuses[entry.key] == .ok {
+        result[entry.key.rawValue] = Self.byokFingerprint(entry.value)
+      }
+    }
+    do {
+      try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+      guard Self.isCurrentReconciliation(generation) else { return }
+      Self.persistEnrolledFingerprints(fingerprints)
+    } catch {
+      // Leave local capability inactive when the backend never enrolled.
+    }
+  }
+}

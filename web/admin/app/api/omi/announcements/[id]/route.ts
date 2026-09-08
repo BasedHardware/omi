@@ -7,10 +7,8 @@ const OMI_API_URL = process.env.NEXT_PUBLIC_OMI_API_URL;
 const OMI_SECRET_KEY = process.env.OMI_API_SECRET_KEY;
 
 // GET /api/omi/announcements/[id] - Get single announcement
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -36,10 +34,8 @@ export async function GET(
 }
 
 // PUT /api/omi/announcements/[id] - Update announcement
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
@@ -69,10 +65,8 @@ export async function PUT(
 }
 
 // DELETE /api/omi/announcements/[id] - Delete announcement
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 

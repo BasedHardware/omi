@@ -139,6 +139,12 @@ class _AppsListState extends State<_AppsList> {
     }
   }
 
+  // The fetch is done, whatever it came back with. Without this flag "empty" and
+  // "still loading" are indistinguishable: both fetches swallow their errors into
+  // empty lists, so the sheet stayed in the skeleton forever for anyone without a
+  // single installed template.
+  bool _loaded = false;
+
   Future<void> _fetchApps() async {
     try {
       await Future.wait([
@@ -147,6 +153,10 @@ class _AppsListState extends State<_AppsList> {
       ]);
     } catch (e) {
       Logger.debug('Error fetching apps: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _loaded = true);
+      }
     }
   }
 
@@ -227,7 +237,7 @@ class _AppsListState extends State<_AppsList> {
     final enabledApps = widget.provider.cachedEnabledConversationApps;
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
-    final isLoading = enabledApps.isEmpty && suggestedApps.isEmpty;
+    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();
@@ -388,7 +398,7 @@ class _AppsListState extends State<_AppsList> {
       final success = await conversationProvider.enableApp(app);
 
       if (!success) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(context.l10n.failedToInstallApp(app.name)),
@@ -411,14 +421,14 @@ class _AppsListState extends State<_AppsList> {
       conversationProvider.trackLastUsedSummarizationApp(app.id);
 
       // Close the bottom sheet
-      if (mounted) Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context);
 
       // Set the app for reprocessing and reprocess the conversation
       conversationProvider.setSelectedAppForReprocessing(app);
       await conversationProvider.reprocessConversation(appId: app.id);
     } catch (e) {
       // Handle installation error
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.errorInstallingApp(app.name, e.toString())),
@@ -477,7 +487,7 @@ class _AppListItemState extends State<_AppListItem> {
           // Set as preferred app
           if (widget.provider != null) {
             widget.provider!.setPreferredSummarizationApp(widget.app.id);
-            if (mounted) {
+            if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)),
@@ -592,7 +602,7 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
+                  child: FaIcon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -621,7 +631,7 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
+                  child: FaIcon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -709,7 +719,7 @@ class _CreateTemplateListItem extends StatelessWidget {
           leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
-            child: Icon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
+            child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
           ),
           title: Text(
             context.l10n.createCustomTemplate,

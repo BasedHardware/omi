@@ -1,12 +1,16 @@
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -35,6 +39,13 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall call) async {
+        if (call.method == 'getApplicationDocumentsDirectory') return Directory.systemTemp.path;
+        return null;
+      },
+    );
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
@@ -42,10 +53,7 @@ void main() {
 
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
-      final frame = WalFrame(
-        payload: [0xAA, 0xBB],
-        syncKey: FrameSyncKey([1]),
-      );
+      final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
       sync.onFrameCaptured(frame);
 
@@ -57,10 +65,7 @@ void main() {
 
     test('preserves insertion order for multiple frames', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: [i],
-          syncKey: FrameSyncKey([i]),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
 
       expect(sync.testFrames.length, 5);
@@ -107,7 +112,8 @@ void main() {
 
       sync.markFrameSynced(key); // marks index 2
       sync.markFrameSynced(
-          key); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
+        key,
+      ); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
 
       // Actually: markFrameSynced scans backward and breaks on FIRST syncKey match,
       // regardless of synced status. So second call marks index 2 again (already true).
@@ -151,10 +157,7 @@ void main() {
 
     test('correctly matches phone-mic-style 1-byte index keys', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       sync.markFrameSynced(FrameSyncKey.fromIndex(3));
@@ -246,6 +249,110 @@ void main() {
     });
   });
 
+  group('upload batching', () {
+    test('newest first, one conversation per batch', () {
+      const now = 2000000000;
+      final oldNewest = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final liveOlder = Wal(
+        timerStart: now - 120,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        conversationId: 'server-conversation',
+      );
+      final oldOldest = Wal(timerStart: now - 8 * 24 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final liveNewest = Wal(
+        timerStart: now - 30,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        conversationId: 'server-conversation',
+      );
+
+      final batch = nextSyncUploadBatch([oldNewest, liveOlder, oldOldest, liveNewest], now);
+
+      expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
+    });
+
+    test('only a conversation-bound recent WAL counts as live capture', () {
+      const now = 2000000000;
+      Wal at(int ageSeconds, {String? conversationId}) =>
+          Wal(timerStart: now - ageSeconds, codec: BleAudioCodec.opus, seconds: 60, conversationId: conversationId);
+
+      expect(isLiveCaptureWal(at(60), now), isFalse);
+      expect(isLiveCaptureWal(at(60, conversationId: 'c'), now), isTrue);
+      expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
+    });
+
+    test('a backlog smaller than the limit drains in one batch', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        3,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch.length, 3);
+    });
+
+    test('a batch never exceeds the limit that keeps a job inside the backend stale guard', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        25,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch.length, 5);
+      expect(batch.map((wal) => wal.timerStart), historical.take(5).map((wal) => wal.timerStart));
+    });
+
+    test('historical WALs with different recording locations are never uploaded as one conversation batch', () {
+      const now = 2000000000;
+      final firstCapture = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        time: DateTime.utc(2033, 5, 18, 3, 30),
+        captureSource: 'current_position',
+      );
+      final secondCapture = Geolocation(
+        latitude: 34.0522,
+        longitude: -118.2437,
+        time: DateTime.utc(2033, 5, 18, 4, 30),
+        captureSource: 'current_position',
+      );
+      final wals = [
+        Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 7 * 60 * 60 - 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: firstCapture),
+        Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60, geolocation: secondCapture),
+      ];
+
+      final batch = nextSyncUploadBatch(wals, now);
+
+      expect(batch, hasLength(2));
+      expect(batch.every((wal) => identical(wal.geolocation, firstCapture)), isTrue);
+    });
+
+    test('a conversation too large for one batch does not claim a manifest', () {
+      const now = 2000000000;
+      final oversized = List.generate(
+        6,
+        (index) => Wal(
+          timerStart: now - index,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          conversationId: 'oversized-conversation',
+        ),
+      );
+
+      final batch = nextSyncUploadBatch(oversized, now);
+
+      expect(batch.length, 5);
+      expect(canClaimLiveCapture(batch, oversized, now), isFalse);
+      expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+  });
+
   group('audio_player_utils temp file serialization (no double-strip)', () {
     test('headerless payloads are serialized without extra sublist(3)', () {
       // Simulate a Wal with headerless payloads (as now stored by _chunk)
@@ -320,10 +427,7 @@ void main() {
     test('phone mic frames with wrapping index keys', () {
       // Simulate phone mic producing 256+ frames (index wraps at 255)
       for (int i = 0; i < 260; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i & 0xFF),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i & 0xFF), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       expect(sync.testFrames.length, 260);
@@ -333,6 +437,43 @@ void main() {
       sync.markFrameSynced(FrameSyncKey.fromIndex(3));
       expect(sync.testFrameSynced[3], false); // Not this one
       expect(sync.testFrameSynced[259], true); // This one (last match)
+    });
+
+    test('each finalized WAL owns an independent location snapshot', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final location = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.006,
+        time: DateTime.utc(2026, 8, 1, 12),
+        captureSource: 'current_position',
+      );
+      sync.setSessionGeolocation(location);
+      location.latitude = 41.0;
+
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+      await sync.finalizeCurrentSession();
+
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])));
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(2));
+      expect(sync.testWals[0].geolocation?.latitude, 40.7128);
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+
+      sync.testWals[0].geolocation!.latitude = 42.0;
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+    });
+
+    test('cleared session location is not inherited by external WALs', () async {
+      sync.setSessionGeolocation(
+        Geolocation(latitude: 40.7128, longitude: -74.006, time: DateTime.utc(2026, 8, 1, 12)),
+      );
+      sync.setSessionGeolocation(null);
+
+      final wal = Wal(timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000, codec: BleAudioCodec.opus, seconds: 1);
+      await sync.addExternalWal(wal);
+
+      expect(wal.geolocation, isNull);
     });
   });
 
@@ -365,10 +506,7 @@ void main() {
 
       // BleDeviceSource strips header
       final payload = blePacket.sublist(3); // [0xAA, 0xBB, 0xCC]
-      final frame = WalFrame(
-        payload: payload,
-        syncKey: FrameSyncKey.fromBleHeader(blePacket),
-      );
+      final frame = WalFrame(payload: payload, syncKey: FrameSyncKey.fromBleHeader(blePacket));
 
       // _chunk stores payload only
       final chunk = [frame].map((f) => f.payload).toList();
@@ -377,6 +515,74 @@ void main() {
       // No firmware header in stored data
       expect(chunk[0].length, 3);
       expect(chunk[0][0], 0xAA); // First byte is audio, not header
+    });
+  });
+
+  group('WAL lists are growable (regression: Cannot add to an unmodifiable list)', () {
+    // Crash: LocalWalSyncImpl._chunk called wal.data.addAll(chunk) on a WAL
+    // loaded from disk. Wal.fromJson never passed `data`, so the constructor
+    // default `const []` left an unmodifiable list that threw on addAll.
+    test('Wal.fromJson produces a growable data list that _chunk can append to', () {
+      final wal = Wal.fromJson({
+        'timer_start': 1700000000,
+        'codec': 'opus',
+        'seconds': 60,
+        'status': 'miss',
+        'storage': 'disk',
+      });
+
+      // The exact operation from _chunk that crashed in production:
+      wal.data.addAll([
+        [0xAA, 0xBB],
+        [0xCC, 0xDD],
+      ]);
+
+      expect(wal.data.length, 2);
+    });
+
+    test('Wal constructed without data has a growable data list', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 60);
+
+      wal.data.add([0x01]);
+
+      expect(wal.data, [
+        [0x01],
+      ]);
+    });
+
+    test('addExternalWal before _initializeWals completes does not throw on _wals', () async {
+      // Same failure class: `_wals = const []` was unmodifiable until
+      // _initializeWals replaced it, so an early addExternalWal crashed.
+      final freshListener = _MockListener();
+      final freshSync = LocalWalSyncImpl(freshListener);
+      // Old timerStart → backfill lane, so no fresh-upload network call runs.
+      final wal = Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60);
+
+      await freshSync.addExternalWal(wal);
+
+      expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
+    });
+  });
+
+  group('syncWal — orphan WAL guard', () {
+    // A WAL the user taps "sync" on may already be gone from `_wals` (a
+    // concurrent delete/reload). Previously `.first` on the empty match list
+    // threw an uncaught StateError; the guard now bails out to null instead.
+    test('LocalWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final orphan = Wal(timerStart: 123, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await sync.syncWal(wal: orphan);
+
+      expect(result, isNull);
+    });
+
+    test('FlashPageWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final flashSync = FlashPageWalSyncImpl(listener);
+      final orphan = Wal(timerStart: 456, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await flashSync.syncWal(wal: orphan);
+
+      expect(result, isNull);
     });
   });
 }

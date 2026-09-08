@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -86,6 +88,70 @@ void main() {
   }
 
   group('simplified status indicators (#6672)', () {
+    testWidgets('shows terminal live STT failure until the backend is ready again', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      captureProvider.updateRecordingState(RecordingState.record);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      captureProvider.onMessageEventReceived(
+        MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: true,
+          reason: 'send_failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(captureProvider.recordingState, RecordingState.record);
+      expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
+
+      captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      await tester.pump();
+
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+      expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
+    });
+
+    testWidgets('shows Paused for non-call audio interruption (#4706)', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      // recordingState=interrupted without micInterrupted → isCallActive is false
+      // (other-app audio / silent stall path, not an active phone call).
+      captureProvider.updateRecordingState(RecordingState.interrupted);
+      expect(captureProvider.isCallActive, isFalse);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      final pausedText = AppLocalizations.of(context).paused;
+      final listeningText = AppLocalizations.of(context).listening;
+
+      expect(find.text(pausedText), findsWidgets);
+      expect(find.text(listeningText), findsNothing);
+      // Phone-mic paused affordance: orange status dot + play (resume) control.
+      expect(
+        find.byWidgetPredicate((w) {
+          if (w is! Container) return false;
+          final d = w.decoration;
+          return d is BoxDecoration &&
+              d.color == const Color(0xFFFF9500) &&
+              d.shape == BoxShape.circle &&
+              w.constraints?.maxWidth == 6;
+        }),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == FontAwesomeIcons.play.codePoint),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);

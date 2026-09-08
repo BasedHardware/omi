@@ -3,33 +3,43 @@ Unit tests for LLM usage database operations.
 """
 
 import os
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
 
-# Create mock db before importing the module
-mock_db = MagicMock()
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-# Mock the database client module
-mock_client_module = MagicMock()
-mock_client_module.db = mock_db
-sys.modules["database._client"] = mock_client_module
-sys.modules["stripe"] = MagicMock()
+_BACKEND = Path(__file__).resolve().parents[2]
 
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
-_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-_google_firestore_module = types.ModuleType("google.cloud.firestore")
-_google_firestore_module.Increment = lambda x: {"__increment": x}
-sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
-setattr(_google_module, "cloud", _google_cloud_module)
-setattr(_google_cloud_module, "firestore", _google_firestore_module)
 
-from database import llm_usage
+@pytest.fixture(scope="module", autouse=True)
+def _llm_usage_module():
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.Increment = lambda value: value
+    firestore_stub.transactional = lambda fn: fn
+    client_stub = AutoMockModule("database._client")
+    client_stub.db = MagicMock()
+
+    with stub_modules(
+        {
+            "google": google_pkg,
+            "google.cloud": google_cloud_pkg,
+            "google.cloud.firestore": firestore_stub,
+            "database._client": client_stub,
+        }
+    ):
+        module = load_module_fresh(
+            "database.llm_usage",
+            os.path.join(str(_BACKEND), "database", "llm_usage.py"),
+        )
+        globals()["llm_usage"] = module
+        yield module
 
 
 class _FakeDocSnapshot:
@@ -64,11 +74,17 @@ class _FakeCollection:
 
 
 class _FakeUserRef:
-    def __init__(self, collection):
+    def __init__(self, collection, subscription_plan=None):
         self._collection = collection
+        self._subscription_plan = subscription_plan
 
     def collection(self, name):
         return self._collection
+
+    def get(self, *_args):
+        if self._subscription_plan is None:
+            return _FakeDocSnapshot({}, exists=False)
+        return _FakeDocSnapshot({'subscription': {'plan': self._subscription_plan}})
 
 
 def test_record_llm_usage_sanitizes_model_with_dots():
@@ -93,8 +109,51 @@ def test_record_llm_usage_sanitizes_model_with_dots():
     call = doc_ref.set_calls[0]
     assert call["merge"] is True
     # Check that '.' is replaced with '_'
-    assert "chat.gpt-4_1-mini.input_tokens" in call["data"]
-    assert "chat.gpt-4_1-mini.output_tokens" in call["data"]
+    # Asserted on the STORED SHAPE, not on a dotted key in the payload. These assertions used to read
+    # `"chat.gpt-4_1-mini.input_tokens" in call["data"]`, which is why the nesting defect was invisible:
+    # the payload was exactly right and Firestore stored it as one field whose NAME contained dots,
+    # because a dot is a field path in update() and a literal character in set().
+    assert set(call["data"]["chat"]["gpt-4_1-mini"]) >= {"input_tokens", "output_tokens"}
+
+
+def test_bucket_attribution_maps_legacy_pro_and_omits_unmeasured_cost():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='pro')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket('user', input_tokens=10, output_tokens=5)
+
+    data = doc_ref.set_calls[0]['data']
+    assert 'cost_usd' not in data.get('desktop_chat', {})
+    assert 'cost_usd' not in data.get('desktop_chat_omi', {})
+    architect = data['plan_usage']['architect']
+    assert architect['desktop_chat']['input_tokens'] == 10
+    assert architect['desktop_chat']['output_tokens'] == 5
+    assert architect['_metadata']['cost_status_counts']['missing'] == 1
+
+
+def test_bucket_complete_cost_is_joinable_to_catalog_plan():
+    doc_ref = _FakeDocRef()
+    collection = _FakeCollection(doc_ref)
+    user_ref = _FakeUserRef(collection, subscription_plan='operator')
+
+    with patch.object(llm_usage, 'db') as patched_db:
+        patched_db.collection.return_value.document.return_value = user_ref
+        llm_usage.record_llm_usage_bucket(
+            'user',
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.25,
+            cost_status='complete',
+        )
+
+    data = doc_ref.set_calls[0]['data']
+    assert data['desktop_chat']['cost_usd'] == 0.25
+    operator = data['plan_usage']['operator']
+    assert operator['desktop_chat']['cost_usd'] == 0.25
+    assert operator['_metadata']['cost_status_counts']['complete'] == 1
 
 
 def test_record_llm_usage_sanitizes_model_with_slash():
@@ -118,8 +177,7 @@ def test_record_llm_usage_sanitizes_model_with_slash():
     call = doc_ref.set_calls[0]
     assert call["merge"] is True
     # Check that both '/' and '.' are replaced with '_'
-    assert "chat.google_gemini-flash-1_5-8b.input_tokens" in call["data"]
-    assert "chat.google_gemini-flash-1_5-8b.output_tokens" in call["data"]
+    assert set(call["data"]["chat"]["google_gemini-flash-1_5-8b"]) >= {"input_tokens", "output_tokens"}
 
 
 def test_record_llm_usage_skips_zero_tokens():
@@ -218,7 +276,7 @@ def test_record_llm_usage_sanitizes_all_special_chars():
     assert len(doc_ref.set_calls) == 1
     call = doc_ref.set_calls[0]
     # All special chars should be replaced with '_'
-    assert "chat.foo_bar_baz_qux_quux_corge_grault_garply.input_tokens" in call["data"]
+    assert "input_tokens" in call["data"]["chat"]["foo_bar_baz_qux_quux_corge_grault_garply"]
 
 
 def test_record_llm_usage_nonzero_input_only():

@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Settings → Rewind now tells you when proactive insights can't run because notifications are off, instead of showing the feature as on while it stays silent."
+  ]
+}

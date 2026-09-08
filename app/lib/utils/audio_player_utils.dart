@@ -9,6 +9,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/app_globals.dart';
@@ -77,12 +78,17 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     if (_audioPlayer != null && !_audioPlayer!.isOpen()) {
       await _audioPlayer!.openPlayer();
+      // onProgress emits nothing unless a subscription interval is set (default 0ms).
+      await _audioPlayer!.setSubscriptionDuration(const Duration(milliseconds: 100));
     }
   }
 
   bool isPlaying(String id) => _currentPlayingId == id;
 
   bool canPlayOrShare(Wal wal) {
+    if (wal.storage == WalStorage.sdcard && wal.fileNum == -1) {
+      return false;
+    }
     return (wal.filePath != null && wal.filePath!.isNotEmpty) ||
         wal.data.isNotEmpty ||
         wal.storage == WalStorage.sdcard;
@@ -201,6 +207,8 @@ class AudioPlayerUtils extends ChangeNotifier {
       [XFile(audioFilePath)],
       text:
           'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toString().split('.')[0]}',
+      // No widget to anchor to here; the fallback is only required to be non-zero.
+      sharePositionOrigin: shareSheetOrigin(),
     );
 
     if (result.status == ShareResultStatus.success) {
@@ -215,6 +223,15 @@ class AudioPlayerUtils extends ChangeNotifier {
       final cachedPath = _audioFileCache[cacheKey]!;
       if (File(cachedPath).existsSync()) {
         return cachedPath;
+      }
+    }
+
+    // Sharing reuses the already-decoded playback file (e.g. the one produced when
+    // the waveform loaded) instead of decoding the whole recording again.
+    if (forSharing) {
+      final playbackCached = _audioFileCache[wal.id];
+      if (playbackCached != null && File(playbackCached).existsSync()) {
+        return playbackCached;
       }
     }
 
@@ -284,10 +301,11 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     List<Uint8List> pcmFrames = [];
     for (final opusFrame in opusFrames) {
-      final pcmFrame = decoder.decode(input: opusFrame);
-      if (pcmFrame != null) {
-        final uint8Frame = Uint8List.fromList(pcmFrame.buffer.asUint8List());
-        pcmFrames.add(uint8Frame);
+      try {
+        final pcmFrame = decoder.decode(input: opusFrame);
+        pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
+      } catch (e) {
+        Logger.warning('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${wal.id}: $e');
       }
     }
 

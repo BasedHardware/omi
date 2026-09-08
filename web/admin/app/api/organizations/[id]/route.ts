@@ -31,10 +31,8 @@ async function fetchStripePaymentDetails(paymentId: string) {
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 

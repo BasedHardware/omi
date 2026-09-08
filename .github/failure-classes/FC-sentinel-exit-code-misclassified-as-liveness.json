@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-sentinel-exit-code-misclassified-as-liveness",
+  "violated_contract": "A sentinel returned by a status API is not authoritative state when a completed operation may return the same value. On Windows, a process can terminate with exit code 259, which is also STILL_ACTIVE; treating GetExitCodeProcess alone as liveness leaves a stale single-flight owner classified as running forever.",
+  "canonical_prevention": "Determine process liveness from the process object's signaled state with a zero-timeout wait, then read creation time only for a process that is still nonsignaled. Keep a native Windows regression process that exits with the sentinel value and require the liveness probe to classify it as terminated.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_preflight_runner.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/scripts/preflight_runner.py",
+    ".github/scripts/test_preflight_runner.py"
+  ],
+  "status": "open"
+}

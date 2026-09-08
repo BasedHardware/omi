@@ -10,7 +10,7 @@ class ChangelogSheet extends StatefulWidget {
   final Future<List<Announcement>> Function()? changelogsFuture;
 
   const ChangelogSheet({super.key, this.changelogs, this.changelogsFuture})
-    : assert(changelogs != null || changelogsFuture != null);
+      : assert(changelogs != null || changelogsFuture != null);
 
   /// Show the changelog sheet as a modal bottom sheet with pre-loaded data.
   static Future<void> show(BuildContext context, List<Announcement> changelogs) {
@@ -112,17 +112,17 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
             child: _isLoading
                 ? _buildLoadingState()
                 : _error != null
-                ? _buildErrorState()
-                : PageView.builder(
-                    controller: _pageController,
-                    itemCount: _orderedChangelogs.length,
-                    onPageChanged: (index) {
-                      setState(() => _currentPage = index);
-                    },
-                    itemBuilder: (context, index) {
-                      return _buildChangelogPage(_orderedChangelogs[index]);
-                    },
-                  ),
+                    ? _buildErrorState()
+                    : PageView.builder(
+                        controller: _pageController,
+                        itemCount: _orderedChangelogs.length,
+                        onPageChanged: (index) {
+                          setState(() => _currentPage = index);
+                        },
+                        itemBuilder: (context, index) {
+                          return _buildChangelogPage(_orderedChangelogs[index]);
+                        },
+                      ),
           ),
           if (!_isLoading && _error == null) _buildFooter(),
         ],

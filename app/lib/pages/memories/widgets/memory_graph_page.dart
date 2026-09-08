@@ -12,6 +12,7 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
@@ -95,7 +96,7 @@ class ForceDirectedSimulation3D {
       node.force.setZero();
     }
 
-    final maxPairs = 5000;
+    const maxPairs = 5000;
     final totalPairs = (nodeCount * (nodeCount - 1)) ~/ 2;
     final skipFactor = totalPairs > maxPairs ? totalPairs ~/ maxPairs : 1;
     int pairIndex = 0;
@@ -223,8 +224,6 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
-  final bool autoRebuildIfEmpty;
-  final bool hideRebuildButtonWhenEmpty;
   final double initialZoom;
 
   const MemoryGraphPage({
@@ -233,8 +232,6 @@ class MemoryGraphPage extends StatefulWidget {
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
-    this.autoRebuildIfEmpty = false,
-    this.hideRebuildButtonWhenEmpty = false,
     this.initialZoom = 1.0,
   });
 
@@ -248,6 +245,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   final Random _rnd = Random();
   final GlobalKey _graphKey = GlobalKey();
+  final GlobalKey _shareButtonKey = GlobalKey();
 
   double _rotationX = 0.0;
   double _rotationY = 0.0;
@@ -259,14 +257,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   Offset? _lastPanStart;
 
   bool _isLoading = true;
-  bool _isRebuilding = false;
   String? _error;
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
-  Set<String> _highlightedNodeIds = {};
-  int _autoRebuildAttempts = 0;
+  final Set<String> _highlightedNodeIds = {};
 
   @override
   void initState() {
@@ -327,6 +323,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
       final newEdges = data['edges'] as List<dynamic>? ?? [];
 
+      if (_error != null && mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
+
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
           setState(() {
@@ -339,10 +341,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
+      Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = context.l10n.couldNotLoadKnowledgeGraph;
         });
       }
     } finally {
@@ -365,38 +368,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (!currentIds.contains(n['id'])) return false;
     }
     return true;
-  }
-
-  Future<void> _rebuildGraph() async {
-    setState(() {
-      _isRebuilding = true;
-      _error = null;
-    });
-
-    try {
-      PlatformManager.instance.analytics.brainMapRebuilt();
-      await KnowledgeGraphApi.rebuildKnowledgeGraph();
-      if (!mounted) return;
-
-      final data = await KnowledgeGraphApi.waitForGraphStability();
-      if (!mounted) return;
-
-      _populateGraph(data);
-      _runLayoutSync();
-
-      simulation.wake();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRebuilding = false;
-        });
-      }
-    }
   }
 
   void _populateGraph(Map<String, dynamic> data) {
@@ -542,16 +513,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      final textSpan = TextSpan(
+      const textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
-      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
 
       textPainter.paint(canvas, Offset(xPos, yPos));
 
@@ -563,7 +534,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final file = await File('${tempDir.path}/memory_graph.png').create();
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
-      await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+      if (mounted) {
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: context.l10n.checkOutMyMemoryGraph,
+          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+        );
+      }
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
     }
@@ -586,7 +563,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [
+                      IconButton(
+                        key: _shareButtonKey,
+                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        onPressed: _shareGraph,
+                      ),
+                    ]
                   : null,
             )
           : null,
@@ -623,7 +606,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadGraph, child: Text(context.l10n.retry)),
+              // Explicit colors: the bare button resolved to theme primary/onPrimary
+              // (black-on-black on this theme), an invisible label.
+              ElevatedButton(
+                onPressed: _loadGraph,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
+                child: Text(context.l10n.retry),
+              ),
             ],
           ),
         ),
@@ -635,13 +624,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
-      if (widget.autoRebuildIfEmpty && !_isRebuilding && _autoRebuildAttempts < 3) {
-        _autoRebuildAttempts++;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _rebuildGraph();
-        });
-      }
-
       return Center(
         child: Padding(
           padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
@@ -656,32 +638,10 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
                 const SizedBox(height: 12),
                 Text(
-                  _isRebuilding
-                      ? context.l10n.buildingKnowledgeGraphFromMemories
-                      : context.l10n.knowledgeGraphWillBuildAutomatically,
+                  context.l10n.knowledgeGraphWillBuildAutomatically,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white38, fontSize: 14),
                 ),
-                const SizedBox(height: 24),
-                if (_isRebuilding)
-                  SizedBox(
-                    width: 200,
-                    child: LinearProgressIndicator(
-                      backgroundColor: Colors.white10,
-                      color: Colors.purpleAccent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  )
-                else if (!widget.hideRebuildButtonWhenEmpty)
-                  ElevatedButton.icon(
-                    onPressed: _rebuildGraph,
-                    icon: const Icon(Icons.auto_fix_high),
-                    label: Text(context.l10n.buildGraphButton),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.withOpacity(0.2),
-                      foregroundColor: Colors.purpleAccent,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -817,7 +777,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _highlightedNodeIds.clear();
 
       if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId!);
+        _highlightedNodeIds.add(hitNodeId);
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
@@ -950,7 +910,7 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withOpacity(alpha);
+      _edgePaint.color = Colors.white.withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -963,9 +923,9 @@ class GraphPainter3D extends CustomPainter {
       final isDimmed = highlightedNodeIds.isNotEmpty && !isHighlightedEdge;
 
       if (isDimmed) {
-        _edgePaint.color = _edgePaint.color.withOpacity(alpha * 0.1);
+        _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withOpacity(max(alpha, 0.8)); // Pop
+        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -975,7 +935,10 @@ class GraphPainter3D extends CustomPainter {
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
           text: edge.label,
-          style: TextStyle(color: Colors.white54.withOpacity(alpha * 2), fontSize: (9 * avgScale).clamp(7, 11)),
+          style: TextStyle(
+            color: Colors.white54.withValues(alpha: alpha * 2),
+            fontSize: (9 * avgScale).clamp(7, 11),
+          ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
@@ -991,11 +954,11 @@ class GraphPainter3D extends CustomPainter {
       if (radius < 0.5) continue;
 
       if (radius > 3) {
-        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.3);
+        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.3);
         _ringPaint.strokeWidth = 1.5 * p.scale;
         canvas.drawCircle(centerOffset, radius * 1.8, _ringPaint);
 
-        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.15);
+        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.15);
         _ringPaint.strokeWidth = 1.0 * p.scale;
         canvas.drawCircle(centerOffset, radius * 2.5, _ringPaint);
       }
@@ -1004,9 +967,9 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withOpacity(p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withOpacity(p.alpha),
-          node.baseColor.withOpacity(p.alpha),
+          Colors.white.withValues(alpha: p.alpha * 0.9),
+          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
       );
@@ -1019,7 +982,7 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withOpacity(screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),

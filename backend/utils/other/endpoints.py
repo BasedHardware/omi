@@ -1,27 +1,97 @@
-import asyncio
+import hmac
 import json
 import os
 import time
+from typing import Any, Callable, Dict, Optional, TypeVar, cast
 
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
 from firebase_admin import auth
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
-from database.users import record_user_platform
-from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
+from database import users as users_db
+from database.account_deletion_policy import account_deletion_blocks_access
+from database.users import record_client_device, record_user_platform
+from utils.account_cutover.access import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_cutover_ws_access,
+)
+from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
+from utils.client_device import resolve_client_device
+from utils.byok import (
+    extract_byok_from_websocket,
+    set_validated_byok_keys,
+    validate_byok_request,
+    validate_byok_websocket_keys,
+)
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
+WS_AUTH_CODE_TOKEN_REFRESH = 4001
+WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
+WS_AUTH_CODE_ACCOUNT_DELETION = 4005
+WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
 
-def get_user(uid: str):
-    user = auth.get_user(uid)
-    return user
+
+def get_user_deletion_wipe_status(uid: str) -> str | None:
+    """Read the durable deletion authority without a cache or fail-open shim."""
+    return cast(Callable[[str], str | None], users_db.get_user_deletion_wipe_status)(uid)
+
+
+def _account_deletion_status(uid: str) -> str | None:
+    """Read the uncached deletion authority, failing closed if it is unavailable."""
+    try:
+        return get_user_deletion_wipe_status(uid)
+    except Exception as error:
+        logger.error(
+            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
+            uid,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        ) from error
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    status = _account_deletion_status(uid)
+    if account_deletion_blocks_access(status):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'code': 'account_deletion_in_progress',
+                'status': status,
+                'retryable': False,
+            },
+        )
+
+
+def enforce_account_deletion_ws_access(uid: str) -> None:
+    try:
+        status = _account_deletion_status(uid)
+    except HTTPException as error:
+        raise WebSocketException(
+            code=1013,
+            reason='Account deletion state unavailable; retry later',
+        ) from error
+    if account_deletion_blocks_access(status):
+        raise WebSocketException(
+            code=WS_AUTH_CODE_ACCOUNT_DELETION,
+            reason='Account deletion in progress',
+        )
+
+
+def get_user(uid: str) -> Any:
+    return auth.get_user(uid)  # type: ignore[reportUnknownVariableType,reportUnknownMemberType]  # firebase_admin auth untyped
 
 
 def verify_token(token: str) -> str:
@@ -37,25 +107,74 @@ def verify_token(token: str) -> str:
     Raises:
         InvalidIdTokenError: If the token is invalid
     """
-    # Check for ADMIN_KEY format
+    # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
+    # this exact concatenation is depended on by this repo's own integration
+    # tests, the listen/sync test stacks, and the production
+    # memory-continuity-gauntlet smoke test, so changing the format would
+    # break first-party tooling, not just close a hole). What actually
+    # changes: the prefix compare is constant-time instead of `startswith`
+    # (closes a timing side-channel on ADMIN_KEY itself), every successful
+    # use is logged so impersonation is auditable instead of silent, and
+    # ADMIN_KEY_AUTH_ENABLED lets an operator who doesn't need this feature
+    # turn it off entirely — default stays "true" so existing deployments
+    # and CI that already rely on it keep working unchanged.
     admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and token.startswith(admin_key):
-        return token[len(admin_key) :]
+    if admin_key and os.getenv('ADMIN_KEY_AUTH_ENABLED', 'true').lower() == 'true':
+        if len(admin_key) < 16:
+            logger.warning('ADMIN_KEY is under 16 chars — trivially guessable if this deployment is internet-facing')
+        candidate = token[: len(admin_key)].encode()
+        if hmac.compare_digest(candidate, admin_key.encode()) and len(token) > len(admin_key):
+            impersonated_uid = token[len(admin_key) :]
+            logger.warning('ADMIN_KEY auth used to impersonate uid=%s', impersonated_uid)
+            return impersonated_uid
 
     # Verify Firebase token
     try:
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         return decoded_token['uid']
     except InvalidIdTokenError:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+        # Only honored when no real Firebase credential is configured — every
+        # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
+        # auth-emulator dev harness) already unsets or never sets these, and
+        # every real deployment sets one to talk to the real project (see
+        # main.py's firebase_admin.initialize_app branches). This keeps the
+        # bypass inert the moment real credentials are present, without
+        # requiring test paths to change what they already do.
+        no_real_credential = not (
+            os.getenv('SERVICE_ACCOUNT_JSON')
+            or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+        )
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
+
+
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing only when FastAPI injected a Request.
+
+    Direct unit-test / helper callers keep the established
+    ``get_current_user_uid(authorization=...)`` API. Request-aware enforcement
+    runs for real HTTP dependency injection without rewriting those callers.
+    """
+
+    if request is None or not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
 
 
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
-):
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+) -> str:
     """FastAPI dependency for HTTP endpoints with Authorization header.
 
     Side-effect: records the signup/last-active platform for the user via
@@ -70,17 +189,45 @@ def get_current_user_uid(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    try:
+        # This runs immediately after Firebase verification, before any
+        # account-deletion, platform, device, BYOK, Redis, or model work.
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
+
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
 
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        record_client_device(
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
 
     # Validate BYOK keys against Firestore enrollment for ALL authenticated
     # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
@@ -94,7 +241,10 @@ def get_current_user_uid(
 def get_current_user_uid_no_byok_validation(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
-):
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+) -> str:
     """Auth dependency that skips BYOK fingerprint validation.
 
     Used ONLY by the BYOK activation/deactivation endpoints — those need to
@@ -106,17 +256,43 @@ def get_current_user_uid_no_byok_validation(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
+
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
 
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    try:
+        device_ctx = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+            x_app_version=x_app_version,
+        )
+        record_client_device(
+            uid,
+            client_device_id=device_ctx.client_device_id,
+            platform=device_ctx.platform,
+            app_version=device_ctx.app_version,
+        )
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
 
     return uid
 
@@ -124,8 +300,10 @@ def get_current_user_uid_no_byok_validation(
 def _verify_ws_auth(authorization: str) -> str:
     """Common WebSocket auth — verifies token, returns uid.
 
-    Raises WebSocketException(code=1008) instead of HTTPException(401) so the
-    ASGI server sends a proper WebSocket close frame (not a handshake crash).
+    Raises WebSocketException instead of HTTPException(401) so the ASGI server
+    sends a proper WebSocket close frame (not a handshake crash). Auth failures
+    use 1008 by default, 4001 when the client should refresh its token, and
+    4004 when it should force re-login.
     """
     if not authorization:
         raise WebSocketException(code=1008, reason="Authorization header not found")
@@ -134,17 +312,68 @@ def _verify_ws_auth(authorization: str) -> str:
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
-    except InvalidIdTokenError as e:
-        logger.error(f"WebSocket auth failed: {e}")
-        raise WebSocketException(code=1008, reason="Invalid or expired token")
+        uid = verify_token(token)
+        enforce_jit_qa_uid(uid)
+        return uid
+    except JITQAAdmissionError as e:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from e
+    except (InvalidIdTokenError, CertificateFetchError) as e:
+        close_code, reason = _get_ws_auth_close(e)
+        _log_ws_auth_rejection(close_code, e)
+        raise WebSocketException(code=close_code, reason=reason)
+    except WebSocketException:
+        raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
 
 
+def _log_ws_auth_rejection(close_code: int, error: Exception) -> None:
+    """Log a token rejection at the severity its fault origin deserves.
+
+    InvalidIdTokenError means Firebase *evaluated* the client-supplied token
+    and rejected it for a client-side reason — expired, signed by a key Google
+    retired, wrong audience, malformed. The close frame (4001/4004/1008)
+    already tells that client what to do; the rejection is the protocol
+    working, not a server failure. Logging each attempt at ERROR turned the
+    stale-client reconnect population into a top-3 production error
+    signature (backend-listen, GCP 2026-08-30/31: ``Token expired`` up to
+    ×47/30m and ``Certificate for key id … not found`` ×34/30m for a single
+    retired key id), burying real serving faults in the same feed.
+
+    CertificateFetchError is the other fault domain: the server could not
+    fetch Google's public certificates, so it could not even evaluate the
+    token. That is a server fault and stays at ERROR.
+
+    Failure-Class: FC-request-input-rejection-escapes-as-server-fault — a
+    route owns the classification of its own request input; a client-caused
+    token rejection must not be indistinguishable from a serving outage in
+    error metrics. Close codes are unchanged; only severity is classified.
+    """
+    if isinstance(error, CertificateFetchError):
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, error)
+    else:
+        logger.warning("WebSocket auth rejected: code=%s error=%s", close_code, error)
+
+
+def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
+    if isinstance(error, RevokedIdTokenError):
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if isinstance(error, CertificateFetchError):
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+    if isinstance(error, ExpiredIdTokenError):
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+
+    message = str(error).lower()
+    if 'revoked' in message:
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if 'expired' in message or 'certificate' in message:
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+    return 1008, "Invalid authorization token"
+
+
 async def get_current_user_uid_ws_listen(
-    websocket: WebSocket = None,
+    websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
     authorization: str = Header(None),
 ):
     """WebSocket auth for /v4/listen — NO rate limiting.
@@ -162,28 +391,55 @@ async def get_current_user_uid_ws_listen(
     control returns to the async handler, so ``get_byok_key('deepgram')``
     would return None downstream. Running the dep on the event loop keeps
     the mutation in the handler's context; the blocking Firebase and
-    Firestore calls are offloaded via ``asyncio.to_thread``.
+    Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await asyncio.to_thread(_verify_ws_auth, authorization)
+    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
 
     # Extract BYOK headers from the WS upgrade request and validate.
-    if websocket is not None:
-        byok_keys = extract_byok_from_websocket(websocket)
-        if byok_keys:
-            set_byok_keys(byok_keys)
-        error = await asyncio.to_thread(validate_byok_websocket, uid)
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
+        validated_byok_keys, error = await run_blocking(
+            critical_executor, validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
+        )
         if error:
             raise WebSocketException(code=4003, reason=error)
+        set_validated_byok_keys(validated_byok_keys, uid)
 
     return uid
 
 
-def get_current_user_uid_ws(authorization: str = Header(None)):
+def get_current_user_uid_ws(
+    websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
+    authorization: str = Header(None),
+):
     """WebSocket auth WITH per-UID rate limiting (7s window).
 
     Use for WebSocket endpoints that need retry-storm protection.
     """
     uid = _verify_ws_auth(authorization)
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
+    enforce_account_deletion_ws_access(uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        enforce_account_cutover_ws_access(
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -198,7 +454,7 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
     return uid
 
 
-def get_current_user_uid_from_ws_message(message: dict) -> str:
+def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     """
     Get user uid from WebSocket first-message auth.
 
@@ -219,9 +475,11 @@ def get_current_user_uid_from_ws_message(message: dict) -> str:
         raise ValueError("Expected JSON auth message")
 
     try:
-        auth_data = json.loads(text)
+        loaded = json.loads(text)
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON")
+
+    auth_data: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
 
     if auth_data.get("type") != "auth":
         raise ValueError("First message must be auth")
@@ -230,27 +488,78 @@ def get_current_user_uid_from_ws_message(message: dict) -> str:
     if not token:
         raise ValueError("Missing token")
 
-    return verify_token(token)
+    uid = verify_token(token)
+    enforce_jit_qa_uid(uid)
+    return uid
 
 
-cached = {}
+async def get_current_user_uid_from_ws_message(
+    message: Dict[str, Any],
+    *,
+    websocket: WebSocket | None = None,
+) -> str:
+    """Authenticate first-message WebSocket clients without blocking the ASGI loop.
+
+    Pass ``websocket`` so account-cutover enforcement can fence product surfaces
+    such as ``/v4/web/listen`` the same way header-auth listen does.
+    """
+    try:
+        uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    except JITQAAdmissionError as error:
+        raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
+    return uid
 
 
-def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int, window_seconds: int):
-    ip = request.client.host
+cached: Dict[str, Any] = {}
+
+# This in-process rate-limit cache is keyed by "{endpoint}:{ip}", so a stream of distinct client IPs
+# would otherwise grow it without bound. Bound the map.
+_MAX_RATE_LIMIT_ENTRIES = 100000
+
+
+def _store_rate_limit(key: str, value: str) -> None:
+    cached[key] = value
+    if len(cached) > _MAX_RATE_LIMIT_ENTRIES:
+        for stale in list(cached)[: len(cached) - _MAX_RATE_LIMIT_ENTRIES]:
+            del cached[stale]
+
+
+def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int, window_seconds: int) -> bool:
+    ip = request.client.host if request.client else None
     key = f"rate_limit:{endpoint}:{ip}"
 
     # Check if the IP is already rate-limited
-    current = cached.get(key)
+    current_raw = cached.get(key)
+    current: Optional[Dict[str, Any]] = None
+    if current_raw:
+        try:
+            current = cast(Dict[str, Any], json.loads(current_raw))
+        except (json.JSONDecodeError, TypeError, KeyError):
+            # Corrupt cache entry: fail open by starting a fresh window rather than 500ing the request.
+            current = None
+
+    timestamp = 0
+    remaining = 0
     if current:
-        current = json.loads(current)
-        remaining = current["remaining"]
-        timestamp = current["timestamp"]
         current_time = int(time.time())
+        remaining = current.get("remaining", 0)
+        timestamp = current.get("timestamp", 0)
 
         # Check if the time window has expired
         if current_time - timestamp >= window_seconds:
-            remaining = requests_per_window - 1  # Reset the counter for the new window
+            # A new window starts with the full quota; the shared decrement below charges
+            # this request, matching the first-request branch. Subtracting here too spent
+            # one slot twice and left every window after the first one request short.
+            remaining = requests_per_window
             timestamp = current_time
         elif remaining == 0:
             raise HTTPException(status_code=429, detail="Too Many Requests")
@@ -262,31 +571,34 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
         remaining = requests_per_window - 1
         timestamp = int(time.time())
 
-    # Update the rate limit info in Redis
-    current = {"timestamp": timestamp, "remaining": remaining}
-    cached[key] = json.dumps(current)
+    # Update the rate limit info in the in-process cache
+    _store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining}))
 
     return True
 
 
 # Dependency to enforce custom rate limiting for specific endpoints
-def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60):
-    def rate_limit(request: Request):
+def rate_limit_dependency(
+    endpoint: str = "", requests_per_window: int = 60, window_seconds: int = 60
+) -> Callable[[Request], bool]:
+    def rate_limit(request: Request) -> bool:
         return rate_limit_custom(endpoint, request, requests_per_window, window_seconds)
 
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str):
+def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False) -> None:
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
     """
     max_requests, window = get_effective_limit(policy_name)
     try:
-        allowed, remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
-    except redis_pkg.exceptions.RedisError as e:
-        logger.error(f"Rate limit Redis error (allowing request): {e}")
+        allowed, _remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
+    except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
+        logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
+        if fail_closed:
+            raise HTTPException(status_code=503, detail="Rate limiter unavailable")
         return
 
     if not allowed:
@@ -304,11 +616,39 @@ def _enforce_rate_limit(key: str, policy_name: str):
         )
 
 
-def with_rate_limit(auth_dependency, policy_name: str):
+def rate_limit_key_for_context(auth_context: Any) -> str:
+    """Return the narrowest stable rate-limit subject for an auth context."""
+    app_id = getattr(auth_context, 'app_id', None)
+    key_id = getattr(auth_context, 'key_id', None)
+    uid = getattr(auth_context, 'uid', None)
+    if app_id and key_id:
+        return f"app:{app_id}:key:{key_id}"
+    if app_id or key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    if uid:
+        return str(uid)
+    raise HTTPException(status_code=401, detail="Authenticated subject missing")
+
+
+def check_api_key_rate_limit(
+    *,
+    prefix: str,
+    uid: str,
+    app_id: Optional[str],
+    key_id: Optional[str],
+    policy_name: str,
+) -> None:
+    if not key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    key = f"{prefix}:{uid}:{app_id or 'unknown_app'}:{key_id}"
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
+
+
+def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
-    One Redis call per request. Fail-open on Redis errors.
+    One Redis call per request. Fail-open on Redis errors for first-party user paths.
 
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
@@ -317,14 +657,42 @@ def with_rate_limit(auth_dependency, policy_name: str):
     if policy_name not in RATE_POLICIES:
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
-    async def dependency(uid: str = Depends(auth_dependency)):
-        _enforce_rate_limit(uid, policy_name)
+    async def dependency(uid: str = Depends(auth_dependency)) -> str:
+        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
         return uid
 
     return dependency
 
 
-def check_rate_limit_inline(key: str, policy_name: str):
+def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
+    """Wrap a context-returning auth dependency with per-subject rate limiting.
+
+    After auth succeeds, checks the rate limit for app/key identity when present,
+    falling back to UID for first-party or legacy auth contexts.
+    One Redis call per request. Fail-closed on Redis errors for API-key paths.
+
+    Args:
+        auth_context_dependency: FastAPI dependency that returns an auth context
+            object with a ``uid`` attribute (e.g. ProductAuthorizationContext).
+        policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+    """
+    if policy_name not in RATE_POLICIES:
+        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+    async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
+        key = rate_limit_key_for_context(auth_context)
+        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
+        return auth_context
+
+    return dependency
+
+
+def check_rate_limit_context(auth_context: Any, policy_name: str) -> None:
+    """Check rate limit inline for an already-authenticated context."""
+    _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
+
+
+def check_rate_limit_inline(key: str, policy_name: str) -> None:
     """Check rate limit inline (for endpoints with custom auth).
 
     Use when auth is not a standard Depends() pattern (e.g., MCP, integration).
@@ -332,20 +700,23 @@ def check_rate_limit_inline(key: str, policy_name: str):
     _enforce_rate_limit(key, policy_name)
 
 
-def timeit(func):
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def timeit(func: F) -> F:
     """
     Decorator for measuring function's running time.
     """
 
-    def measure_time(*args, **kw):
+    def measure_time(*args: Any, **kw: Any) -> Any:
         start_time = time.time()
         result = func(*args, **kw)
         logger.info("Processing time of %s(): %.2f seconds." % (func.__qualname__, time.time() - start_time))
         return result
 
-    return measure_time
+    return cast(F, measure_time)
 
 
-def delete_account(uid: str):
-    auth.delete_user(uid)
+def delete_account(uid: str) -> Dict[str, str]:
+    auth.delete_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
     return {"message": "User deleted"}

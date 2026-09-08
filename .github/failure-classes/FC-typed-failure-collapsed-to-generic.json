@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-typed-failure-collapsed-to-generic",
+  "violated_contract": "When a client already produces a typed failure (HTTP status, decode, transport), the caller that records the terminal outcome must persist that class. Collapsing it into a generic bucket makes the true cause unrecoverable from client telemetry, and ignoring a typed 429's Retry-After keeps firing the same exhausted quota.",
+  "canonical_prevention": "Classify at the catch boundary into a bounded provenance JSON (http_error with status, decode, invalid_response, network with a bounded error_type). For HTTP 429, surface Retry-After on the typed error and skip further lane attempts until that deadline (conservative default when the header is missing), with an injected clock so tests do not sleep.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/CandidateSink.swift",
+    "desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift",
+    "desktop/macos/Desktop/Tests/CandidateSinkGraduationTests.swift",
+    "desktop/macos/Desktop/Tests/ProactiveLaneClientTests.swift"
+  ],
+  "evidence_prs": [
+    11487
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+/*
+ * Linux OCR helper for Omi.
+ * Drop-in replacement for win-ocr-helper.exe, speaking the same stdio protocol
+ * (src/main/ocr/helperProtocol.ts):
+ *   Request : [uint32 LE length][1 byte opcode][payload]
+ *   Response: [uint32 LE length][UTF-8 JSON]
+ *   OP_OCR=1    payload=JPEG bytes -> {"ok":true,"fullText","lines":[]}
+ *                                  or {"ok":false,"code","message"}
+ *   OP_WINDOW=2 payload=empty      -> {"app","title","pid","processName"}
+ * OCR uses tesseract. WINDOW stays protocol-compatible but returns empty
+ * metadata so capture uses the canonical linuxForeground/nativeForeground seam.
+ * One request at a time (the supervisor serializes), never throws.
+ */
+'use strict'
+const { execFileSync } = require('child_process')
+const { writeFileSync, unlinkSync } = require('fs')
+const { tmpdir } = require('os')
+const { join } = require('path')
+
+const OP_OCR = 1
+const OP_WINDOW = 2
+
+let seq = 0
+function ocr(jpeg) {
+  const tmp = join(tmpdir(), `omi-ocr-${process.pid}-${seq++}.jpg`)
+  try {
+    writeFileSync(tmp, jpeg)
+    // --psm 6: assume a uniform block of text; good default for screen content.
+    const out = execFileSync('tesseract', [tmp, 'stdout', '--psm', '6'], {
+      encoding: 'utf8',
+      timeout: 4000,
+      maxBuffer: 16 * 1024 * 1024
+    })
+    return { ok: true, fullText: out.replace(/\s+$/g, ''), lines: [] }
+  } catch (e) {
+    return { ok: false, code: 'HELPER_ERROR', message: String(e && e.message || e) }
+  } finally {
+    try { unlinkSync(tmp) } catch (_) { /* ignore */ }
+  }
+}
+
+function windowInfo() {
+  return { app: '', title: '', pid: 0, processName: '' }
+}
+
+function writeFrame(obj) {
+  const json = Buffer.from(JSON.stringify(obj), 'utf8')
+  const header = Buffer.alloc(4)
+  header.writeUInt32LE(json.length, 0)
+  process.stdout.write(Buffer.concat([header, json]))
+}
+
+// Decode incoming request frames and respond one-for-one, in order.
+let buf = Buffer.alloc(0)
+process.stdin.on('data', (chunk) => {
+  buf = Buffer.concat([buf, chunk])
+  for (;;) {
+    if (buf.length < 4) return
+    const len = buf.readUInt32LE(0)
+    if (buf.length < 4 + len) return
+    const opcode = buf[4]
+    const payload = buf.subarray(5, 4 + len)
+    buf = buf.subarray(4 + len)
+    if (opcode === OP_OCR) writeFrame(ocr(payload))
+    else if (opcode === OP_WINDOW) writeFrame(windowInfo())
+    else writeFrame({ ok: false, code: 'HELPER_ERROR', message: `bad opcode ${opcode}` })
+  }
+})
+process.stdin.on('end', () => process.exit(0))
+process.stdin.resume()

@@ -1,0 +1,168 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 21,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "bucketId": "",
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"$Service\"\nseverity>=$Severity\ntextPayload:*\nSEARCH(\"$Search\")",
+          "refId": "A",
+          "viewId": ""
+        }
+      ],
+      "title": "New panel",
+      "type": "logs"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": [
+            "backend"
+          ],
+          "value": [
+            "backend"
+          ]
+        },
+        "includeAll": false,
+        "multi": true,
+        "name": "Service",
+        "options": [
+          {
+            "selected": true,
+            "text": "backend",
+            "value": "backend"
+          },
+          {
+            "selected": false,
+            "text": "backend-integration",
+            "value": "backend-integration"
+          },
+          {
+            "selected": false,
+            "text": "backend-sync",
+            "value": "backend-sync"
+          },
+          {
+            "selected": false,
+            "text": "plugins",
+            "value": "plugins"
+          },
+          {
+            "selected": false,
+            "text": "pusher",
+            "value": "pusher"
+          }
+        ],
+        "query": "backend,backend-integration,backend-sync,plugins,pusher",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "DEFAULT",
+          "value": "DEFAULT"
+        },
+        "name": "Severity",
+        "options": [
+          {
+            "selected": true,
+            "text": "DEFAULT",
+            "value": "DEFAULT"
+          },
+          {
+            "selected": false,
+            "text": "WARNING",
+            "value": "WARNING"
+          },
+          {
+            "selected": false,
+            "text": "ERROR",
+            "value": "ERROR"
+          }
+        ],
+        "query": "DEFAULT,WARNING, ERROR",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "Search",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Cloud Run Services - Logs",
+  "uid": "d2d782ef-f537-46b8-969d-f73561ec7d07"
+}

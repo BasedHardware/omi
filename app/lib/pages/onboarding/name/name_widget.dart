@@ -16,18 +16,23 @@ class NameWidget extends StatefulWidget {
 class _NameWidgetState extends State<NameWidget> {
   late TextEditingController nameController;
   var focusNode = FocusNode();
-  bool hasPrefilledName = false;
 
   @override
   void initState() {
     nameController = TextEditingController(text: SharedPreferencesUtil().givenName);
-    hasPrefilledName = SharedPreferencesUtil().givenName.trim().isNotEmpty;
     super.initState();
 
     // Auto-focus the name input field after the widget is built
     // WidgetsBinding.instance.addPostFrameCallback((_) {
     //   focusNode.requestFocus();
     // });
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    focusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -56,10 +61,10 @@ class _NameWidgetState extends State<NameWidget> {
 
                 // Main title
                 Text(
-                  hasPrefilledName ? context.l10n.wantDifferentName : context.l10n.whatsYourName,
-                  style: TextStyle(
+                  context.l10n.whatsYourName,
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: hasPrefilledName ? 22 : 28,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
                     fontFamily: 'Manrope',
@@ -73,7 +78,7 @@ class _NameWidgetState extends State<NameWidget> {
                 // Text(
                 //   'Tell us how you\'d like to be addressed.\nThis helps personalize your Omi experience.',
                 //   style: TextStyle(
-                //     color: Colors.white.withOpacity(0.6),
+                //     color: Colors.white.withValues(alpha: 0.6),
                 //     fontSize: 16,
                 //     fontFamily: 'Manrope',
                 //     height: 1.5,
@@ -151,7 +156,7 @@ class _NameWidgetState extends State<NameWidget> {
                 //         child: Text(
                 //           'Need Help?',
                 //           style: TextStyle(
-                //             color: Colors.white.withOpacity(0.6),
+                //             color: Colors.white.withValues(alpha: 0.6),
                 //             fontSize: 14,
                 //             fontFamily: 'Manrope',
                 //             decoration: TextDecoration.underline,

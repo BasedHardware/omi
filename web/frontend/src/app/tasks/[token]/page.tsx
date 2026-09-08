@@ -1,5 +1,6 @@
 import getSharedTasks from '@/src/actions/tasks/get-shared-tasks';
 import envConfig from '@/src/constants/envConfig';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -10,13 +11,14 @@ interface TasksParams {
 }
 
 interface TasksPageProps {
-  params: TasksParams;
+  params: Promise<TasksParams>;
 }
 
 export async function generateMetadata(
-  { params }: { params: TasksParams },
+  props: { params: Promise<TasksParams> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const params = await props.params;
   const prevData = (await parent) as Metadata;
   let data: { sender_name?: string; count?: number } | null = null;
 
@@ -60,19 +62,8 @@ export async function generateMetadata(
 }
 
 function getPlatformLink(userAgent: string, token: string) {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  // iOS: Use custom URL scheme because Universal Links don't trigger for same-domain navigation
-  // (user is already on h.omi.me, so tapping https://h.omi.me/... just reloads the page)
-  // Android: Use intent:// with fallback to Google Play if app not installed
-  return isAndroid
-    ? `intent://h.omi.me/tasks/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
-        'https://play.google.com/store/apps/details?id=com.friend.ios',
-      )};end`
-    : isIOS
-    ? `omi://h.omi.me/tasks/${token}`
-    : 'https://omi.me';
+  // iOS: custom scheme — Universal Links don't fire for same-domain navigation.
+  return getOmiPlatformDeepLink(userAgent, `tasks/${token}`);
 }
 
 function formatDueDate(dateStr: string): string {
@@ -84,14 +75,15 @@ function formatDueDate(dateStr: string): string {
   });
 }
 
-export default async function SharedTasksPage({ params }: TasksPageProps) {
+export default async function SharedTasksPage(props: TasksPageProps) {
+  const params = await props.params;
   const token = params.token;
   const data = await getSharedTasks(token);
   if (!data) {
     notFound();
   }
 
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent, token);
 
   return (

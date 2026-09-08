@@ -1,0 +1,7 @@
+# Local auto-update test config. Only consulted when the updater is forced to run
+# in an unpackaged build (OMI_UPDATER_DEV=1 → autoUpdater.forceDevUpdateConfig).
+# Point this at a local static file server hosting a latest.yml + installer to
+# exercise the download → "update ready" flow without a real GitHub release. This
+# file is excluded from packaged builds (see electron-builder.yml `files`).
+provider: generic
+url: http://127.0.0.1:8099

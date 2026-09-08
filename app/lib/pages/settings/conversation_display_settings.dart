@@ -50,7 +50,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   Widget _buildToggleItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {
@@ -78,7 +78,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
               ],
             ),
           ),
-          Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFF22C55E)),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
         ],
       ),
     );

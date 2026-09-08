@@ -59,7 +59,7 @@ export function ConversationPreviewPanel({
       setLoading(true);
       try {
         const results = await Promise.all(
-          conversationIds.map(id => getConversation(id).catch(() => null))
+          conversationIds.map((id) => getConversation(id).catch(() => null)),
         );
         setConversations(results.filter((c): c is Conversation => c !== null));
       } catch (err) {
@@ -90,18 +90,18 @@ export function ConversationPreviewPanel({
           transition={{ type: 'spring', damping: 30, stiffness: 300 }}
           className={cn(
             'h-full flex-shrink-0 overflow-hidden',
-            'bg-bg-secondary border-l border-white/[0.06]'
+            'bg-bg-secondary border-l border-white/[0.06]',
           )}
         >
           <div className="w-[420px] h-full flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-purple-primary" />
+                <MessageSquare className="w-4 h-4 text-text-primary" />
                 <span className="text-sm font-medium text-text-primary">
                   Source Conversations
                 </span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-white/[0.08] text-text-primary">
                   {conversationIds.length}
                 </span>
               </div>
@@ -118,10 +118,7 @@ export function ConversationPreviewPanel({
               {loading ? (
                 // Loading skeletons
                 [...Array(Math.min(conversationIds.length, 5))].map((_, i) => (
-                  <div
-                    key={i}
-                    className="p-3 rounded-xl bg-bg-tertiary animate-pulse"
-                  >
+                  <div key={i} className="p-3 rounded-xl bg-bg-tertiary animate-pulse">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 bg-bg-quaternary rounded" />
                       <div className="flex-1 space-y-2">
@@ -142,8 +139,8 @@ export function ConversationPreviewPanel({
                     className={cn(
                       'w-full text-left p-3 rounded-xl',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
-                      'border border-transparent hover:border-purple-primary/30',
-                      'transition-all duration-150 group'
+                      'border border-transparent hover:border-white/25',
+                      'transition-all duration-150 group',
                     )}
                   >
                     <div className="flex items-start gap-3">
@@ -155,10 +152,10 @@ export function ConversationPreviewPanel({
                       <div className="flex-1 min-w-0">
                         {/* Title */}
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-medium text-text-primary line-clamp-1 group-hover:text-purple-primary transition-colors">
+                          <h4 className="text-sm font-medium text-text-primary line-clamp-1 group-hover:text-text-primary transition-colors">
                             {conversation.structured.title || 'Untitled'}
                           </h4>
-                          <ExternalLink className="w-3.5 h-3.5 text-text-quaternary group-hover:text-purple-primary flex-shrink-0 mt-0.5 transition-colors" />
+                          <ExternalLink className="w-3.5 h-3.5 text-text-quaternary group-hover:text-text-primary flex-shrink-0 mt-0.5 transition-colors" />
                         </div>
 
                         {/* Time info */}
@@ -169,7 +166,11 @@ export function ConversationPreviewPanel({
                           </span>
                           {conversation.finished_at && (
                             <span>
-                              · {formatDuration(conversation.started_at, conversation.finished_at)}
+                              ·{' '}
+                              {formatDuration(
+                                conversation.started_at,
+                                conversation.finished_at,
+                              )}
                             </span>
                           )}
                         </div>
@@ -186,9 +187,7 @@ export function ConversationPreviewPanel({
                 ))
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-sm text-text-tertiary">
-                    No conversations found
-                  </p>
+                  <p className="text-sm text-text-tertiary">No conversations found</p>
                 </div>
               )}
             </div>

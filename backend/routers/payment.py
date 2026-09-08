@@ -1,10 +1,10 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional
 import uuid
 import time
@@ -17,6 +17,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.redis_db import set_credits_invalidation_signal
+from config.plan_catalog import plan_uses_overage
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -24,13 +25,19 @@ from utils.subscription import (
     get_basic_plan_limits,
     get_paid_plan_definitions,
     get_plan_type_from_price_id,
+    is_purchasable_price_id,
     get_plan_limits,
     is_paid_plan,
     filter_plans_for_user,
+    desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
+    find_active_paid_subscription_for_user,
+    price_ids_match_plan_and_interval,
 )
+from utils.observability.fallback import record_fallback
+from utils.observability.subscription_events import record_subscription_event
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -38,6 +45,7 @@ from database.users import (
     get_default_payment_method,
     set_default_payment_method,
     get_paypal_payment_details,
+    get_user_profile,
 )
 from utils import stripe as stripe_utils
 from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
@@ -51,8 +59,8 @@ from utils.overage import (
     PROVIDER_REFERENCE_RATES,
     build_explainer_text,
     get_user_overage,
-    is_overage_plan,
 )
+from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
 import os
 import logging
@@ -63,11 +71,122 @@ router = APIRouter()
 
 
 class CreateCheckoutRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
+    promotion_code: Optional[str] = None
 
 
 class UpgradeSubscriptionRequest(BaseModel):
-    price_id: str
+    price_id: str = Field(..., min_length=1, max_length=255)
+    promotion_code: Optional[str] = None
+
+
+class PaymentMutationResponse(BaseModel):
+    status: str
+
+
+class PaymentStatusMessageResponse(BaseModel):
+    status: str
+    message: str
+
+
+class PaymentCheckoutSessionResponse(BaseModel):
+    url: Optional[str] = None
+    session_id: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    next_billing_date: Optional[int] = None
+
+    @model_validator(mode='after')
+    def validate_success_shape(self):
+        if self.status == 'reactivated':
+            if not self.message or self.next_billing_date is None:
+                raise ValueError('reactivated checkout responses require message and next_billing_date')
+            return self
+        if not self.url or not self.session_id:
+            raise ValueError('checkout session responses require url and session_id')
+        return self
+
+
+class PaymentSubscriptionResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    plan: str = 'basic'
+    status: str = 'active'
+    stripe_subscription_id: Optional[str] = None
+    current_period_start: Optional[int] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: bool = False
+    current_price_id: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    limits: PlanLimits = Field(default_factory=get_basic_plan_limits)
+    deprecated: bool = False
+    deprecation_message: Optional[str] = None
+
+
+class AppSubscriptionDetails(BaseModel):
+    id: Optional[str] = None
+    status: Optional[str] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: Optional[bool] = None
+    price_id: Optional[str] = None
+    customer_id: Optional[str] = None
+
+
+class AppSubscriptionResponse(BaseModel):
+    subscription: Optional[AppSubscriptionDetails] = None
+
+
+class AppSubscriptionCancelResponse(BaseModel):
+    status: str
+    message: str
+    cancel_at_period_end: Optional[bool] = None
+    current_period_end: Optional[int] = None
+
+
+class PaymentUpgradeSubscriptionResponse(BaseModel):
+    status: str
+    message: str
+    subscription: PaymentSubscriptionResponse
+    days_remaining: int
+    schedule_id: Optional[str] = None
+
+
+class CustomerPortalSessionResponse(BaseModel):
+    url: str
+
+
+class StripeConnectAccountResponse(BaseModel):
+    account_id: str
+    url: str
+
+
+class StripeOnboardingStatusResponse(BaseModel):
+    onboarding_complete: bool
+
+
+class StripeSupportedCountryResponse(BaseModel):
+    id: str
+    name: str
+
+
+class PayPalPaymentDetailsResponse(BaseModel):
+    email: str
+    paypalme_url: str
+
+
+class SavePayPalPaymentDetailsRequest(BaseModel):
+    email: str
+    paypalme_url: str
+
+
+class PaymentMethodStatusResponse(BaseModel):
+    stripe: str
+    paypal: str
+    default: Optional[str] = None
+
+
+class SetDefaultPaymentMethodRequest(BaseModel):
+    method: str
 
 
 class PricingOption(BaseModel):
@@ -98,6 +217,7 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
             plan=PlanType.basic,
             status=SubscriptionStatus.active,
             current_period_end=stripe_sub.get('current_period_end'),
+            current_period_start=stripe_sub.get('current_period_start'),
             stripe_subscription_id=stripe_sub['id'],
             cancel_at_period_end=False,
             limits=get_basic_plan_limits(),
@@ -111,17 +231,62 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
 
     try:
         plan = get_plan_type_from_price_id(price_id)
-    except ValueError:
+    except ValueError as e:
+        # A price Stripe is actively billing that we cannot resolve. Before the
+        # catalog, a retained/configured disagreement could not arise here: the
+        # env mapping simply won. It can now raise, and this early return means
+        # the subscriber's stored row silently stops tracking Stripe. That is
+        # the Apr 17-20 failure shape, so it must be observable rather than a
+        # bare log line. See .github/agent-docs/plan-source-of-truth.md.
+        record_fallback(
+            component='other',
+            from_mode='stripe_price_resolution',
+            to_mode='skip_subscription_write',
+            # Must be a member of ALLOWED_REASONS, or bucket_reason() relabels it
+            # 'other' and the reason dimension is lost. The price is absent from both
+            # the catalog ledger and the env binding: a configuration gap.
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.error(
+            f"Unresolvable Stripe price {sanitize(str(price_id))} on an active subscription; "
+            f"local row will not be updated: {sanitize(str(e))}"
+        )
         return None
 
     return Subscription(
         plan=plan,
         status=SubscriptionStatus.active,
         current_period_end=stripe_sub.get('current_period_end'),
+        current_period_start=stripe_sub.get('current_period_start'),
         stripe_subscription_id=stripe_sub['id'],
         cancel_at_period_end=stripe_sub.get('cancel_at_period_end', False),
         limits=get_plan_limits(plan),
     )
+
+
+def _has_current_paid_subscription_for_different_stripe_sub(
+    current_subscription: Subscription | None, event_subscription_id: str | None, now: int | None = None
+) -> bool:
+    """True when a stale inactive event should not overwrite stored paid access."""
+    if not current_subscription or not event_subscription_id:
+        return False
+    if current_subscription.stripe_subscription_id == event_subscription_id:
+        return False
+    if current_subscription.status != SubscriptionStatus.active or not is_paid_plan(current_subscription.plan):
+        return False
+    # Require a valid, unexpired period end before preserving paid access.
+    # A missing or zero current_period_end means the stored paid row is not
+    # provably valid, so we do NOT let it shield a downgrade from a stale
+    # inactive event. This mirrors reconcile_basic_plan_with_stripe, which
+    # only treats a paid subscription as usable when current_period_end is
+    # present and still in the future.
+    if not current_subscription.current_period_end:
+        return False
+    if current_subscription.current_period_end < (now or int(time.time())):
+        return False
+    return True
 
 
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
@@ -137,7 +302,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             if stripe_sub:
                 new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
                 if new_subscription:
-                    users_db.update_user_subscription(uid, new_subscription.dict())
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
@@ -149,12 +314,32 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
 
+    When the local Firestore row is missing or stale (no ``stripe_subscription_id``),
+    fall back to Stripe as the source of truth so a pending-cancellation
+    subscription Stripe still holds for this user can be reactivated instead of
+    dropping into a fresh-checkout flow.
+
     Returns:
         dict with reactivation details if successful, None otherwise
     """
     current_subscription = users_db.get_user_subscription(uid)
+    recovered_from_stripe = False
     if not current_subscription or not current_subscription.stripe_subscription_id:
-        return None
+        # The local row may be missing/stale (e.g. read-after-write lag or a
+        # sync issue). Stripe is the recovery source of truth: find the active
+        # paid subscription there and use its id to attempt reactivation.
+        current_subscription = find_active_paid_subscription_for_user(uid)
+        recovered_from_stripe = True
+        if not current_subscription or not current_subscription.stripe_subscription_id:
+            record_fallback(
+                component='other',
+                from_mode='firestore_subscription',
+                to_mode='stripe_subscription',
+                reason='local_heal',
+                outcome='exhausted',
+                log=logger,
+            )
+            return None
 
     try:
         # Retrieve current subscription from Stripe to check status
@@ -166,15 +351,29 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
-            if current_price_id == target_price_id:
+            current_interval = stripe_sub_dict['items']['data'][0]['price'].get('recurring', {}).get('interval')
+            if price_ids_match_plan_and_interval(current_price_id, target_price_id, current_interval):
                 stripe.Subscription.modify(current_subscription.stripe_subscription_id, cancel_at_period_end=False)
 
                 # Update our database
                 current_subscription.cancel_at_period_end = False
-                users_db.update_user_subscription(uid, current_subscription.dict())
+                users_db.update_user_subscription(uid, current_subscription.model_dump())
+                set_credits_invalidation_signal(uid)
+                clear_trial_paywall_cache(uid)
+                if recovered_from_stripe:
+                    record_fallback(
+                        component='other',
+                        from_mode='firestore_subscription',
+                        to_mode='stripe_subscription',
+                        reason='local_heal',
+                        outcome='recovered',
+                        log=logger,
+                    )
 
                 # Calculate next billing date
-                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
+                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
+                    '%B %d, %Y'
+                )
 
                 return {
                     "status": "reactivated",
@@ -183,6 +382,16 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 }
     except Exception as e:
         logger.error(f"Error checking for reactivation: {e}")
+
+    if recovered_from_stripe:
+        record_fallback(
+            component='other',
+            from_mode='firestore_subscription',
+            to_mode='stripe_subscription',
+            reason='local_heal',
+            outcome='exhausted',
+            log=logger,
+        )
 
     return None
 
@@ -277,7 +486,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
                             price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                            description=None,
+                            description=definition.get("description"),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
@@ -299,7 +508,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
                             price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                            description=definition["annual_description"],
+                            description=f'{definition.get("description", "")} {definition["annual_description"]}'.strip(),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
@@ -357,7 +566,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     return OverageInfoResponse(
         plan=subscription_utils.get_plan_display_name(plan),
         plan_type=plan.value,
-        is_overage_plan=is_overage_plan(plan),
+        is_overage_plan=plan_uses_overage(plan),
         included_questions=snapshot['included_questions'],
         included_cost_usd=snapshot.get('included_cost_usd'),
         used_questions=snapshot['used_questions'],
@@ -373,12 +582,39 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
-@router.post('/v1/payments/checkout-session')
+def _validate_price_id(price_id: str) -> None:
+    """Reject a blank/whitespace-only or non-purchasable price_id before any Stripe call.
+
+    A valid checkout or upgrade target must be a currently-purchasable plan price. Retained catalog
+    prices are intentionally rejected here: they exist for existing subscribers' renewals and
+    reconciliation, not as new purchase targets, so a caller cannot select a hidden or deprecated
+    price by posting its ID directly. This is the checkout and upgrade boundary check.
+    """
+    if not price_id or not price_id.strip():
+        raise HTTPException(status_code=400, detail="price_id is required")
+    if not is_purchasable_price_id(price_id):
+        raise HTTPException(status_code=400, detail="Unknown price_id")
+
+
+@router.post(
+    '/v1/payments/checkout-session',
+    response_model=PaymentCheckoutSessionResponse,
+    response_model_exclude_none=True,
+)
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    _validate_price_id(request.price_id)
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
     if not can_pay:
         raise HTTPException(status_code=400, detail=reason)
+
+    # Validate promotion code early — reject invalid codes before any subscription changes
+    resolved_checkout_promo_id = None
+    if request.promotion_code:
+        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        if not promo_list.data:
+            raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+        resolved_checkout_promo_id = promo_list.data[0].id
 
     # Try to reactivate canceled subscription (Scenario A)
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
@@ -388,15 +624,52 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
-    session = stripe_utils.create_subscription_checkout_session(
-        uid, request.price_id, idempotency_key, customer_id=existing_customer_id
-    )
+    try:
+        session = stripe_utils.create_subscription_checkout_session(
+            uid,
+            request.price_id,
+            idempotency_key,
+            customer_id=existing_customer_id,
+            promotion_code_id=resolved_checkout_promo_id,
+        )
+    except stripe.error.InvalidRequestError as e:
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
 
 
-@router.post('/v1/payments/upgrade-subscription')
+def _release_attached_schedules(stripe_sub: dict) -> None:
+    """Detach any active/not-started SubscriptionSchedule from this subscription.
+
+    Stripe rejects both Subscription.modify() and SubscriptionSchedule.create()
+    with "You cannot migrate a subscription that is already attached to a
+    schedule" once a schedule is attached — e.g. a user who earlier scheduled a
+    monthly→annual change. That left those users unable to change plans at all.
+    Releasing detaches the schedule without canceling the subscription (billing
+    continues on the current phase), which unblocks the new change. Mirrors the
+    release pattern already used by the cancel-subscription endpoint.
+    """
+    customer_id = stripe_sub.get('customer')
+    sub_id = stripe_sub.get('id')
+    if not customer_id or not sub_id:
+        return
+    try:
+        schedules = stripe.SubscriptionSchedule.list(customer=customer_id, limit=10)
+    except Exception as e:
+        logger.error(f"Error listing subscription schedules before plan change: {sanitize(str(e))}")
+        return
+    for schedule in schedules.data:
+        if schedule.status in ('active', 'not_started') and getattr(schedule, 'subscription', None) == sub_id:
+            try:
+                stripe.SubscriptionSchedule.release(schedule.id)
+                logger.info(f"Released subscription schedule {schedule.id} for {sub_id} before plan change")
+            except Exception as e:
+                logger.error(f"Error releasing subscription schedule {schedule.id}: {sanitize(str(e))}")
+
+
+@router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -405,6 +678,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     - Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,
       takes effect at end of current billing period.
     """
+    _validate_price_id(request.price_id)
     current_subscription = users_db.get_user_subscription(uid)
 
     if not current_subscription or not current_subscription.stripe_subscription_id:
@@ -416,6 +690,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if stripe_sub.get('cancel_at_period_end') and (
+            not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Plan changes are available after the current subscription ends. Reactivate your current plan to keep it.",
+            )
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 
@@ -431,26 +712,39 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        # Block downgrades from Architect to Unlimited
-        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
-            raise HTTPException(
-                status_code=400,
-                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
-            )
+        desktop_change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan)
+        if desktop_change_error:
+            raise HTTPException(status_code=400, detail=desktop_change_error)
+
+        # Validate and resolve promotion code if provided
+        resolved_promo_id = None
+        if request.promotion_code:
+            promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+            if not promo_list.data:
+                raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+            resolved_promo_id = promo_list.data[0].id
+
+        # A previously-scheduled change (e.g. monthly→annual) leaves a schedule
+        # attached to the subscription, which Stripe then refuses to modify or
+        # re-schedule. Release it first so the user can switch plans again.
+        _release_attached_schedules(stripe_sub)
 
         # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
-            updated_sub = stripe.Subscription.modify(
-                stripe_sub['id'],
-                items=[{'id': current_item_id, 'price': request.price_id}],
-                proration_behavior='always_invoice',
-                metadata={'uid': uid, 'sub_type': target_plan.value},
-            )
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'always_invoice',
+                'metadata': {'uid': uid, 'sub_type': target_plan.value},
+            }
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
             if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.dict())
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
                 clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
@@ -464,7 +758,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             return {
                 "status": "success",
                 "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
-                "subscription": new_subscription.dict() if new_subscription else current_subscription.dict(),
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
                 "days_remaining": 0,
                 "schedule_id": None,
             }
@@ -493,6 +789,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                             'price': request.price_id,
                         }
                     ],
+                    **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
                 },
             ],
             metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
@@ -506,13 +803,17 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         return {
             "status": "success",
             "message": f"Upgrade scheduled! Your monthly plan continues for {remaining_days} more days, then automatically switches to annual.",
-            "subscription": current_subscription.dict(),
+            "subscription": current_subscription.model_dump(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
         }
 
     except HTTPException:
         raise
+    except stripe.error.InvalidRequestError as e:
+        logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
@@ -523,7 +824,7 @@ class CancelSubscriptionRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/payments/subscription')
+@router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -568,7 +869,7 @@ def cancel_subscription_endpoint(
 
             # Update our database to reflect the scheduled cancellation
             subscription.cancel_at_period_end = True
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
         else:
@@ -578,7 +879,7 @@ def cancel_subscription_endpoint(
                 raise HTTPException(status_code=500, detail="Could not cancel subscription with Stripe.")
 
             subscription.cancel_at_period_end = updated_sub.cancel_at_period_end
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
@@ -590,7 +891,7 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
-@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
+@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
@@ -616,12 +917,17 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                stripe_utils.modify_subscription(subscription_id, metadata={"uid": uid, "app_id": app_id})
+                await run_blocking(
+                    stripe_executor,
+                    stripe_utils.modify_subscription,
+                    subscription_id,
+                    metadata={"uid": uid, "app_id": app_id},
+                )
                 # Store the customer ID for app subscription so that it is easy to cancel the subscription
                 customer_id = session.get("customer")
                 if customer_id:
-                    set_user_app_sub_customer_id(app_id, uid, customer_id)
-            paid_app(app_id, uid)
+                    await run_blocking(db_executor, set_user_app_sub_customer_id, app_id, uid, customer_id)
+            await run_blocking(db_executor, paid_app, app_id, uid)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
         elif client_reference_id or session.get('metadata', {}).get('sub_type'):
@@ -639,15 +945,24 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             # Verify user exists before processing — the subscription getter has
             # create-on-miss behavior that would resurrect a deleted user's doc
-            if not users_db.get_user_profile(uid):
+            if not await run_blocking(db_executor, users_db.get_user_profile, uid):
                 logger.warning(
                     f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session processing"
                 )
                 return {"status": "success"}
 
-            # Check if user already has an active subscription to prevent duplicates
-            existing_subscription = users_db.get_user_valid_subscription(uid)
-            if existing_subscription and existing_subscription.stripe_subscription_id:
+            # Check if user already has an active *paid* subscription to prevent duplicates.
+            # Stripe sends customer.subscription.created while Checkout subscriptions are still
+            # incomplete; our subscription event handler represents those as Basic with a Stripe
+            # subscription id. Do not treat that transient Basic record as a duplicate checkout,
+            # otherwise checkout.session.completed returns before persisting the real paid
+            # subscription/customer id and later stale incomplete_expired events can clobber access.
+            existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            if (
+                existing_subscription
+                and existing_subscription.stripe_subscription_id
+                and is_paid_plan(existing_subscription.plan)
+            ):
                 # If user already has a Stripe subscription, verify it's not the same one
                 if existing_subscription.stripe_subscription_id == session.get('subscription'):
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
@@ -659,39 +974,48 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
                     )
                     try:
-                        stripe.Subscription.cancel(old_sub_id)
+                        await run_blocking(stripe_executor, lambda: stripe.Subscription.cancel(old_sub_id))
                         logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
                     except Exception as e:
                         logger.error(
                             f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
                         )
 
-            _update_subscription_from_session(uid, session)
-            set_credits_invalidation_signal(uid)
-            clear_trial_paywall_cache(uid)
-            subscription = users_db.get_user_subscription(uid)
+            await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
+            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
+            subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
             if subscription and is_paid_plan(subscription.plan):
-                conversations_db.unlock_all_conversations(uid)
-                memories_db.unlock_all_memories(uid)
-                action_items_db.unlock_all_action_items(uid)
-                clear_fair_use_on_upgrade(uid)
+                await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+                await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+                await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+                await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
                     price_id = None
-                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                    stripe_sub = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
                     if stripe_sub:
                         subscription_obj = stripe_sub.to_dict()
                         if subscription_obj and subscription_obj['items']['data']:
                             price_id = subscription_obj['items']['data'][0]['price']['id']
                     sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
-                    stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "sub_type": sub_type})
+                    await run_blocking(
+                        stripe_executor,
+                        lambda: stripe.Subscription.modify(
+                            subscription_id, metadata={"uid": uid, "sub_type": sub_type}
+                        ),
+                    )
                 except Exception as e:
                     logger.error(f"Error updating subscription metadata: {e}")
 
                 # Send paid notification if applicable
                 try:
-                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                    stripe_sub = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
                     if stripe_sub:
                         subscription_obj = stripe_sub.to_dict()
                         if subscription_obj and subscription_obj['items']['data']:
@@ -713,6 +1037,11 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         'customer.subscription.created',
     ]:
         subscription_obj = event['data']['object']
+        record_subscription_event(
+            stripe_event_type=event['type'],
+            subscription_obj=subscription_obj,
+            previous_attributes=event.get('data', {}).get('previous_attributes'),
+        )
         uid = subscription_obj.get('metadata', {}).get('uid')
 
         if not uid:
@@ -720,23 +1049,62 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if not customer_id:
                 return {"status": "success", "message": "No customer ID or UID in subscription event."}
 
-            user = users_db.get_user_by_stripe_customer_id(customer_id)
+            user = await run_blocking(db_executor, users_db.get_user_by_stripe_customer_id, customer_id)
             if user and user.get('uid'):
                 uid = user['uid']
 
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             if new_subscription:
+                # Guard against a stale/old subscription's cancellation clobbering an
+                # active plan. If this event downgrades the user to a non-paid plan
+                # (e.g. an old sub got canceled) but they still have a *different*
+                # active paid subscription — they canceled one sub and started
+                # another near-simultaneously, possibly on a new Stripe customer —
+                # don't overwrite their plan with basic. Adopt the active paid sub.
+                adopted_active_paid = False
+                if not is_paid_plan(new_subscription.plan):
+                    event_sub_id = subscription_obj.get('id')
+                    current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    if _has_current_paid_subscription_for_different_stripe_sub(current_subscription, event_sub_id):
+                        logger.info(
+                            f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
+                            f"stored paid sub {current_subscription.stripe_subscription_id} is still valid."
+                        )
+                        return {"status": "success"}
+                    active_paid = await run_blocking(stripe_executor, find_active_paid_subscription_for_user, uid)
+                    if active_paid and active_paid.stripe_subscription_id != event_sub_id:
+                        logger.info(
+                            f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
+                            f"a different active paid sub {active_paid.stripe_subscription_id} exists."
+                        )
+                        new_subscription = active_paid
+                        adopted_active_paid = True
                 try:
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                        conversations_db.unlock_all_conversations(uid)
-                        memories_db.unlock_all_memories(uid)
-                        action_items_db.unlock_all_action_items(uid)
-                    users_db.update_user_subscription(uid, new_subscription.dict())
-                    set_credits_invalidation_signal(uid)
-                    clear_trial_paywall_cache(uid)
+                        # Only persist the customer id from the incoming event when we
+                        # did NOT adopt a different active paid subscription. When the
+                        # stale-downgrade guard adopted active_paid, the event's
+                        # subscription_obj['customer'] belongs to the canceled/stale
+                        # subscription (possibly a different Stripe customer), so
+                        # writing it would clobber the correct customer id that
+                        # find_active_paid_subscription_for_user used to locate
+                        # active_paid — a later reconciliation could then query the
+                        # wrong customer and miss the paid sub.
+                        if not adopted_active_paid:
+                            customer_id = subscription_obj.get('customer')
+                            if customer_id:
+                                await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
+                        await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+                        await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+                        await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+                    await run_blocking(
+                        db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                    )
+                    await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+                    await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                        clear_fair_use_on_upgrade(uid)
+                        await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(
@@ -767,7 +1135,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 try:
                     if schedule_obj.get('subscription'):
                         new_subscription_id = schedule_obj['subscription']
-                        new_stripe_sub = stripe.Subscription.retrieve(new_subscription_id)
+                        new_stripe_sub = await run_blocking(
+                            stripe_executor, lambda: stripe.Subscription.retrieve(new_subscription_id)
+                        )
                         new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
                         if not new_subscription:
                             logger.warning(
@@ -775,11 +1145,13 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                                 f"subscription {new_subscription_id} — unknown price ID"
                             )
                         else:
-                            users_db.update_user_subscription(uid, new_subscription.dict())
-                            set_credits_invalidation_signal(uid)
-                            clear_trial_paywall_cache(uid)
+                            await run_blocking(
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                            )
+                            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             if is_paid_plan(new_subscription.plan):
-                                clear_fair_use_on_upgrade(uid)
+                                await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
                                 f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
                             )
@@ -791,13 +1163,13 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     logger.error(f"Error updating subscription after scheduled upgrade: {e}")
             elif schedule_obj.get('status') == 'canceled':
                 try:
-                    # When a schedule is canceled, update the subscription to reflect cancellation
                     if schedule_obj.get('subscription'):
                         subscription_id = schedule_obj['subscription']
-                        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                        stripe_sub = await run_blocking(
+                            stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                        )
                         subscription_obj = stripe_sub.to_dict()
 
-                        # Build subscription object with cancellation status
                         new_subscription = _build_subscription_from_stripe_object(subscription_obj)
                         if not new_subscription:
                             logger.warning(
@@ -806,9 +1178,11 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                         else:
                             new_subscription.cancel_at_period_end = True
-                            users_db.update_user_subscription(uid, new_subscription.dict())
-                            set_credits_invalidation_signal(uid)
-                            clear_trial_paywall_cache(uid)
+                            await run_blocking(
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                            )
+                            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
+                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )
@@ -822,8 +1196,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
+@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
+async def stripe_connect_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
     try:
@@ -839,8 +1213,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if account['charges_enabled'] and account['details_submitted']:
             # account is fully onboarded
             uid = (account.get('metadata') or {}).get('uid')
-            if uid and get_default_payment_method(uid) is None:
-                set_default_payment_method(uid, 'stripe')
+            if uid and await run_blocking(db_executor, get_default_payment_method, uid) is None:
+                await run_blocking(db_executor, set_default_payment_method, uid, 'stripe')
 
     # TODO: handle this event to link transfers?
     # if event['type'] == 'transfer.created':
@@ -849,8 +1223,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post("/v1/stripe/connect-accounts")
-async def create_connect_account_endpoint(
+@router.post("/v1/stripe/connect-accounts", response_model=StripeConnectAccountResponse)
+def create_connect_account_endpoint(
     country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)
 ):
     """
@@ -862,6 +1236,11 @@ async def create_connect_account_endpoint(
         if account_id:
             account = refresh_connect_account_link(account_id)
         else:
+            # Require a real user record before creating a Stripe Connect account, so a UID that is
+            # valid in auth but missing from Firestore surfaces as a 404 rather than leaving an
+            # orphaned Stripe account (cubic on #8567).
+            if not get_user_profile(uid):
+                raise HTTPException(status_code=404, detail="User not found")
             if country is None or country.strip() == "":
                 raise HTTPException(status_code=400, detail="Country is required")
             account = create_connect_account(uid, country)
@@ -872,13 +1251,13 @@ async def create_connect_account_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get('/v1/stripe/supported-countries')
+@router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
 def get_supported_countries():
     return stripe_utils.get_supported_countries()
 
 
-@router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
-async def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
+@router.get("/v1/stripe/onboarded", response_model=StripeOnboardingStatusResponse, tags=['v1', 'stripe'])
+def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """
     Check the onboarding status of a Connect account
     """
@@ -891,10 +1270,8 @@ async def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid))
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/v1/stripe/refresh/{account_id}")
-async def refresh_account_link_endpoint(
-    request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)
-):
+@router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
+def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate a fresh account link if the previous one expired
     """
@@ -906,7 +1283,7 @@ async def refresh_account_link_endpoint(
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
-async def stripe_return(account_id: str):
+def stripe_return(account_id: str):
     """
     Handle the return flow from Stripe Connect account creation
     """
@@ -973,28 +1350,30 @@ async def stripe_return(account_id: str):
     return HTMLResponse(content=html_content)
 
 
-@router.post("/v1/paypal/payment-details")
-def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@router.post("/v1/paypal/payment-details", response_model=PaymentMutationResponse)
+def save_paypal_payment_details(data: SavePayPalPaymentDetailsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Save PayPal payment details (email and paypal.me link)
     """
     try:
-        if 'email' not in data or 'paypalme_url' not in data:
-            raise HTTPException(status_code=400, detail="Email and PayPal.me URL are required")
-        paypalme_url = data.get('paypalme_url').lower()
-        data['email'] = data.get('email').lower()
+        email = data.email.lower()
+        paypalme_url = data.paypalme_url.lower()
         if paypalme_url and not paypalme_url.startswith('http'):
             paypalme_url = 'https://' + paypalme_url
-        data['paypalme_url'] = paypalme_url
-        set_paypal_payment_details(uid, data)
+        set_paypal_payment_details(uid, {'email': email, 'paypalme_url': paypalme_url})
         if get_default_payment_method(uid) is None:
             set_default_payment_method(uid, 'paypal')
         return {"status": "success"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Broad catch around a Firestore write — unlike the ValidationError/
+        # StripeError sites elsewhere in this file (whose messages are
+        # designed to be user-facing), an unexpected exception here could be
+        # anything, so log the real detail server-side and don't echo it.
+        logger.error(f"Failed to save PayPal payment details for uid={uid}: {e}")
+        raise HTTPException(status_code=400, detail="Could not save PayPal payment details. Please try again.")
 
 
-@router.get("/v1/paypal/payment-details")
+@router.get("/v1/paypal/payment-details", response_model=Optional[PayPalPaymentDetailsResponse])
 def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """
     Get the PayPal payment details for the user
@@ -1007,7 +1386,7 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 
 
 @router.get("/v1/payments/success", response_class=HTMLResponse)
-async def stripe_success(session_id: str = Query(...)):
+def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
     return HTMLResponse(content="""
         <html>
@@ -1021,7 +1400,7 @@ async def stripe_success(session_id: str = Query(...)):
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
-async def stripe_cancel():
+def stripe_cancel():
     return HTMLResponse(content="""
         <html>
             <head><title>Cancelled</title></head>
@@ -1033,7 +1412,7 @@ async def stripe_cancel():
     """)
 
 
-@router.post('/v1/payments/customer-portal')
+@router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
 
@@ -1062,7 +1441,7 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
-async def portal_return():
+def portal_return():
     return HTMLResponse(content="""
         <html>
             <head><title>Portal Complete</title></head>
@@ -1074,7 +1453,7 @@ async def portal_return():
     """)
 
 
-@router.get("/v1/payment-methods/status")
+@router.get("/v1/payment-methods/status", response_model=PaymentMethodStatusResponse)
 def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the statuses of the payment methods for the user"""
     default_payment_method = get_default_payment_method(uid)
@@ -1091,17 +1470,19 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     return {"stripe": stripe_status, "paypal": paypal_status, "default": default_payment_method}
 
 
-@router.post("/v1/payment-methods/default")
-def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@router.post("/v1/payment-methods/default", response_model=PaymentMutationResponse)
+def set_default_payment_method_endpoint(
+    data: SetDefaultPaymentMethodRequest, uid: str = Depends(auth.get_current_user_uid)
+):
     """Set the default payment method for the user"""
-    method = data.get('method')
+    method = data.method
     if method not in ['stripe', 'paypal']:
         raise HTTPException(status_code=400, detail="Invalid method")
     set_default_payment_method(uid, method)
     return {"status": "success"}
 
 
-@router.get("/v1/apps/{app_id}/subscription")
+@router.get("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionResponse)
 def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get user's subscription for a specific app"""
     try:
@@ -1134,7 +1515,7 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
         raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
 
 
-@router.delete("/v1/apps/{app_id}/subscription")
+@router.delete("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionCancelResponse)
 def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel user's subscription for a specific app"""
     try:

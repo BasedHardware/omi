@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import {
   Clock,
   CalendarDays,
@@ -58,7 +58,7 @@ function getNotificationIconColor(type: NotificationType): string {
     case 'action_item_delete':
       return 'text-blue-400';
     case 'daily_summary':
-      return 'text-purple-400';
+      return 'text-text-secondary';
     case 'plugin':
       return 'text-green-400';
     case 'merge_completed':
@@ -100,14 +100,14 @@ export function NotificationItem({
         'flex items-start gap-3 px-4 py-3 cursor-pointer',
         'hover:bg-bg-tertiary/50 transition-colors',
         'group relative',
-        !notification.read && 'bg-purple-primary/5'
+        !notification.read && 'bg-white/[0.08]',
       )}
     >
       {/* Icon or App Image */}
       <div
         className={cn(
           'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden',
-          'bg-bg-tertiary'
+          'bg-bg-tertiary',
         )}
       >
         {showAppImage ? (
@@ -129,7 +129,7 @@ export function NotificationItem({
           <p
             className={cn(
               'text-sm font-medium truncate',
-              notification.read ? 'text-text-secondary' : 'text-text-primary'
+              notification.read ? 'text-text-secondary' : 'text-text-primary',
             )}
           >
             {notification.title}
@@ -141,7 +141,7 @@ export function NotificationItem({
         <p
           className={cn(
             'text-sm mt-0.5 line-clamp-2',
-            notification.read ? 'text-text-quaternary' : 'text-text-tertiary'
+            notification.read ? 'text-text-quaternary' : 'text-text-tertiary',
           )}
         >
           {notification.body}
@@ -151,7 +151,7 @@ export function NotificationItem({
       {/* Unread indicator */}
       {!notification.read && (
         <div
-          className="w-2 h-2 rounded-full bg-purple-primary flex-shrink-0 mt-2"
+          className="w-2 h-2 rounded-full bg-text-primary flex-shrink-0 mt-2"
           title="Unread"
         />
       )}
@@ -162,7 +162,7 @@ export function NotificationItem({
           'absolute right-2 top-1/2 -translate-y-1/2',
           'flex items-center gap-1',
           'opacity-0 group-hover:opacity-100 transition-opacity',
-          'bg-bg-secondary/90 backdrop-blur-sm rounded-lg px-1 py-1'
+          'bg-bg-secondary/90 backdrop-blur-sm rounded-lg px-1 py-1',
         )}
       >
         {!notification.read && (

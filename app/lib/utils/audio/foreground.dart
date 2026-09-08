@@ -1,12 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -16,6 +14,13 @@ void _startForegroundCallback() {
 class _ForegroundFirstTaskHandler extends TaskHandler {
   DateTime? _locationUpdatedAt;
 
+  static const Duration _lastKnownMaxAge = Duration(minutes: 5);
+
+  bool _isLastKnownFresh(Position position) {
+    final age = DateTime.now().toUtc().difference(position.timestamp.toUtc());
+    return !age.isNegative && age <= _lastKnownMaxAge;
+  }
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
     Logger.debug("Starting foreground task");
@@ -23,10 +28,34 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
   }
 
   Future _locationInBackground() async {
+    // Periodic refresh from FOREGROUND_SERVICE_LOCATION. while-in-use is
+    // enough; do not request ACCESS_BACKGROUND_LOCATION (Play Store
+    // prominent-disclosure). This isolate has no Activity, so it never prompts.
     if (await Geolocator.isLocationServiceEnabled()) {
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        var locationData = await Geolocator.getCurrentPosition();
+        Position? lastKnown;
+        try {
+          lastKnown = await Geolocator.getLastKnownPosition() ??
+              await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
+        } catch (_) {}
+        late final Position locationData;
+        if (lastKnown != null && _isLastKnownFresh(lastKnown)) {
+          locationData = lastKnown;
+        } else {
+          try {
+            locationData = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+            ).timeout(const Duration(seconds: 8));
+          } catch (e) {
+            if (lastKnown == null) {
+              Object loc = {'error': 'Location fix failed: $e'};
+              FlutterForegroundTask.sendDataToMain(loc);
+              return;
+            }
+            locationData = lastKnown;
+          }
+        }
         if (_locationUpdatedAt == null ||
             _locationUpdatedAt!.isBefore(DateTime.now().subtract(const Duration(minutes: 5)))) {
           Object loc = {
@@ -108,11 +137,12 @@ class ForegroundUtil {
     Logger.debug('initializeForegroundService');
 
     try {
+      await NotificationChannelStrings.loadAppLocale();
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'foreground_service',
-          channelName: 'Foreground Service Notification',
-          channelDescription: 'Transcription service is running in the background.',
+          channelName: NotificationChannelStrings.foregroundServiceChannelName,
+          channelDescription: NotificationChannelStrings.foregroundServiceChannelDescription,
           channelImportance: NotificationChannelImportance.LOW,
           priority: NotificationPriority.HIGH,
           // iconData: const NotificationIconData(

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-enrichment-starved-by-unwritten-association",
+  "violated_contract": "An enrichment step that decorates a primary record with context from another source must not depend on a single association that only one code path writes. Conversation meeting-context enrichment resolved solely through a Redis conversation-to-meeting mapping written at desktop conversation creation, and only when a stored meeting already overlapped that instant; because no shipping client ever populated the stored-meetings collection, the mapping was never created, the lookup returned nothing, and summarization silently produced notes attributed to 'Speaker 0' and 'Speaker 1' instead of named participants. A missing writer degraded the dependent feature to a plausible-looking wrong answer rather than a visible failure, so no error, metric, or test caught it.",
+  "canonical_prevention": "Resolve enrichment context by matching the primary record's own time window across layered sources rather than through a single association key, and cover every layer's absence explicitly. meeting_context.resolve_meeting_context orders calendar-backed stored meetings, client-supplied context, a read-only calendar overlap, screen-derived identity, and server-side OCR, selecting by overlap thresholds shared with the calendar auto-link path and degrading silently at each layer. Regression tests assert the ordering, the per-layer degrade-to-nothing behaviour, and that production enrichment is actually reachable with its dependencies faked, so a source that never writes cannot silently disable enrichment again.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_meeting_context_resolution.py",
+    "backend/tests/unit/test_meeting_context_enrichment_wiring.py"
+  ],
+  "evidence_prs": [
+    11834
+  ],
+  "scope_hints": [
+    "backend/utils/conversations/**"
+  ],
+  "status": "open"
+}

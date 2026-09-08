@@ -1,0 +1,2 @@
+# Keep Windows app text files aligned with .editorconfig and Prettier.
+* text=auto eol=lf

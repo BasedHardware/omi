@@ -1,0 +1,15 @@
+{
+  "version": "0.12.190",
+  "date": "2026-08-20",
+  "changes": [
+    "Fixed Omi quitting by itself during first-run permission setup",
+    "Fixed the Save button turning blank in the Add Memory dialog as soon as you typed",
+    "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac",
+    "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue",
+    "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index",
+    "Notifications now come in exactly four types — Focus, Task, Insight, Memory — each controlled by its own toggle in Settings (the toggle formerly called Live Suggestions is now Focus Notifications)",
+    "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train",
+    "Fixed the conversation processing banner overlapping source and duration details",
+    "Fixed longer push-to-talk questions losing the screenshot Omi answers from, so it can still see your screen"
+  ]
+}

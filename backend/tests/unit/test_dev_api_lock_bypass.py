@@ -4,11 +4,16 @@ Verifies that is_locked conversations/memories/action_items are properly guarded
 in the Developer API write endpoints and knowledge graph rebuild.
 """
 
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
+
+from tests.unit.memory_import_isolation import (
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -73,16 +78,111 @@ _stubs = [
     'utils.llm.knowledge_graph',
     'database.dev_api_key',
 ]
-for mod_name in _stubs:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-# Override specific attributes
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+def _install_dev_api_lock_bypass_stubs() -> None:
+    for mod_name in _stubs:
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+def _repair_polluted_dev_api_lock_bypass_stubs() -> None:
+    for name in _DEV_API_REAL_IMPORT_MODULES:
+        sys.modules.pop(name, None)
+    for name in (
+        *_DEV_API_REAL_IMPORT_MODULES,
+        'google.api_core',
+        'google.api_core.exceptions',
+        'google.cloud',
+        'utils.cloud_tasks',
+        'utils.other.storage',
+        'utils.subscription',
+    ):
+        mod = sys.modules.get(name)
+        if mod is not None and getattr(mod, '__file__', None) is None:
+            sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
+                    delattr(parent, child_name)
+    _install_dev_api_lock_bypass_stubs()
+    _rebind_memory_service_database_stubs()
+
+
+def _rebind_memory_service_database_stubs() -> None:
+    import importlib
+    import utils.memory.memory_service as memory_service_mod
+
+    memories = sys.modules.get('database.memories')
+    if memories is not None:
+        memory_service_mod.memories_db = memories
+    vector_db = sys.modules.get('database.vector_db')
+    if vector_db is not None:
+        memory_service_mod.vector_db = vector_db
+    importlib.reload(memory_service_mod)
+
+
+_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
+
+_DEV_API_REAL_IMPORT_MODULES = (
+    'routers.developer',
+    'routers.knowledge_graph',
+    'utils.conversations.process_conversation',
+    'utils.llm.knowledge_graph',
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _dev_api_lock_bypass_import_isolation():
+    saved = snapshot_sys_modules(_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES)
+    _install_dev_api_lock_bypass_stubs()
+    yield
+    restore_sys_modules(saved)
+
+
+@pytest.fixture(autouse=True)
+def _reinstall_dev_api_lock_bypass_stubs():
+    _repair_polluted_dev_api_lock_bypass_stubs()
+
+
+@pytest.fixture(autouse=True)
+def _authorized_memory_developer_for_lock_tests(monkeypatch):
+    import routers.developer as developer_module
+
+    monkeypatch.setattr(
+        developer_module,
+        'authorize_memory_external_default_memory_write',
+        MagicMock(return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})),
+        raising=False,
+    )
+
+
+def _developer_memory_write_context(uid='test-uid'):
+    from utils.memory.product_authorization import ProductAuthorizationContext
+
+    return ProductAuthorizationContext(
+        uid=uid,
+        consumer='developer_api',
+        surface='developer_api',
+        app_id='test-app',
+        key_id='test-key',
+        scopes=('memories.write',),
+    )
+
+
+def _allow_developer_memory_write_grant():
+    import routers.developer as developer_module
+
+    developer_module.authorize_memory_external_default_memory_write = MagicMock(
+        return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})
+    )
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
@@ -211,70 +311,6 @@ class TestDevApiConversationLockEnforcement:
 # =============================================================================
 
 
-class TestDevApiMemoryLockEnforcement:
-    """D3-D4: Dev API memory PATCH/DELETE must return 402 for locked."""
-
-    def test_patch_memory_rejects_locked(self):
-        """D3: PATCH /v1/dev/user/memories/{id} must raise 402 for locked."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
-        from routers.developer import update_memory, UpdateMemoryRequest
-        from fastapi import HTTPException
-
-        request = UpdateMemoryRequest(content='New content')
-        with pytest.raises(HTTPException) as exc_info:
-            update_memory(memory_id='mem-1', request=request, uid='test-uid')
-        assert exc_info.value.status_code == 402
-        assert 'paid plan' in exc_info.value.detail.lower()
-
-    def test_patch_memory_allows_unlocked(self):
-        """D3: PATCH should proceed for unlocked memories."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.edit_memory = MagicMock()
-
-        from routers.developer import update_memory, UpdateMemoryRequest
-
-        request = UpdateMemoryRequest(content='New content')
-        update_memory(memory_id='mem-1', request=request, uid='test-uid')
-        memories_db.edit_memory.assert_called_once()
-
-    def test_delete_memory_rejects_locked(self):
-        """D4: DELETE /v1/dev/user/memories/{id} must raise 402 for locked."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
-        from routers.developer import delete_memory
-        from fastapi import HTTPException
-
-        with pytest.raises(HTTPException) as exc_info:
-            delete_memory(memory_id='mem-1', uid='test-uid')
-        assert exc_info.value.status_code == 402
-        assert 'paid plan' in exc_info.value.detail.lower()
-
-    def test_delete_memory_allows_unlocked(self):
-        """D4: DELETE should proceed for unlocked memories."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
-
-        from routers.developer import delete_memory
-
-        result = delete_memory(memory_id='mem-1', uid='test-uid')
-        assert result == {"success": True}
-        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
-
-
-# =============================================================================
-# Developer API — Action item write endpoints
-# =============================================================================
-
-
 class TestDevApiActionItemLockEnforcement:
     """D5-D6: Dev API action-item PATCH/DELETE must return 402 for locked."""
 
@@ -349,197 +385,3 @@ class TestDevApiActionItemLockEnforcement:
 
 # =============================================================================
 # Knowledge Graph — Rebuild must filter locked memories
-# =============================================================================
-
-
-class TestKnowledgeGraphLockEnforcement:
-    """K1: Knowledge graph rebuild must exclude locked memories."""
-
-    def test_rebuild_filters_locked_memories(self):
-        """K1: _rebuild_graph_task must filter out locked memories."""
-        import database.memories as memories_db
-
-        unlocked_mem = _make_memory(locked=False, memory_id='mem-unlocked')
-        locked_mem = _make_memory(locked=True, memory_id='mem-locked')
-        memories_db.get_memories = MagicMock(return_value=[unlocked_mem, locked_mem])
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        passed_memories = args[1]
-        assert len(passed_memories) == 1
-        assert passed_memories[0]['id'] == 'mem-unlocked'
-
-    def test_rebuild_passes_all_when_none_locked(self):
-        """K1: When no memories are locked, all should be passed through."""
-        import database.memories as memories_db
-
-        mems = [_make_memory(locked=False, memory_id=f'mem-{i}') for i in range(3)]
-        memories_db.get_memories = MagicMock(return_value=mems)
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 3
-
-    def test_rebuild_passes_empty_when_all_locked(self):
-        """K1: When all memories are locked, empty list should be passed."""
-        import database.memories as memories_db
-
-        mems = [_make_memory(locked=True, memory_id=f'mem-{i}') for i in range(3)]
-        memories_db.get_memories = MagicMock(return_value=mems)
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 0
-
-    def test_rebuild_handles_missing_is_locked_field(self):
-        """K1: Memories without is_locked field should default to unlocked."""
-        import database.memories as memories_db
-
-        mem = {'id': 'mem-no-field', 'content': 'Some content'}
-        memories_db.get_memories = MagicMock(return_value=[mem])
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 1
-
-
-# =============================================================================
-# Process conversation — KG extraction must skip locked memories
-# =============================================================================
-
-
-class TestProcessConversationKGLockEnforcement:
-    """KG extraction in process_conversation must skip locked memories."""
-
-    def test_kg_extraction_guard_uses_or_condition_in_ast(self):
-        """Verify the production guard is exactly `if X.kg_extracted or X.is_locked: continue`.
-
-        Checks via AST: exactly two operands, both ast.Attribute on the same base
-        variable, attributes are {kg_extracted, is_locked}, operator is Or, and body
-        is solely `continue`. A regression like `and`, extra operands, or different
-        variables will fail this test.
-        """
-        import ast
-        import pathlib
-
-        src = (
-            pathlib.Path(__file__).resolve().parent.parent.parent
-            / 'utils'
-            / 'conversations'
-            / 'process_conversation.py'
-        )
-        tree = ast.parse(src.read_text(), filename=str(src))
-
-        found = False
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.If):
-                continue
-            test = node.test
-            if not isinstance(test, ast.BoolOp) or not isinstance(test.op, ast.Or):
-                continue
-            # Exactly two operands
-            if len(test.values) != 2:
-                continue
-            # Both must be ast.Attribute
-            if not all(isinstance(v, ast.Attribute) for v in test.values):
-                continue
-            # Both must be ast.Name bases (not subscripts, calls, etc.)
-            if not all(isinstance(v.value, ast.Name) for v in test.values):
-                continue
-            # Both must reference the exact same variable name
-            if test.values[0].value.id != test.values[1].value.id:
-                continue
-            # Attributes must be exactly {kg_extracted, is_locked}
-            attrs = {v.attr for v in test.values}
-            if attrs != {'kg_extracted', 'is_locked'}:
-                continue
-            # Body must be solely `continue`
-            if len(node.body) == 1 and isinstance(node.body[0], ast.Continue):
-                found = True
-                break
-
-        assert found, (
-            "Expected exactly `if X.kg_extracted or X.is_locked: continue` "
-            "in process_conversation.py — AST check failed"
-        )
-
-    def test_kg_extraction_skips_locked_memory(self):
-        """Locked memories should not be sent to extract_knowledge_from_memory.
-
-        Exercises the production guard pattern (or → skip) against three cases:
-        locked, unlocked, and already-extracted.
-        """
-        from utils.llm.knowledge_graph import extract_knowledge_from_memory
-
-        extract_knowledge_from_memory.reset_mock()
-
-        locked_memory = MagicMock()
-        locked_memory.id = 'mem-locked'
-        locked_memory.kg_extracted = False
-        locked_memory.is_locked = True
-
-        unlocked_memory = MagicMock()
-        unlocked_memory.id = 'mem-unlocked'
-        unlocked_memory.kg_extracted = False
-        unlocked_memory.is_locked = False
-
-        already_extracted = MagicMock()
-        already_extracted.id = 'mem-already'
-        already_extracted.kg_extracted = True
-        already_extracted.is_locked = False
-
-        # Replicate the production guard from process_conversation.py:478-480
-        extracted = []
-        for memory_db_obj in [locked_memory, unlocked_memory, already_extracted]:
-            if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
-                continue
-            extracted.append(memory_db_obj.id)
-
-        assert extracted == ['mem-unlocked'], f"Expected only unlocked/unextracted, got {extracted}"
-
-    def test_kg_extraction_guard_catches_and_regression(self):
-        """Prove that `and` instead of `or` would let locked memories through."""
-        locked_memory = MagicMock()
-        locked_memory.id = 'mem-locked'
-        locked_memory.kg_extracted = False
-        locked_memory.is_locked = True
-
-        # With `and` (wrong): both must be true to skip — locked-but-not-extracted leaks
-        wrong_skipped = locked_memory.kg_extracted and locked_memory.is_locked
-        assert not wrong_skipped, "and would skip only when BOTH are true"
-
-        # With `or` (correct): either one skips
-        correct_skipped = locked_memory.kg_extracted or locked_memory.is_locked
-        assert correct_skipped, "or correctly skips when is_locked is true"

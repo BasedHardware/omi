@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-platform-contract-left-as-a-local-comment",
+  "violated_contract": "A platform requirement learned the hard way at one call site must be encoded in a shared primitive, not recorded as a comment beside the single fixed caller. Left local, every sibling call site ships the same defect: iPad and macOS require a non-zero share-sheet anchor and share_plus throws without one, which one screen documented and fixed while four others kept omitting it. The failure is invisible because the platform call is the last await in an async handler with no error path, so the exception is unhandled and the control simply does nothing.",
+  "canonical_prevention": "When a platform constraint forces a workaround, land it as a shared helper with a test asserting the property the platform demands, and migrate the known call sites in the same change rather than leaving a comment for the next reader to find. Give any handler whose last statement is a platform call an error path, so a violation surfaces as a message instead of a dead control.",
+  "canonical_prevention_artifact": [
+    "app/lib/utils/share_sheet.dart",
+    "app/test/utils/share_sheet_test.dart"
+  ],
+  "evidence_prs": [
+    11855
+  ],
+  "scope_hints": [
+    "app/lib/utils/share_sheet.dart",
+    "app/lib/pages/**"
+  ],
+  "status": "open"
+}

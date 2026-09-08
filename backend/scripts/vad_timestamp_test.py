@@ -30,15 +30,18 @@ import wave
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 import numpy as np
 import requests
-from gtts import gTTS
+from gtts import gTTS  # type: ignore[reportMissingImports]  # gTTS not installed in dev venv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.stt.vad_gate import VADStreamingGate
+
+# gTTS ships no stubs; alias as Any to avoid cascading unknown-member warnings.
+_gTTS: Any = cast(Any, gTTS)
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -101,7 +104,7 @@ def synthesize_segment(text: str, lang: str, temp_dir: Path) -> bytes:
     mp3_path = temp_dir / f'seg_{hash(text) & 0xFFFFFFFF}.mp3'
     wav_path = temp_dir / f'seg_{hash(text) & 0xFFFFFFFF}.wav'
 
-    gTTS(text=text, lang=lang, slow=False).save(str(mp3_path))
+    _gTTS(text=text, lang=lang, slow=False).save(str(mp3_path))
     subprocess.run(
         [
             'ffmpeg',
@@ -187,7 +190,7 @@ def transcribe_with_words(wav_data: bytes, api_key: str, language: str = 'en') -
     response.raise_for_status()
     result = response.json()
 
-    words = []
+    words: List[WordTimestamp] = []
     channels = result.get('results', {}).get('channels', [])
     if channels:
         alts = channels[0].get('alternatives', [])
@@ -212,7 +215,7 @@ def run_vad_gate(pcm_data: bytes, threshold: float) -> Tuple[bytes, VADStreaming
         uid='timestamp-test',
         session_id=f'ts-{threshold}',
     )
-    gate._speech_threshold = threshold
+    gate._speech_threshold = threshold  # type: ignore[reportPrivateUsage]  # poking VAD gate internals for the benchmark
 
     chunk_bytes = int(SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH * (CHUNK_MS / 1000.0))
     wall_start = time.time()
@@ -273,7 +276,7 @@ def match_words(gt_words: List[WordTimestamp], remap_words: List[WordTimestamp])
     return drifts
 
 
-def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, float]:
+def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, Any]:
     """Print drift table and return summary stats."""
     print(f"\n{'=' * 90}")
     print(f"TIMESTAMP DRIFT: {label}")
@@ -281,8 +284,8 @@ def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, float]:
     print(f"{'Word':<20} {'GT Start':>9} {'Remap Start':>12} {'Drift':>8} {'GT End':>8} {'Remap End':>10} {'Drift':>8}")
     print('-' * 90)
 
-    abs_start_drifts = []
-    abs_end_drifts = []
+    abs_start_drifts: List[float] = []
+    abs_end_drifts: List[float] = []
 
     for d in drifts:
         flag = ''
@@ -302,7 +305,7 @@ def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, float]:
         print("  (no matched words)")
         return {}
 
-    stats = {
+    stats: Dict[str, Any] = {
         'words_matched': len(drifts),
         'mean_start_drift': np.mean(abs_start_drifts),
         'median_start_drift': np.median(abs_start_drifts),
@@ -342,7 +345,7 @@ def print_drift_table(drifts: List[WordDrift], label: str) -> Dict[str, float]:
     return stats
 
 
-def run_timestamp_test(pcm_data: bytes, threshold: float, api_key: str) -> Dict[str, float]:
+def run_timestamp_test(pcm_data: bytes, threshold: float, api_key: str) -> Dict[str, Any]:
     """Run one threshold test and return drift stats."""
     print(f"\n--- Threshold {threshold} ---")
 
@@ -420,7 +423,7 @@ def main() -> int:
     for t in timings:
         print(f"  {t.wall_offset_sec:>6.2f}s: {t.text[:60]}  (silence after: {t.silence_after_sec}s)")
 
-    all_stats = {}
+    all_stats: Dict[str, Dict[str, Any]] = {}
     for threshold in thresholds:
         stats = run_timestamp_test(pcm_data, threshold, api_key)
         all_stats[str(threshold)] = stats

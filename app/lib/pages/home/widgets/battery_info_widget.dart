@@ -15,6 +15,7 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -28,49 +29,6 @@ class BatteryInfoWidget extends StatefulWidget {
 }
 
 class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
-  void _showRecordOptions(BuildContext context) {
-    HapticFeedback.lightImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _RecordOptionsSheet(
-        onPickPhoneMic: () {
-          Navigator.pop(sheetContext);
-          _startRecording(context);
-        },
-        onPickPhoneCall: () {
-          Navigator.pop(sheetContext);
-          if (!context.mounted) return;
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
-        },
-      ),
-    );
-  }
-
-  Future<void> _startRecording(BuildContext context) async {
-    HapticFeedback.mediumImpact();
-    final captureProvider = context.read<CaptureProvider>();
-    if (captureProvider.recordingState == RecordingState.initialising) return;
-    if (captureProvider.recordingState == RecordingState.record) {
-      await captureProvider.stopStreamRecording();
-      captureProvider.forceProcessingCurrentConversation();
-      PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      return;
-    }
-    await captureProvider.streamRecording();
-    PlatformManager.instance.analytics.phoneMicRecordingStarted();
-    if (context.mounted) {
-      final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
-          ? captureProvider.conversationProvider!.conversations.first.id
-          : null;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Selector<HomeProvider, bool>(
@@ -242,90 +200,108 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       ),
                     ),
                   ),
-                  if (isMemoriesPage)
-                    Consumer<CaptureProvider>(
-                      builder: (context, captureProvider, _) {
-                        final isRecording = captureProvider.recordingState == RecordingState.record;
-                        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-                        final showChevron = !isRecording && !isInitialising;
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _startRecording(context),
-                                  child: Container(
-                                    height: 36,
-                                    alignment: Alignment.center,
-                                    padding: EdgeInsets.fromLTRB(12, 0, showChevron ? 10 : 12, 0),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        if (isRecording)
-                                          const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
-                                        else if (isInitialising)
-                                          const SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                          )
-                                        else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          isRecording
-                                              ? context.l10n.stop
-                                              : isInitialising
-                                                  ? '...'
-                                                  : context.l10n.record,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (showChevron) ...[
-                                  Container(width: 1, height: 18, color: Colors.white.withValues(alpha: 0.25)),
-                                  GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => _showRecordOptions(context),
-                                    child: Container(
-                                      height: 36,
-                                      alignment: Alignment.center,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      child: const Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        size: 18,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
                 ],
               );
             }
           },
+        );
+      },
+    );
+  }
+}
+
+/// Circular phone-mic record button shown to the right of the home chat bar.
+/// Tap starts/stops recording; long-press opens the record options sheet.
+class HomeRecordButton extends StatefulWidget {
+  const HomeRecordButton({super.key});
+
+  @override
+  State<HomeRecordButton> createState() => _HomeRecordButtonState();
+}
+
+class _HomeRecordButtonState extends State<HomeRecordButton> {
+  void _showRecordOptions(BuildContext context) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => RecordOptionsSheet(
+        onPickPhoneMic: () {
+          Navigator.pop(sheetContext);
+          _startRecording(context);
+        },
+        onPickPhoneCall: () {
+          Navigator.pop(sheetContext);
+          if (!context.mounted) return;
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
+        },
+      ),
+    );
+  }
+
+  Future<void> _startRecording(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final captureProvider = context.read<CaptureProvider>();
+    if (captureProvider.recordingState == RecordingState.initialising) return;
+    if (captureProvider.recordingState == RecordingState.record) {
+      // Batch reports RecordingState.record too, but has no in-progress conversation
+      // to force-process — stopStreamRecording finalizes the local .bin on its own.
+      final wasBatch = captureProvider.isPhoneMicBatchRecording;
+      await captureProvider.stopStreamRecording();
+      if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
+      PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      return;
+    }
+    await captureProvider.streamRecording();
+    PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
+    // conversations-list batch card, so skip the capturing page (same as BLE batch).
+    if (captureProvider.isPhoneMicBatchRecording) {
+      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
+        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+      }
+      return;
+    }
+    if (context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<CaptureProvider>(
+      builder: (context, captureProvider, _) {
+        final isRecording = captureProvider.recordingState == RecordingState.record;
+        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _startRecording(context),
+          onLongPress: isRecording || isInitialising ? null : () => _showRecordOptions(context),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 62,
+            height: 62,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
+              shape: BoxShape.circle,
+            ),
+            child: isRecording
+                ? const Icon(Icons.stop_rounded, size: 24, color: Colors.white)
+                : isInitialising
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.add, size: 28, color: Colors.white),
+          ),
         );
       },
     );
@@ -365,11 +341,11 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _RecordOptionsSheet extends StatelessWidget {
+class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
 
-  const _RecordOptionsSheet({required this.onPickPhoneMic, required this.onPickPhoneCall});
+  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall});
 
   @override
   Widget build(BuildContext context) {
@@ -399,7 +375,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: Icons.phone_in_talk_rounded,
+            icon: FontAwesomeIcons.phone,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
@@ -411,7 +387,7 @@ class _RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -433,6 +409,7 @@ class _RecordOption extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
@@ -448,7 +425,7 @@ class _RecordOption extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 18),
+              child: FaIcon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

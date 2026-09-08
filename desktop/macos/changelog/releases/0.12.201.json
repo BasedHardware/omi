@@ -1,0 +1,7 @@
+{
+  "version": "0.12.201",
+  "date": "2026-08-22",
+  "changes": [
+    "Fixed released builds accepting local CLI test triggers, which let any process on your Mac deliver a fake Omi notification and save it to your chat"
+  ]
+}

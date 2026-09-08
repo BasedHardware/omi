@@ -22,7 +22,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cd "$REPO_ROOT/desktop/Desktop"
+cd "$REPO_ROOT/desktop/macos/Desktop"
 
 # Put Apple-provided tools first so SwiftPM does not pick up a broken Homebrew git on CI/macOS hosts.
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"

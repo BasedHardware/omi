@@ -1,5 +1,6 @@
 {
     "@@locale": "hr",
+    "sessionExpiredSignInAgain": "Sesija je istekla — prijavite se ponovno.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Moje aplikacije",
+    "myApps": "Moje kreacije",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline sinkronizacija",
+    "autoSync": "Automatska sinkronizacija",
+    "autoSyncDescription": "Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Tvoj plan se obnavlja {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Besplatni plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "{used} od {limit} uvida dobiveno ovaj mjesec",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} od {limit} uspomena kreirano ovaj mjesec",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "Izvezi konfiguraciju",
     "bringYourOwn": "Donesi svoje",
     "payYourSttProvider": "Slobodno koristi omi. Direktno plaćaš samo svojem STT pružatelju.",
-    "freeMinutesMonth": "1.200 besplatnih minuta/mjesec uključeno. Neograničeno sa ",
+    "freeMinutesMonth": "300 besplatnih minuta/mjesec uključeno. Neograničeno sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Domaćin je obavezan",
     "validPortRequired": "Validan port je obavezan",
@@ -1580,7 +1562,7 @@
     "designingApp": "Dizajniranje aplikacije",
     "generatingIconStep": "Stvaranje ikone",
     "finalTouches": "Završni dodaci",
-    "processing": "Obrada...",
+    "processing": "Obrada",
     "features": "Mogućnosti",
     "creatingYourApp": "Stvaranje vaše aplikacije...",
     "generatingIcon": "Stvaranje ikone...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Sviđa ti se Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u App Store. Tvoj povratni podaci su nam veoma važni!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Pomozi nam dosegnuti više ljudi ostavljanjem recenzije u Google Play Storeu. Tvoj povratni podaci su nam veoma važni!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Ocijeni na App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Ocijeni na Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Možda kasnije",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Postavke WiFi sinhronizacije",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Unesite vjerodajnice osobnog pristupnog mjesta vašeg telefona",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi sinhronizacija koristi vaš telefon kao osobno pristupno mjesto. Pronađite naziv i lozinku osobnog pristupnog mjesta u Postavkama > Osobno pristupno mjesto.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Naziv osobnog pristupnog mjesta (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "npr. iPhone Personal Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Lozinka",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Unesite lozinku osobnog pristupnog mjesta",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Spremi vjerodajnice",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "Briši vjerodajnice",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Molimo unesite naziv osobnog pristupnog mjesta",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi vjerodajnice su spremljene",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi vjerodajnice su obrisane",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Sažetak je generiran za {date}",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 premium minuta + neograničeno na uređaju",
+    "basicPlanDescription": "300 premium minuta + neograničeno na uređaju",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Brzi prijenos",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Sinkronizacija",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Metoda prijenosa",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Brzo",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Telefon",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Neuspješno omogućavanje WiFi-ja na uređaju. Molimo pokušajte ponovno.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Vaš uređaj ne podržava brzi prijenos. Umjesto toga koristite Bluetooth.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Molimo omogućite vrelu točku vašeg telefona i pokušajte ponovno.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Neuspješan početak prijenosa. Molimo pokušajte ponovno.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Uređaj nije odgovorio. Molimo pokušajte ponovno.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Nevaljani WiFi kredencijali. Provjerite postavke vruće točke.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Veza WiFi-ja nije uspjela. Molimo pokušajte ponovno.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Obrada SD kartice",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "Obrada",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi sinkronizacija neuspješna",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Obrada neuspješna",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesInfo": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesMonth": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi sinkronizacija",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} kopiran u međumemoriju",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Veza nije uspjela",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Povezivanje sa {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Omogući WiFi na {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Prebačeno na Brz Prijenos",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Prijenos je završen! Sada možete reproducirati ovu snimku.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Brz Prijenos je Omogućen",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth Sinhronizacija Omogućena",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Omogući Brz Prijenos",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Brz Prijenos koristi WiFi za oko 5x brže brzine. Vaš telefon će se privremeno povezati na WiFi mrežu vašeg Omi uređaja tijekom prijenosa.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Pristup internetu je pauziran tijekom prijenosa",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Odaberite kako se snimke prenose s vašeg Omi uređaja na vaš telefon.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s putem WiFi-ja",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X BRŽE",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Kreira izravnu WiFi vezu s vašim Omi uređajem. Vaš telefon će se privremeno odspojiti od vaše standardne WiFi mreže tijekom prijenosa.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Vaš uređaj ima nisku bateriju. Vrijeme je za puniranje! 🔋",
+    "lowBatteryAlertBody": "Vaša baterija je na {level}%. Vrijeme je za punjenje! 🔋",
     "batteryFullyChargedTitle": "Omi je potpuno napunjen",
     "batteryFullyChargedBody": "Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Vaš Omi Uređaj Je Odspoj",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Dozvola za Lokaciju je Obavezna",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Brz Prijenos zahtijeva dozvolu za lokaciju da provjerite WiFi vezu. Molim vas dodijelite dozvolu za lokaciju da biste nastavili.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Izvoz Transkripcije",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "Nema dnevnih sažetaka",
     "dailyRecapsDescription": "Tvoji dnevni sažetci će se pojaviti ovdje nakon što budu generirani",
-    "chooseTransferMethod": "Odaberite Metodu Prijenosa",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s putem WiFi-ja",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Otkrivena velika vremenski razmak ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Uređaj ne podržava WiFi sinhronizaciju, prebacivanje na Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health nije dostupan na ovom uređaju",
     "downloadAudio": "Preuzmi Zvuk",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Prikaži sve",
+    "expand": "Proširi",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Sigurno pohranjeno na vašem telefonu",
+    "safelyBackedUp": "Razgovori stvoreni",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "Nadogradi plan",
     "billingMonthly": "Mjesečno",
     "billingYearly": "Godišnje",
-    "savePercent": "Uštedite ~17%",
+    "savePercent": "Uštedite ~{percent}%",
     "popular": "Popularno",
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} pitanja mjesečno",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "Pokreni snimanje poziva",
     "startVoiceRecording": "Pokreni glasovno snimanje",
     "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
-    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno."
+    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno.",
+    "deleteRecap": "Izbriši pregled",
+    "deleteRecapConfirmTitle": "Izbrisati ovaj pregled?",
+    "deleteRecapConfirmBody": "Ovaj pregled bit će trajno uklonjen. Izvorni razgovori toga dana nisu pogođeni.",
+    "deleteRecapAction": "Izbriši",
+    "recapDeletedSnackbar": "Pregled izbrisan",
+    "recapDeleteFailed": "Pregled nije moguće izbrisati. Pokušajte ponovno kasnije.",
+    "syncStatusBackedUp": "Sigurnosno kopirano",
+    "syncStatusBackingUp": "Sinkronizacija…",
+    "syncStatusWaiting": "Čeka sinkronizaciju",
+    "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
+    "syncStatusFailed": "Neuspjelo — dodirnite Pokušaj ponovno",
+    "syncStatusTooOld": "Prestaro za sinkronizaciju — Omi ga ne može prihvatiti",
+    "syncStatusFileUnavailable": "Datoteka nije dostupna",
+    "syncStatusUploaded": "Učitano · obrađuje se na Omi",
+    "noRecordingsYet": "Još nema snimaka",
+    "syncInProgress": "Sinkronizacija u tijeku",
+    "deleteWhileProcessingTitle": "Još se obrađuje",
+    "deleteWhileProcessingMessage": "Ova je snimka učitana, ali Omi još stvara razgovor. Ako je sada izbrišete i obrada ne uspije, neće se moći vratiti. Svejedno izbrisati?",
+    "syncCardAllBackedUp": "Sve snimke sinkronizirane",
+    "syncCardReadyCount": "{count, plural, one{1 snimka spremna za sinkronizaciju} few{{count} snimke spremne za sinkronizaciju} other{{count} snimaka spremno za sinkronizaciju}}",
+    "syncCardProcessing": "Obrada u Omi…",
+    "syncCardWaitingInternet": "Čekanje interneta",
+    "syncCardNeedsAttention": "{count, plural, one{{count} snimka zahtijeva pažnju} few{{count} snimke zahtijevaju pažnju} other{{count} snimaka zahtijeva pažnju}}",
+    "syncFlowIntro": "Snimke se prenose s vašeg uređaja na ovaj telefon i pohranjuju lokalno, a zatim učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.",
+    "syncStepUpload": "Sinkronizacija",
+    "syncStepUploadDesc": "Vaša snimka šalje se na Omijev poslužitelj",
+    "syncStepProcess": "Transkripcija",
+    "syncStepProcessDesc": "Omi pretvara zvuk u razgovor",
+    "syncStepBackedUp": "Razgovor je spreman",
+    "syncStepBackedUpDesc": "Pronađi ga u Razgovori",
+    "syncFailureFootnote": "Ako obrada ne uspije, snimka se automatski ponavlja pri sljedećoj sinkronizaciji.",
+    "syncStatusConversationCreated": "Razgovor stvoren",
+    "syncCardUploadingTitle": "Slanje u Omi",
+    "syncCardDownloadingTitle": "Preuzimanje s vašeg uređaja",
+    "syncCardProgressOf": "{current} od {total}",
+    "syncStatusOnDevice": "Na vašem uređaju",
+    "syncStatusDownloadingFromDevice": "Preuzimanje s vašeg uređaja",
+    "newestFirst": "Najnovije prvo",
+    "noSyncedRecordingsYet": "Još nema sinkroniziranih snimaka",
+    "morePaymentMethodsComingSoon": "Uskoro stižu novi načini plaćanja",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon.",
+    "syncCardRateLimited": "Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti",
+    "syncCardBackendBusy": "Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet",
+    "unableToDetermineFirmwareVersion": "Nije moguće utvrditi trenutnu verziju firmvera",
+    "promoCode": "Promo kod",
+    "enterPromoCode": "Unesite promo kod",
+    "invalidPromotionCode": "Nevažeći promo kod.",
+    "backgroundModeTitle": "Pozadinski način rada",
+    "backgroundModeDescription": "Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.",
+    "backgroundModeNote": "Zasad radi samo s Omi uređajima i neprestano se poboljšava.",
+    "regenerateRecap": "Ponovno generiraj sažetak",
+    "recapRegeneratedSnackbar": "Sažetak je ponovno generiran",
+    "recapRegenerateFailed": "Nije bilo moguće ponovno generirati sažetak. Pokušajte kasnije.",
+    "recapRegenerateCooldown": "Pričekajte nekoliko sekundi prije ponovnog generiranja.",
+    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan.",
+    "syncCustomSttWarningTitle": "Sinkronizacija koristi Omi transkripciju",
+    "syncCustomSttWarningMessage": "Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.",
+    "transcribeLaterTitle": "Transkribiraj poslije",
+    "transcribeLaterDescription": "Snimaj zvuk odmah, a transkripciju pokreni naknadno umjesto uživo. Snimke se spremaju na tvoj telefon, a zatim ih prenosiš kako bi se stvorili razgovori.",
+    "transcribeLaterNote": "Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na tvom telefonu dok ga ne odlučiš prenijeti.",
+    "transcribeLaterStorageFull": "Telefonu ponestaje prostora pa je snimanje pauzirano. Oslobodi prostor ili prenesi snimke i snimanje će se automatski nastaviti.",
+    "unmute": "Uključi zvuk",
+    "newRecording": "Novo snimanje",
+    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima",
+    "recordingMode": "Način snimanja",
+    "captureModeLater": "Kasnije",
+    "captureModeLiveDescription": "Transkribiraj u stvarnom vremenu dok govoriš.",
+    "captureModeLaterDescription": "Spremi zvuk sada i transkribiraj kad god želiš.",
+    "backgroundModeUnavailable": "Pozadinski način nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da biste koristili ovu značajku.",
+    "memoryThisDevice": "Ovaj uređaj",
+    "memoryThisIphone": "Ovaj iPhone",
+    "memoryThisPhone": "Ovaj telefon",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Kako koristiti Omi",
+    "deviceOnboardingTranscriptionTitle": "Govorite u svoj Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Recite nekoliko riječi i gledajte kako se pojavljuju u stvarnom vremenu",
+    "deviceOnboardingGoodJob": "Odlično!",
+    "deviceOnboardingStartSpeaking": "Počnite govoriti...",
+    "deviceOnboardingAskQuestionTitle": "Postavite Omiju pitanje",
+    "deviceOnboardingAskQuestionSubtitle": "Jednom pritisnite gumb, izgovorite pitanje pa ponovno pritisnite kada završite",
+    "deviceOnboardingProcessingQuestion": "Obrada pitanja...",
+    "deviceOnboardingListening": "Slušanje...",
+    "deviceOnboardingTurnOffTitle": "Isključivanje",
+    "deviceOnboardingTurnOnTitle": "Uključivanje",
+    "deviceOnboardingTurnOffSubtitle": "Držite gumb 3 sekunde",
+    "deviceOnboardingTurnOnSubtitle": "Pritisnite gumb za ponovno uključivanje",
+    "deviceOnboardingHoldButtonHint": "Čvrsto držite gumb dok se svjetlo ne ugasi",
+    "deviceOnboardingStatusConnected": "Povezano",
+    "deviceOnboardingStatusConnectedDone": "Povezano!",
+    "deviceOnboardingStatusDisconnected": "Nije povezano",
+    "deviceOnboardingStatusTurningOff": "Isključivanje...",
+    "deviceOnboardingDoubleTapTitle": "Prilagodite dvostruki dodir",
+    "deviceOnboardingEndConversation": "Završi razgovor",
+    "deviceOnboardingEndConversationDesc": "Spremi i završi trenutni razgovor",
+    "deviceOnboardingMuteUnmute": "Isključi / uključi zvuk",
+    "deviceOnboardingMuteUnmuteDesc": "Uključi ili isključi mikrofon",
+    "deviceOnboardingStarConversation": "Označi tekući razgovor zvjezdicom",
+    "deviceOnboardingStarConversationDesc": "Označi razgovor kao važan",
+    "deviceOnboardingSingleTapHint": "To je bio jedan dodir – pokušajte brzo dodirnuti dvaput!",
+    "deviceOnboardingTryDoubleTap": "Pokušajte sada! Dvaput dodirnite svoj Omi",
+    "deviceOnboardingContinue": "Nastavi",
+    "deviceOnboardingFinish": "Završi",
+    "deviceOnboardingIntroTitle": "Upoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Brz i praktičan obilazak svega što vaš Omi može.",
+    "deviceOnboardingIntroDuration": "Otprilike 1 minuta",
+    "jumpToLatestMessage": "Idi na najnoviju poruku",
+    "latest": "Najnovije",
+    "flashFirmware": "Instaliraj firmver",
+    "pendantRecordingTitle": "Snimanje na privjesku",
+    "pendantRecordingNote": "Tvoj privjesak snima samostalno. Snimke se sinkroniziraju s telefonom dok je aplikacija otvorena.",
+    "pendantSyncingRecordings": "Sinkronizacija snimaka s tvog privjeska…",
+    "pendantMinutesStored": "~{minutes} min pohranjeno",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pohrana privjeska gotovo je puna — drži aplikaciju otvorenom radi sinkronizacije.",
+    "connectRayBanMeta": "Poveži Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Koristite svoje Ray-Ban Meta naočale kao Omi uređaj za snimanje razgovora i vizualnog konteksta. Omi će otvoriti aplikaciju Meta AI za povezivanje vaših naočala.",
+    "raybanMetaOpenMetaAI": "Poveži putem Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dovršite povezivanje u aplikaciji Meta AI, a zatim se vratite ovamo.",
+    "raybanMetaCheckAgain": "Provjeri ponovno",
+    "raybanMetaAllowCamera": "Dopusti kameru na naočalama",
+    "raybanMetaCameraExplanation": "Omi koristi kameru vaših naočala za dodavanje fotografija u vaše razgovore. Ovaj korak možete preskočiti i koristiti samo zvuk.",
+    "raybanMetaSkipForNow": "Preskoči za sada",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta način rada samo sa zvukom",
+    "raybanMetaAudioOnlyExplanation": "Ova verzija Omija može koristiti mikrofon vaših naočala putem Bluetooth veze. Za snimanje fotografija potrebna je Meta razvojna verzija Omija.",
+    "raybanMetaMusicPauseNote": "Glazba na vašem telefonu pauzira se dok je mikrofon naočala u upotrebi.",
+    "raybanMetaContinue": "Nastavi",
+    "raybanMetaCapturePhoto": "Snimi fotografiju",
+    "raybanMetaPhotoRequested": "Fotografija zatražena — pojavit će se u vašem razgovoru.",
+    "raybanMetaMicrophoneReady": "Mikrofon spreman",
+    "raybanMetaImageCaptureReady": "Snimanje slike spremno",
+    "raybanMetaImageCaptureUnavailable": "Nedostupno u načinu rada samo sa zvukom",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Pogreška pri povezivanju s Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Pohrana uređaja",
+    "deviceStoragePercentFull": "{percent}% popunjeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
+    "deviceStorageFree": "{free} slobodno",
+    "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte kako biste oslobodili prostor.",
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži.",
+    "dataEncryptedBanner": "Vaši su podaci prema zadanim postavkama zaštićeni snažnom enkripcijom, a vi kontrolirate kako se pohranjuju i koriste.",
+    "rayBanMetaMicPickerTitle": "Odaberite mikrofon Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Odaberite Bluetooth mikrofon naočala. Glazba se pauzira dok ga Omi koristi.",
+    "rayBanMetaMicPickerEmpty": "Nije pronađen nijedan Bluetooth mikrofon. Povežite naočale u postavkama iPhonea pa pokušajte ponovno.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth mikrofoni nisu se mogli učitati. Provjerite je li Bluetooth uključen pa pokušajte ponovno.",
+    "rayBanMetaMicPickerConnectError": "Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.",
+    "cloudTranscription": "Transkripcija u oblaku",
+    "copyMessage": "Kopiraj poruku",
+    "deleteOnDeviceModel": "Obriši model",
+    "deleteOnDeviceModelConfirm": "Jeste li sigurni da želite obrisati ovaj model?",
+    "downgradeAnyway": "Ipak prijeđi na niži plan",
+    "downgradeLimitBattery": "7x veća potrošnja baterije",
+    "downgradeLimitDelay": "Kašnjenje od 5-7 sekundi",
+    "downgradeLimitQuality": "30% slabija kvaliteta transkripcije",
+    "downgradeLimitSpeakers": "Nije moguće prepoznati govornike",
+    "downgradeLimitationsHeading": "Susrest ćete se sa sljedećim ograničenjima:",
+    "downgradeToFreemiumTitle": "Prijeći na besplatni plan?",
+    "errorLoadingAudio": "Greška pri učitavanju zvuka",
+    "failedToLinkCalendarEvent": "Povezivanje s događajem u kalendaru nije uspjelo",
+    "googleCalendarConnectPrompt": "Povežite svoj Google Calendar kako biste razgovore povezali s događajima u kalendaru.",
+    "googleCalendarNotConnected": "Google Calendar nije povezan",
+    "linkedToEvent": "Povezano s „{title}”",
+    "onDeviceModelDeleted": "Model obrisan",
+    "onDeviceModelDownloadFailed": "Preuzimanje modela nije uspjelo",
+    "onDeviceModelDownloadFailedDesc": "Preuzimanje Whisper modela nije uspjelo. Pokušajte ponovno.",
+    "onDeviceModelDownloadSuccess": "Model preuzet",
+    "onDeviceModelDownloadSuccessDesc": "Whisper model uspješno je preuzet",
+    "onDeviceModelDownloaded": "Preuzeto",
+    "onDeviceModelSize": "Veličina modela",
+    "onDeviceTranscription": "Transkripcija na uređaju",
+    "onDeviceTranscriptionDesc": "Transkripcija se obrađuje lokalno na vašem uređaju",
+    "searchSettings": "Pretraži postavke…",
+    "speechToTextProvider": "Pružatelj usluge govora u tekst",
+    "speechToTextProviderDesc": "Odaberite uslugu koja se koristi za transkripciju",
+    "sttFilterAuto": "Automatski",
+    "sttModelAccuracy": "Točnost",
+    "sttModelFaster": "Brže",
+    "sttModelHigher": "Više",
+    "sttModelLower": "Niže",
+    "sttModelSlower": "Sporije",
+    "sttModelSpeed": "Brzina",
+    "sttNone": "Nijedan",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Hvala na povratnoj informaciji!",
+    "transcriptionLanguage": "Jezik transkripcije",
+    "transcriptionLanguageDesc": "Odaberite jezik za transkripciju govora",
+    "whisperModel": "Whisper model",
+    "whisperModelDesc": "Odaberite model za transkripciju na uređaju",
+    "whisperModelSizeBase": "Osnovni",
+    "whisperModelSizeLarge": "Veliki",
+    "whisperModelSizeMedium": "Srednji",
+    "whisperModelSizeSmall": "Mali",
+    "whisperModelSizeTiny": "Sićušni",
+    "planSheetChooseYourPlan": "Odaberite svoj plan i otključajte neograničeni Omi.",
+    "availableOnMacMobileWeb": "Dostupno na Macu, mobitelu i webu",
+    "popularBadge": "POPULARNO",
+    "worksOnDesktop": "Radi na računalu",
+    "noDesktopAccess": "Ne radi na računalu",
+    "annualBillingSummary": "{months} mjeseci / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} mjesec besplatno} few{{count} mjeseca besplatno} other{{count} mjeseci besplatno}}",
+    "freemiumLimitsIntro": "Omi je besplatan, ali besplatna inačica ima ograničenja koja utječu na vaše iskustvo:",
+    "downgradeLimitDelayNotRealTime": "Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)",
+    "downgradeToFreemiumAction": "Prijeđite na besplatnu inačicu",
+    "getFreeUnlimitedAccess": "Ostvarite besplatan neograničen pristup",
+    "shareDataForTraining": "Podijelite podatke za treniranje",
+    "yourRequestUnderReview": "Vaš je zahtjev u pregledu",
+    "pinAsBaseline": "Prikvači kao osnovu",
+    "unpinAsBaseline": "Otkvači s osnove",
+    "baselineMemory": "Osnovna memorija",
+    "alwaysInContext": "Uvijek u kontekstu",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeAbout": "O: {title}",
+    "askAboutThisConversation": "Pitaj o ovome",
+    "sendRawAudioToOmi": "Šalji neobrađeni zvuk u Omi",
+    "sendRawAudioToOmiDescription": "Isključite kako biste spriječili slanje neobrađenog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.",
+    "findDevice": "Pronađi",
+    "diagnosticsShareFailed": "Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovno.",
+    "appDisabledTitle": "Ova je aplikacija onemogućena i ne može se instalirati.",
+    "appDisabledWebhookFailures": "Njezina krajnja točka nije radila 72 sata zaredom pa je isporuka zaustavljena.",
+    "appDisabledGeneric": "Onemogućila ju je Omi.",
+    "appDisabledOwnerHint": "Najprije popravi krajnju točku — ponovno omogućivanje iznova provjerava svaki konfigurirani URL.",
+    "appReEnable": "Ponovno omogući",
+    "appReEnableFailedTitle": "Ponovno omogućivanje nije uspjelo",
+    "appReEnableFailedBody": "Ovu aplikaciju nije bilo moguće ponovno omogućiti. Pokušaj ponovno.",
+    "appDisabledOn": "Onemogućeno {date}.",
+    "appDisabledLastError": "Posljednja pogreška: {error}.",
+    "prerecordedTranscript": "Unaprijed snimljeno",
+    "pendantRecordingSyncBlocked": "Pendant još uvijek snima pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.",
+    "pendantFullSyncBlocked": "Pohrana Pendanta je puna i još je u načinu snimanja, pa se pohranjeni zvuk ne može prenijeti. Pritisnite gumb na Pendantu da zaustavite snimanje, a zatim ponovno sinkronizirajte.",
+    "conversationsNotCapturedCount": "Nije snimljeno ({count})",
+    "transcriptionNoAudio": "Transkripcija ne prima zvuk",
+    "chatBlockTask": "Zadatak",
+    "chatBlockGoal": "Cilj",
+    "chatBlockConversation": "Razgovor",
+    "chatBlockMemory": "Sjećanje",
+    "chatBlockQuestion": "Pitanje",
+    "chatBlockOpenInGoals": "Otvori u Ciljevima",
+    "chatBlockOpenConversation": "Otvori razgovor",
+    "chatBlockOpenInMemories": "Otvori u Sjećanjima",
+    "chatBlockUnavailable": "Više nije dostupno",
+    "chatBlockRecommendedNextSteps": "Preporučeni sljedeći koraci",
+    "couldNotLoadMemories": "Nije moguće učitati uspomene",
+    "couldNotLoadKnowledgeGraph": "Nije moguće učitati graf znanja",
+    "speechProfileOwnerTitle": "Glasovni profil: {name}",
+    "play": "Reproduciraj",
+    "redo": "Snimi ponovno",
+    "answerWithYourVoice": "Odgovorite glasom:",
+    "speechProfileTopicLocation": "Gdje živite?",
+    "speechProfileTopicWork": "Čime se bavite?",
+    "speechProfileTopicGoal": "Koji je vaš dugoročni cilj?",
+    "speechToTextUnavailableDesc": "Pretvaranje govora u tekst trenutačno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju pa pokušajte ponovno.",
+    "memoryHistoryPartial": "Dio povijesti sjećanja nije dostupan. Prikazuje se dosad primljena povijest.",
+    "tapPlusToStartRecording": "Dodirnite + za početak snimanja"
 }

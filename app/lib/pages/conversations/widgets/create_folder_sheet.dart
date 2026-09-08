@@ -79,7 +79,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
 
     try {
       final folderProvider = Provider.of<FolderProvider>(context, listen: false);
-      final colorHex = '#${_selectedColor.value.toRadixString(16).substring(2).toUpperCase()}';
+      final colorHex = '#${_selectedColor.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
 
       bool success;
       if (isEditing) {
@@ -272,7 +272,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         height: 40,
         margin: const EdgeInsets.only(right: 8),
         decoration: BoxDecoration(
-          color: isSelected ? _selectedColor.withOpacity(0.2) : ResponsiveHelper.backgroundTertiary,
+          color: isSelected ? _selectedColor.withValues(alpha: 0.2) : ResponsiveHelper.backgroundTertiary,
           borderRadius: BorderRadius.circular(10),
           border: isSelected ? Border.all(color: _selectedColor, width: 1.5) : null,
         ),
@@ -288,7 +288,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
   }
 
   Widget _buildColorOption(Color color) {
-    final isSelected = _selectedColor.value == color.value;
+    final isSelected = _selectedColor.toARGB32() == color.toARGB32();
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();

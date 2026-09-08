@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
+import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/app.dart';
@@ -16,6 +20,29 @@ import 'package:omi/utils/logger.dart';
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
+  static FlutterSecureStorage? _secureStorage;
+
+  /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
+  static String _authTokenCache = '';
+
+  /// Used under `flutter test` when no [FlutterSecureStorage] is injected, so
+  /// production code never calls `@visibleForTesting` mock APIs.
+  static Map<String, String>? _testSecureFallback;
+
+  static const String _authTokenSecureKey = 'authToken';
+  static const String _authTokenMigratedPrefsKey = 'authTokenSecureMigrated';
+
+  /// Plain prefs mirror for in-tree native readers (Android background socket).
+  static const String _nativeAuthTokenPrefsKey = 'nativeAuthToken';
+
+  static bool _mirrorNativeAuthToken = false;
+
+  static const int _duplicateKeychainItem = -25299;
+
+  static const IOSOptions _anyAccessibilityIos = IOSOptions(accessibility: null);
+  static const MacOsOptions _anyAccessibilityMacOs = MacOsOptions(accessibility: null);
+
+  static Future<void> _secureQueue = Future<void>.value();
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -26,9 +53,158 @@ class SharedPreferencesUtil {
   String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
-  static Future<void> init() async {
+  static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
+    if (secureStorage != null) {
+      _secureStorage = secureStorage;
+      _testSecureFallback = null;
+    } else if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      // Hermetic unit tests have no secure-storage plugin channel.
+      _secureStorage = null;
+      _testSecureFallback = <String, String>{};
+    } else {
+      _secureStorage = const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
+        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+      );
+      _testSecureFallback = null;
+    }
+    await migrateAuthTokenFromPrefs();
+    _authTokenCache = await _readSecureAuthToken() ?? '';
+    // Codex P2: a failed secure write leaves the legacy prefs token; still use it.
+    if (_authTokenCache.isEmpty) {
+      _authTokenCache = _preferences?.getString('authToken') ?? '';
+    }
+    await _syncNativeAuthToken(_authTokenCache);
   }
+
+  /// One-time move of `authToken` from SharedPreferences into secure storage.
+  ///
+  /// Called from [init] at startup. Idempotent: a prefs flag skips work after
+  /// the first successful pass. If secure storage already has a token, the
+  /// prefs copy is discarded so we never overwrite a newer secure value.
+  static Future<void> migrateAuthTokenFromPrefs() async {
+    final prefs = _preferences;
+    if (prefs == null || (_secureStorage == null && _testSecureFallback == null)) return;
+    if (prefs.getBool(_authTokenMigratedPrefsKey) == true) {
+      // Scrub any prefs residue written after migration (e.g. stale native/cache paths).
+      if (prefs.containsKey('authToken')) {
+        await prefs.remove('authToken');
+      }
+      return;
+    }
+
+    final legacyToken = prefs.getString('authToken');
+    try {
+      final existingSecure = await _readSecureAuthToken();
+      if ((existingSecure == null || existingSecure.isEmpty) && legacyToken != null && legacyToken.isNotEmpty) {
+        final persisted = await _writeSecureAuthToken(legacyToken);
+        if (!persisted) return;
+      }
+      if (legacyToken != null) {
+        await prefs.remove('authToken');
+      }
+      await prefs.setBool(_authTokenMigratedPrefsKey, true);
+    } catch (e, stack) {
+      // Leave the prefs copy and migration flag unset so the next launch retries.
+      Logger.debug('authToken secure migration failed: $e');
+      Logger.debug('Stack: $stack');
+    }
+  }
+
+  static Future<T?> _runSecure<T extends Object>(String op, Future<T?> Function() action) {
+    final result = Completer<T?>();
+    _secureQueue = _secureQueue.then((_) async {
+      try {
+        result.complete(await action());
+      } catch (e, stack) {
+        Logger.debug('Secure storage $op failed: $e');
+        Logger.debug('Stack: $stack');
+        result.complete(null);
+      }
+    });
+    return result.future;
+  }
+
+  static bool _isDuplicateKeychainItem(PlatformException e) =>
+      e.details == _duplicateKeychainItem || (e.message?.contains('$_duplicateKeychainItem') ?? false);
+
+  static Future<String?> _readSecureAuthToken() async {
+    final fallback = _testSecureFallback;
+    if (fallback != null) return fallback[_authTokenSecureKey];
+    final storage = _secureStorage;
+    if (storage == null) return null;
+    return _runSecure<String>('read', () => storage.read(key: _authTokenSecureKey));
+  }
+
+  static Future<bool> _writeSecureAuthToken(String value) async {
+    final fallback = _testSecureFallback;
+    if (fallback != null) {
+      fallback[_authTokenSecureKey] = value;
+      return true;
+    }
+    final storage = _secureStorage;
+    if (storage == null) return false;
+    final wrote = await _runSecure<bool>('write', () async {
+      try {
+        await storage.write(key: _authTokenSecureKey, value: value);
+      } on PlatformException catch (e) {
+        if (!_isDuplicateKeychainItem(e)) rethrow;
+        await storage.delete(
+          key: _authTokenSecureKey,
+          iOptions: _anyAccessibilityIos,
+          mOptions: _anyAccessibilityMacOs,
+        );
+        await storage.write(key: _authTokenSecureKey, value: value);
+      }
+      return true;
+    });
+    return wrote ?? false;
+  }
+
+  static Future<void> _deleteSecureAuthToken() async {
+    final fallback = _testSecureFallback;
+    if (fallback != null) {
+      fallback.remove(_authTokenSecureKey);
+    } else {
+      final storage = _secureStorage;
+      if (storage != null) {
+        await _runSecure<bool>('delete', () async {
+          await storage.delete(
+            key: _authTokenSecureKey,
+            iOptions: _anyAccessibilityIos,
+            mOptions: _anyAccessibilityMacOs,
+          );
+          return true;
+        });
+      }
+    }
+    await _syncNativeAuthToken('');
+  }
+
+  /// Native Android still reads SharedPreferences. Mirror the live token there
+  /// under a dedicated key so background streaming survives the secure migration.
+  static Future<void> _syncNativeAuthToken(String value) async {
+    final prefs = _preferences;
+    if (prefs == null) return;
+    if (value.isEmpty || !_mirrorNativeAuthToken) {
+      await prefs.remove(_nativeAuthTokenPrefsKey);
+    } else {
+      await prefs.setString(_nativeAuthTokenPrefsKey, value);
+    }
+  }
+
+  /// Picks up values written natively (the Dart cache doesn't see those otherwise).
+  static Future<void> reload() async {
+    await _preferences?.reload();
+  }
+
+  int get pendantPagesStored => getInt('pendantPagesStored');
+
+  bool get pendantDraining => getBool('pendantDraining');
+
+  bool get pendantStorageAlmostFull => getBool('pendantStorageAlmostFull');
 
   set uid(String value) => saveString('uid', value);
 
@@ -38,16 +214,62 @@ class SharedPreferencesUtil {
 
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
+    if (value.id.isNotEmpty) {
+      final devices = _upsertBtDevice(value);
+      saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    }
   }
 
   Future<void> btDeviceSet(BtDevice value) async {
     await saveString('btDevice', jsonEncode(value.toJson()));
+    await btDeviceAdd(value);
   }
 
   BtDevice get btDevice {
-    final String device = getString('btDevice') ?? '';
+    final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
+  }
+
+  List<BtDevice> get btDevices {
+    final devices = <BtDevice>[];
+    for (final encodedDevice in getStringList('btDevices')) {
+      try {
+        final decoded = jsonDecode(encodedDevice);
+        if (decoded is Map<String, dynamic>) {
+          final device = BtDevice.fromJson(decoded);
+          if (device.id.isNotEmpty && !devices.any((savedDevice) => savedDevice.id == device.id)) {
+            devices.add(device);
+          }
+        }
+      } catch (e) {
+        Logger.debug('Error decoding saved device: $e');
+      }
+    }
+
+    final legacyDevice = btDevice;
+    if (devices.isEmpty && legacyDevice.id.isNotEmpty) {
+      devices.add(legacyDevice);
+    }
+    return devices;
+  }
+
+  Future<void> btDeviceAdd(BtDevice value) async {
+    if (value.id.isEmpty) return;
+    final devices = _upsertBtDevice(value);
+    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    await saveString('btDevice', jsonEncode(value.toJson()));
+  }
+
+  List<BtDevice> _upsertBtDevice(BtDevice value) {
+    final devices = btDevices;
+    final index = devices.indexWhere((device) => device.id == value.id);
+    if (index >= 0) {
+      devices[index] = value;
+    } else {
+      devices.add(value);
+    }
+    return devices;
   }
 
   set deviceName(String value) => saveString('deviceName', value);
@@ -57,6 +279,54 @@ class SharedPreferencesUtil {
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
+
+  bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
+
+  set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
+
+  bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
+
+  set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
+  // Batch (offline) capture mode: when on, BLE audio is stored to local .bin files
+  // by the native layer instead of being transcribed in real time. Mutually
+  // exclusive with the realtime transcription socket (see CaptureProvider).
+  bool get batchModeEnabled => getBool('batchModeEnabled');
+
+  set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Phone-mic batch capture marker. false = explicit Transcribe Later (files
+  // named audio_omibatchphone_...), true = automatic offline fallback (files
+  // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.
+  bool get phoneBatchAuto => getBool('phoneBatchAuto');
+
+  set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
+
+  // Transcribe Later: pause capture (native writer drops packets, keeps the file
+  // open) so the user can mute a sensitive moment and resume the same recording.
+  bool get batchMuted => getBool('batchMuted');
+
+  set batchMuted(bool value) => saveBool('batchMuted', value);
+
+  // Realtime device mute (double-tap pause). Persisted so the mute survives an
+  // app kill/restart — otherwise the device silently resumes recording on the
+  // next reconnect even though the user muted it. Restored into
+  // CaptureProvider._isPaused at startup and re-applied on reconnect.
+  bool get deviceMuted => getBool('deviceMuted');
+
+  set deviceMuted(bool value) => saveBool('deviceMuted', value);
+
+  // Transcribe Later: one-shot flag — when set, the native writer finalizes the
+  // current file and starts a fresh one (manual "New recording" cut), then clears it.
+  bool get batchCutRequested => getBool('batchCutRequested');
+
+  set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
+
+  // Set while interactive device onboarding has temporarily suspended Transcribe Later so the
+  // realtime demo works. Persisted so an app-kill mid-onboarding is self-healed on next capture start.
+  bool get batchModeSuspendedForOnboarding => getBool('batchModeSuspendedForOnboarding');
+
+  set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
@@ -86,6 +356,12 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  // Whether offline recordings auto-sync to Omi when the device connects.
+  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+
+  set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
@@ -181,11 +457,6 @@ class SharedPreferencesUtil {
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 
   bool get vadGateEnabled => getBool('vadGateEnabled');
-
-  // Claude Agent — route chat through desktop agent VM (experimental)
-  set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
-
-  bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
 
   // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
@@ -325,20 +596,10 @@ class SharedPreferencesUtil {
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
-  // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
-  String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
-
-  set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
-
   // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)
   bool get deviceSupportsMultiFileSync => getBool('deviceSupportsMultiFileSync');
 
   set deviceSupportsMultiFileSync(bool value) => saveBool('deviceSupportsMultiFileSync', value);
-
-  // Whether the user has been shown the Fast Transfer explanation dialog
-  bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
-
-  set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 
@@ -372,6 +633,11 @@ class SharedPreferencesUtil {
   String get userPrimaryLanguage => getString('userPrimaryLanguage');
 
   set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
+
+  // Last served picker options, JSON name -> code.
+  String get cachedAvailableLanguages => getString('cachedAvailableLanguages');
+
+  set cachedAvailableLanguages(String value) => saveString('cachedAvailableLanguages', value);
 
   bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage');
 
@@ -479,13 +745,18 @@ class SharedPreferencesUtil {
 
   // Pending memories - memories created offline that need to be synced
   List<Memory> get pendingMemories {
-    final memories = getStringList('pendingMemories');
-    return memories.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return [];
+    _scopeLegacyUserData(ownerUid);
+    final memories = getStringList(_userScopedKey('pendingMemories', ownerUid));
+    return memories.map((e) => Memory.fromJson(jsonDecode(e))).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
     final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('pendingMemories', memories);
+    saveStringList(_userScopedKey('pendingMemories', ownerUid), memories);
   }
 
   void addPendingMemory(Memory memory) {
@@ -494,14 +765,22 @@ class SharedPreferencesUtil {
     pendingMemories = memories;
   }
 
-  void removePendingMemory(String memoryId) {
-    final List<Memory> memories = pendingMemories;
+  void removePendingMemory(String memoryId, {String? ownerUid}) {
+    final owner = ownerUid ?? uid;
+    if (owner.isEmpty) return;
+    final encoded = getStringList(_userScopedKey('pendingMemories', owner));
+    final memories = encoded.map((e) => Memory.fromJson(jsonDecode(e))).toList();
     memories.removeWhere((m) => m.id == memoryId);
-    pendingMemories = memories;
+    saveStringList(
+      _userScopedKey('pendingMemories', owner),
+      memories.map((memory) => jsonEncode(memory.toJson())).toList(),
+    );
   }
 
   void clearPendingMemories() {
-    saveStringList('pendingMemories', []);
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveStringList(_userScopedKey('pendingMemories', ownerUid), []);
   }
 
   List<Person> get cachedPeople {
@@ -563,9 +842,17 @@ class SharedPreferencesUtil {
 
   //--------------------------------- Auth ------------------------------------//
 
-  String get authToken => getString('authToken');
+  String get authToken => _authTokenCache;
 
-  set authToken(String value) => saveString('authToken', value);
+  set authToken(String value) {
+    _authTokenCache = value;
+    if (value.isEmpty) {
+      unawaited(_deleteSecureAuthToken());
+    } else {
+      unawaited(_writeSecureAuthToken(value));
+      unawaited(_syncNativeAuthToken(value));
+    }
+  }
 
   int get tokenExpirationTime => getInt('tokenExpirationTime');
 
@@ -585,6 +872,76 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
+  /// Clears persisted user identity and server-backed display caches while
+  /// preserving device, onboarding, permissions, and offline recording state.
+  void clearUserDisplayCache() {
+    final ownerUid = uid;
+    if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
+    authToken = '';
+    tokenExpirationTime = 0;
+    uid = '';
+    email = '';
+    givenName = '';
+    familyName = '';
+    cachedConversations = <ServerConversation>[];
+    cachedMessages = <ServerMessage>[];
+    cachedPeople = <Person>[];
+    appsList = <App>[];
+    modifiedConversationDetails = null;
+    cachedSingleLanguageMode = false;
+    cachedTranscriptionVocabulary = <String>[];
+    userPrimaryLanguage = '';
+    hasSetPrimaryLanguage = false;
+    hasSpeakerProfile = false;
+    selectedChatAppId = 'no_selected';
+    lastUsedSummarizationAppId = '';
+    preferredSummarizationAppId = '';
+    calendarEnabled = false;
+    _preferences?.remove('cachedMemories');
+  }
+
+  String _userScopedKey(String baseKey, String ownerUid) => '$baseKey:$ownerUid';
+
+  void scopeLegacyUserDataForCurrentUser() {
+    final ownerUid = uid;
+    if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
+  }
+
+  void _scopeLegacyUserData(String ownerUid) {
+    final preferences = _preferences;
+    if (preferences == null || ownerUid.isEmpty) return;
+
+    final pendingKey = _userScopedKey('pendingMemories', ownerUid);
+    final legacyPending = preferences.getStringList('pendingMemories');
+    if (legacyPending != null) {
+      final scopedPending = preferences.getStringList(pendingKey) ?? const <String>[];
+      preferences.setStringList(pendingKey, {...scopedPending, ...legacyPending}.toList());
+    }
+    preferences.remove('pendingMemories');
+
+    final goalsKey = _userScopedKey('goals_tracker_local_goals', ownerUid);
+    final legacyGoals = preferences.getString('goals_tracker_local_goals');
+    if (legacyGoals != null) {
+      final scopedGoals = preferences.getString(goalsKey);
+      preferences.setString(goalsKey, _mergeJsonLists(scopedGoals, legacyGoals));
+    }
+    preferences.remove('goals_tracker_local_goals');
+  }
+
+  String _mergeJsonLists(String? existing, String legacy) {
+    try {
+      final existingItems = existing == null ? <dynamic>[] : jsonDecode(existing) as List<dynamic>;
+      final legacyItems = jsonDecode(legacy) as List<dynamic>;
+      final merged = <String, dynamic>{};
+      for (final item in [...existingItems, ...legacyItems]) {
+        merged[jsonEncode(item)] = item;
+      }
+      return jsonEncode(merged.values.toList());
+    } catch (_) {
+      return existing ?? legacy;
+    }
+  }
+
   String get foundOmiSource => getString('foundOmiSource');
 
   set foundOmiSource(String value) => saveString('foundOmiSource', value);
@@ -596,16 +953,6 @@ class SharedPreferencesUtil {
   set companionAssociationPrompted(bool value) => saveBool('companionAssociationPrompted', value);
 
   bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
-
-  //------------------------ TestFlight API Environment ----------------------//
-
-  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
-  /// Default is 'production' so new TestFlight installs hit prod by default.
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'production');
-
-  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
-
-  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
 
   //--------------------------- Announcements ---------------------------------//
 
@@ -661,5 +1008,9 @@ class SharedPreferencesUtil {
 
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
-  Future<bool> clear() async => await _preferences?.clear() ?? false;
+  Future<bool> clear() async {
+    _authTokenCache = '';
+    await _deleteSecureAuthToken();
+    return await _preferences?.clear() ?? false;
+  }
 }

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-in-band-auth-await-stall",
+  "violated_contract": "An ACP path that hits a provider auth failure must terminalize the pending turn and leave OAuth out-of-band; it must never `await` the interactive sign-in flow in-band, because that blocks the caller for the whole callback timeout with nothing on the wire to fail fast.",
+  "canonical_prevention": "Signal `auth_required` to the host first, then start (never await) the OAuth flow so the pending send terminalizes as `authentication`; route both the active-turn and cold-start-init paths through the shared beginProviderAuthWithoutBlocking / signalProviderAuthRequired seam rather than awaiting startAuthFlow.",
+  "evidence_prs": [10417, 10407],
+  "scope_hints": ["desktop/macos/agent/src/**"],
+  "status": "open"
+}

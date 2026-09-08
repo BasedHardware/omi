@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIconFile</key>
+	<string>ContextForClaude</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.omi.context-for-claude</string>
+	<key>CFBundleName</key>
+	<string>Context for Claude</string>
+	<key>CFBundleDisplayName</key>
+	<string>Context for Claude</string>
+	<key>CFBundleExecutable</key>
+	<string>Context for Claude</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.4</string>
+	<!-- Not menu-bar-only any more, and the direction of that change is the whole decision.
+
+	     The app lives in two places: the status item, and the Dock. On a crowded menu bar a 16 pt
+	     template mark is one of thirty near-identical glyphs, which is the report this answers.
+	     `DockPresence` (Settings/SettingsPreferences.swift) owns the preference that hides the Dock
+	     half again; this key decides which shape the process is *launched* in, which Swift cannot.
+
+	     `false` rather than `true` because promotion is the transition that misbehaves. An app that
+	     launches `LSUIElement` and calls `setActivationPolicy(.regular)` gets its Dock icon, but the
+	     main menu AppKit builds around a regular app is not drawn until the app has been deactivated
+	     and reactivated — so the default case would ship a menu bar that appears on the second
+	     activation. Demotion is the direction that behaves, so the process launches regular and
+	     `ContextAppDelegate` demotes it for the user who turned the row off. That user pays a Dock
+	     icon visible for the length of a launch; nobody pays a missing menu bar.
+
+	     Written out rather than deleted: absent and `false` mean the same thing to LaunchServices,
+	     and a key that is present is a key the next person reads the reasoning for. -->
+	<key>LSUIElement</key>
+	<false/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- macOS shows these verbatim in the TCC prompt, so they are written as the app speaking. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>I listen to your microphone so I can hear what you talk about and give Claude that context later.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>I record system audio so I can catch the other side of your calls, not just your half.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>I take an occasional snapshot of your screen so I can see what you are working on and tell Claude about it.</string>
+
+	<!-- ==========================================================================================
+	     Sparkle auto-update.
+
+	     This app updates itself with Sparkle, the same mechanism `desktop/macos` uses, and shares
+	     none of that app's identity: its own feed, its own EdDSA key pair, its own bundle. Updates
+	     come from GitHub and no backend brokers them — the feed below is the `appcast.xml` asset on
+	     this app's fixed `context-for-claude-appcast` release tag, and that feed's enclosures are this
+	     app's own `context-for-claude-v*` release assets. Sparkle draws the update sheet from *this*
+	     bundle — `CFBundleName`, `CFBundleIconFile`, `CFBundleShortVersionString` — and the release
+	     notes from the feed, so a user is never shown Omi's name, Omi's icon, or Omi's changelog.
+
+	     Nothing here may ever be pointed at `releases/latest/download/appcast.xml`: `latest` is the
+	     newest release of the *whole* monorepo, which publishes Omi Desktop tags several times a day,
+	     so it resolves to an Omi Computer release and Sparkle would replace this app with one. The
+	     `context-for-claude-appcast` tag in the path is load-bearing, and `UpdatePolicy` refuses to
+	     start Sparkle at all for any other URL.
+
+	     `SUPublicEDKey` ships as a placeholder on purpose. The private half lives only in the
+	     releasing maintainer's login keychain and is never committed, so this repository cannot
+	     contain a working signing key. `UpdatePolicy` treats the placeholder as "not configured" and
+	     refuses to start Sparkle at all — load-bearing rather than tidy, because
+	     `SPUStandardUpdaterController` calls `abort()` when it is started with an unusable key.
+	     Generating the pair and filling this in is the first step of `docs/releasing.md`.
+	     ========================================================================================== -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>REPLACE_WITH_SUPublicEDKey_FROM_generate_keys</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<!-- Download and verification may happen in the background. Installation and relaunch remain
+	     behind an explicit prompt because replacing the bundle is the one operation that can cost this
+	     app its Screen Recording grant. -->
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<!-- Six hours. Omi checks every ten minutes because it publishes a candidate most days; this app
+	     publishes rarely, and a background request every ten minutes for a feed that changes monthly
+	     is chatter nobody asked for. -->
+	<key>SUScheduledCheckInterval</key>
+	<integer>21600</integer>
+</dict>
+</plist>

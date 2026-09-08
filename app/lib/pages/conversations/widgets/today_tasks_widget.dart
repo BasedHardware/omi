@@ -83,7 +83,7 @@ class TodayTasksWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
                     context.l10n.noTasksForToday,
-                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
                   ),
                 )
               else

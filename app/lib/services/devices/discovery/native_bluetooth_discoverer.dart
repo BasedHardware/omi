@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
@@ -21,6 +22,9 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
   @override
   Future<DeviceDiscoveryResult> discover({int timeout = 5}) async {
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      return const DeviceDiscoveryResult(devices: [], isBlocked: true);
+    }
     final List<BlePeripheral> results = [];
     final completer = Completer<void>();
 
@@ -66,13 +70,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   // MARK: - Device type detection (mirrors BtDevice.isSupportedDevice without ScanResult)
 
   static bool _isSupportedPeripheral(BlePeripheral p) {
-    return _isBee(p) ||
-        _isPlaud(p) ||
-        _isFieldy(p) ||
-        _isFriendPendant(p) ||
-        _isLimitless(p) ||
-        _isOmi(p) ||
-        _isFrame(p);
+    return _isBee(p) || _isPlaud(p) || _isFieldy(p) || _isFriendPendant(p) || _isLimitless(p) || _isOmi(p);
   }
 
   static bool _isBee(BlePeripheral p) {
@@ -101,10 +99,6 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     return _hasService(p, omiServiceUuid);
   }
 
-  static bool _isFrame(BlePeripheral p) {
-    return _hasService(p, frameServiceUuid);
-  }
-
   static bool _hasService(BlePeripheral p, String serviceUuid) {
     final target = serviceUuid.toLowerCase();
     return p.serviceUuids.any((uuid) => uuid.toLowerCase() == target);
@@ -124,8 +118,6 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
       type = DeviceType.limitless;
     } else if (_isOmi(p)) {
       type = DeviceType.omi;
-    } else if (_isFrame(p)) {
-      type = DeviceType.frame;
     } else {
       type = DeviceType.omi;
     }

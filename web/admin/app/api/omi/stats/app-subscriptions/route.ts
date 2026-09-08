@@ -1,65 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import {
+  AllSubscriptionSourcesFailedError,
+  MRR_STATUSES,
+  isAppSubscription,
+  listSubscriptions,
+} from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+function cacheKey(): string {
+  // v3: past_due subscriptions now count, and the payload gained `partial`.
+  return `app-subscriptions:v3`;
+}
 
-  const stripe = getStripe();
-  try {
-    const omiMonthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const omiAnnualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
+export { cacheKey as appSubscriptionsCacheKey };
 
-    if (!omiMonthlyPriceId || !omiAnnualPriceId) {
-      return NextResponse.json(
-        { error: 'OMI price IDs not configured' },
-        { status: 500 }
-      );
-    }
+export async function computeAppSubscriptions() {
+    const stripe = getStripe();
 
-    // Fetch ALL active subscriptions with pagination
-    let allSubscriptions: Stripe.Subscription[] = [];
-    let hasMore = true;
-    let startingAfter: string | undefined = undefined;
+    // Same status set as every other subscription metric (MRR_STATUSES): a `past_due` marketplace
+    // subscription is still a live subscription, and counting only `active` here made this route
+    // disagree with the Omi-plan routes on what a subscription is.
+    //
+    // Status legs run through `Promise.allSettled` like `fetchOmiSubscriptions`: one failing leg
+    // degrades to `partial` rather than silently undercounting, and a total failure throws.
+    const results = await Promise.allSettled(
+      MRR_STATUSES.map((status) => listSubscriptions(stripe, { status })),
+    );
 
-    while (hasMore) {
-      const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
-        status: 'active',
-        limit: 100, // Stripe max per page
-        expand: ['data.items.data.price'], // Include price details
-        ...(startingAfter ? { starting_after: startingAfter } : {}),
-      });
-
-      allSubscriptions = allSubscriptions.concat(page.data);
-      hasMore = page.has_more;
-      if (hasMore && page.data.length > 0) {
-        startingAfter = page.data[page.data.length - 1].id;
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Error fetching ${MRR_STATUSES[index]} app subscriptions:`, result.reason);
       }
-    }
-
-    // Filter out subscriptions that have OMI price IDs
-    const appSubscriptions = allSubscriptions.filter((subscription) => {
-      // Check if any item in the subscription has the OMI price IDs
-      const hasOmiPrice = subscription.items.data.some((item) => {
-        const priceId = typeof item.price === 'string' ? item.price : item.price.id;
-        return priceId === omiMonthlyPriceId || priceId === omiAnnualPriceId;
-      });
-      
-      // Return subscriptions that DON'T have OMI prices
-      return !hasOmiPrice;
     });
 
+    if (results.every((result) => result.status === 'rejected')) {
+      throw new AllSubscriptionSourcesFailedError('All subscription data sources failed');
+    }
+
+    const allSubscriptions = results.flatMap((result) =>
+      result.status === 'fulfilled' ? result.value : [],
+    );
+    const partial = results.some((result) => result.status === 'rejected');
+
+    // Marketplace subscriptions are the ones the backend stamped with an app_id. Selecting them
+    // by "not one of two Omi price IDs" put every other first-party plan in this bucket.
+    const appSubscriptions = allSubscriptions.filter(isAppSubscription);
+
     // Group by customer to handle multiple subscriptions per user
-    const customerSubscriptions: Record<string, any[]> = {};
+    const customerSubscriptions: Record<string, true> = {};
     appSubscriptions.forEach((subscription) => {
       const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
-      if (!customerSubscriptions[customerId]) {
-        customerSubscriptions[customerId] = [];
-      }
-      customerSubscriptions[customerId].push(subscription);
+      customerSubscriptions[customerId] = true;
     });
 
     // Group by price ID to show breakdown
@@ -67,19 +62,38 @@ export async function GET(request: NextRequest) {
     appSubscriptions.forEach((subscription) => {
       subscription.items.data.forEach((item) => {
         const priceId = typeof item.price === 'string' ? item.price : item.price.id;
-        if (priceId !== omiMonthlyPriceId && priceId !== omiAnnualPriceId) {
-          priceBreakdown[priceId] = (priceBreakdown[priceId] || 0) + 1;
-        }
+        priceBreakdown[priceId] = (priceBreakdown[priceId] || 0) + 1;
       });
     });
 
-    return NextResponse.json({
+    return {
       totalAppSubscriptions: appSubscriptions.length,
       uniqueCustomers: Object.keys(customerSubscriptions).length,
       priceBreakdown,
       uniquePriceIds: Object.keys(priceBreakdown).length,
-    });
+      partial,
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const key = cacheKey();
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeAppSubscriptions>>>(key);
+    if (cached) {
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+    }
+
+    const payload = await computeAppSubscriptions();
+    await setPayload(key, payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
+    if (error instanceof AllSubscriptionSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error fetching app subscription stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch app subscription data' },

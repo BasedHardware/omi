@@ -4,10 +4,8 @@ import omiApiClient from '@/lib/services/omi-api/client';
 
 export const dynamic = 'force-dynamic';
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { app_id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ app_id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 

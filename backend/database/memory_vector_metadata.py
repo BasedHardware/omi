@@ -1,0 +1,285 @@
+"""Canonical provider identity, vector metadata builders, and parsers (WS-G7)."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Collection, Dict, Optional, cast
+
+from models.memory_search_gateway import SearchDecision, SearchVectorHit
+from models.knowledge_ledger_search import (
+    LEDGER_INDEX_VERSION,
+    LEDGER_SEARCH_KINDS,
+    build_ledger_index_metadata,
+    validate_ledger_kinds,
+)
+from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
+
+MEMORY_VECTOR_SCHEMA_VERSION = 1
+CANONICAL_MEMORY_PROVIDER_ID_PREFIX = "memproj"
+
+
+@dataclass(frozen=True)
+class ParsedVectorHit:
+    hit: Optional[SearchVectorHit]
+    decision: SearchDecision
+    reason: str
+
+
+@dataclass(frozen=True)
+class ParsedMemoryVectorHit:
+    hit: Optional[SearchVectorHit]
+    decision: SearchDecision
+    reason: str
+
+
+def canonical_memory_provider_id(uid: str, memory_id: str) -> str:
+    """Return the sole external-provider identity for one user's canonical memory."""
+    if not uid.strip():
+        raise ValueError("uid is required")
+    if not memory_id.strip():
+        raise ValueError("memory_id is required")
+    payload = f"{uid}\0{memory_id}".encode("utf-8")
+    return f"{CANONICAL_MEMORY_PROVIDER_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
+
+
+def build_canonical_memory_vector_delete_filter(
+    uid: str,
+    memory_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fence vector cleanup to one user and optional canonical memory.
+
+    The filter intentionally does not require the current schema marker:
+    account/privacy cleanup must also remove legacy and partially migrated rows.
+    """
+    if not uid.strip():
+        raise ValueError("uid is required")
+    clauses: list[Dict[str, Any]] = [{"uid": {"$eq": uid}}]
+    if memory_id is not None:
+        if not memory_id.strip():
+            raise ValueError("memory_id is required")
+        clauses.append({"memory_id": {"$eq": memory_id}})
+    return {"$and": clauses}
+
+
+def _shared_memory_vector_metadata_fields(
+    item: MemoryItem,
+    *,
+    projection_commit_id: str,
+    vector_updated_at: datetime,
+) -> Dict[str, Any]:
+    if not projection_commit_id or not projection_commit_id.strip():
+        raise ValueError("projection_commit_id is required")
+    if vector_updated_at.tzinfo is None or vector_updated_at.utcoffset() is None:
+        raise ValueError("vector_updated_at must be timezone-aware")
+    labels = sorted({label.strip().lower() for label in item.sensitivity_labels if label and label.strip()})
+    shared = {
+        "uid": item.uid,
+        "memory_id": item.memory_id,
+        "status": item.status.value,
+        "processing_state": item.processing_state.value,
+        "source_state": item.source_state.value,
+        "visibility": item.visibility,
+        "sensitivity_labels": labels,
+        "restricted_sensitivity": bool(set(labels).intersection(RESTRICTED_SENSITIVITY_LABELS)),
+        "account_generation": item.account_generation,
+        "item_revision": item.item_revision,
+        "source_commit_id": item.source_commit_id,
+        "content_hash": item.content_hash,
+        "projection_commit_id": projection_commit_id,
+        "vector_updated_at": vector_updated_at.isoformat(),
+    }
+    device_ids = sorted({d for d in (item.capture_device_ids or []) if d})
+    if not device_ids and item.primary_capture_device:
+        device_ids = [item.primary_capture_device]
+    if device_ids:
+        shared["capture_device_ids"] = device_ids
+    return strip_null_metadata_values(shared)
+
+
+def build_memory_vector_metadata(
+    item: MemoryItem,
+    *,
+    projection_commit_id: str,
+    vector_updated_at: datetime,
+) -> Dict[str, Any]:
+    """Neutral metadata for universal canonical vectors (``memory_layer``, ``memory_schema_version``)."""
+    shared = _shared_memory_vector_metadata_fields(
+        item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
+    )
+    metadata = {
+        "memory_schema_version": MEMORY_VECTOR_SCHEMA_VERSION,
+        "memory_layer": item.tier.value,
+        **shared,
+    }
+    metadata.update(build_ledger_index_metadata(item))
+    return metadata
+
+
+def strip_null_metadata_values(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Return Pinecone-safe metadata without null values."""
+    return {key: value for key, value in metadata.items() if value is not None}
+
+
+def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
+    return _base_memory_vector_filter(
+        uid, {"memory_layer": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}}
+    )
+
+
+def build_ledger_memory_vector_filter(uid: str, kinds: Collection[str] = LEDGER_SEARCH_KINDS) -> Dict[str, Any]:
+    """Build a provider filter for open, versioned ledger rows only."""
+
+    parsed_kinds = validate_ledger_kinds(kinds)
+    result = build_default_memory_vector_filter(uid)
+    result["$and"].extend(
+        [
+            {"ledger_index_version": {"$eq": LEDGER_INDEX_VERSION}},
+            {"ledger_schema_version": {"$eq": "knowledge_ledger.v1"}},
+            {"ledger_row_state": {"$eq": "open"}},
+            {"ledger_kind": {"$in": sorted(parsed_kinds)}},
+        ]
+    )
+    return result
+
+
+def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
+    return _base_memory_vector_filter(uid, {"memory_layer": {"$eq": MemoryTier.archive.value}})
+
+
+def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
+    try:
+        if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
+            raise ValueError("wrong_schema")
+        memory_id = _required_str(metadata, "memory_id")
+        projection_commit_id = _required_str(metadata, "projection_commit_id")
+        vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
+        score = float(match.get("score", 0.0))
+        hit = SearchVectorHit(
+            vector_id=_optional_match_id(match),
+            memory_id=memory_id,
+            score=score,
+            projection_commit_id=projection_commit_id,
+            vector_updated_at=vector_updated_at,
+            uid=_optional_str(metadata, "uid"),
+            account_generation=_optional_int(metadata, "account_generation"),
+            item_revision=_optional_int(metadata, "item_revision"),
+            source_commit_id=_optional_str(metadata, "source_commit_id"),
+            content_hash=_optional_str(metadata, "content_hash"),
+        )
+    except (TypeError, ValueError):
+        return ParsedMemoryVectorHit(
+            hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
+        )
+    return ParsedMemoryVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
+
+
+def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
+    raw_metadata = match.get("metadata")
+    metadata: Dict[str, Any] = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
+    try:
+        if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
+            raise ValueError("wrong_schema")
+        memory_id = _required_str(metadata, "memory_id")
+        projection_commit_id = _required_str(metadata, "projection_commit_id")
+        vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
+        score = float(match.get("score", 0.0))
+        hit = SearchVectorHit(
+            vector_id=_optional_match_id(match),
+            memory_id=memory_id,
+            score=score,
+            projection_commit_id=projection_commit_id,
+            vector_updated_at=vector_updated_at,
+            uid=_optional_str(metadata, "uid"),
+            account_generation=_optional_int(metadata, "account_generation"),
+            item_revision=_optional_int(metadata, "item_revision"),
+            source_commit_id=_optional_str(metadata, "source_commit_id"),
+            content_hash=_optional_str(metadata, "content_hash"),
+        )
+    except (TypeError, ValueError):
+        return ParsedVectorHit(
+            hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
+        )
+    return ParsedVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
+
+
+def _active_memory_vector_filter_clauses() -> list[Dict[str, Any]]:
+    return [
+        {"status": {"$eq": "active"}},
+        {"source_state": {"$eq": "active"}},
+        {"visibility": {"$in": ["private", "public", "shared"]}},
+        {"restricted_sensitivity": {"$eq": False}},
+    ]
+
+
+def _base_memory_vector_filter(uid: str, layer_filter: Dict[str, Any]) -> Dict[str, Any]:
+    if not uid or not uid.strip():
+        raise ValueError("uid is required")
+    return {
+        "$and": [
+            {"uid": {"$eq": uid}},
+            {"memory_schema_version": {"$eq": MEMORY_VECTOR_SCHEMA_VERSION}},
+            layer_filter,
+            *_active_memory_vector_filter_clauses(),
+        ]
+    }
+
+
+def _optional_match_id(match: Dict[str, Any]) -> Optional[str]:
+    value = match.get("id")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("id")
+    return value
+
+
+def _required_str(metadata: Dict[str, Any], key: str) -> str:
+    value = metadata.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(key)
+    return value
+
+
+def _optional_str(metadata: Dict[str, Any], key: str) -> Optional[str]:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(key)
+    return value
+
+
+def _optional_int(metadata: Dict[str, Any], key: str) -> Optional[int]:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    return int(value)
+
+
+def _parse_timestamp(value: str) -> datetime:
+    timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("naive_timestamp")
+    return timestamp
+
+
+__all__ = [
+    "CANONICAL_MEMORY_PROVIDER_ID_PREFIX",
+    "MEMORY_VECTOR_SCHEMA_VERSION",
+    "RESTRICTED_SENSITIVITY_LABELS",
+    "ParsedMemoryVectorHit",
+    "ParsedVectorHit",
+    "build_archive_memory_vector_filter",
+    "build_canonical_memory_vector_delete_filter",
+    "build_default_memory_vector_filter",
+    "build_ledger_memory_vector_filter",
+    "build_memory_vector_metadata",
+    "canonical_memory_provider_id",
+    "parse_memory_search_vector_hit",
+    "parse_search_vector_hit",
+    "strip_null_metadata_values",
+]

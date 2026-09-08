@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { cachedPosthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -71,32 +72,11 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
-    const [totalRes, voiceRes, sessionsRes] = await Promise.all([
-      fetch(`${host}/api/projects/${projectId}/query/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: { kind: "HogQLQuery", query: totalQuery } }),
-      }),
-      fetch(`${host}/api/projects/${projectId}/query/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: { kind: "HogQLQuery", query: voiceQuery } }),
-      }),
-      fetch(`${host}/api/projects/${projectId}/query/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: { kind: "HogQLQuery", query: sessionsQuery } }),
-      }),
-    ]);
+    // Sequential (not Promise.all) so we don't burst the rate-limited PostHog key;
+    // each is Firestore-cached + stale-on-throttle via cachedPosthogFetch.
+    const totalRes = await cachedPosthogFetch(host, projectId, apiKey, totalQuery);
+    const voiceRes = await cachedPosthogFetch(host, projectId, apiKey, voiceQuery);
+    const sessionsRes = await cachedPosthogFetch(host, projectId, apiKey, sessionsQuery);
 
     if (!totalRes.ok || !voiceRes.ok || !sessionsRes.ok) {
       const failedRes = !totalRes.ok ? totalRes : !voiceRes.ok ? voiceRes : sessionsRes;

@@ -1,6 +1,20 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+// Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
+// adapters, not typedefs:
+//  - Structured: client-only `id`, getEmoji() behavior (utf8 decode + random pick),
+//    fromJson that accepts String action items, and toJson that serializes actionItems
+//    as description strings (generated emits objects).
+//  - ActionItem: client-only `id`/`deleted` fields absent from GeneratedActionItem.
+//  - AppResponse: client-only `id` and toJson key 'appId' (generated emits 'app_id').
+//  - Event: client-only `id`, field name `startsAt` (generated `start`), and fromJson
+//    epoch-int -> DateTime conversion.
+
+// Section has no client-only fields or behavior, so it stays a typedef over the wire type.
+typedef Section = wire.GeneratedSection;
+
 class Structured {
   int id = 0;
 
@@ -8,6 +22,8 @@ class Structured {
   String overview;
   String emoji;
   String category;
+
+  List<Section> sections = [];
 
   List<ActionItem> actionItems = [];
 
@@ -26,35 +42,71 @@ class Structured {
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
-    var structured = Structured(json['title'], json['overview'], emoji: json['emoji'], category: json['category']);
-    var aItems = json['actionItems'] ?? json['action_items'];
-    if (aItems != null) {
-      for (dynamic item in aItems) {
-        if (item.runtimeType == String) {
-          if (item.isEmpty) continue;
-          structured.actionItems.add(ActionItem(item));
-        } else {
-          structured.actionItems.add(ActionItem.fromJson(item));
+    var structured = Structured(
+      json['title'] ?? '',
+      json['overview'] ?? '',
+      emoji: json['emoji'] ?? '🧠',
+      category: json['category'] ?? 'other',
+    );
+    final sections = json['sections'];
+    if (sections is List) {
+      for (final section in sections) {
+        final Map<String, dynamic>? sectionJson = section is Map<String, dynamic>
+            ? section
+            : section is Map
+                ? Map<String, dynamic>.from(section)
+                : null;
+        if (sectionJson == null) continue;
+        // Section.fromJson throws a FormatException on a missing or mistyped
+        // `heading` / `body_markdown`. Skip the bad entry the way the
+        // actionItems and events loops below do: one malformed section used to
+        // throw out of here and take the whole conversation decode with it.
+        try {
+          structured.sections.add(Section.fromJson(sectionJson));
+        } on FormatException {
+          continue;
         }
       }
     }
 
-    if (json['events'] != null) {
-      for (dynamic event in json['events']) {
-        if (event.isEmpty) continue;
-        structured.events.add(
-          Event(
-            event['title'],
-            (event['startsAt'] ?? event['start']) is int
-                ? DateTime.fromMillisecondsSinceEpoch((event['startsAt'] ?? event['start']) * 1000).toLocal()
-                : DateTime.parse(event['startsAt'] ?? event['start']).toLocal(),
-            event['duration'],
-            description: event['description'] ?? '',
-            created: event['created'] ?? false,
-          ),
-        );
+    final aItems = json['actionItems'] ?? json['action_items'];
+    if (aItems is List) {
+      for (final item in aItems) {
+        if (item is String) {
+          if (item.isEmpty) continue;
+          structured.actionItems.add(ActionItem(item));
+        } else if (item is Map<String, dynamic>) {
+          structured.actionItems.add(ActionItem.fromJson(item));
+        } else if (item is Map) {
+          structured.actionItems.add(ActionItem.fromJson(Map<String, dynamic>.from(item)));
+        }
       }
     }
+
+    final events = json['events'];
+    if (events is List) {
+      for (final event in events) {
+        if (event is Map && event.isEmpty) continue;
+        if (event is Map<String, dynamic>) {
+          structured.events.add(Event.fromJson(event));
+        } else if (event is Map) {
+          structured.events.add(Event.fromJson(Map<String, dynamic>.from(event)));
+        }
+      }
+    }
+    return structured;
+  }
+
+  factory Structured.fromGenerated(wire.GeneratedStructured generated) {
+    var structured = Structured(
+      generated.title,
+      generated.overview,
+      emoji: generated.emoji,
+      category: generated.category,
+    );
+    structured.sections = generated.sections?.toList() ?? [];
+    structured.actionItems = generated.actionItems?.map(ActionItem.fromGenerated).toList() ?? [];
+    structured.events = generated.events?.map(Event.fromGenerated).toList() ?? [];
     return structured;
   }
 
@@ -62,6 +114,9 @@ class Structured {
   String toString() {
     var str = '';
     str += '${getEmoji()} $title\n\n$overview\n\n'; // ($category)
+    for (var section in sections) {
+      str += '${section.heading}\n${section.bodyMarkdown}\n\n';
+    }
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
       for (var item in actionItems) {
@@ -83,9 +138,22 @@ class Structured {
       'overview': overview,
       'emoji': emoji,
       'category': category,
+      'sections': sections.map((section) => section.toJson()).toList(),
       'actionItems': actionItems.map((item) => item.description).toList(),
       'events': events.map((event) => event.toJson()).toList(),
     };
+  }
+
+  wire.GeneratedStructured toGenerated() {
+    return wire.GeneratedStructured(
+      title: title,
+      overview: overview,
+      emoji: emoji,
+      category: category,
+      sections: sections.toList(),
+      actionItems: actionItems.map((item) => item.toGenerated()).toList(),
+      events: events.map((event) => event.toGenerated()).toList(),
+    );
   }
 }
 
@@ -98,11 +166,24 @@ class ActionItem {
 
   ActionItem(this.description, {this.id = 0, this.completed = false, this.deleted = false});
 
-  static fromJson(Map<String, dynamic> json) {
-    return ActionItem(json['description'], completed: json['completed'] ?? false, deleted: json['deleted'] ?? false);
+  factory ActionItem.fromGenerated(wire.GeneratedActionItem generated) {
+    return ActionItem(generated.description, completed: generated.completed);
   }
 
-  toJson() => {'description': description, 'completed': completed, 'deleted': deleted};
+  static fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedActionItem.fromJson(json);
+    return ActionItem(
+      generated.description,
+      completed: generated.completed,
+      deleted: json['deleted'] ?? false,
+    );
+  }
+
+  wire.GeneratedActionItem toGenerated() {
+    return wire.GeneratedActionItem(description: description, completed: completed);
+  }
+
+  toJson() => {...toGenerated().toJson(), 'deleted': deleted};
 }
 
 class AppResponse {
@@ -113,10 +194,18 @@ class AppResponse {
 
   AppResponse(this.content, {this.id = 0, this.appId});
 
+  factory AppResponse.fromGenerated(wire.GeneratedAppResult generated) {
+    return AppResponse(generated.content, appId: generated.appId);
+  }
+
+  wire.GeneratedAppResult toGenerated() {
+    return wire.GeneratedAppResult(appId: appId, content: content);
+  }
+
   toJson() => {'appId': appId, 'content': content};
 
   factory AppResponse.fromJson(Map<String, dynamic> json) {
-    return AppResponse(json['content'], appId: json['appId'] ?? json['app_id']);
+    return AppResponse.fromGenerated(wire.GeneratedAppResult.fromJson(json));
   }
 }
 
@@ -131,6 +220,40 @@ class Event {
   bool created = false;
 
   Event(this.title, this.startsAt, this.duration, {this.description = '', this.created = false, this.id = 0});
+
+  factory Event.fromGenerated(wire.GeneratedEvent generated) {
+    return Event(
+      generated.title,
+      generated.start,
+      generated.duration,
+      description: generated.description,
+      created: generated.created,
+    );
+  }
+
+  factory Event.fromJson(Map<String, dynamic> json) {
+    final rawStart = json['startsAt'] ?? json['start'];
+    if (rawStart is int) {
+      return Event(
+        json['title'] ?? '',
+        DateTime.fromMillisecondsSinceEpoch(rawStart * 1000).toLocal(),
+        json['duration'] ?? 30,
+        description: json['description'] ?? '',
+        created: json['created'] ?? false,
+      );
+    }
+    return Event.fromGenerated(wire.GeneratedEvent.fromJson(json));
+  }
+
+  wire.GeneratedEvent toGenerated() {
+    return wire.GeneratedEvent(
+      title: title,
+      start: startsAt,
+      duration: duration,
+      description: description,
+      created: created,
+    );
+  }
 
   toJson() {
     return {

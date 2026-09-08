@@ -1,0 +1,8 @@
+{
+  "version": "0.11.564",
+  "date": "2026-06-29",
+  "changes": [
+    "Fixed the Notch Mode Omi Chat row so clicking it opens Omi Chat",
+    "Fixed the floating bar hover menu hiding the final key in longer Ask Omi shortcuts"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "version": "0.11.558",
+  "date": "2026-06-28",
+  "changes": [
+    "Improved automatic updates so the main window only reopens when omi was already in the foreground"
+  ]
+}

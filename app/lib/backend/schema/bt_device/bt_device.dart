@@ -1,20 +1,16 @@
 import 'package:flutter/services.dart';
 
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/devices/apple_watch_connection.dart';
-import 'package:omi/services/devices/bee_connection.dart';
-import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/bee_connection.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/frame_connection.dart';
-import 'package:omi/services/devices/friend_pendant_connection.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/models.dart';
-import 'package:omi/services/devices/omi_connection.dart';
-import 'package:omi/services/devices/omiglass_connection.dart';
-import 'package:omi/services/devices/plaud_connection.dart';
+import 'package:omi/services/devices/connectors/fieldy_connection.dart';
+import 'package:omi/services/devices/connectors/friend_pendant_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omiglass_connection.dart';
+import 'package:omi/services/devices/connectors/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
@@ -88,6 +84,29 @@ enum BleAudioCodec {
   // PDM frame size
   int getFrameSize() {
     return this == BleAudioCodec.opusFS320 ? 320 : 160;
+  }
+
+  /// Encoded bytes produced per second for the fixed-rate Opus wire formats.
+  int get encodedBytesPerSecond {
+    return switch (this) {
+      BleAudioCodec.opus => 8000,
+      BleAudioCodec.opusFS320 => 16000,
+      _ => 8000,
+    };
+  }
+
+  /// Best-effort encoded size rate used by recording/storage UI.
+  int estimatedBytesPerSecond({required int sampleRate, required int channels}) {
+    return switch (this) {
+      BleAudioCodec.opus || BleAudioCodec.opusFS320 => encodedBytesPerSecond,
+      BleAudioCodec.pcm16 => sampleRate * 2 * channels,
+      BleAudioCodec.pcm8 || BleAudioCodec.mulaw16 || BleAudioCodec.mulaw8 => sampleRate * channels,
+      _ => 8000,
+    };
+  }
+
+  int estimatedRecordingBytes({required int seconds, required int sampleRate, required int channels}) {
+    return estimatedBytesPerSecond(sampleRate: sampleRate, channels: channels) * seconds;
   }
 
   /// Check if this codec is supported for custom STT providers
@@ -188,44 +207,55 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
-  if (cachedDevicesMap.containsKey(device.remoteId.toString())) {
-    return cachedDevicesMap[device.remoteId.toString()];
-  }
-  DeviceType? deviceType;
-  await device.discoverServices();
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
 
-  // Check for device types using helper methods
-  if (BtDevice.isBeeDeviceFromDevice(device)) {
-    deviceType = DeviceType.bee;
-  } else if (BtDevice.isPlaudDeviceFromDevice(device)) {
-    deviceType = DeviceType.plaud;
-  } else if (BtDevice.isFieldyDeviceFromDevice(device)) {
-    deviceType = DeviceType.fieldy;
-  } else if (BtDevice.isFriendPendantDeviceFromDevice(device)) {
-    deviceType = DeviceType.friendPendant;
-  } else if (BtDevice.isLimitlessDeviceFromDevice(device)) {
-    deviceType = DeviceType.limitless;
-  } else if (BtDevice.isOmiDeviceFromDevice(device)) {
-    // Check if the device has the image data stream characteristic
-    final hasImageStream = device.servicesList
-        .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
-        .expand((s) => s.characteristics)
-        .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
-    // Also check device name for OpenGlass/OmiGlass detection
-    final isOpenGlassByName =
-        device.platformName.toLowerCase().contains('openglass') || device.platformName.toLowerCase().contains('glass');
-    deviceType = (hasImageStream || isOpenGlassByName) ? DeviceType.openglass : DeviceType.omi;
-  } else if (BtDevice.isFrameDeviceFromDevice(device)) {
-    deviceType = DeviceType.frame;
+extension DeviceTypeAnalytics on DeviceType {
+  String get analyticsVendor {
+    switch (this) {
+      case DeviceType.omi:
+      case DeviceType.openglass:
+        return 'omi';
+      case DeviceType.appleWatch:
+        return 'apple';
+      case DeviceType.plaud:
+        return 'plaud';
+      case DeviceType.bee:
+        return 'bee';
+      case DeviceType.fieldy:
+        return 'fieldlabs';
+      case DeviceType.friendPendant:
+        return 'friend';
+      case DeviceType.limitless:
+        return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'meta';
+    }
   }
-  if (deviceType != null) {
-    cachedDevicesMap[device.remoteId.toString()] = deviceType;
-  }
-  return deviceType;
 }
 
-enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+// Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
+const List<String> _legacyDeviceTypeNames = [
+  'omi',
+  'openglass',
+  'frame',
+  'appleWatch',
+  'plaud',
+  'bee',
+  'fieldy',
+  'friendPendant',
+  'limitless',
+  'raybanMeta',
+];
+
+DeviceType _deviceTypeFromJson(dynamic raw) {
+  String? name;
+  if (raw is int) {
+    if (raw >= 0 && raw < _legacyDeviceTypeNames.length) name = _legacyDeviceTypeNames[raw];
+  } else if (raw is String) {
+    name = raw;
+  }
+  return DeviceType.values.firstWhere((e) => e.name == name, orElse: () => DeviceType.omi);
+}
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
@@ -367,13 +397,25 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
       return await _getDeviceInfoFromOmi(conn);
-    } else if (type == DeviceType.frame) {
-      return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.raybanMeta) {
+      return _getDeviceInfoFromRayBanMeta();
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
+  }
+
+  // The Meta Wearables toolkit doesn't expose firmware/hardware revisions, so
+  // static identity fields are all we can report.
+  BtDevice _getDeviceInfoFromRayBanMeta() {
+    return copyWith(
+      modelNumber: 'Ray-Ban Meta',
+      firmwareRevision: 'Unknown',
+      hardwareRevision: 'Unknown',
+      manufacturerName: 'Meta',
+      type: DeviceType.raybanMeta,
+    );
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
@@ -421,32 +463,6 @@ class BtDevice {
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
       type: t,
-    );
-  }
-
-  Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
-    var modelNumber = 'Frame';
-    var firmwareRevision = 'Unknown';
-    var hardwareRevision = 'Brilliant Labs Frame';
-    var manufacturerName = 'Brilliant Labs';
-
-    try {
-      final deviceInfo = await conn.getDeviceInfo();
-
-      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
-      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
-      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
-      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-    } catch (e) {
-      Logger.error('Error getting Frame device info: $e');
-    }
-
-    return copyWith(
-      modelNumber: modelNumber,
-      firmwareRevision: firmwareRevision,
-      hardwareRevision: hardwareRevision,
-      manufacturerName: manufacturerName,
-      type: DeviceType.frame,
     );
   }
 
@@ -640,8 +656,8 @@ class BtDevice {
         return isBeeFirmwareUnsupported ? 'Firmware Not Supported' : 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
@@ -678,180 +694,29 @@ class BtDevice {
 
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
 
-  // from BluetoothDevice
-  Future fromBluetoothDevice(BluetoothDevice device) async {
-    var rssi = await device.readRssi();
-    return BtDevice(name: device.platformName, id: device.remoteId.str, type: DeviceType.omi, rssi: rssi);
-  }
-
-  // Check if a scan result is from a supported device
-  static bool isSupportedDevice(ScanResult result) {
-    return isBeeDevice(result) ||
-        isPlaudDevice(result) ||
-        isFieldyDevice(result) ||
-        isFriendPendantDevice(result) ||
-        isLimitlessDevice(result) ||
-        isOmiDevice(result) ||
-        isFrameDevice(result);
-  }
-
-  static bool isBeeDevice(ScanResult result) {
-    return result.device.platformName.toLowerCase().contains('bee');
-  }
-
-  static bool isBeeDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == beeServiceUuid.toLowerCase()) ||
-        device.platformName.toLowerCase().contains('bee');
-  }
-
-  static bool isPlaudDevice(ScanResult result) {
-    final manufacturerData = result.advertisementData.manufacturerData;
-
-    // Check for PLAUD manufacturer ID (93 / 0x5D)
-    // This should be consistent across all PLAUD devices
-    if (manufacturerData.containsKey(93)) {
-      final data = manufacturerData[93]!;
-
-      // Log the pattern to learn new devices
-      Logger.debug(
-        '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}',
-      );
-
-      // Known pattern for NotePin: 0456cf00
-      if (data.length >= 4 && data[0] == 0x04 && data[1] == 0x56 && data[2] == 0xcf && data[3] == 0x00) {
-        return true;
-      }
-
-      // Accept any device with manufacturer ID 93 if it has data
-      // This catches other PLAUD models we haven't seen yet
-      if (data.isNotEmpty) {
-        Logger.debug('[PLAUD] Accepting device with manufacturer ID 93');
-        return true;
-      }
-    }
-
-    // Fallback: name check for renamed/unknown variants
-    return result.device.platformName.toUpperCase().startsWith('PLAUD');
-  }
-
-  static bool isPlaudDeviceFromDevice(BluetoothDevice device) {
-    // Primary check: PLAUD service UUID (most reliable after connection)
-    if (device.servicesList.any((s) => s.uuid == Guid(plaudServiceUuid))) {
-      return true;
-    }
-
-    // Fallback: name check for compatibility
-    return device.platformName.toUpperCase().startsWith('PLAUD');
-  }
-
-  static bool isFieldyDevice(ScanResult result) {
-    final name = result.device.platformName.toLowerCase();
-    return name == 'compass' || name == 'fieldy';
-  }
-
-  static bool isFieldyDeviceFromDevice(BluetoothDevice device) {
-    final name = device.platformName.toLowerCase();
-    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == fieldyServiceUuid.toLowerCase()) ||
-        name == 'compass' ||
-        name == 'fieldy';
-  }
-
-  static bool isFriendPendantDevice(ScanResult result) {
-    return result.device.platformName.toLowerCase().startsWith('friend_') ||
-        result.advertisementData.serviceUuids.any(
-          (uuid) => uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase(),
-        );
-  }
-
-  static bool isFriendPendantDeviceFromDevice(BluetoothDevice device) {
-    return device.platformName.toLowerCase().startsWith('friend_') ||
-        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
-  }
-
-  static bool isLimitlessDevice(ScanResult result) {
-    final name = result.device.platformName.toLowerCase();
-    return name.contains('limitless') ||
-        name.contains('pendant') ||
-        result.advertisementData.serviceUuids.any(
-          (uuid) => uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase(),
-        );
-  }
-
-  static bool isLimitlessDeviceFromDevice(BluetoothDevice device) {
-    final name = device.platformName.toLowerCase();
-    return name.contains('limitless') ||
-        name.contains('pendant') ||
-        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
-  }
-
-  static bool isOmiDevice(ScanResult result) {
-    return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
-  }
-
-  static bool isOmiDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid == Guid(omiServiceUuid));
-  }
-
-  static bool isFrameDevice(ScanResult result) {
-    return result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid));
-  }
-
-  static bool isFrameDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid == Guid(frameServiceUuid));
-  }
-
-  // from ScanResult
-  static fromScanResult(ScanResult result) {
-    DeviceType? deviceType;
-
-    if (isBeeDevice(result)) {
-      deviceType = DeviceType.bee;
-    } else if (isPlaudDevice(result)) {
-      deviceType = DeviceType.plaud;
-    } else if (isFieldyDevice(result)) {
-      deviceType = DeviceType.fieldy;
-    } else if (isFriendPendantDevice(result)) {
-      deviceType = DeviceType.friendPendant;
-    } else if (isLimitlessDevice(result)) {
-      deviceType = DeviceType.limitless;
-    } else if (isOmiDevice(result)) {
-      deviceType = DeviceType.omi;
-    } else if (isFrameDevice(result)) {
-      deviceType = DeviceType.frame;
-    }
-    if (deviceType != null) {
-      cachedDevicesMap[result.device.remoteId.toString()] = deviceType;
-    } else if (cachedDevicesMap.containsKey(result.device.remoteId.toString())) {
-      deviceType = cachedDevicesMap[result.device.remoteId.toString()];
-    }
-    return BtDevice(
-      name: result.device.platformName,
-      id: result.device.remoteId.str,
-      type: deviceType ?? DeviceType.omi,
-      rssi: result.rssi,
-      locator: DeviceLocator.bluetooth(deviceId: result.device.remoteId.str),
-    );
-  }
-
   // from json
   static fromJson(Map<String, dynamic> json) {
+    // Persisted values may be missing or mistyped (e.g. rssi stored as a
+    // String by an older app version) — never throw during deserialization.
+    final rawRssi = json['rssi'];
+    final rssi = rawRssi is int ? rawRssi : (rawRssi is num ? rawRssi.toInt() : int.tryParse('$rawRssi') ?? 0);
     return BtDevice(
-      name: json['name'],
-      id: json['id'],
-      type: DeviceType.values[json['type']],
-      rssi: json['rssi'],
-      locator: json['locator'] != null ? DeviceLocator.fromJson(json['locator']) : null,
-      modelNumber: json['modelNumber'],
-      firmwareRevision: json['firmwareRevision'],
-      hardwareRevision: json['hardwareRevision'],
-      manufacturerName: json['manufacturerName'],
-      serialNumber: json['serialNumber'],
+      name: json['name'] is String ? json['name'] : '',
+      id: json['id'] is String ? json['id'] : '',
+      type: _deviceTypeFromJson(json['type']),
+      rssi: rssi,
+      locator: json['locator'] is Map<String, dynamic> ? DeviceLocator.fromJson(json['locator']) : null,
+      modelNumber: json['modelNumber'] is String ? json['modelNumber'] : null,
+      firmwareRevision: json['firmwareRevision'] is String ? json['firmwareRevision'] : null,
+      hardwareRevision: json['hardwareRevision'] is String ? json['hardwareRevision'] : null,
+      manufacturerName: json['manufacturerName'] is String ? json['manufacturerName'] : null,
+      serialNumber: json['serialNumber'] is String ? json['serialNumber'] : null,
     );
   }
 
@@ -860,7 +725,10 @@ class BtDevice {
     return {
       'name': name,
       'id': id,
-      'type': type.index,
+      // Persist by stable name (not index): _deviceTypeFromJson reads both the
+      // new name strings and legacy integer indexes, so removing an enum value
+      // can never mis-map existing or newly-saved devices.
+      'type': type.name,
       'rssi': rssi,
       'locator': locator?.toJson(),
       'modelNumber': modelNumber,

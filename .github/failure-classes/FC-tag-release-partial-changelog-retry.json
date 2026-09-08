@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-tag-release-partial-changelog-retry",
+  "violated_contract": "After a desktop tag-release merges the versioned changelog to main but fails before publishing the immutable v*-macos tag, a sole retry must recover a main-reachable consolidate commit (not an orphan source-qualified branch tip) and must not fail closed on consolidate dirt left in the worktree before branch checkout.",
+  "canonical_prevention": "Resolve changelog sync commits with a pure helper that prefers main-reachable consolidate commits for the planned source and version, clean the worktree before reuse checkout, and skip opening a second changelog PR when merge evidence is already on main.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/resolve-desktop-changelog-sync.py",
+    ".github/scripts/test_resolve_desktop_changelog_sync.py",
+    ".github/workflows/desktop_auto_release.yml"
+  ],
+  "evidence_prs": [10787],
+  "scope_hints": [
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/scripts/resolve-desktop-changelog-sync.py",
+    ".github/scripts/desktop-release-source-identity.py",
+    ".github/scripts/plan-desktop-release.py"
+  ],
+  "status": "open"
+}

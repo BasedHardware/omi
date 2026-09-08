@@ -1,14 +1,14 @@
-import asyncio
 import io
 import re
 import wave
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import av
 import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -64,7 +64,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     wav_buffer.seek(0)
 
     # Use av to extract trimmed audio with sample-accurate boundaries
-    trimmed_samples = []
+    trimmed_samples: List[Any] = []
     with av.open(wav_buffer, mode='r') as container:
         stream = container.streams.audio[0]
 
@@ -72,7 +72,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
             if frame.pts is None:
                 continue
 
-            frame_time = float(frame.pts * stream.time_base)
+            frame_time = float(frame.pts * cast(Any, stream.time_base))
             frame_duration = frame.samples / sample_rate
             frame_end_time = frame_time + frame_duration
 
@@ -127,7 +127,8 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'zh': [  # Chinese
-        r"(我是|我叫|我的名字是)\s*([\u4e00-\u9fa5]+)",
+        r"(我的名字是|我叫)\s*([\u4e00-\u9fa5]{2,5}?)(?:[，。！？、,.!?\s]|$)",
+        r"(我是)\s*([\u4e00-\u9fa5]{2,4}?)(?:[，。！？、,.!?\s]|$)",
     ],
     'cs': [  # Czech
         r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
@@ -172,10 +173,11 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'ja': [  # Japanese
-        r"(私は|わたしは|私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)",
+        r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
+        r"(私は|わたしは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
     ],
     'ko': [  # Korean
-        r"(저는|제 이름은)\s*([\uac00-\ud7a3]+)",
+        r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
     ],
     'lt': [  # Lithuanian
         r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
@@ -225,18 +227,440 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 }
 
 # Check all (multi lang)
-patterns_to_check = []
-for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
+patterns_to_check: List[str] = []
+PATTERN_TO_LANG: Dict[str, str] = {}
+for lang, lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.items():
     patterns_to_check.extend(lang_patterns)
+    for pat in lang_patterns:
+        PATTERN_TO_LANG[pat] = lang
+
+# CJK stopwords and grammatical elements to avoid false-positive speaker creation
+# from ordinary conversational sentences (#12900).
+JA_NAME_STOPWORDS = frozenset(
+    {
+        'そう',
+        'これ',
+        'それ',
+        'あれ',
+        'どれ',
+        'ここ',
+        'そこ',
+        'あそこ',
+        'どこ',
+        '私',
+        'わたし',
+        'わたくし',
+        '僕',
+        'ぼく',
+        '俺',
+        'おれ',
+        '自分',
+        'じぶん',
+        '日本人',
+        '外国人',
+        '学生',
+        '大学生',
+        '高校生',
+        '中学生',
+        '小学生',
+        '留学生',
+        '大学院生',
+        '生徒',
+        '先生',
+        '医者',
+        '医師',
+        '看護師',
+        '弁護士',
+        '会社員',
+        '公務員',
+        '研究員',
+        '店員',
+        '店長',
+        '社長',
+        '部長',
+        '課長',
+        '社員',
+        '主婦',
+        '無職',
+        '友達',
+        '人間',
+        '大人',
+        '子供',
+        '大丈夫',
+        'ちょっと',
+        'お腹',
+        '元気',
+        '誰',
+        'だれ',
+        '何',
+        'なに',
+        'なん',
+        '本当',
+        'ほんとう',
+        '無理',
+        'むり',
+        '好き',
+        'すき',
+        '嫌い',
+        'きらい',
+        '思う',
+        'おもう',
+        '行く',
+        'いく',
+        '来る',
+        'くる',
+        '見る',
+        'みる',
+        '食べる',
+        '飲む',
+        '知る',
+        'わかる',
+        '今日',
+        'きょう',
+        '明日',
+        'あした',
+        '今',
+        'いま',
+        '日本',
+        '東京',
+        '会社',
+        '仕事',
+        '学校',
+        'そう思う',
+    }
+)
+
+JA_PARTICLES_AND_VERB_ENDINGS = (
+    'が',
+    'を',
+    'に',
+    'へ',
+    'で',
+    'から',
+    'より',
+    'まで',
+    'ます',
+    'ました',
+    'ません',
+    'でした',
+    'たい',
+    'たく',
+    'ている',
+    'てます',
+    'てる',
+    'すいた',
+    'すいて',
+    '思う',
+    'おもう',
+    '思って',
+    '言う',
+    'いう',
+    '言って',
+    '疲れた',
+)
+
+ZH_NAME_STOPWORDS = frozenset(
+    {
+        '这个',
+        '那个',
+        '这些',
+        '那些',
+        '这里',
+        '那里',
+        '我们',
+        '你们',
+        '他们',
+        '她们',
+        '它们',
+        '大家',
+        '自己',
+        '别人',
+        '什么',
+        '谁',
+        '哪',
+        '哪个',
+        '哪里',
+        '怎么',
+        '怎样',
+        '一个',
+        '不是',
+        '就是',
+        '也是',
+        '都是',
+        '只是',
+        '还是',
+        '真的',
+        '觉得',
+        '认为',
+        '以为',
+        '知道',
+        '不知道',
+        '想',
+        '要',
+        '可以',
+        '应该',
+        '能够',
+        '没有',
+        '不行',
+        '中国人',
+        '外国人',
+        '学生',
+        '老师',
+        '医生',
+        '朋友',
+        '同事',
+        '老板',
+        '大人',
+        '小孩',
+        '孩子',
+        '男人',
+        '女人',
+        '人类',
+        '新人',
+        '成员',
+        '今天',
+        '明天',
+        '现在',
+        '中国',
+        '北京',
+        '公司',
+        '工作',
+        '学校',
+        '我们的这个',
+    }
+)
+
+ZH_INVALID_CHARS = frozenset('的了着得地')
+
+KO_NAME_STOPWORDS = frozenset(
+    {
+        '학생',
+        '선생님',
+        '한국인',
+        '외국인',
+        '친구',
+        '사람',
+        '사람들',
+        '이것',
+        '그것',
+        '저것',
+        '여기',
+        '거기',
+        '저기',
+        '우리',
+        '저희',
+        '누구',
+        '무엇',
+        '생각',
+        '진짜',
+        '정말',
+        '오늘',
+        '내일',
+        '지금',
+        '회사',
+        '학교',
+        '일',
+    }
+)
+
+KO_VERB_ENDINGS = (
+    '합니다',
+    '입니다',
+    '갑니다',
+    '옵니다',
+    '습니다',
+    'ㅂ니다',
+    '있습니다',
+    '없습니다',
+    '해요',
+    '가요',
+    '와요',
+)
+
+# Pronouns and filler words the introduction patterns can capture from run-on
+# transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
+SPEAKER_NAME_STOPWORDS = frozenset(
+    {
+        'it',
+        'you',
+        'they',
+        'them',
+        'he',
+        'she',
+        'we',
+        'us',
+        'me',
+        'him',
+        'her',
+        'his',
+        'hers',
+        'its',
+        'my',
+        'mine',
+        'your',
+        'yours',
+        'our',
+        'ours',
+        'their',
+        'theirs',
+        'this',
+        'that',
+        'these',
+        'those',
+        'here',
+        'there',
+        'what',
+        'who',
+        'when',
+        'where',
+        'why',
+        'how',
+        'which',
+        'the',
+        'and',
+        'but',
+        'not',
+        'yes',
+        'no',
+        'okay',
+        'ok',
+        'yeah',
+        'just',
+        'like',
+        'so',
+        'very',
+        'really',
+        'now',
+        'then',
+        'well',
+        'still',
+        'also',
+        'too',
+        'gonna',
+        'going',
+        'sure',
+        'sorry',
+        'good',
+        'fine',
+        'right',
+        'everyone',
+        'everybody',
+        'someone',
+        'somebody',
+        'nobody',
+        'anyone',
+        'anybody',
+        'something',
+        'nothing',
+        'one',
+        'all',
+        'some',
+    }
+    | JA_NAME_STOPWORDS
+    | ZH_NAME_STOPWORDS
+    | KO_NAME_STOPWORDS
+)
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
-    for pattern in patterns_to_check:
+def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) -> bool:
+    """Validate that candidate CJK name is plausible and not a full sentence or clause."""
+    has_cjk = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name))
+    if not has_cjk:
+        return True
+
+    # CJK names are typically 2-4 characters, rarely 5-6 (compound or transliterated names)
+    if len(name) > 6:
+        return False
+
+    is_all_kanji_or_han = bool(re.search(r'^[\u4E00-\u9FAF]+$', name))
+    has_kana = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF]', name))
+    has_hangul = bool(re.search(r'[\uAC00-\uD7A3]', name))
+
+    # Japanese validation: applied when matched by Japanese pattern, or contains kana,
+    # or is all-kanji without specific non-ja language hint
+    if pattern_lang == 'ja' or has_kana or (is_all_kanji_or_han and pattern_lang != 'zh'):
+        for ending in JA_PARTICLES_AND_VERB_ENDINGS:
+            if ending in name:
+                return False
+        if name in JA_NAME_STOPWORDS:
+            return False
+
+    # Chinese Han characters validation: applied when matched by Chinese pattern,
+    # or is Han characters without specific non-zh language hint
+    if pattern_lang == 'zh' or (is_all_kanji_or_han and pattern_lang != 'ja'):
+        if len(name) > 5:
+            return False
+        if name in ZH_NAME_STOPWORDS:
+            return False
+        for char in ZH_INVALID_CHARS:
+            if char in name:
+                return False
+
+    # Korean Hangul validation: applied when matched by Korean pattern or contains Hangul
+    if pattern_lang == 'ko' or has_hangul:
+        if len(name) > 5:
+            return False
+        if name in KO_NAME_STOPWORDS:
+            return False
+        for ending in KO_VERB_ENDINGS:
+            if name.endswith(ending):
+                return False
+
+    return True
+
+
+def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
+    if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
+        seen = set()
+        patterns = []
+        for p in SPEAKER_IDENTIFICATION_PATTERNS[language]:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
+        if language != 'en' and 'en' in SPEAKER_IDENTIFICATION_PATTERNS:
+            for p in SPEAKER_IDENTIFICATION_PATTERNS['en']:
+                if p not in seen:
+                    seen.add(p)
+                    patterns.append(p)
+        for p in patterns_to_check:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
+    else:
+        patterns = patterns_to_check
+
+    for pattern in patterns:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name and len(name) >= 2:
-                return name.capitalize()
+            if not name:
+                continue
+
+            matched_lang = PATTERN_TO_LANG.get(pattern)
+
+            # Strip trailing Japanese copulas if captured
+            if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', name):
+                name = re.sub(r'(?:です|だ|でーす|だよ)$', '', name).strip()
+            # Strip trailing Korean copulas if captured
+            if re.search(r'[\uAC00-\uD7A3]', name):
+                name = re.sub(r'(?:입니다|이에요|예요|이야|야)$', '', name).strip()
+
+            name = name.strip(' \t\r\n、。，．！？!?.,')
+
+            if len(name) < 2:
+                continue
+
+            if name.lower() in SPEAKER_NAME_STOPWORDS:
+                continue
+
+            if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
+                continue
+
+            return (
+                name
+                if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
+                else name.capitalize()
+            )
     return None
 
 
@@ -255,21 +679,29 @@ async def extract_speaker_samples(
     try:
         # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
-        person = users_db.get_person(uid, person_id)
+        person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
         if person:
             person = await maybe_migrate_person_samples(uid, person)
 
         # Check sample count after migration
-        sample_count = users_db.get_person_speech_samples_count(uid, person_id)
+        sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
         if sample_count >= 1:
             logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
             return
 
         # Fetch conversation to get started_at and segment details
-        conversation = conversations_db.get_conversation(uid, conversation_id)
+        conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
+
+        # Sample extraction runs live, while the conversation is still processing, so
+        # conversation['language'] (only resolved at finalization) is normally empty here.
+        # Fall back to the user's app-level language preference, same as chat/memories/
+        # process_conversation, instead of silently defaulting to English downstream.
+        sample_language = conversation.get('language') or await run_blocking(
+            db_executor, users_db.get_user_language_preference, uid
+        )
 
         started_at = conversation.get('started_at')
         if not started_at:
@@ -289,7 +721,7 @@ async def extract_speaker_samples(
             return
 
         # Collect all chunk timestamps from audio files
-        all_timestamps = []
+        all_timestamps: List[Any] = []
         for af in audio_files:
             timestamps = af.get('chunk_timestamps', [])
             all_timestamps.extend(timestamps)
@@ -299,7 +731,7 @@ async def extract_speaker_samples(
             return
 
         # Build chunks list in expected format
-        chunks = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
+        chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
         max_samples_to_add = 1 - sample_count
@@ -372,7 +804,7 @@ async def extract_speaker_samples(
                     break
 
             # Collect from first_idx up to abs_end
-            relevant_timestamps = []
+            relevant_timestamps: List[Any] = []
             for chunk in sorted_chunks[first_idx:]:
                 if chunk['timestamp'] <= abs_end:
                     relevant_timestamps.append(chunk['timestamp'])
@@ -385,8 +817,9 @@ async def extract_speaker_samples(
                 )
                 continue
 
-            # Download, merge, and extract
-            merged = await asyncio.to_thread(
+            # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
+            merged = await run_blocking(
+                sync_executor,
                 download_audio_chunks_and_merge,
                 uid,
                 conversation_id,
@@ -418,17 +851,21 @@ async def extract_speaker_samples(
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
             # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text, language=sample_language
+            )
             if not is_valid:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment
 
             # Upload and store
-            path = await asyncio.to_thread(
-                upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+            path = await run_blocking(
+                storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
+            success = await run_blocking(
+                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+            )
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
@@ -438,10 +875,12 @@ async def extract_speaker_samples(
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
                 try:
-                    embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "sample.wav")
+                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
-                    users_db.set_person_speaker_embedding(uid, person_id, embedding_list)
+                    await run_blocking(
+                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
+                    )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )

@@ -1,10 +1,12 @@
 import Foundation
+import Combine
 import WatchConnectivity
 import AVFoundation
 
 @MainActor
-class WatchAudioRecorderViewModel: NSObject, ObservableObject {
+class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     @Published var isRecording: Bool = false
+    @Published private(set) var recordingStartedAt: Date?
 
     var session: WCSession
     private var audioEngine: AVAudioEngine?
@@ -45,6 +47,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
 
             if success {
                 self.setupAudioStreaming()
+                self.recordingStartedAt = Date()
                 self.isRecording = true
                 self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
             } else {
@@ -59,6 +62,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         }
 
         isRecording = false
+        recordingStartedAt = nil
         isStreaming = false
 
         // Stop audio streaming
@@ -382,5 +386,3 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
 }
-
-

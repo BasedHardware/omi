@@ -1,85 +1,81 @@
-name: Deploy Frontend to Cloud RUN
+name: Deploy Frontend to Cloud Run
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: ["main", "development"]
     paths:
       - 'web/frontend/**'
+      - 'config/public-build-*.json'
+      - '.github/actions/deploy-public-build/**'
+      - '.github/actions/prepare-public-build/**'
+      - '.github/actions/public-build-candidate-promotion/**'
+      - '.github/scripts/preflight_public_build_config.py'
+      - '.github/scripts/preflight_public_build_runtime.py'
+      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]
       release_version:
         description: 'Release version (optional)'
         required: false
         default: ''
 
-env:
-  SERVICE: frontend
-  REGION: us-central1
+concurrency:
+  group: deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
-      contents: 'read'
-      id-token: 'write'
-
+      actions: read
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
-      - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - run: gcloud auth configure-docker
-      - name: Build and Push Docker image
+      - name: Validate trusted frontend service identity contract
+        env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+          PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
         run: |
-          docker build \
-            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
-            --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
-            --build-arg OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --build-arg API_URL=${{ secrets.API_URL }} \
-            -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile .
-            
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v0
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          set -euo pipefail
+          user_sa='^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]+\.iam\.gserviceaccount\.com$'
+          compute_sa='^[0-9]+-compute@developer\.gserviceaccount\.com$'
+          audience='^https://[A-Za-z0-9.-]+$'
+          if [[ ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA" =~ $user_sa &&
+                ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA" =~ $compute_sa ]]; then
+            echo "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA is not a Cloud Run service-account identity" >&2
+            exit 1
+          fi
+          if [[ ! "$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE" =~ $audience ]]; then
+            echo "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE is not an origin-only HTTPS audience" >&2
+            exit 1
+          fi
 
-      # If required, use the Cloud Run url output in later steps
-      - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
-
-      - name: Generate deployment summary
-        if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-summary
+      - name: Deploy checked public-build candidate
+        id: public-build-deploy
+        uses: ./.github/actions/deploy-public-build
         with:
-          environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
-          status: ${{ job.status }}
-          service: ${{ env.SERVICE }}
+          target: frontend
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          service_account: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+          runtime_env_vars: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE=${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
 
-      - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-notifier
-        with:
-          environment: ${{ github.event.inputs.environment }}
-          release_version: ${{ github.event.inputs.release_version }}
-          status: ${{ job.status }}
-          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Verify Cloud Run rollout
+        run: |
+          python3 backend/scripts/deploy_status_report.py \
+            --env ${{ vars.ENV }} \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ steps.public-build-deploy.outputs.region }} \
+            --include-cloud-run \
+            --cloud-run-service ${{ steps.public-build-deploy.outputs.service }}

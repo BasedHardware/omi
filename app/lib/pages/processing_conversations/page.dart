@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -28,27 +27,21 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
     super.initState();
   }
 
-  void _pushNewConversation(BuildContext context, conversation) async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: conversation)));
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(
       builder: (context, provider, child) {
-        // Track memory // FIXME
-        // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
-        //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
-        //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
-        // }
-
         // Conversation source
         var convoSource = widget.conversation.source;
-        bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
+        bool hasPhotos = widget.conversation.photos.isNotEmpty;
+        String contentTabLabel;
+        if (convoSource == ConversationSource.openglass) {
+          contentTabLabel = context.l10n.photos;
+        } else if (convoSource == ConversationSource.screenpipe) {
+          contentTabLabel = context.l10n.rawData;
+        } else {
+          contentTabLabel = context.l10n.content;
+        }
 
         return PopScope(
           canPop: true,
@@ -64,6 +57,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
+                    key: const ValueKey('processing_conversation_back_button'),
                     onPressed: () {
                       Navigator.pop(context);
                       return;
@@ -80,6 +74,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
             body: Column(
               children: [
                 TabBar(
+                  key: const ValueKey('processing_conversation_tab_bar'),
                   indicatorSize: TabBarIndicatorSize.label,
                   isScrollable: false,
                   padding: EdgeInsets.zero,
@@ -87,13 +82,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                   controller: _controller,
                   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                   tabs: [
-                    Tab(
-                      text: convoSource == ConversationSource.openglass
-                          ? context.l10n.photos
-                          : convoSource == ConversationSource.screenpipe
-                          ? context.l10n.rawData
-                          : context.l10n.content,
-                    ),
+                    Tab(text: contentTabLabel),
                     Tab(text: context.l10n.summary),
                   ],
                   indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
@@ -115,6 +104,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                                 widget.conversation.transcriptSegments,
                                 widget.conversation.photos,
                                 null,
+                                conversationId: widget.conversation.id,
                               ),
                             if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
                               Column(

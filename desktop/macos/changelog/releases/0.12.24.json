@@ -1,0 +1,7 @@
+{
+  "version": "0.12.24",
+  "date": "2026-07-05",
+  "changes": [
+    "Fixed transcription connection status to wait for the WebSocket to actually open"
+  ]
+}

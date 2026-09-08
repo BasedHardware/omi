@@ -6,7 +6,7 @@ Collection: users/{uid}/focus_sessions
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List
+from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -16,15 +16,20 @@ from ._client import db
 logger = logging.getLogger(__name__)
 
 
-def _user_col(uid: str, collection: str):
+def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
     return db.collection('users').document(uid).collection(collection)
 
 
-def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs) -> dict:
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs: Any) -> Dict[str, Any]:
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    doc = {
+    doc: Dict[str, Any] = {
         'id': session_id,
         'status': status,
         'app_or_site': app_or_site,
@@ -37,7 +42,7 @@ def create_focus_session(uid: str, status: str, app_or_site: str, description: s
     return doc
 
 
-def get_focus_sessions(uid: str, date: str = None, limit: int = 100, offset: int = 0) -> List[dict]:
+def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     col = _user_col(uid, 'focus_sessions')
     query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
@@ -48,9 +53,9 @@ def get_focus_sessions(uid: str, date: str = None, limit: int = 100, offset: int
         query = query.where(filter=FieldFilter('created_at', '<', day_end))
 
     query = query.offset(offset).limit(limit)
-    items = []
+    items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        data = _typed_doc(doc)
         data['id'] = doc.id
         items.append(data)
     return items
@@ -58,19 +63,19 @@ def get_focus_sessions(uid: str, date: str = None, limit: int = 100, offset: int
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
     ref = _user_col(uid, 'focus_sessions').document(session_id)
-    if not ref.get().exists:
+    if not getattr(ref.get(), "exists", False):
         return False
     ref.delete()
     return True
 
 
-def get_focus_stats(uid: str, date: str = None) -> dict:
+def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
     total_distracted_seconds = 0
-    distractions = {}
+    distractions: Dict[str, Dict[str, int]] = {}
 
     for s in sessions:
         if s.get('status') == 'focused':
@@ -79,7 +84,7 @@ def get_focus_stats(uid: str, date: str = None) -> dict:
         elif s.get('status') == 'distracted':
             distracted_count += 1
             total_distracted_seconds += s.get('duration_seconds') or 60
-            app = s.get('app_or_site', 'Unknown')
+            app = str(s.get('app_or_site', 'Unknown'))
             entry = distractions.setdefault(app, {'total_seconds': 0, 'count': 0})
             entry['total_seconds'] += s.get('duration_seconds') or 60
             entry['count'] += 1

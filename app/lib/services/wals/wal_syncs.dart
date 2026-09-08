@@ -1,12 +1,11 @@
 import 'dart:async';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -27,21 +26,63 @@ class WalSyncs implements IWalSync {
   late StorageSyncImpl _storageSync;
   StorageSyncImpl get storage => _storageSync;
 
+  late RingStorageSyncImpl _ringSync;
+  RingStorageSyncImpl get ring => _ringSync;
+
   final IWalSyncListener listener;
 
   bool _isCancelled = false;
+  BtDevice? _device;
+  String? _firmwareVersion;
+
+  /// Called from DeviceProvider when a device connects/disconnects so the
+  /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
+  ///
+  /// [firmwareVersion] is the enriched value resolved after getDeviceInfo();
+  /// prefer it over [device].firmwareRevision, which on the raw connect object
+  /// is frequently still 'Unknown' and would misroute ring-buffer devices to
+  /// the multi-file enumerator (so their recordings never enumerate).
+  void setDevice(BtDevice? device, {String? firmwareVersion}) {
+    _device = device;
+    _firmwareVersion = firmwareVersion;
+  }
+
+  /// Best available firmware for discovery routing: the enriched value if it
+  /// resolved, otherwise whatever the raw connect object carries.
+  String? get _resolvedFirmware => resolveDiscoveryFirmware(_firmwareVersion, _device?.firmwareRevision);
+
+  /// Prefer the enriched firmware over the raw connect-object value, which is
+  /// frequently still 'Unknown'. A missing/'Unknown' enriched value falls back
+  /// to the raw one so behavior is never worse than before.
+  static String? resolveDiscoveryFirmware(String? enriched, String? raw) {
+    if (enriched != null && enriched.isNotEmpty && enriched != 'Unknown') return enriched;
+    return raw;
+  }
+
+  /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
+  /// firmware (3.0.17–3.0.19) keeps using StorageSync.
+  static bool isRingBufferFirmware(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown') return false;
+    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    if (parts.length < 3) return false;
+    if (parts[0] > 3) return true;
+    if (parts[0] < 3) return false;
+    if (parts[1] > 0) return true;
+    if (parts[1] < 0) return false;
+    return parts[2] >= 20;
+  }
 
   WalSyncs(this.listener) {
     _phoneSync = LocalWalSyncImpl(listener);
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
+    _ringSync = RingStorageSyncImpl(listener);
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
     _storageSync.setLocalSync(_phoneSync);
-
-    _sdcardSync.loadWifiCredentials();
+    _ringSync.setLocalSync(_phoneSync);
   }
 
   @override
@@ -50,11 +91,13 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteWal(wal);
     await _flashPageSync.deleteWal(wal);
     await _storageSync.deleteWal(wal);
+    await _ringSync.deleteWal(wal);
   }
 
   @override
   Future<List<Wal>> getMissingWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _ringSync.getMissingWals());
     wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
@@ -64,11 +107,35 @@ class WalSyncs implements IWalSync {
 
   Future<List<Wal>> getAllWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _ringSync.getMissingWals());
     wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getAllWals());
     wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
+  }
+
+  /// Enumerate offline recordings from the connected device WITHOUT downloading
+  /// them, so they can be listed (e.g. on the Auto Sync page) even when the user
+  /// has turned auto-sync off. Mirrors the per-firmware device discovery that
+  /// [syncAll] runs in Phase 0/1b, minus the download. SD-card WALs are already
+  /// enumerated on connect via [sdcard.setDevice], so they're not repeated here.
+  /// Safe no-op when no device is set; each sub-sync guards against running
+  /// while a sync is in progress.
+  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
+    if (_device == null) return;
+    // Prefer the caller-supplied firmware, then the enriched value stored at
+    // setDevice — the raw connect object's firmwareRevision can still be
+    // 'Unknown', which would misroute ring-buffer discovery.
+    final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
+        ? firmwareVersion
+        : _resolvedFirmware;
+    if (isRingBufferFirmware(fw)) {
+      await _ringSync.refreshWalsFromDevice();
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+    }
+    await _flashPageSync.refreshWalsFromDevice();
   }
 
   Future<WalStats> getWalStats() async {
@@ -122,23 +189,11 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    int bytesPerSecond;
-    switch (wal.codec) {
-      case BleAudioCodec.opusFS320:
-        bytesPerSecond = 16000;
-      case BleAudioCodec.opus:
-        bytesPerSecond = 8000;
-        break;
-      case BleAudioCodec.pcm16:
-        bytesPerSecond = wal.sampleRate * 2 * wal.channel;
-        break;
-      case BleAudioCodec.pcm8:
-        bytesPerSecond = wal.sampleRate * 1 * wal.channel;
-        break;
-      default:
-        bytesPerSecond = 8000;
-    }
-    return bytesPerSecond * wal.seconds;
+    return wal.codec.estimatedRecordingBytes(
+      seconds: wal.seconds,
+      sampleRate: wal.sampleRate,
+      channels: wal.channel,
+    );
   }
 
   Future<void> deleteAllSyncedWals() async {
@@ -146,6 +201,7 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteAllSyncedWals();
     await _flashPageSync.deleteAllSyncedWals();
     await _storageSync.deleteAllSyncedWals();
+    await _ringSync.deleteAllSyncedWals();
   }
 
   Future<void> deleteAllPendingWals() async {
@@ -153,7 +209,12 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteAllPendingWals();
     await _flashPageSync.deleteAllPendingWals();
     await _storageSync.deleteAllPendingWals();
+    await _ringSync.deleteAllPendingWals();
   }
+
+  /// Terminal corruption is produced by the phone-local WAL owner. Device
+  /// stores keep their existing pending-deletion semantics.
+  Future<void> deleteAllCorruptedWals() => _phoneSync.deleteAllCorruptedWals();
 
   @override
   void start() {
@@ -161,6 +222,7 @@ class WalSyncs implements IWalSync {
     _sdcardSync.start();
     _flashPageSync.start();
     _storageSync.start();
+    _ringSync.start();
   }
 
   @override
@@ -169,13 +231,11 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.stop();
     await _flashPageSync.stop();
     await _storageSync.stop();
+    await _ringSync.stop();
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _isCancelled = false;
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -187,15 +247,49 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Phase 0: New multi-file storage sync (for new firmware with LittleFS)
-    // Refresh file list from device via BLE (safe — not syncing yet)
-    await _storageSync.refreshWalsFromDevice();
-    final storageMissing = await _storageSync.getMissingWals();
-    if (storageMissing.isNotEmpty) {
-      Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
-      DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync');
-      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-      await _storageSync.syncAll(progress: progress);
+    // Protect the live path before a potentially multi-hour device drain.
+    Logger.debug("WalSyncs: Phase -1 - Uploading already-local live-capture recordings");
+    DebugLogManager.logInfo('Sync Phase -1: Uploading live-capture phone files first');
+    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
+    final preDrainResult = await _phoneSync.syncLiveCaptureOnly(progress: progress);
+    if (preDrainResult != null) {
+      resp.newConversationIds.addAll(
+        preDrainResult.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        preDrainResult.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
+      resp.localUploadFailures += preDrainResult.localUploadFailures;
+      resp.localUploadPermanentFailures += preDrainResult.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
+    }
+
+    // Phase 0: New offline storage sync, gated by firmware version.
+    //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
+    //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
+    //   fw < 3.0.17   -> falls through to Phase 1a legacy SD-card path
+    final fwVersion = _resolvedFirmware;
+    final useRing = isRingBufferFirmware(fwVersion);
+    if (useRing) {
+      await _ringSync.refreshWalsFromDevice();
+      final ringMissing = await _ringSync.getMissingWals();
+      if (ringMissing.isNotEmpty) {
+        Logger.debug("WalSyncs: Phase 0 - Ring-buffer sync (fw=$fwVersion)");
+        DebugLogManager.logInfo('Sync Phase 0: Ring-buffer sync', {'fw': fwVersion ?? ''});
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _ringSync.syncAll(progress: progress);
+      }
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+      final storageMissing = await _storageSync.getMissingWals();
+      if (storageMissing.isNotEmpty) {
+        Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
+        DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _storageSync.syncAll(progress: progress);
+      }
     }
 
     if (_isCancelled) {
@@ -209,19 +303,9 @@ class WalSyncs implements IWalSync {
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
     final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
-    bool usedWifi = false;
     if (missingSDCardWals.isNotEmpty) {
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        usedWifi = true;
-        DebugLogManager.logInfo('SD card sync using WiFi', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        DebugLogManager.logInfo('SD card sync using BLE', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncAll(progress: progress);
-      }
+      DebugLogManager.logInfo('SD card sync over BLE', {'walCount': missingSDCardWals.length});
+      await _sdcardSync.syncAll(progress: progress);
     }
 
     if (_isCancelled) {
@@ -233,24 +317,19 @@ class WalSyncs implements IWalSync {
     // Phase 1b: Download flash page data to phone
     Logger.debug("WalSyncs: Phase 1b - Downloading flash page data to phone");
     DebugLogManager.logInfo('Sync Phase 1b: Downloading flash page data to phone');
-    await _flashPageSync.syncAll(progress: progress);
+    // Re-enumerate from the device first (mirrors the ring/storage phases
+    // above) so a repeat Sync tap resumes from the device's current flash-page
+    // pointer instead of a stale cached WAL — no app relaunch needed.
+    await _flashPageSync.refreshWalsFromDevice();
+    final flashMissing = (await _flashPageSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (flashMissing.isNotEmpty) {
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      await _flashPageSync.syncAll(progress: progress);
+    }
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");
       DebugLogManager.logWarning('Sync cancelled after flash page phase');
-      return resp;
-    }
-
-    if (usedWifi) {
-      Logger.debug("WalSyncs: Waiting for internet after WiFi transfer...");
-      DebugLogManager.logInfo('Waiting for internet after WiFi transfer');
-      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.waitingForInternet);
-      await _waitForInternet();
-    }
-
-    if (_isCancelled) {
-      Logger.debug("WalSyncs: Cancelled after waiting for internet");
-      DebugLogManager.logWarning('Sync cancelled while waiting for internet');
       return resp;
     }
 
@@ -268,6 +347,9 @@ class WalSyncs implements IWalSync {
           (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
         ),
       );
+      resp.localUploadFailures += partialRes.localUploadFailures;
+      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
     }
 
     DebugLogManager.logEvent('sync_completed', {
@@ -279,21 +361,13 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        return await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        return _sdcardSync.syncWal(wal: wal, progress: progress);
+      if (wal.fileNum == -1) {
+        return _ringSync.syncWal(wal: wal, progress: progress);
       }
+      return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       return _flashPageSync.syncWal(wal: wal, progress: progress);
@@ -306,15 +380,16 @@ class WalSyncs implements IWalSync {
   @override
   void cancelSync() {
     _isCancelled = true;
+    _ringSync.cancelSync();
     _storageSync.cancelSync();
     _sdcardSync.cancelSync();
     _flashPageSync.cancelSync();
     _phoneSync.cancelSync();
   }
 
-  bool get isStorageSyncing => _storageSync.isSyncing;
+  bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
-  double get storageSpeedKBps => _storageSync.currentSpeedKBps;
+  double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;
 
   bool get isSdCardSyncing => _sdcardSync.isSyncing;
 
@@ -322,23 +397,12 @@ class WalSyncs implements IWalSync {
 
   bool get isFlashPageSyncing => _flashPageSync.isSyncing;
 
+  /// Why the last flash-page drain pass stopped early (reset at the start of
+  /// each flash sync). Lets the UI distinguish "pendant is recording" from a
+  /// plain transfer lull instead of reporting silent success.
+  FlashSyncStallReason get flashStallReason => _flashPageSync.lastStallReason;
+
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.
   SyncLocalFilesResponse? get accumulatedResponse => _phoneSync.accumulatedResponse;
-
-  /// Wait for internet connectivity to be restored (e.g. after WiFi transfer).
-  /// Polls every 2 seconds, gives up after 30 seconds.
-  Future<void> _waitForInternet() async {
-    final connectivity = ConnectivityService();
-    for (int i = 0; i < 15; i++) {
-      if (connectivity.isConnected) {
-        Logger.debug("WalSyncs: Internet available after ${i * 2}s");
-        DebugLogManager.logInfo('Internet restored after ${i * 2}s');
-        return;
-      }
-      await Future.delayed(const Duration(seconds: 2));
-    }
-    Logger.debug("WalSyncs: Internet not available after 30s, proceeding anyway");
-    DebugLogManager.logWarning('Internet not available after 30s, proceeding anyway');
-  }
 }

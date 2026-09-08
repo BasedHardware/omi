@@ -1,0 +1,60 @@
+{
+  "$comment": "Local-calendar-day identity for a UTC instant. This is the rule behind conversation day grouping on every platform (Flutter conversationLocalDayKey, Windows startOfLocalDay/groupConversationsByDate) and the class of bug fixed in #10198, #10980 and #10984 (UTC day used where the local day was meant). Because implementations use the runtime's own zone, expectations are keyed by the zone offset IN EFFECT AT THAT INSTANT, in minutes east of UTC (JS: -date.getTimezoneOffset(); Dart: local.timeZoneOffset.inMinutes). An adapter runs each case whose map contains the runtime's offset and counts the rest as skipped; offset 0 is always present so CI (UTC) always exercises every case. Offsets included: 0 (UTC), -420 (US Pacific DST), -480 (US Pacific standard), 120 (central Europe DST), 345 (Nepal).",
+  "cases": [
+    {
+      "name": "early_utc_morning_crosses_backward",
+      "utc": "2026-08-15T03:30:00Z",
+      "expected_by_offset": {
+        "0": "2026-08-15",
+        "-420": "2026-08-14",
+        "-480": "2026-08-14",
+        "120": "2026-08-15",
+        "345": "2026-08-15"
+      }
+    },
+    {
+      "name": "late_utc_evening_crosses_forward",
+      "utc": "2026-08-15T23:30:00Z",
+      "expected_by_offset": {
+        "0": "2026-08-15",
+        "-420": "2026-08-15",
+        "-480": "2026-08-15",
+        "120": "2026-08-16",
+        "345": "2026-08-16"
+      }
+    },
+    {
+      "name": "new_year_boundary",
+      "utc": "2026-01-01T00:30:00Z",
+      "expected_by_offset": {
+        "0": "2026-01-01",
+        "-420": "2025-12-31",
+        "-480": "2025-12-31",
+        "120": "2026-01-01",
+        "345": "2026-01-01"
+      }
+    },
+    {
+      "name": "midday_stable_everywhere",
+      "utc": "2026-08-15T12:00:00Z",
+      "expected_by_offset": {
+        "0": "2026-08-15",
+        "-420": "2026-08-15",
+        "-480": "2026-08-15",
+        "120": "2026-08-15",
+        "345": "2026-08-15"
+      }
+    },
+    {
+      "name": "end_of_february_non_leap",
+      "utc": "2026-03-01T06:59:00Z",
+      "expected_by_offset": {
+        "0": "2026-03-01",
+        "-420": "2026-02-28",
+        "-480": "2026-02-28",
+        "120": "2026-03-01",
+        "345": "2026-03-01"
+      }
+    }
+  ]
+}

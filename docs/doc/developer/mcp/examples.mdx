@@ -55,22 +55,34 @@ Once connected, try these prompts with your AI assistant:
 
 ## Python SDK Example
 
+This programmatic example uses the manual MCP-key fallback because the adapter receives
+static headers. Create an `omi_mcp_...` key as described in the [Setup guide](/doc/developer/mcp/setup)
+and load it from a secret store or environment variable in production.
+
 ```python
+import asyncio
+import os
+
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-async with MultiServerMCPClient({
-    "omi": {
-        "url": "https://api.omi.me/v1/mcp/sse",
-        "transport": "streamable_http",
-        "headers": {"Authorization": "Bearer omi_mcp_YOUR_KEY"},
-    }
-}) as client:
-    tools = client.get_tools()
+async def main():
+    async with MultiServerMCPClient({
+        "omi": {
+            "url": "https://api.omi.me/v1/mcp/sse",
+            "transport": "streamable_http",
+            "headers": {"Authorization": f"Bearer {os.environ['OMI_MCP_API_KEY']}"},
+        }
+    }) as client:
+        tools = client.get_tools()
 
-    # Search memories
-    result = await client.call_tool("omi", "search_memories", {
-        "query": "morning routine",
-        "limit": 5,
-    })
-    print(result)
+        # Search memories
+        result = await client.call_tool("omi", "search_memories", {
+            "query": "morning routine",
+            "limit": 5,
+        })
+        print(result)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```

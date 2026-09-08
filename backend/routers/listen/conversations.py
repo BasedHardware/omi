@@ -1,0 +1,482 @@
+"""Durable conversation ownership and lifecycle for a live listen session."""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
+from database.firestore_read_metrics import FirestoreReadSite
+from models.conversation import Conversation
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
+from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from utils.byok import get_byok_keys
+from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.observability.transcription import record_listen_audio_outcome
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.factory import deserialize_conversation
+from utils.conversations.projection_payload import omit_null_processing_state
+from utils.conversations.process_conversation import retrieve_in_progress_conversation
+from utils.transcribe_decisions import (
+    ConversationLifecycleAction,
+    RecordingSessionReconnectAction,
+    decide_existing_conversation_action,
+    decide_lifecycle_action,
+    decide_recording_session_reconnect_action,
+    recording_session_id_for_lifecycle_event,
+    select_recording_session_id,
+    should_attach_to_existing_in_progress,
+)
+from utils.transcribe_store import calendar_db, conversations_db, redis_db
+
+logger = logging.getLogger(__name__)
+
+# Orphan threshold for stale in_progress recovery (#9809). Any live session
+# refreshes finished_at continuously and its lifecycle loop processes an idle
+# conversation within the ~2-minute conversation timeout, so an hour of silence
+# proves no session owns the row — including one on another device.
+STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
+# Per-session recovery bound: spreads a large backlog across sessions instead of
+# fanning dozens of LLM finalizations out of one reconnect.
+STALE_IN_PROGRESS_RECOVERY_BATCH = 10
+
+
+def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
+    """The onboarding-provenance marker consumed by the daily memory sweep
+    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    onboarding-admission decision (``host.onboarding_session_id``), not
+    ``OnboardingHandler.session_id``: the handler mints its own fallback id
+    whenever none is supplied (utils/onboarding.py), so a Settings speech-
+    profile redo — which runs the same question handler but intentionally
+    clears the runtime's admission id — must not be re-tagged as onboarding
+    provenance just because the handler picked an id for itself.
+    """
+    session_id = getattr(host, 'onboarding_session_id', None)
+    return session_id if isinstance(session_id, str) and len(session_id) >= 16 else None
+
+
+class LiveConversationController:
+    """Own the recording-session to conversation mapping for one WebSocket."""
+
+    def __init__(self, host: Any):
+        self.host = host
+
+    async def _recording_session_event(self, recording_session_id: str, conversation_id: str, phase: str):
+        try:
+            return await self.host.persistence.call(
+                lifecycle_service.record_recording_session_event,
+                self.host.request.uid,
+                recording_session_id,
+                conversation_id,
+                phase,
+            )
+        except Exception:
+            logger.exception(
+                'recording session event persistence failed session=%s conversation=%s uid=%s',
+                recording_session_id,
+                conversation_id,
+                self.host.request.uid,
+            )
+            return None
+
+    def send_conversation_session(
+        self, binding: dict[str, Any], recording_session_id: str, *, status: str = 'in_progress'
+    ):
+        self.host.send_event(
+            ConversationSessionEvent(
+                conversation_id=binding['conversation_id'],
+                status=status,
+                recording_session_id=recording_session_id,
+                lifecycle_version=binding['lifecycle_version'],
+                lifecycle_phase=binding['lifecycle_phase'],
+                lifecycle_sequence=binding['lifecycle_sequence'],
+            )
+        )
+
+    async def emit_recording_lifecycle_event(self, conversation_id: str, phase: str) -> None:
+        recording_session_id = recording_session_id_for_lifecycle_event(
+            self.host.recording_session_ids_by_conversation, conversation_id
+        )
+        if not recording_session_id:
+            logger.warning('Suppressing lifecycle event without durable binding conversation=%s', conversation_id)
+            return
+        data = await self.host.persistence.call(
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_RECORDING_LIFECYCLE_EVENT,
+        )
+        if not data:
+            return
+        envelope = await self._recording_session_event(recording_session_id, conversation_id, phase)
+        if envelope is None:
+            return
+        self.host.send_event(
+            ConversationEvent(
+                event_type='memory_created' if phase == 'completed' else 'memory_processing_started',
+                memory=deserialize_conversation(data),
+                messages=[] if phase == 'completed' else None,
+                recording_session_id=envelope['recording_session_id'],
+                conversation_id=envelope['conversation_id'],
+                lifecycle_version=envelope['lifecycle_version'],
+                lifecycle_phase=envelope['lifecycle_phase'],
+                lifecycle_sequence=envelope['lifecycle_sequence'],
+            )
+        )
+
+    def on_conversation_processed(self, conversation_id: str) -> None:
+        self.host.spawn(
+            self.emit_recording_lifecycle_event(conversation_id, 'completed'), name='recording_session_completed'
+        )
+
+    def on_conversation_processing_started(self, conversation_id: str) -> None:
+        self.host.spawn(
+            self.emit_recording_lifecycle_event(conversation_id, 'processing'), name='recording_session_processing'
+        )
+
+    async def schedule_finalization(self, conversation_id: str) -> bool:
+        if not self.host.request_conversation_processing and not is_listen_finalization_dispatch_enabled():
+            logger.warning('Pusher unavailable; finalization remains queued conversation=%s', conversation_id)
+            return False
+        finalization = await self.host.persistence.call(
+            lifecycle_service.request_finalization,
+            self.host.request.uid,
+            conversation_id,
+            has_byok_keys=bool(get_byok_keys()),
+            client_kind=self.host.client_kind,
+        )
+        route = finalization['route']
+        if route == 'pusher':
+            if not self.host.request_conversation_processing:
+                return False
+            await self.host.request_conversation_processing(
+                conversation_id, finalization['job_id'], finalization['dispatch_generation']
+            )
+            self.on_conversation_processing_started(conversation_id)
+            return True
+        if route in {'cloud_tasks', 'queued', 'blocked_byok'}:
+            self.on_conversation_processing_started(conversation_id)
+            return True
+        return route == 'noop'
+
+    def _should_report_no_audio_teardown(self) -> bool:
+        """Multi-channel session (phone calls today) that never sent a first audio byte."""
+
+        return bool(
+            getattr(self.host, 'is_multi_channel', False)
+            and getattr(self.host.state, 'first_audio_byte_timestamp', None) is None
+        )
+
+    async def process_conversation(self, conversation_id: str) -> bool:
+        data = await self.host.persistence.call(
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
+        )
+        if not data:
+            return False
+        if data.get('transcript_segments') or data.get('photos'):
+            return await self.schedule_finalization(conversation_id)
+        recording_session_id = recording_session_id_for_lifecycle_event(
+            self.host.recording_session_ids_by_conversation, conversation_id
+        )
+        # Snapshot before the fenced delete: the outcome is only truthful if the
+        # delete actually wins the race to content, so emit after `deleted`.
+        was_no_audio_session = self._should_report_no_audio_teardown()
+        deleted = await self.host.persistence.call(
+            lifecycle_service.delete_empty_recording_conversation,
+            self.host.request.uid,
+            conversation_id,
+            recording_session_id,
+        )
+        if deleted:
+            if was_no_audio_session:
+                # A phone_call that stayed silent for its whole duration must be
+                # distinguishable from a call that was never transcribed at all;
+                # the empty-conversation deletion itself is unchanged.
+                logger.warning(
+                    'Listen session tore down with no audio received source=%s platform=%s',
+                    self.host.request.source,
+                    self.host.client_device_context.platform,
+                )
+                record_listen_audio_outcome(
+                    source=self.host.request.source,
+                    outcome='no_audio_teardown',
+                    platform=self.host.client_device_context.platform,
+                )
+            return True
+        latest = await self.host.persistence.call(
+            conversations_db.get_conversation,
+            self.host.request.uid,
+            conversation_id,
+            read_site=FirestoreReadSite.LISTEN_POST_DELETE_REREAD,
+        )
+        return bool(
+            latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
+        ) and await self.schedule_finalization(conversation_id)
+
+    async def create_new_in_progress_conversation(self, *, rollover: bool = False) -> None:
+        request = self.host.request
+        self.host.recording_session_id = select_recording_session_id(
+            client_conversation_id=self.host.client_conversation_id,
+            current_recording_session_id=self.host.recording_session_id,
+            rollover=rollover,
+            generated_id=str(uuid.uuid4()),
+        )
+        try:
+            source = ConversationSource(request.source) if request.source else ConversationSource.omi
+        except ValueError:
+            logger.error('Invalid conversation source %s; using omi', request.source)
+            source = ConversationSource.omi
+        use_client_conversation_id = bool(self.host.client_conversation_id) and not rollover
+        proposed_id = self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
+        proposed_id_is_server_generated = not use_client_conversation_id
+        binding = await self.host.persistence.call(
+            lifecycle_service.open_live_recording_session,
+            request.uid,
+            self.host.recording_session_id,
+            proposed_id,
+        )
+        if binding['requires_rollover']:
+            await self.create_new_in_progress_conversation(rollover=True)
+            return
+        conversation_id = binding['conversation_id']
+        self.host.recording_session_ids_by_conversation[conversation_id] = self.host.recording_session_id
+        if proposed_id_is_server_generated and conversation_id == proposed_id:
+            # proposed_id was invented for this call and the binding adopted it
+            # verbatim, so no conversation document can exist under it yet: a
+            # lookup here is a guaranteed NOT_FOUND read. Client-supplied ids
+            # always still get looked up below, since they can legitimately
+            # name an existing conversation (resume/idempotency).
+            existing = None
+        elif binding.get('conversation_snapshot_known'):
+            # open_live_recording_session already read this exact document while
+            # resolving the binding; reuse it instead of reading it again.
+            existing = binding['conversation_snapshot']
+        else:
+            existing = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_CLIENT_ID_PROBE,
+            )
+        if existing:
+            action = decide_recording_session_reconnect_action(
+                status=existing.get('status'),
+                discarded=bool(existing.get('discarded')),
+                in_progress_status=ConversationStatus.in_progress,
+            )
+            if action == RecordingSessionReconnectAction.resume_current:
+                self.host.state.current_conversation_id = conversation_id
+                # Persist the custom-STT marker on resume so a conversation that
+                # started under normal STT but continues under custom STT keeps
+                # accurate provenance: once any session was custom-STT, the
+                # conversation is marked as such.
+                if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
+                    await self.host.persistence.call(
+                        conversations_db.update_conversation,
+                        request.uid,
+                        conversation_id,
+                        {'uses_custom_stt': True},
+                    )
+                await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
+                self.send_conversation_session(binding, self.host.recording_session_id)
+                return
+            if action == RecordingSessionReconnectAction.suppress_discarded_and_rollover:
+                await self.create_new_in_progress_conversation(rollover=True)
+                return
+            self.send_conversation_session(binding, self.host.recording_session_id, status=str(existing.get('status')))
+            if existing.get('status') == ConversationStatus.completed.value:
+                self.on_conversation_processed(conversation_id)
+            await self.create_new_in_progress_conversation(rollover=True)
+            return
+
+        context = self.host.client_device_context
+        external_data = {'conversation_role': request.conversation_role}
+        onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
+        if onboarding_session_id:
+            # This marker reflects the backend's own onboarding-admission
+            # decision; request.source and request.onboarding_mode are client
+            # input and are intentionally not used as provenance.
+            external_data['onboarding_session_id'] = onboarding_session_id
+        conversation = Conversation(
+            id=conversation_id,
+            created_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+            structured=Structured(),
+            language=self.host.language,
+            transcript_segments=[],
+            photos=[],
+            status=ConversationStatus.in_progress,
+            source=source,
+            private_cloud_sync_enabled=self.host.private_cloud_sync_enabled,
+            uses_custom_stt=self.host.use_custom_stt,
+            call_id=request.call_id if self.host.is_multi_channel else None,
+            client_device_id=context.client_device_id,
+            client_platform=context.platform,
+            external_data=external_data,
+            geolocation=request.geolocation,
+        )
+        await self.host.persistence.call(
+            lifecycle_service.create_in_progress_conversation,
+            request.uid,
+            # The modeled field's None default is omitted, never stamped:
+            # persist is merge=True, so a dumped None would become an
+            # explicit Firestore key on every fresh recording.
+            omit_null_processing_state(conversation.model_dump()),
+            idempotent=bool(self.host.client_conversation_id and conversation_id == self.host.client_conversation_id),
+        )
+        await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
+        if source == ConversationSource.desktop:
+            now = datetime.now(timezone.utc)
+            meetings = await self.host.persistence.call(
+                calendar_db.get_meetings_in_time_range,
+                request.uid,
+                now - timedelta(minutes=2),
+                now + timedelta(minutes=2),
+            )
+            if meetings:
+                closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
+                await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
+        self.host.state.current_conversation_id = conversation_id
+        self.send_conversation_session(binding, self.host.recording_session_id)
+
+    async def prepare(self) -> Optional[str]:
+        if self.host.is_multi_channel:
+            await self.create_new_in_progress_conversation()
+            return None
+        if self.host.client_conversation_id:
+            await self.create_new_in_progress_conversation()
+            return None
+        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
+            # A speech-profile recording (onboarding step or Settings redo) is its
+            # own conversation. Attaching to a still-open one from a previous
+            # attempt makes combine_segments() merge the new speech into that
+            # conversation's last segment, and the client then shows the words
+            # from last time as soon as the user starts talking again.
+            # Admission, not the raw request flag, owns this decision: the
+            # runtime refuses onboarding provenance for completed accounts, and
+            # an unadmitted onboarding claim must keep the ordinary session's
+            # existing-conversation behavior instead of dodging it.
+            await self.create_new_in_progress_conversation()
+            return None
+        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if not existing:
+            await self.create_new_in_progress_conversation()
+            return None
+        existing_source = existing.get('source')
+        if hasattr(existing_source, 'value'):
+            existing_source = existing_source.value
+        # Cross-source sockets (pendant + web meeting) must not share one conversation (#5388).
+        if not should_attach_to_existing_in_progress(
+            existing_source=existing_source if isinstance(existing_source, str) else None,
+            request_source=self.host.request.source,
+        ):
+            await self.create_new_in_progress_conversation()
+            return None
+        finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
+        seconds = (datetime.now(timezone.utc) - finished_at).total_seconds()
+        if (
+            decide_existing_conversation_action(
+                seconds_since_last_segment=seconds,
+                conversation_creation_timeout=self.host.conversation_creation_timeout,
+            )
+            == ConversationLifecycleAction.process_and_create_new
+        ):
+            await self.create_new_in_progress_conversation()
+            return existing['id']
+        binding = await self.host.persistence.call(
+            lifecycle_service.open_live_recording_session,
+            self.host.request.uid,
+            self.host.recording_session_id,
+            existing['id'],
+        )
+        if binding['requires_rollover']:
+            await self.create_new_in_progress_conversation(rollover=True)
+            return None
+        self.host.state.current_conversation_id = existing['id']
+        self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
+        self.send_conversation_session(binding, self.host.recording_session_id)
+        return None
+
+    async def process_pending(self, timed_out_id: Optional[str]) -> None:
+        # Interruptible delay, not a polling loop. An early wake means the session is shutting
+        # down, which is precisely when the timed-out conversation and anything still stuck in
+        # `processing` must be finalized, so the wake shortens the wait instead of skipping the
+        # work. Returning here dropped both (pre-split this was an unconditional sleep).
+        await self.host.wait(7)
+        if timed_out_id:
+            await self.process_conversation(timed_out_id)
+        processing = await self.host.persistence.call(
+            conversations_db.get_processing_conversations, self.host.request.uid
+        )
+        for conversation in processing or []:
+            await self.schedule_finalization(conversation['id'])
+        await self.recover_stale_in_progress()
+
+    async def recover_stale_in_progress(self) -> None:
+        """Route orphaned `in_progress` conversations through normal finalization (#9809).
+
+        Conversations from sessions that died without processing sit invisible in
+        `in_progress` forever; the manual /finalize workaround proves their content
+        is intact. `process_conversation` already makes the right call per row —
+        content goes through the durable finalization seam, empty rows are
+        deleted — so recovery is exactly the path a live timeout takes. Bounded
+        and oldest-first so one session never stampedes the pipeline.
+        """
+        stale = await self.host.persistence.call(
+            conversations_db.get_stale_in_progress_conversations,
+            self.host.request.uid,
+            older_than_seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS,
+            limit=STALE_IN_PROGRESS_RECOVERY_BATCH,
+        )
+        for conversation in stale or []:
+            if conversation['id'] == self.host.state.current_conversation_id:
+                continue
+            logger.info(
+                'recovering stale in_progress conversation uid=%s conversation=%s finished_at=%s',
+                self.host.request.uid,
+                conversation['id'],
+                conversation.get('finished_at'),
+            )
+            await self.process_conversation(conversation['id'])
+
+    async def lifecycle_loop(self) -> None:
+        while self.host.state.active:
+            if await self.host.wait(5):
+                break
+            conversation_id = self.host.state.current_conversation_id
+            if not conversation_id:
+                continue
+            conversation = await self.host.persistence.call(
+                conversations_db.get_conversation,
+                self.host.request.uid,
+                conversation_id,
+                read_site=FirestoreReadSite.LISTEN_LIFECYCLE_POLL,
+            )
+            if not conversation:
+                await self.create_new_in_progress_conversation(rollover=True)
+                continue
+            finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
+            action = decide_lifecycle_action(
+                conversation_exists=True,
+                status=conversation.get('status'),
+                in_progress_status=ConversationStatus.in_progress,
+                seconds_since_last_update=(datetime.now(timezone.utc) - finished_at).total_seconds(),
+                conversation_creation_timeout=self.host.conversation_creation_timeout,
+            )
+            if action == ConversationLifecycleAction.create_new:
+                await self.create_new_in_progress_conversation(rollover=True)
+            elif action == ConversationLifecycleAction.process_and_create_new:
+                await self.host.transcripts.flush_speaker_assignments(conversation_id)
+                await self.process_conversation(conversation_id)
+                await self.create_new_in_progress_conversation(rollover=True)
+
+    async def send_last_conversation(self) -> None:
+        last = await self.host.persistence.call(conversations_db.get_last_completed_conversation, self.host.request.uid)
+        if last:
+            self.host.send_event(LastConversationEvent(memory_id=last['id']))

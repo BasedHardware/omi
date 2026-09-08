@@ -1,0 +1,37 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nllb-translation.fullname" . }}
+  labels:
+    {{- include "nllb-translation.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nllb-translation.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.requestsPerPod }}
+    # Scale on concurrent translation requests — the primary signal for a GPU-bound
+    # inference service (CPU stays low during inference, so a CPU-only HPA never
+    # scales). Mirrors the parakeet active-requests pattern. Requires the
+    # nllb_active_requests_total adapter rule in the cluster-wide prometheus-adapter.
+    - type: External
+      external:
+        metric:
+          name: nllb_active_requests_total
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.autoscaling.requestsPerPod }}"
+    {{- end }}
+{{- end }}

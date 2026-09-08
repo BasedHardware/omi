@@ -1,0 +1,136 @@
+name: Deploy Cloud Run Metrics Egress
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml'
+      - 'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml'
+      - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the monitoring environment to deploy'
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - prod
+
+# Monitoring releases share one mutation domain per environment. Do not cancel
+# an in-flight Helm upgrade because --atomic rollback must be allowed to finish.
+concurrency:
+  group: deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # workflow_dispatch can be started from any ref in the UI. Only reviewed
+    # main configuration may receive deployment credentials.
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout reviewed monitoring configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Resolve environment-specific release contract
+        env:
+          ENV_SLUG: ${{ vars.ENV }}
+        run: |
+          set -euo pipefail
+          case "$ENV_SLUG" in
+            dev)
+              stack_release=dev-kube-prometheus-stack
+              ;;
+            prod)
+              stack_release=prod-omi-kube-prometheus-stack
+              ;;
+            *)
+              echo "Unsupported monitoring environment slug: $ENV_SLUG" >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "MONITORING_NAMESPACE=${ENV_SLUG}-omi-monitoring"
+            echo "EXPORTER_RELEASE=${ENV_SLUG}-omi-cloud-run-metrics-exporter"
+            echo "STACK_RELEASE=$stack_release"
+            echo "EXPORTER_VALUES=backend/charts/monitoring/prometheus-stackdriver-exporter/${ENV_SLUG}_omi_cloud_run_metrics_exporter.yaml"
+            echo "STACK_VALUES=backend/charts/monitoring/kube-prometheus-stack/${ENV_SLUG}_omi_monitoring_values.yaml"
+          } >> "$GITHUB_ENV"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: us-central1
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Add pinned chart repository
+        run: |
+          set -euo pipefail
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+          helm repo update prometheus-community
+
+      - name: Render Cloud Run metrics egress releases
+        run: |
+          set -euo pipefail
+          helm template "$EXPORTER_RELEASE" prometheus-community/prometheus-stackdriver-exporter \
+            --version 4.8.3 \
+            --namespace "$MONITORING_NAMESPACE" \
+            --values "$EXPORTER_VALUES" >/dev/null
+          helm template "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
+            --version 75.15.1 \
+            --namespace "$MONITORING_NAMESPACE" \
+            --values "$STACK_VALUES" >/dev/null
+
+      - name: Deploy isolated Cloud Run metrics exporter
+        run: |
+          set -euo pipefail
+          helm upgrade --install "$EXPORTER_RELEASE" prometheus-community/prometheus-stackdriver-exporter \
+            --version 4.8.3 \
+            --namespace "$MONITORING_NAMESPACE" \
+            --values "$EXPORTER_VALUES" \
+            --atomic \
+            --wait \
+            --timeout 10m
+
+      - name: Deploy Prometheus scrape configuration
+        run: |
+          set -euo pipefail
+          helm upgrade --install "$STACK_RELEASE" prometheus-community/kube-prometheus-stack \
+            --version 75.15.1 \
+            --namespace "$MONITORING_NAMESPACE" \
+            --values "$STACK_VALUES" \
+            --atomic \
+            --wait \
+            --timeout 15m
+
+      - name: Verify deployed egress resources
+        run: |
+          set -euo pipefail
+          helm status "$EXPORTER_RELEASE" --namespace "$MONITORING_NAMESPACE"
+          helm status "$STACK_RELEASE" --namespace "$MONITORING_NAMESPACE"
+          kubectl rollout status "deployment/$EXPORTER_RELEASE" \
+            --namespace "$MONITORING_NAMESPACE" \
+            --timeout=5m
+          kubectl get service "$EXPORTER_RELEASE" \
+            --namespace "$MONITORING_NAMESPACE"

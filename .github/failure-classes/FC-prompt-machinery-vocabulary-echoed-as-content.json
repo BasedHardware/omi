@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-prompt-machinery-vocabulary-echoed-as-content",
+  "violated_contract": "A prompt must not describe its own internal machinery in words the model is also asked to produce. A weak extraction model reproduces that vocabulary as content: naming the outputs \"ambient narrative\", \"identifier\", \"proposals\" and \"evidence\" put those words at the head of 25% of stored fact statements and filled 104 of 125 identifier slots with model bookkeeping (fact-001, f-002, ftn-003), and the corrupted text then propagated to every downstream consumer, including the director prompt that reads those facts back.",
+  "canonical_prevention": "Describe the wanted output in the reader's language with one concrete good/bad example and none of the pipeline's own nouns, and enforce the shape at the storage boundary rather than in prompt wording alone: reject scaffolding-shaped statements and bookkeeping-shaped identifiers at write time, so a regression in model behaviour cannot reach the corpus.",
+  "evidence_prs": [11634],
+  "scope_hints": ["desktop/macos/Desktop/Sources/ProactiveAssistants/**"],
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift",
+    "desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"
+  ]
+}

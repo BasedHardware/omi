@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import type Stripe from 'stripe';
 import { getOptionalStripe } from '@/lib/stripe';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import {
+  AllSubscriptionSourcesFailedError,
+  fetchOmiSubscriptions,
+  isAnnual,
+} from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
+
+function cacheKey(months: number): string {
+  return `subscription-trends:v2:${months}`;
+}
+
+export { cacheKey as subscriptionTrendsCacheKey };
 
 function buildEmptySubscriptionTrendData(months: number) {
   const endDate = new Date();
@@ -29,76 +41,23 @@ function buildEmptySubscriptionTrendData(months: number) {
   });
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
-
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const months = parseInt(searchParams.get('months') || '12', 10);
+export async function computeSubscriptionTrends(months: number) {
     const stripe = getOptionalStripe();
-    const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
-    if (!stripe || !monthlyPriceId || !annualPriceId) {
-      return NextResponse.json({ data: buildEmptySubscriptionTrendData(months), unavailable: true });
+    if (!stripe) {
+      return { data: buildEmptySubscriptionTrendData(months), unavailable: true };
     }
 
-    // Calculate date range
     const endDate = new Date();
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - months);
 
-    // Fetch all subscriptions (not just active) for both price IDs with pagination
-    const fetchAllSubscriptions = async (priceId: string) => {
-      let allSubscriptions: Stripe.Subscription[] = [];
-      let hasMore = true;
-      let startingAfter: string | undefined = undefined;
-
-      while (hasMore) {
-        const params: Stripe.SubscriptionListParams = {
-          price: priceId,
-          limit: 100,
-          expand: ['data.items.data.price'],
-        };
-
-        if (startingAfter) {
-          params.starting_after = startingAfter;
-        }
-
-        const subscriptions = await stripe.subscriptions.list(params);
-        allSubscriptions = allSubscriptions.concat(subscriptions.data);
-        
-        hasMore = subscriptions.has_more;
-        if (hasMore && subscriptions.data.length > 0) {
-          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
-        }
-      }
-
-      return allSubscriptions;
-    };
-
-    const results = await Promise.allSettled([
-      fetchAllSubscriptions(monthlyPriceId),
-      fetchAllSubscriptions(annualPriceId),
-    ]);
-
-    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
-    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
-
-    if (results[0].status === 'rejected') {
-      console.error('Error fetching monthly subscription trends:', results[0].reason);
-    }
-    if (results[1].status === 'rejected') {
-      console.error('Error fetching annual subscription trends:', results[1].reason);
-    }
-
-    if (results.every((r) => r.status === 'rejected')) {
-      return NextResponse.json(
-        { error: 'All subscription trend data sources failed' },
-        { status: 502 }
-      );
-    }
+    // New-subscription counts include ones later cancelled, so this reads every status. Only
+    // subscriptions created inside the window can land in a bucket, so Stripe filters on that
+    // rather than us paging the whole account's history.
+    const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, ['all'], {
+      created: { gte: Math.floor(startDate.getTime() / 1000) },
+    });
 
     // Group subscriptions by month created
     const monthlyTrends: Record<string, number> = {};
@@ -115,30 +74,19 @@ export async function GET(request: NextRequest) {
       currentDate.setMonth(currentDate.getMonth() + 1);
     }
 
-    // Count monthly subscriptions by creation month
-    monthlySubscriptions.forEach((subscription) => {
+    // Count by creation month, split on the billing interval rather than a price id.
+    subscriptions.forEach((subscription) => {
       const createdDate = new Date(subscription.created * 1000);
-      if (createdDate >= startDate && createdDate <= endDate) {
-        const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`;
-        if (monthlyTrends[monthKey] !== undefined) {
-          monthlyTrends[monthKey]++;
-        }
-      }
-    });
+      if (createdDate < startDate || createdDate > endDate) return;
 
-    // Count annual subscriptions by creation month
-    annualSubscriptions.forEach((subscription) => {
-      const createdDate = new Date(subscription.created * 1000);
-      if (createdDate >= startDate && createdDate <= endDate) {
-        const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`;
-        if (annualTrends[monthKey] !== undefined) {
-          annualTrends[monthKey]++;
-        }
+      const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`;
+      const bucket = isAnnual(subscription) ? annualTrends : monthlyTrends;
+      if (bucket[monthKey] !== undefined) {
+        bucket[monthKey]++;
       }
     });
 
     // Format data for chart
-    const partial = results.some((r) => r.status === 'rejected');
     const data = monthKeys.map((monthKey) => {
       const [year, month] = monthKey.split('-');
       const date = new Date(parseInt(year), parseInt(month) - 1);
@@ -150,8 +98,30 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ data, partial });
+    return { data, partial };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const months = parseInt(searchParams.get('months') || '12', 10);
+    const key = cacheKey(months);
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptionTrends>>>(key);
+    if (cached) {
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+    }
+
+    const payload = await computeSubscriptionTrends(months);
+    await setPayload(key, payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
+    if (error instanceof AllSubscriptionSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error fetching subscription trends:', error);
     return NextResponse.json(
       { error: 'Failed to fetch subscription trends' },

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/utils/logger.dart';
@@ -26,8 +25,6 @@ class F {
       case Environment.prod:
         return 'Omi';
       case Environment.dev:
-        return 'Omi Dev';
-      default:
         return 'Omi Dev';
     }
   }

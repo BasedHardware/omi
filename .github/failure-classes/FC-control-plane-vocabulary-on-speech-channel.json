@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-control-plane-vocabulary-on-speech-channel",
+  "violated_contract": "Control-plane vocabulary must not share the speech channel. Asking a speech model to emit classification tokens or verb labels on native PCM or TTS teaches the model to speak machine verbs instead of the user-facing answer.",
+  "canonical_prevention": "Carry classification on a silent hub tool whose result is opaque and unspeakable. Hub inject instructions must not list speakable output tokens. Native PCM is not sanitized by spokenText; do not add a speech-channel regex as a substitute for the non-speech channel.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/Interject/**",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift",
+    "desktop/macos/agent/src/runtime/omi-tool-manifest.ts"
+  ],
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/Interject/InterjectHubFeedbackTool.swift",
+    "desktop/macos/Desktop/Tests/InterjectVoiceFeedbackRoutingTests.swift"
+  ]
+}

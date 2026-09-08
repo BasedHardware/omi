@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "cases": [
+    {"name": "current_weather", "prompt": "What's the weather in NYC right now?", "requiresPublicWeb": true},
+    {"name": "recent_news", "prompt": "Give me recent news about Anthropic", "requiresPublicWeb": true},
+    {"name": "new_release", "prompt": "What AI model was newly released?", "requiresPublicWeb": true},
+    {"name": "explicit_lookup_variant", "prompt": "Look this up online: HumanPost", "requiresPublicWeb": true},
+    {"name": "implicit_research_with_web_locus", "prompt": "Find out who David Zhang is and get the public information available on him online", "requiresPublicWeb": true},
+    {"name": "mixed_public_and_private", "prompt": "Search the web and my conversations for HumanPost", "requiresPublicWeb": true},
+    {"name": "private_weather_history", "prompt": "What did I say today about the current weather?", "requiresPublicWeb": false},
+    {"name": "explicit_no_web", "prompt": "Do not use web search; answer from what you already know", "requiresPublicWeb": false},
+    {"name": "long_service_synthesis", "prompt": "Analyze these calendar events and extract a profile. Today's date is 2026-07-25. Extract facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life, professional identity, collaboration patterns, and recurring commitments. Preserve source fidelity and do not infer facts that are absent from the supplied events.", "requiresPublicWeb": false},
+    {"name": "lookup_term_inside_longer_word", "prompt": "Review the marketing copy I wrote today", "requiresPublicWeb": false},
+    {"name": "fresh_phrase_inside_longer_word", "prompt": "Review my recent newsletter draft", "requiresPublicWeb": false},
+    {"name": "utf8_byte_length_matches_rust_cap", "prompt": "谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁谁 who's playing today", "requiresPublicWeb": false},
+    {"name": "game_inside_gameplan", "prompt": "Review my launch gameplan today", "requiresPublicWeb": false}
+  ]
+}

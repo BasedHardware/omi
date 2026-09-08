@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -10,7 +11,10 @@ Future<List<Folder>> getFolders() async {
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var folders = (jsonDecode(body) as List<dynamic>).map((folder) => Folder.fromJson(folder)).toList();
+    var folders = (jsonDecode(body) as List<dynamic>)
+        .map((folder) => wire.GeneratedFolder.fromJson(folder as Map<String, dynamic>))
+        .map(Folder.fromGenerated)
+        .toList();
     Logger.debug('getFolders length: ${folders.length}');
     return folders;
   } else {
@@ -35,7 +39,8 @@ Future<Folder?> createFolderApi({required String name, String? description, Stri
   if (response == null) return null;
   Logger.debug('createFolderApi: ${response.body}');
   if (response.statusCode == 200) {
-    return Folder.fromJson(jsonDecode(response.body));
+    final generated = wire.GeneratedFolder.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Folder.fromGenerated(generated);
   }
   return null;
 }
@@ -65,7 +70,8 @@ Future<Folder?> updateFolderApi(
   if (response == null) return null;
   Logger.debug('updateFolderApi: ${response.body}');
   if (response.statusCode == 200) {
-    return Folder.fromJson(jsonDecode(response.body));
+    final generated = wire.GeneratedFolder.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return Folder.fromGenerated(generated);
   }
   return null;
 }
@@ -107,7 +113,10 @@ Future<int> bulkMoveConversationsToFolderApi(String folderId, List<String> conve
   if (response == null) return 0;
   Logger.debug('bulkMoveConversationsToFolderApi: ${response.body}');
   if (response.statusCode == 200) {
-    return jsonDecode(response.body)['moved_count'] ?? 0;
+    final generated = wire.GeneratedBulkMoveConversationsResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return generated.movedCount;
   }
   return 0;
 }

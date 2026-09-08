@@ -2,19 +2,28 @@
 Tools for accessing user memories and facts.
 """
 
-from datetime import datetime
-from typing import Optional, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
 import contextvars
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.memories as memory_db
-import database.vector_db as vector_db
+import database.notifications as notification_db
+from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.memory_service import MemoryService
+from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
 import logging
 
 logger = logging.getLogger(__name__)
+
+# A broad question ("what do you know about me") can match every memory a user has. Formatting
+# all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
+# are handed to the model at once; the most recent are kept.
+MAX_MEMORIES_FOR_LLM = 300
 
 # Import agent_config_context for fallback config access
 try:
@@ -24,13 +33,52 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
+def _memory_tools_blocked_by_chat_scope(configurable: Any) -> Optional[str]:
+    """Conversation hard-scope cannot be honored by global memory tools (#4515)."""
+    scope = chat_scope_from_config(configurable)
+    if scope and scope.get("conversation_id"):
+        return (
+            "Error: Chat is scoped to a single conversation. "
+            "Use get_conversations_tool or search_conversations_tool for that conversation; "
+            "memory fact tools are unavailable while conversation scope is active."
+        )
+    return None
+
+
+def _parse_aware_iso(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError("naive datetime")
+    return dt
+
+
+def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime], end_dt: Optional[datetime]) -> bool:
+    if created_at is None:
+        return not (start_dt or end_dt)
+    if start_dt is not None and created_at < start_dt:
+        return False
+    if end_dt is not None and created_at > end_dt:
+        return False
+    return True
+
+
 @tool
 def get_memories_tool(
     limit: int = 50,
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve structured FACTS and PREFERENCES about the user (NOT events/incidents).
@@ -57,26 +105,15 @@ def get_memories_tool(
     - Questions like "when did X happen?", "what happened at Y?", "when did I get Z?"
 
     Memory retrieval guidance - choosing the right limit:
-    - **CRITICAL**: For ANY question asking about basic personal information (name, age, location, background, etc.) or multiple personal facts together, you MUST use limit=5000 to get ALL memories
-    - **For GENERAL COMPREHENSIVE questions, you MUST use limit=5000** to get ALL memories
-    - **For specific questions about a single narrow topic, you can use limit=50-200**
-    - Examples when you MUST use limit=5000:
-      * "what do you know about me"
-      * "tell me about myself"
-      * "what's my name, age, and location"
-      * "who am I"
-      * "what's my profile"
-      * "what's my age"
-      * "where do I live"
-      * "tell me everything"
-      * "what are all my interests"
-      * Any question asking for multiple personal facts together
-    - Examples when limit=50-200 is acceptable:
-      * "what conversations did I have about Python"
-      * "what do I know about machine learning"
-      * Questions about a specific narrow topic
-    - **Ask user for confirmation** before fetching 500+ memories for very broad analysis, as it may take longer
-    - **Maximum limit is 5000 per call** - use pagination (offset parameter) if more are needed
+    - For broad questions about the user ("what do you know about me", "tell me about myself",
+      "who am I", "what are all my interests"), use a high limit (e.g. 300) to get a comprehensive
+      set of facts.
+    - For specific questions about a single narrow topic ("what do I know about machine learning"),
+      use limit=50-200.
+    - For a very large memory bank the result is automatically capped to the most relevant memories
+      so it cannot overflow context; summarize what is returned and offer to narrow to a specific
+      topic if the user needs more.
+    - Use the offset parameter to page through additional memories when needed.
 
     Args:
         limit: Number of memories to retrieve (default: 50, recommended: 50-200, max per call: 5000)
@@ -92,22 +129,21 @@ def get_memories_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                logger.info(f"🔧 get_memories_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ get_memories_tool - config not found in context variable")
-            config = None
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info(f"🔧 get_memories_tool - got config from context variable")
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ get_memories_tool - config is None")
         return "Error: Configuration not available"
 
+    memories: List[MemoryDB] = []
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ get_memories_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -116,8 +152,13 @@ def get_memories_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
-    # Get safety guard from config if available
-    safety_guard = config['configurable'].get('safety_guard')
+    blocked = _memory_tools_blocked_by_chat_scope(configurable)
+    if blocked:
+        return blocked
+
+    start_date, end_date, scope_err = apply_chat_scope_dates(chat_scope_from_config(configurable), start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap at 5000 per call to prevent overloading context
     if limit > 5000:
@@ -148,23 +189,46 @@ def get_memories_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    # Get memories
-    memories = []
     try:
-        memories = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
+        service = MemoryService(db_client=firestore_db)
+        # Product/API reads retain a short locked preview for released clients,
+        # but chat context must never receive paid-plan locked content. Keep the
+        # privacy boundary at this LLM-facing consumer even though all rows now
+        # come through the universal MemoryService.
+        target_end = min(max(offset, 0) + limit, 5000)
+        scan_offset = 0
+        visible: List[MemoryDB] = []
+        max_scan = 5000
+        while scan_offset < max_scan and len(visible) < target_end:
+            batch_limit = min(500, max_scan - scan_offset)
+            fetch_limit = target_end if scan_offset == 0 else batch_limit
+            batch = service.read(uid, limit=fetch_limit, offset=scan_offset)
+            if not batch:
+                break
+            scan_offset += len(batch)
+            for memory in batch:
+                if memory.is_locked:
+                    continue
+                if not _memory_in_scope(memory.created_at, start_dt, end_dt):
+                    continue
+                visible.append(memory)
+            if len(batch) < fetch_limit:
+                break
+        memories = visible[max(offset, 0) : target_end]
     except Exception as e:
         logger.error(e)
 
-    # Filter out locked memories (paid plan required)
-    if memories:
-        memories = [m for m in memories if not m.get('is_locked', False)]
-
-    memories_count = len(memories) if memories else 0
-    logger.info(f"📊 get_memories_tool - found {memories_count} memories")
-
-    # Log warning if large number of memories retrieved
-    if memories_count >= 500:
-        logger.info(f"⚠️ Large number of memories retrieved ({memories_count}). Consider if all are needed.")
+    # Bound how many memories are formatted for the chat model so a broad question cannot flood
+    # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
+    # A full DB page (len >= limit) means more memories likely exist beyond it, so flag that too so
+    # the note is not silently dropped when the model requested a small limit (cubic on #8527).
+    db_page = memories or []
+    more_in_db = len(db_page) >= limit
+    memories, page_count, capped = cap_items_for_llm(db_page, MAX_MEMORIES_FOR_LLM)
+    results_truncated = capped or more_in_db
+    logger.info(
+        f"📊 get_memories_tool - page {page_count} memories, showing {len(memories)}, truncated={results_truncated}"
+    )
 
     if not memories:
         date_info = ""
@@ -179,30 +243,19 @@ def get_memories_tool(
         logger.info(f"⚠️ get_memories_tool - {msg}")
         return msg
 
-    # Convert dictionaries to MemoryDB objects for proper formatting
-    memory_objects = []
-    for memory_data in memories:
-        try:
-            memory_objects.append(MemoryDB(**memory_data))
-        except Exception as e:
-            logger.error(f"Error creating MemoryDB object: {e}")
-            continue
+    # Format memories using the Memory model's string formatter. Label the count as "shown" rather
+    # than "total": it is the displayed page, which may be a subset of all the user's memories.
+    result = f"User Memories ({len(memories)} shown):\n\n"
+    result += MemoryDB.get_memories_as_str(memories)
 
-    if not memory_objects:
-        return "Error: Could not parse memories data"
-
-    # Format memories using the Memory model's string formatter
-    result = f"User Memories ({len(memory_objects)} total):\n\n"
-    result += MemoryDB.get_memories_as_str(memory_objects)
-
-    return result.strip()
+    return bounded_result(result.strip(), results_truncated, noun="memories")
 
 
 @tool
 def search_memories_tool(
     query: str,
     limit: int = 5,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Search memories using semantic vector search to find relevant facts about the user.
@@ -235,22 +288,20 @@ def search_memories_tool(
     logger.info(f"🔧 search_memories_tool called with query: {query}")
 
     # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                logger.info(f"🔧 search_memories_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ search_memories_tool - config not found in context variable")
-            config = None
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info(f"🔧 search_memories_tool - got config from context variable")
 
-    if config is None:
+    if cfg is None:
         logger.info(f"❌ search_memories_tool - config is None")
         return "Error: Configuration not available"
 
     try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
+        configurable: Any = cfg.get('configurable')
+        uid = configurable.get('user_id')
+    except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ search_memories_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
@@ -259,15 +310,43 @@ def search_memories_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
 
+    blocked = _memory_tools_blocked_by_chat_scope(configurable)
+    if blocked:
+        return blocked
+
+    scope = chat_scope_from_config(configurable) or {}
+    _, _, scope_err = apply_chat_scope_dates(scope, None, None)
+    if scope_err:
+        return f"Error: {scope_err}"
+    try:
+        scope_start_dt = _parse_aware_iso(scope.get("start_date") if isinstance(scope.get("start_date"), str) else None)
+        scope_end_dt = _parse_aware_iso(scope.get("end_date") if isinstance(scope.get("end_date"), str) else None)
+    except ValueError as e:
+        return f"Error: chat_scope dates invalid ({e})"
+
     # Cap limit at 20
     limit = min(limit, 20)
 
+    # Memory dates go to the chat model; the UTC date rolls over at a different instant than
+    # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
     try:
-        # Perform vector search on memories (no threshold, just return top matches)
-        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        display_tz, _ = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"search_memories_tool - timezone lookup failed, formatting dates in UTC: {tz_error}")
+        display_tz = timezone.utc
 
-        logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
-
+    try:
+        if scope_start_dt or scope_end_dt:
+            matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit, candidate_limit=limit * 3)
+        else:
+            matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = [match for match in matches if not match.memory.is_locked]
+        if scope_start_dt or scope_end_dt:
+            matches = [
+                m
+                for m in matches
+                if _memory_in_scope(getattr(m.memory, "created_at", None), scope_start_dt, scope_end_dt)
+            ][:limit]
         if not matches:
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
@@ -275,42 +354,11 @@ def search_memories_tool(
             logger.info(f"⚠️ search_memories_tool - {msg}")
             return msg
 
-        memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
-        scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
-
-        if not memory_ids:
-            return f"Found matches but no valid memory IDs for query: '{query}'"
-
-        memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
-
-        # Filter out locked memories (paid plan required)
-        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
-
-        if not memories_data:
-            return f"No memories found matching '{query}'. The content may require a paid plan to access."
-
-        # Convert to MemoryDB objects with scores
-        memory_objects = []
-        for memory_data in memories_data:
-            try:
-                memory_obj = MemoryDB(**memory_data)
-                score = scores_by_id.get(memory_data.get('id'), 0)
-                memory_objects.append({'memory': memory_obj, 'score': score})
-            except Exception as e:
-                logger.error(f"Error creating MemoryDB object: {e}")
-                continue
-
-        if not memory_objects:
-            return f"Found matches but could not retrieve memory details for query: '{query}'"
-
-        logger.info(f"🔍 search_memories_tool - Loaded {len(memory_objects)} full memories")
-
-        # Format results with relevance scores
-        result = f"Found {len(memory_objects)} memories matching '{query}':\n\n"
-        for item in memory_objects:
-            memory = item['memory']
-            score = item['score']
-            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        for match in matches:
+            memory = match.memory
+            score = match.score
+            date_str = format_local_date(memory.created_at, display_tz) if memory.created_at else 'Unknown'
             result += (
                 f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
             )

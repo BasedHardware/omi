@@ -10,29 +10,212 @@ import os
 import struct
 import sys
 import wave
+from types import ModuleType
 
 import numpy as np
 import pytest
 
 # Mock modules that initialize GCP clients at import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"Unsupported test cdist metric: {metric}")
+
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    numerator = a @ b.T
+    denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        similarity = numerator / denominator
+    return 1.0 - similarity
+
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("utils.other.storage", MagicMock())
-sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
-
-from utils.audio import AudioRingBuffer
-from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
-from utils.stt.speaker_embedding import (
-    compare_embeddings,
-    is_same_speaker,
-    find_best_match,
-    SPEAKER_MATCH_THRESHOLD,
-    _get_wav_duration,
+_RESTORED_MODULES = (
+    "database._client",
+    "database.conversations",
+    "database.users",
+    "av",
+    "utils.audio",
+    "utils.http_client",
+    "utils.other",
+    "utils.other.storage",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.speaker_sample_migration",
+    "utils.stt",
+    "utils.stt.speaker_embedding",
+    "utils.stt.pre_recorded",
+    "scipy",
+    "scipy.spatial",
+    "scipy.spatial.distance",
 )
+_PARENT_ATTRS = (
+    ("database", "_client"),
+    ("database", "conversations"),
+    ("database", "users"),
+    ("utils", "audio"),
+    ("utils", "http_client"),
+    ("utils", "other"),
+    ("utils.other", "storage"),
+    ("utils", "speaker_identification"),
+    ("utils", "speaker_sample"),
+    ("utils", "speaker_sample_migration"),
+    ("utils", "stt"),
+    ("utils.stt", "speaker_embedding"),
+    ("utils.stt", "pre_recorded"),
+    ("scipy", "spatial"),
+    ("scipy.spatial", "distance"),
+)
+_MISSING = object()
+_NOT_IMPORTED = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_saved_parent_attrs = {
+    (parent_name, attr): getattr(sys.modules.get(parent_name), attr, _MISSING) for parent_name, attr in _PARENT_ATTRS
+}
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+def _drop_module_and_parent_attr(name):
+    current = sys.modules.pop(name, _MISSING)
+    if "." not in name:
+        return
+
+    parent_name, attr = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is None:
+        return
+
+    if current is _MISSING:
+        if hasattr(parent, attr):
+            delattr(parent, attr)
+    elif getattr(parent, attr, _MISSING) is current:
+        delattr(parent, attr)
+
+
+def _restore_parent_attr(parent, attr, original, current):
+    if original is _MISSING:
+        if current is not _NOT_IMPORTED and getattr(parent, attr, _MISSING) is current:
+            delattr(parent, attr)
+    else:
+        setattr(parent, attr, original)
+
+
+def _restore_stub_modules():
+    current_modules = {name: sys.modules.get(name, _NOT_IMPORTED) for name in _RESTORED_MODULES}
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+    for (parent_name, attr), original in _saved_parent_attrs.items():
+        parent = sys.modules.get(parent_name)
+        if parent is None:
+            continue
+        child_name = f"{parent_name}.{attr}"
+        _restore_parent_attr(parent, attr, original, current_modules.get(child_name, _NOT_IMPORTED))
+
+
+for _real_import in (
+    "utils.audio",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.stt.speaker_embedding",
+):
+    _drop_module_and_parent_attr(_real_import)
+
+_install_module("database._client", MagicMock())
+_conversations_mod = ModuleType("database.conversations")
+_conversations_mod.get_conversation = MagicMock(return_value=None)
+_install_module("database.conversations", _conversations_mod)
+
+_users_mod = ModuleType("database.users")
+_users_mod.get_person = MagicMock(return_value=None)
+_users_mod.get_person_speech_samples_count = MagicMock(return_value=0)
+_users_mod.add_person_speech_sample = MagicMock(return_value=True)
+_users_mod.set_person_speaker_embedding = MagicMock(return_value=None)
+_install_module("database.users", _users_mod)
+
+_http_client_mod = ModuleType("utils.http_client")
+_http_client_mod.get_stt_client = MagicMock()
+_install_module("utils.http_client", _http_client_mod)
+
+_av_mod = ModuleType("av")
+
+
+def _av_open(*args, **kwargs):
+    raise RuntimeError("av is not installed; this test module only covers helpers that do not decode audio")
+
+
+_av_mod.open = _av_open
+_install_module("av", _av_mod)
+
+_storage_mod = ModuleType("utils.other.storage")
+for _name in [
+    "delete_speech_profile_blob",
+    "download_audio_chunks_and_merge",
+    "download_speech_profile_bytes",
+    "list_audio_chunks",
+    "upload_person_speech_sample_from_bytes",
+]:
+    setattr(_storage_mod, _name, MagicMock())
+_install_module("utils.other.storage", _storage_mod)
+
+_migration_mod = ModuleType("utils.speaker_sample_migration")
+_migration_mod.maybe_migrate_person_samples = AsyncMock(side_effect=lambda _uid, person: person)
+_install_module("utils.speaker_sample_migration", _migration_mod)
+
+_install_module("utils.stt.pre_recorded", MagicMock())
+try:
+    from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
+except ImportError:
+    scipy_mod = ModuleType("scipy")
+    spatial_mod = ModuleType("scipy.spatial")
+    distance_mod = ModuleType("scipy.spatial.distance")
+    distance_mod.cdist = _cosine_cdist
+    scipy_mod.spatial = spatial_mod
+    spatial_mod.distance = distance_mod
+    _install_module("scipy", scipy_mod)
+    _install_module("scipy.spatial", spatial_mod)
+    _install_module("scipy.spatial.distance", distance_mod)
+
+try:
+    from utils.audio import AudioRingBuffer
+    from utils.speaker_identification import (
+        detect_speaker_from_text,
+        SPEAKER_IDENTIFICATION_PATTERNS,
+        _pcm_to_wav_bytes,
+    )
+    from utils.stt.speaker_embedding import (
+        compare_embeddings,
+        SPEAKER_MATCH_THRESHOLD,
+        _get_wav_duration,
+    )
+    from utils.stt.speaker_match import select_speaker_match
+finally:
+    _restore_stub_modules()
 
 # ─── AudioRingBuffer ─────────────────────────────────────────────────────────
+
+
+class TestImportStubCleanup:
+    def test_restore_parent_attr_ignores_missing_child_and_absent_attr(self):
+        parent = ModuleType("parent")
+        _restore_parent_attr(parent, "child", _MISSING, _NOT_IMPORTED)
+        assert not hasattr(parent, "child")
 
 
 class TestAudioRingBuffer:
@@ -205,9 +388,27 @@ class TestDetectSpeakerFromText:
         ('fr', "Je m'appelle Sophie", "Sophie"),
         ('de', "Ich bin Hans", "Hans"),
         ('de', "Mein Name ist Klaus", "Klaus"),
-        ('zh', "我是李明", None),  # Chinese names — detect_speaker_from_text returns capitalized
-        ('ja', "私は田中", None),  # Japanese — same pattern
-        ('ko', "저는 김철수", None),  # Korean
+        ('zh', "我是李明", "李明"),
+        ('zh', "我叫王芳", "王芳"),
+        ('zh', "我的名字是张伟", "张伟"),
+        ('ja', "私は田中", "田中"),
+        ('ja', "私は田中です", "田中"),
+        ('ja', "私の名前は佐藤です", "佐藤"),
+        ('ja', "私の名前は渡辺", "渡辺"),
+        ('ja', "私は田中と申します", "田中"),
+        ('ja', "私は山田太郎です", "山田太郎"),
+        ('ja', "私は田中。", "田中"),
+        ('ja', "私は田中！", "田中"),
+        ('ja', "私は田中？", "田中"),
+        ('ja', "私は田中、元気です", "田中"),
+        ('ja', "私の名前は今日子です", "今日子"),
+        ('ja', "私は明日香です", "明日香"),
+        ('ja', "私は今井です", "今井"),
+        ('ja', "私は中村です", "中村"),
+        ('ja', "私は小林です", "小林"),
+        ('ko', "저는 김철수", "김철수"),
+        ('ko', "저는 김철수입니다", "김철수"),
+        ('ko', "제 이름은 이영희입니다", "이영희"),
         ('ru', "Меня зовут Иван", "Иван"),
         ('pt', "Eu sou Pedro", "Pedro"),
         ('it', "Mi chiamo Marco", "Marco"),
@@ -241,6 +442,48 @@ class TestDetectSpeakerFromText:
         "a",  # Too short for name match
         "i am",  # No name follows (lowercase)
         "I am",  # No name follows
+        # Japanese ordinary sentences (#12900 reproduction cases):
+        "私はそう思います",
+        "私は行きます",
+        "私はちょっと疲れました",
+        "私はコーヒーが好きです",
+        "わたしはお腹すいた",
+        "私は学生です",
+        "私は日本人です",
+        "私は大丈夫です",
+        "私は会社員です",
+        "私は大学生です",
+        "私は高校生です",
+        "私は公務員です",
+        "私の名前は会社員です",
+        "私はそう思う",
+        "私は行きます。",
+        # Chinese ordinary sentences:
+        "我是中国人",
+        "我是学生",
+        "我是你的朋友",
+        "我是觉得不行",
+        "我是真的不知道",
+        "我们的这个",
+        "我是谁",
+        "我是你",
+        # Korean ordinary sentences:
+        "저는 학생입니다",
+        "저는 생각합니다",
+        "저는 갑니다",
+        "저는 한국인입니다",
+    ]
+
+    # Run-on / garbled transcripts where the regex captures a pronoun or filler
+    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223).
+    STOPWORD_CASES = [
+        "And I am It was great",
+        "I'm You know, the guy",
+        "Yeah, I'm Them and the others",
+        "My name is It",
+        "I am Sorry about that",
+        "I'm Just saying",
+        "i am Gonna do it",
     ]
 
     @pytest.mark.parametrize("lang,text,expected_name", POSITIVE_CASES)
@@ -261,6 +504,26 @@ class TestDetectSpeakerFromText:
         """Non-introduction text returns None."""
         result = detect_speaker_from_text(text)
         assert result is None, f"False positive on: {text!r}"
+
+    @pytest.mark.parametrize("text", STOPWORD_CASES)
+    def test_pronoun_stopwords_rejected(self, text):
+        """Pronouns/fillers captured by the intro patterns are not returned as names."""
+        result = detect_speaker_from_text(text)
+        assert result is None, f"Stopword leaked as speaker name: {text!r} -> {result}"
+
+    def test_real_name_after_stopword_guard(self):
+        """Genuine introductions still detect after the stopword guard."""
+        assert detect_speaker_from_text("I am John") == "John"
+        assert detect_speaker_from_text("My name is Alice") == "Alice"
+
+    def test_language_hint_prioritization_and_fallback(self):
+        """Language hint prioritizes given language but preserves multi-language fallback."""
+        # Prioritizes given language:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="ja") == "佐藤"
+        # Falls back to other languages when hint does not match:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="fr") == "佐藤"
+        assert detect_speaker_from_text("My name is Alice", language="ja") == "Alice"
+        assert detect_speaker_from_text("Me llamo Carlos", language="ja") == "Carlos"
 
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""
@@ -297,7 +560,7 @@ class TestDetectSpeakerFromText:
 
 
 class TestSpeakerEmbeddingMath:
-    """Tests for cosine distance, matching, and best-match selection."""
+    """Tests for cosine distance and the shared match decision."""
 
     def _random_embedding(self, dim=512, seed=None):
         """Generate a random unit-normalized embedding."""
@@ -322,6 +585,12 @@ class TestSpeakerEmbeddingMath:
         distance = compare_embeddings(a, b)
         assert distance == pytest.approx(1.0, abs=1e-6)
 
+    def test_compare_zero_vector_distance_nan(self):
+        """Zero-norm inputs match scipy cosine behavior."""
+        zero = np.zeros((1, 512), dtype=np.float32)
+        emb = self._random_embedding(seed=42)
+        assert np.isnan(compare_embeddings(zero, emb))
+
     def test_compare_opposite_vectors_distance_two(self):
         """Opposite vectors → cosine distance 2."""
         emb = self._random_embedding(seed=42)
@@ -345,100 +614,20 @@ class TestSpeakerEmbeddingMath:
         b = self._random_embedding(seed=2)
         assert compare_embeddings(a, b) == pytest.approx(compare_embeddings(b, a), abs=1e-7)
 
-    def test_is_same_speaker_true_below_threshold(self):
-        """Match returns True when distance is below threshold."""
-        emb = self._random_embedding(seed=42)
-        noise = np.random.RandomState(99).randn(1, 512).astype(np.float32) * 0.01
-        similar = emb + noise
-        similar /= np.linalg.norm(similar)
+    def test_threshold_is_the_bench_operating_point(self):
+        """0.65 came from the offline bench on real enrollments (see speaker_match.py)."""
+        assert SPEAKER_MATCH_THRESHOLD == 0.65
 
-        is_match, distance = is_same_speaker(emb, similar)
-        assert is_match is True
-        assert distance < SPEAKER_MATCH_THRESHOLD
-
-    def test_is_same_speaker_false_above_threshold(self):
-        """Match returns False when distance is above threshold."""
-        a = self._random_embedding(seed=1)
-        b = self._random_embedding(seed=2)
-
-        is_match, distance = is_same_speaker(a, b)
-        # Random 512-d vectors typically have distance ~1.0
-        assert is_match is False
-        assert distance >= SPEAKER_MATCH_THRESHOLD
-
-    def test_is_same_speaker_exact_threshold_boundary(self):
-        """Distance exactly at threshold returns False (strict < comparison)."""
-        # is_same_speaker uses distance < threshold, so equality means no match
-        emb = self._random_embedding(seed=42)
-        # Use distance=0.0 (identical), threshold=0.0 → 0 < 0 is False
-        is_match, distance = is_same_speaker(emb, emb, threshold=0.0)
-        assert distance == pytest.approx(0.0, abs=1e-6)
-        assert is_match is False  # strict <, not <=
-
-    def test_is_same_speaker_custom_threshold(self):
-        """Custom threshold is respected."""
-        emb = self._random_embedding(seed=42)
-        is_match, _ = is_same_speaker(emb, emb, threshold=0.0001)
-        assert is_match is True  # identical
-
-        a = self._random_embedding(seed=1)
-        b = self._random_embedding(seed=2)
-        is_match, _ = is_same_speaker(a, b, threshold=999.0)
-        assert is_match is True  # huge threshold accepts everything
-
-    def test_find_best_match_returns_lowest_distance(self):
-        """find_best_match selects the candidate with minimum distance."""
+    def test_select_speaker_match_prefers_nearest_candidate(self):
         query = self._random_embedding(seed=42)
-
-        # Create 3 candidates: one identical, two random
-        candidates = [
-            self._random_embedding(seed=1),  # random
-            query.copy(),  # identical — should be best match
-            self._random_embedding(seed=2),  # random
-        ]
-
-        result = find_best_match(query, candidates)
-        assert result is not None
-        best_idx, best_distance = result
-        assert best_idx == 1  # the identical copy
-        assert best_distance == pytest.approx(0.0, abs=1e-6)
-
-    def test_find_best_match_none_when_all_above_threshold(self):
-        """Returns None when no candidate is within threshold."""
-        query = self._random_embedding(seed=42)
-        candidates = [self._random_embedding(seed=i) for i in range(5)]
-
-        result = find_best_match(query, candidates, threshold=0.001)
-        assert result is None  # random vectors won't be that close
-
-    def test_find_best_match_empty_candidates(self):
-        """Returns None for empty candidate list."""
-        query = self._random_embedding(seed=42)
-        result = find_best_match(query, [])
-        assert result is None
-
-    def test_find_best_match_single_candidate_within_threshold(self):
-        """Single candidate within threshold is returned."""
-        query = self._random_embedding(seed=42)
-        result = find_best_match(query, [query.copy()])
-        assert result is not None
-        assert result[0] == 0
-        assert result[1] == pytest.approx(0.0, abs=1e-6)
-
-    def test_find_best_match_tie_breaks_deterministically(self):
-        """When multiple candidates have same distance, first one wins."""
-        query = self._random_embedding(seed=42)
-        # Two identical copies
-        candidates = [query.copy(), query.copy()]
-        result = find_best_match(query, candidates)
-        assert result is not None
-        # Implementation iterates in order, updates only on strict <
-        # So first candidate (idx 0) wins on tie
-        assert result[0] == 0
-
-    def test_threshold_default_is_045(self):
-        """Verify the SPEAKER_MATCH_THRESHOLD constant."""
-        assert SPEAKER_MATCH_THRESHOLD == 0.45
+        distances = {
+            'random-a': compare_embeddings(query, self._random_embedding(seed=1)),
+            'same': compare_embeddings(query, query.copy()),
+            'random-b': compare_embeddings(query, self._random_embedding(seed=2)),
+        }
+        decision = select_speaker_match(distances)
+        assert decision.person_id == 'same'
+        assert decision.best_distance == pytest.approx(0.0, abs=1e-6)
 
 
 # ─── PCM-to-WAV Conversion ──────────────────────────────────────────────────
@@ -633,24 +822,6 @@ class TestEmbeddingShapes:
         distance = compare_embeddings(a, b)
         assert isinstance(distance, float)
         assert 0.0 <= distance <= 2.0
-
-    def test_find_best_match_with_different_dimensions(self):
-        """find_best_match works with various embedding dimensions."""
-        for dim in [128, 256, 512, 1024]:
-            query = np.random.randn(1, dim).astype(np.float32)
-            candidates = [np.random.randn(1, dim).astype(np.float32) for _ in range(3)]
-            # Should not crash regardless of dimension
-            result = find_best_match(query, candidates, threshold=2.0)
-            assert result is not None
-
-    def test_is_same_speaker_returns_tuple(self):
-        """is_same_speaker returns (bool, float) tuple."""
-        a = np.random.randn(1, 512).astype(np.float32)
-        result = is_same_speaker(a, a)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], bool)
-        assert isinstance(result[1], float)
 
 
 # ─── User Embedding Cache Integration ─────────────────────────────────────────

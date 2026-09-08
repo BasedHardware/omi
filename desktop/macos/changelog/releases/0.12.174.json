@@ -1,0 +1,22 @@
+{
+  "version": "0.12.174",
+  "date": "2026-08-15",
+  "changes": [
+    "Chat can now save a remembered fact in your own words instead of copying the exact phrase you typed",
+    "Tasks you delete now show up under “Removed by me” instead of “Removed by AI”, and Omi stops re-suggesting them",
+    "Desktop Beta now ships from the hourly signed-candidate train without a separate qualification wait.",
+    "Conversation detail and meeting-notes chat cards can copy a public share link, with confirmation that anyone with the link can view",
+    "Proactive notifications no longer go quiet after a busy day: silent background evaluations stopped counting against the daily notification budget",
+    "Omi responds faster on work you keep returning to and can follow up right after you switch away",
+    "Notifications now say times in your local time zone instead of UTC",
+    "Proactive answers now arrive even if you switch away while Omi is still thinking",
+    "Improved proactive notifications on detail questions: the context director's lookup now also searches verbatim transcript excerpts with dates, not just conversation summaries",
+    "Fixed glass panels losing their rounded-corner clipping",
+    "When meeting notes finish processing, a notification now recommends your open action items from the meeting and clicking it takes you to the conversation",
+    "Notification settings now keep syncing in the background after a failed save, so the toggle you see stays aligned with the server",
+    "Fixed a crash when granting Screen Recording for the first time during onboarding",
+    "Omi Beta is a separate app you install beside Omi. Switching an update channel no longer turns this app into a beta build",
+    "Fixed the same due-task nudge being delivered repeatedly in quick succession at Maximum notification frequency",
+    "Screen task capture no longer retries permanently rejected sync payloads forever; unusable duplicate-task references now fall back to a new suggestion instead of failing delivery"
+  ]
+}

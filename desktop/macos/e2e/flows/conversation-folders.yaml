@@ -1,0 +1,69 @@
+version: 2
+name: conversation-folders
+tier: 2
+description: Hermetic conversation folders + starring via extended list snapshot and folder actions
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Components/FolderManagementViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S2
+    name: Baseline conversation list snapshot
+    bridge.action:
+      name: conversation_list_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Create hermetic test folder
+    bridge.action:
+      name: create_test_folder
+      params:
+        name: "[[MARKER:conversation-folders]] harness folder"
+    expect:
+      result.detail.created: "true"
+
+  - id: S4
+    name: Create hermetic capture conversation
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: lifecycle
+        text: "[[MARKER:conversation-folders]] hermetic folder star"
+    expect:
+      result.detail.stopped: "true"
+
+  - id: S5
+    name: Star latest conversation
+    bridge.action:
+      name: set_conversation_starred
+      params:
+        conversationId: latest
+        starred: "true"
+    expect:
+      result.detail.starred: "true"
+
+  - id: S6
+    name: Conversation list snapshot with folder fields
+    bridge.action:
+      name: conversation_list_snapshot
+    expect:
+      ok: true
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

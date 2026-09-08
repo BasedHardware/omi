@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "policy_version": "association.v1",
+  "cases": [
+    {
+      "id": "intent_match",
+      "evidence": {"summary": "Sarah changed the pricing objection for the investor email.", "evidence_refs": [{"kind": "conversation", "id": "conv-1", "scope": "canonical"}]},
+      "candidate_workstreams": [{"workstream_id": "investor_outreach_sarah", "objective": "Send Sarah a current investor note", "current_state_summary": "Draft based on old pricing context"}],
+      "recorded_judgment": {"workstream_id": "investor_outreach_sarah", "material": true}
+    },
+    {
+      "id": "entity_only",
+      "evidence": {"summary": "Sarah joined us for dinner.", "evidence_refs": [{"kind": "conversation", "id": "conv-2", "scope": "canonical"}]},
+      "candidate_workstreams": [{"workstream_id": "investor_outreach_sarah", "objective": "Send Sarah a current investor note", "current_state_summary": "Waiting on pricing response"}],
+      "recorded_judgment": {"workstream_id": null, "material": false}
+    },
+    {
+      "id": "immaterial_repeat",
+      "evidence": {"summary": "The investor email tab was opened again.", "evidence_refs": [{"kind": "local_screen", "id": "screen-1", "scope": "device_local", "device_id": "device-1"}]},
+      "candidate_workstreams": [{"workstream_id": "investor_outreach_sarah", "objective": "Send Sarah a current investor note", "current_state_summary": "Draft awaiting review"}],
+      "recorded_judgment": {"workstream_id": "investor_outreach_sarah", "material": false}
+    }
+  ]
+}

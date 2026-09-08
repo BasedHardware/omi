@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -17,9 +17,11 @@ import {
   Volume2,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
@@ -28,9 +30,33 @@ import { EditableTitle } from './EditableTitle';
 import { SpeakerTagSheet } from './SpeakerTagSheet';
 import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
+import { ConversationScreenFrameBanner } from './ConversationScreenFrameBanner';
+import { ConversationScreenFrameCarousel } from './ConversationScreenFrameCarousel';
+import { ScreenFrameLightbox } from './ScreenFrameLightbox';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { usePeople } from '@/hooks/usePeople';
-import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
-import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile, Geolocation } from '@/types/conversation';
+import { useScreenFrames } from '@/hooks/useScreenFrames';
+import {
+  BANNER_LIGHTBOX_INDEX,
+  buildLightboxFrames,
+  resolveIndexAfterRemoval,
+  stripFrameLightboxIndex,
+} from '@/lib/screenFrames';
+import {
+  precacheConversationAudio,
+  getConversationAudioUrls,
+  updateSegmentText,
+  reprocessConversation,
+} from '@/lib/api';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import type {
+  Conversation,
+  AppResponse,
+  TranscriptSegment,
+  AudioFileUrlInfo,
+  Geolocation,
+  StructuredActionItem,
+} from '@/types/conversation';
 
 // Dynamic import for Leaflet map (SSR not supported)
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
@@ -51,6 +77,10 @@ interface ConversationDetailPanelProps {
   onConversationUpdate?: (conversation: Conversation) => void;
   onDelete?: () => void;
 }
+
+// Give a reprocess this long before we stop waiting and surface a failure, so a
+// hung request can't leave the UI stuck on "Reprocessing…" indefinitely.
+const REPROCESS_TIMEOUT_MS = 90_000;
 
 type TabId = 'summary' | 'actions' | 'transcript';
 
@@ -89,22 +119,20 @@ function calculateDuration(start: string | null, end: string | null): number {
 /**
  * Action item component
  */
-function ActionItemRow({ item }: { item: ActionItem }) {
+function ActionItemRow({ item }: { item: StructuredActionItem }) {
   return (
     <div
       className={cn(
         'flex items-start gap-3 p-4 rounded-xl',
         'bg-bg-tertiary border border-bg-quaternary/50',
-        item.completed && 'opacity-60'
+        item.completed && 'opacity-60',
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-md border-2 flex-shrink-0 mt-0.5',
           'flex items-center justify-center',
-          item.completed
-            ? 'bg-success border-success'
-            : 'border-text-quaternary'
+          item.completed ? 'bg-success border-success' : 'border-text-quaternary',
         )}
       >
         {item.completed && (
@@ -121,7 +149,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
         <span
           className={cn(
             'text-text-primary',
-            item.completed && 'line-through text-text-tertiary'
+            item.completed && 'line-through text-text-tertiary',
           )}
         >
           {item.description}
@@ -132,6 +160,17 @@ function ActionItemRow({ item }: { item: ActionItem }) {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+const OVERVIEW_MARKDOWN_CLASS =
+  'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
+
+function OverviewMarkdown({ overview }: { overview: string }) {
+  return (
+    <div className={OVERVIEW_MARKDOWN_CLASS}>
+      <ReactMarkdown>{overview}</ReactMarkdown>
     </div>
   );
 }
@@ -149,7 +188,7 @@ interface SummaryTabProps {
   geolocation?: Geolocation | null;
 }
 
-function SummaryTab({
+export function SummaryTab({
   overview,
   category,
   conversationId,
@@ -200,20 +239,22 @@ function SummaryTab({
                 ref={textRef}
                 className={cn(
                   'transition-all duration-300',
-                  !isExpanded && needsTruncation && 'overflow-hidden'
+                  !isExpanded && needsTruncation && 'overflow-hidden',
                 )}
-                style={!isExpanded && needsTruncation && mapHeight > 0 ? { maxHeight: mapHeight - 56 } : undefined}
+                style={
+                  !isExpanded && needsTruncation && mapHeight > 0
+                    ? { maxHeight: mapHeight - 56 }
+                    : undefined
+                }
               >
                 {category && (
                   <div className="mb-3">
-                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                       {category}
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">
-                  {overview}
-                </p>
+                <OverviewMarkdown overview={overview} />
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -224,13 +265,16 @@ function SummaryTab({
 
               {/* Gradient fade and Show more button */}
               {needsTruncation && (
-                <div className={cn(
-                  'mt-2',
-                  !isExpanded && 'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent'
-                )}>
+                <div
+                  className={cn(
+                    'mt-2',
+                    !isExpanded &&
+                      'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent',
+                  )}
+                >
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                    className="flex items-center gap-1 text-sm text-text-primary hover:text-text-secondary transition-colors"
                   >
                     {isExpanded ? (
                       <>
@@ -263,14 +307,12 @@ function SummaryTab({
         <div>
           {category && (
             <div className="mb-3">
-              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-white/[0.08] text-text-primary capitalize">
                 {category}
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">
-            {overview}
-          </p>
+          <OverviewMarkdown overview={overview} />
         </div>
       )}
 
@@ -279,7 +321,7 @@ function SummaryTab({
         {/* Section Header with Generate Button */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <Sparkles className="w-4 h-4 text-text-primary" />
             <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
           <GenerateSummaryButton
@@ -305,7 +347,8 @@ function SummaryTab({
         {/* Empty state for templates */}
         {!hasAppSummaries && (
           <p className="text-sm text-text-tertiary mt-2">
-            No summaries yet. Click Templates above to generate one or create a custom template.
+            No summaries yet. Click Templates above to generate one or create a custom
+            template.
           </p>
         )}
       </div>
@@ -316,8 +359,8 @@ function SummaryTab({
 /**
  * Action items tab content
  */
-function ActionItemsTab({ items }: { items: ActionItem[] }) {
-  const completedCount = items.filter(i => i.completed).length;
+function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
+  const completedCount = items.filter((i) => i.completed).length;
 
   return (
     <div className="space-y-4">
@@ -394,14 +437,137 @@ export function ConversationDetailPanel({
   const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
   const [showManagePeople, setShowManagePeople] = useState(false);
+  // Whether a transcript segment was edited this session (derived summary/search
+  // is now stale until the conversation is reprocessed — see the nudge banner).
+  const [transcriptEdited, setTranscriptEdited] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  // Set when a reprocess errors or times out, so the failure is surfaced to the
+  // user (not just console) and they can retry — the summary stays stale.
+  const [reprocessFailed, setReprocessFailed] = useState(false);
+  // Serialized transcript-edit save queue. Segment edits are persisted one at a
+  // time so concurrent PATCHes can't lose-update the backend's read-modify-write
+  // of the whole segments array (each save reads the state left by the previous
+  // one). `saveBatch` drives the "Saving X of N" progress UI.
+  const saveQueueRef = useRef<
+    Array<{ segmentId: string; text: string; prevText: string }>
+  >([]);
+  const processingRef = useRef(false);
+  const [saveBatch, setSaveBatch] = useState<{
+    total: number;
+    done: number;
+    savingId: string | null;
+    failed: number;
+  }>({ total: 0, done: 0, savingId: null, failed: 0 });
   const router = useRouter();
   const { people } = usePeople();
+
+  // Meeting-note screenshots: banner + carousel + lightbox state.
+  const screenFrames = useScreenFrames(conversationId);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [pendingFrameDelete, setPendingFrameDelete] = useState<
+    { kind: 'frame'; frameId: string } | { kind: 'all' } | null
+  >(null);
+  const [deletingFrameId, setDeletingFrameId] = useState<string | null>(null);
+  const [deletingAllFrames, setDeletingAllFrames] = useState(false);
+
+  // The lightbox steps through the banner (if any) plus the strip, in that
+  // order, as one list — see `@/lib/screenFrames` for why the banner isn't a
+  // disjoint sequence from the strip.
+  const lightboxFrames = buildLightboxFrames(screenFrames.frameSet);
+
+  // If that combined list shrinks (a delete just landed) while the lightbox
+  // is open, clamp its index into the new bounds or close it if nothing is
+  // left. Never guess *which* frame that lands on beyond clamping — see
+  // `@/lib/screenFrames` for why banner/strip promotion stays server-owned.
+  useEffect(() => {
+    const newLength = lightboxFrames.length;
+    setLightboxIndex((current) =>
+      current === null ? null : resolveIndexAfterRemoval(current, newLength),
+    );
+  }, [lightboxFrames.length]);
+
+  const openScreenFrameLightboxForStripIndex = useCallback(
+    (stripIndex: number) => {
+      setLightboxIndex(stripFrameLightboxIndex(screenFrames.frameSet, stripIndex));
+    },
+    [screenFrames.frameSet],
+  );
+
+  const openScreenFrameLightboxForBanner = useCallback(() => {
+    setLightboxIndex(BANNER_LIGHTBOX_INDEX);
+  }, []);
+
+  const closeScreenFrameLightbox = useCallback(() => {
+    setLightboxIndex(null);
+  }, []);
+
+  const requestDeleteScreenFrame = useCallback((frameId: string) => {
+    setPendingFrameDelete({ kind: 'frame', frameId });
+  }, []);
+
+  const requestDeleteAllScreenFrames = useCallback(() => {
+    setPendingFrameDelete({ kind: 'all' });
+  }, []);
+
+  const confirmPendingFrameDelete = useCallback(async () => {
+    const pending = pendingFrameDelete;
+    if (!pending) return;
+    setPendingFrameDelete(null);
+
+    if (pending.kind === 'frame') {
+      setDeletingFrameId(pending.frameId);
+      try {
+        await screenFrames.deleteFrame(pending.frameId);
+      } finally {
+        setDeletingFrameId(null);
+      }
+    } else {
+      setDeletingAllFrames(true);
+      try {
+        await screenFrames.deleteAll();
+        setLightboxIndex(null);
+      } finally {
+        setDeletingAllFrames(false);
+      }
+    }
+  }, [pendingFrameDelete, screenFrames]);
+
+  // Refs holding the *currently displayed* conversation id and object, so async
+  // completions (segment saves, reprocess) can (a) build optimistic updates from
+  // the latest state and (b) bail out if the user switched conversations while a
+  // request was in flight — otherwise a stale response would clobber the new
+  // conversation's UI (displayed id vs. request id divergence).
+  const convIdRef = useRef(conversationId);
+  const conversationRef = useRef(conversation);
+  useEffect(() => {
+    convIdRef.current = conversationId;
+    conversationRef.current = conversation;
+  }, [conversationId, conversation]);
+
+  // Reset all edit/save state when switching to a different conversation so
+  // nothing leaks across (queued saves, progress, "edited" nudge, reprocessing).
+  useEffect(() => {
+    saveQueueRef.current = [];
+    processingRef.current = false;
+    setSaveBatch({ total: 0, done: 0, savingId: null, failed: 0 });
+    setTranscriptEdited(false);
+    setIsReprocessing(false);
+    setReprocessFailed(false);
+    setLightboxIndex(null);
+    setPendingFrameDelete(null);
+    setDeletingFrameId(null);
+    setDeletingAllFrames(false);
+  }, [conversationId]);
+
+  const isSavingSegments = saveBatch.total > saveBatch.done;
 
   // Audio state
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const [audioAvailable, setAudioAvailable] = useState(false);
-  const [fetchedAudioFiles, setFetchedAudioFiles] = useState<AudioFile[]>([]);
-  const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number | undefined>(undefined);
+  const [fetchedAudioFiles, setFetchedAudioFiles] = useState<AudioFileUrlInfo[]>([]);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number | undefined>(
+    undefined,
+  );
 
   // Check audio availability for the conversation
   const audio_files = conversation?.audio_files || [];
@@ -415,10 +581,11 @@ export function ConversationDetailPanel({
     async function checkAudioAvailability() {
       // Helper to map audio URLs to AudioFile format
       const mapAudioUrls = (urls: Awaited<ReturnType<typeof getConversationAudioUrls>>) =>
-        urls.map(af => ({
+        urls.map((af) => ({
           id: af.id,
           duration: af.duration || 0,
           signed_url: af.signed_url,
+          status: af.status,
         }));
 
       // If audio_files array has data, audio is available
@@ -453,7 +620,7 @@ export function ConversationDetailPanel({
       for (let attempt = 0; attempt < 3; attempt++) {
         if (signal.aborted) return;
         if (attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
         const audioUrls = await getConversationAudioUrls(conversationId, signal);
@@ -488,42 +655,166 @@ export function ConversationDetailPanel({
   }, []);
 
   // Handle segment updates from transcript editing
-  const handleSegmentsUpdate = useCallback((
-    segmentIds: string[],
-    personId: string | null,
-    isUser: boolean
-  ) => {
-    if (!conversation || !onConversationUpdate) return;
+  const handleSegmentsUpdate = useCallback(
+    (segmentIds: string[], personId: string | null, isUser: boolean) => {
+      if (!conversation || !onConversationUpdate) return;
 
-    const updatedSegments = conversation.transcript_segments.map((seg) => {
-      if (seg.id && segmentIds.includes(seg.id)) {
-        return {
-          ...seg,
-          is_user: isUser,
-          person_id: isUser ? null : personId,
-        };
-      }
-      return seg;
-    });
+      const updatedSegments = (conversation.transcript_segments ?? []).map((seg) => {
+        if (seg.id && segmentIds.includes(seg.id)) {
+          return {
+            ...seg,
+            is_user: isUser,
+            person_id: isUser ? null : personId,
+          };
+        }
+        return seg;
+      });
 
-    onConversationUpdate({
-      ...conversation,
-      transcript_segments: updatedSegments,
-    });
-  }, [conversation, onConversationUpdate]);
-
-  // Handle title change - update conversation with new title
-  const handleTitleChange = useCallback((newTitle: string) => {
-    if (conversation && onConversationUpdate) {
       onConversationUpdate({
         ...conversation,
-        structured: {
-          ...conversation.structured,
-          title: newTitle,
-        },
+        transcript_segments: updatedSegments,
       });
+    },
+    [conversation, onConversationUpdate],
+  );
+
+  // Immutably patch a single segment's text from the *latest* conversation state
+  // (via ref, not a stale closure) so overlapping edits don't drop each other.
+  const applyOptimisticText = useCallback(
+    (segmentId: string, text: string) => {
+      const latest = conversationRef.current;
+      if (!latest || !onConversationUpdate) return;
+      onConversationUpdate({
+        ...latest,
+        transcript_segments: (latest.transcript_segments ?? []).map((seg) =>
+          seg.id === segmentId ? { ...seg, text } : seg,
+        ),
+      });
+    },
+    [onConversationUpdate],
+  );
+
+  // Drain the save queue one PATCH at a time. Serializing is the correctness fix:
+  // the backend rewrites the whole segments array, so concurrent writes lose-update
+  // — running them sequentially means each save reads the previous one's result.
+  const processSaveQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    const convId = convIdRef.current;
+    try {
+      while (saveQueueRef.current.length > 0) {
+        // Abandon the batch if the user navigated to another conversation.
+        if (convIdRef.current !== convId) {
+          saveQueueRef.current = [];
+          break;
+        }
+        const task = saveQueueRef.current.shift()!;
+        setSaveBatch((s) => ({ ...s, savingId: task.segmentId }));
+        try {
+          await updateSegmentText(convId, task.segmentId, task.text);
+          if (convIdRef.current === convId) {
+            setTranscriptEdited(true);
+            MixpanelManager.track('Transcript Segment Edited', {
+              conversation_id: convId,
+              segment_id: task.segmentId,
+            });
+          }
+        } catch (error) {
+          console.error('Failed to save transcript segment edit:', error);
+          // Revert the optimistic change so the UI reflects the persisted truth.
+          if (convIdRef.current === convId)
+            applyOptimisticText(task.segmentId, task.prevText);
+          setSaveBatch((s) => ({ ...s, failed: s.failed + 1 }));
+        } finally {
+          setSaveBatch((s) => ({ ...s, done: s.done + 1, savingId: null }));
+        }
+      }
+    } finally {
+      processingRef.current = false;
+      // Collapse the progress counters once the queue is fully drained (keep the
+      // failure count so the error banner persists until the next edit).
+      if (saveQueueRef.current.length === 0) {
+        setSaveBatch((s) => ({ total: 0, done: 0, savingId: null, failed: s.failed }));
+      }
     }
-  }, [conversation, onConversationUpdate]);
+  }, [applyOptimisticText]);
+
+  // Enqueue a segment edit: show it optimistically now, persist it in order.
+  const enqueueSegmentSave = useCallback(
+    (segmentId: string, text: string) => {
+      const latest = conversationRef.current;
+      if (!latest) return;
+      const prevText =
+        (latest.transcript_segments ?? []).find((seg) => seg.id === segmentId)?.text ??
+        '';
+      const trimmed = text.trim();
+      if (!trimmed || trimmed === prevText) return;
+
+      applyOptimisticText(segmentId, trimmed);
+      saveQueueRef.current.push({ segmentId, text: trimmed, prevText });
+      // A new edit while the queue is idle starts a fresh batch (clears old errors).
+      setSaveBatch((s) => {
+        const fresh = s.total === s.done;
+        return {
+          total: (fresh ? 0 : s.total) + 1,
+          done: fresh ? 0 : s.done,
+          savingId: s.savingId,
+          failed: fresh ? 0 : s.failed,
+        };
+      });
+      void processSaveQueue();
+    },
+    [applyOptimisticText, processSaveQueue],
+  );
+
+  // Reprocess the conversation to refresh summary/search after transcript edits.
+  // Reprocessing is heavy; race it against a timeout so a hung request can't leave
+  // the UI stuck on "Reprocessing…", and surface failures to the user (not console).
+  const handleReprocessAfterEdit = useCallback(async () => {
+    const convId = convIdRef.current;
+    setIsReprocessing(true);
+    setReprocessFailed(false);
+    try {
+      const updated = await Promise.race([
+        reprocessConversation(convId),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Reprocess timed out')),
+            REPROCESS_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+      // Ignore the response if the user has since switched conversations.
+      if (convIdRef.current === convId) {
+        onConversationUpdate?.(updated);
+        setTranscriptEdited(false);
+        MixpanelManager.track('Conversation Reprocessed After Edit', {
+          conversation_id: convId,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to reprocess conversation after edit:', error);
+      if (convIdRef.current === convId) setReprocessFailed(true);
+    } finally {
+      if (convIdRef.current === convId) setIsReprocessing(false);
+    }
+  }, [onConversationUpdate]);
+
+  // Handle title change - update conversation with new title
+  const handleTitleChange = useCallback(
+    (newTitle: string) => {
+      if (conversation && onConversationUpdate) {
+        onConversationUpdate({
+          ...conversation,
+          structured: {
+            ...conversation.structured,
+            title: newTitle,
+          },
+        });
+      }
+    },
+    [conversation, onConversationUpdate],
+  );
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -570,10 +861,10 @@ export function ConversationDetailPanel({
   ];
 
   // Filter to only enabled tabs
-  const enabledTabs = tabs.filter(tab => !tab.disabled);
+  const enabledTabs = tabs.filter((tab) => !tab.disabled);
 
   // Ensure active tab is valid
-  if (!enabledTabs.find(t => t.id === activeTab)) {
+  if (!enabledTabs.find((t) => t.id === activeTab)) {
     const firstEnabled = enabledTabs[0];
     if (firstEnabled && activeTab !== firstEnabled.id) {
       setActiveTab(firstEnabled.id);
@@ -649,6 +940,22 @@ export function ConversationDetailPanel({
         </div>
       </div>
 
+      {/* Screenshot banner — renders nothing (and this wrapper isn't mounted)
+          when there's no approved banner frame, leaving the header above as
+          the only header treatment. */}
+      {screenFrames.frameSet?.banner && (
+        <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
+          <ConversationScreenFrameBanner
+            frame={screenFrames.frameSet.banner}
+            title={structured.title || 'Untitled Conversation'}
+            dateLabel={
+              conversation.started_at ? formatDate(conversation.started_at) : undefined
+            }
+            onClick={openScreenFrameLightboxForBanner}
+          />
+        </div>
+      )}
+
       {/* Tabs */}
       {enabledTabs.length > 0 && (
         <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-bg-tertiary">
@@ -661,8 +968,8 @@ export function ConversationDetailPanel({
                   'flex items-center gap-2 px-3 py-2 rounded-lg',
                   'text-sm font-medium transition-all duration-150',
                   activeTab === tab.id
-                    ? 'bg-purple-primary text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                    ? 'bg-text-primary text-bg-primary'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
                 {tab.icon}
@@ -671,9 +978,7 @@ export function ConversationDetailPanel({
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full text-xs',
-                      activeTab === tab.id
-                        ? 'bg-white/20'
-                        : 'bg-bg-tertiary'
+                      activeTab === tab.id ? 'bg-white/20' : 'bg-bg-tertiary',
                     )}
                   >
                     {tab.count}
@@ -696,15 +1001,25 @@ export function ConversationDetailPanel({
             transition={{ duration: 0.15 }}
           >
             {activeTab === 'summary' && structured.overview && (
-              <SummaryTab
-                overview={structured.overview}
-                category={structured.category}
-                conversationId={conversationId}
-                appResults={conversation.apps_results || []}
-                suggestedAppIds={conversation.suggested_summarization_apps || []}
-                onGenerateComplete={onConversationUpdate}
-                geolocation={geolocation}
-              />
+              <>
+                <SummaryTab
+                  overview={structured.overview}
+                  category={structured.category}
+                  conversationId={conversationId}
+                  appResults={conversation.apps_results || []}
+                  suggestedAppIds={conversation.suggested_summarization_apps || []}
+                  onGenerateComplete={onConversationUpdate}
+                  geolocation={geolocation}
+                />
+                <ConversationScreenFrameCarousel
+                  frames={screenFrames.frameSet?.strip ?? []}
+                  onFrameClick={openScreenFrameLightboxForStripIndex}
+                  onRequestDeleteFrame={requestDeleteScreenFrame}
+                  onRequestDeleteAll={requestDeleteAllScreenFrames}
+                  deletingFrameId={deletingFrameId}
+                  className="mt-6"
+                />
+              </>
             )}
 
             {activeTab === 'actions' && hasActionItems && (
@@ -726,12 +1041,79 @@ export function ConversationDetailPanel({
                 {/* Loading state while fetching signed URLs */}
                 {audioAvailable && fetchedAudioFiles.length === 0 && (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-text-tertiary text-sm">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-primary/50">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-text-primary/90">
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     </div>
                     <span>Loading audio...</span>
                   </div>
                 )}
+                {/* Save-queue progress: edits persist one at a time (serialized) */}
+                {isSavingSegments && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-sm text-text-secondary">
+                    <div className="w-4 h-4 border-2 border-text-quaternary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    <span>
+                      Saving edit {Math.min(saveBatch.done + 1, saveBatch.total)} of{' '}
+                      {saveBatch.total}…
+                    </span>
+                  </div>
+                )}
+                {/* Failed-save banner (edits were reverted to their saved value) */}
+                {!isSavingSegments && saveBatch.failed > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-error/10 border border-error/20 text-sm text-error">
+                    <span>
+                      Couldn&apos;t save {saveBatch.failed} edit
+                      {saveBatch.failed > 1 ? 's' : ''} — reverted to the saved text.
+                      Please try again.
+                    </span>
+                  </div>
+                )}
+                {/* Reprocess failed/timed out — surface it and let the user retry */}
+                {reprocessFailed && !isReprocessing && !conversation.discarded && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-error/10 border border-error/20">
+                    <span className="text-sm text-error">
+                      Reprocessing failed — the summary and search may be out of date.
+                    </span>
+                    <button
+                      onClick={handleReprocessAfterEdit}
+                      className={cn(
+                        'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
+                        'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                      )}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry</span>
+                    </button>
+                  </div>
+                )}
+                {/* Nudge to refresh derived summary/search after edits (once saved) */}
+                {transcriptEdited &&
+                  !conversation.discarded &&
+                  !isSavingSegments &&
+                  saveBatch.failed === 0 &&
+                  !reprocessFailed && (
+                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50">
+                      <div className="flex items-center gap-2 text-sm text-text-secondary">
+                        <Sparkles className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                        <span>
+                          Transcript edited. Reprocess to update the summary and search.
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleReprocessAfterEdit}
+                        disabled={isReprocessing}
+                        className={cn(
+                          'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
+                          'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                          'disabled:opacity-60',
+                        )}
+                      >
+                        <RefreshCw
+                          className={cn('w-3.5 h-3.5', isReprocessing && 'animate-spin')}
+                        />
+                        <span>{isReprocessing ? 'Reprocessing…' : 'Reprocess'}</span>
+                      </button>
+                    </div>
+                  )}
                 <TranscriptView
                   segments={transcript_segments}
                   userName={userName}
@@ -739,6 +1121,9 @@ export function ConversationDetailPanel({
                   people={people}
                   editable={true}
                   onSpeakerClick={handleSpeakerClick}
+                  onSegmentTextChange={enqueueSegmentSave}
+                  savingSegmentId={saveBatch.savingId}
+                  editingDisabled={isReprocessing}
                   currentTime={currentPlaybackTime}
                   hasAudio={audioAvailable}
                   onSeekTo={handleSeekTo}
@@ -778,6 +1163,48 @@ export function ConversationDetailPanel({
             setShowTagSheet(true);
           }
         }}
+      />
+
+      {/* Screenshot lightbox — steps through the banner (if any) plus the
+          strip as one ordered list; see `openScreenFrameLightboxForBanner`
+          / `openScreenFrameLightboxForStripIndex` above. */}
+      <ScreenFrameLightbox
+        open={lightboxIndex !== null}
+        frames={lightboxFrames}
+        index={lightboxIndex ?? 0}
+        onIndexChange={setLightboxIndex}
+        onClose={closeScreenFrameLightbox}
+        onRequestDeleteFrame={requestDeleteScreenFrame}
+        deletingFrameId={deletingFrameId}
+      />
+
+      {/* Screenshot delete confirmation — shared by the carousel's hover-X
+          and the lightbox's delete button. A modal confirm (rather than the
+          inline two-step reveal used for conversation delete in
+          ConversationActionsMenu) because the trigger is a ~24px hover
+          affordance on a 128px-wide thumbnail with no room for inline
+          "Delete this? [Cancel] [Delete]" text. */}
+      <ConfirmDialog
+        open={pendingFrameDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFrameDelete(null);
+        }}
+        title={
+          pendingFrameDelete?.kind === 'all'
+            ? 'Delete all screenshots?'
+            : 'Delete screenshot?'
+        }
+        description={
+          pendingFrameDelete?.kind === 'all'
+            ? "This removes every screenshot from this conversation. This can't be undone."
+            : "This screenshot will be permanently removed. This can't be undone."
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          void confirmPendingFrameDelete();
+        }}
+        isLoading={deletingAllFrames}
       />
     </div>
   );

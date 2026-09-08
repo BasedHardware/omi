@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-durable-terminal-projection",
+  "violated_contract": "Every accepted capture-finalization job must persist one bounded terminal outcome in its authoritative Firestore transition, and backend-listen must project that durable state without relying on process-local emission.",
+  "canonical_prevention": "Write the terminal outcome in the lease-fenced completion, stale-fence, and dead-letter transactions; aggregate the closed outcome set from Firestore; and verify the transition plus detached listener/Pusher/worker stack.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_finalization_jobs.py",
+    "backend/tests/unit/test_journey_observability.py",
+    "backend/testing/listen_pusher_stack/run.py"
+  ],
+  "evidence_prs": [10468],
+  "scope_hints": [
+    "backend/database/conversation_finalization_jobs.py",
+    "backend/services/conversation_finalization.py",
+    "backend/utils/metrics.py",
+    "backend/charts/monitoring/**",
+    "backend/testing/listen_pusher_stack/**"
+  ],
+  "status": "open"
+}

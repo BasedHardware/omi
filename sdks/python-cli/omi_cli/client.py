@@ -158,6 +158,11 @@ class OmiClient:
         except _RetryableHttp as exc:
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
+        except httpx.TransportError as exc:
+            raise ServerError(
+                message="Connection failed",
+                detail="Unable to reach the Omi API. Check your network connection or try again shortly.",
+            ) from exc
         # Unreachable — Retrying always either returns or raises — but the type
         # checker doesn't know that.
         raise RuntimeError("unreachable")
@@ -295,6 +300,9 @@ def _extract_detail(response: httpx.Response) -> Optional[str]:
         msg = body.get("message")
         if isinstance(msg, str):
             return msg
+        error = body.get("error")
+        if isinstance(error, str):
+            return error
     return None
 
 

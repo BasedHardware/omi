@@ -1,16 +1,6 @@
 import asyncio
-import os
-import sys
+
 import pytest
-from unittest.mock import MagicMock
-
-# https://github.com/BasedHardware/omi/blob/main/backend/.env.template#L48C20-L48C88
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-
-# Mock modules that initialize GCP clients at import time or have complex dependencies
-sys.modules["database._client"] = MagicMock()
-sys.modules["utils.other.storage"] = MagicMock()
-sys.modules["utils.stt.pre_recorded"] = MagicMock()
 
 import utils.speaker_sample as speaker_sample
 
@@ -382,3 +372,138 @@ def test_verify_and_transcribe_sample_empty_transcript(monkeypatch):
     assert transcript is None
     assert is_valid is False
     assert reason == "insufficient_words: 0/5"
+
+
+# --- provider granularity: the counts are over words, not over list entries ------------------------
+#
+# A transcriber may return either granularity, and both are legitimate. Deepgram emits one entry per
+# word, so counting entries and counting words are the same number there. Parakeet emits one entry per
+# SEGMENT with the whole utterance inside — measured against a live parakeet on a 24.9s sample, its
+# /v2/transcribe response carries `segments: 1` and no `words` field at all. Counting entries therefore
+# read 1, and every parakeet-backed sample was rejected as `insufficient_words` whatever it contained;
+# the same miscount made the multi-speaker ratio 1.0 on a single entry, so that guard stopped rejecting
+# instead of stopping bad samples.
+
+
+def _make_segments(texts, speakers=None):
+    """One entry per segment, each carrying several words — what parakeet returns."""
+    segments = []
+    for index, text in enumerate(texts):
+        segment = {"text": text}
+        if speakers is not None:
+            segment["speaker"] = speakers[index]
+        segments.append(segment)
+    return segments
+
+
+def test_a_single_segment_is_counted_by_its_words_not_as_one_entry(monkeypatch):
+    segments = _make_segments(["hester prynne went one day to the mansion"], speakers=["SPEAKER_00"])
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (is_valid, reason) == (True, "ok")
+    assert transcript == "hester prynne went one day to the mansion"
+
+
+def test_word_granular_and_segment_granular_agree_on_the_same_utterance(monkeypatch):
+    """The same eight words, split two ways, must produce the same verdict."""
+    words = " one two three four five six seven eight".split()
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: _make_words(words))
+    per_word = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    monkeypatch.setattr(
+        speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: _make_segments([" ".join(words)])
+    )
+    per_segment = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert per_word[1:] == per_segment[1:] == (True, "ok")
+
+
+def test_a_segment_short_of_the_floor_is_still_refused(monkeypatch):
+    """The fix must not turn the word floor off: four words in one entry still fail."""
+    monkeypatch.setattr(
+        speaker_sample,
+        "deepgram_prerecorded_from_bytes",
+        lambda *_a, **_k: _make_segments(["thanks for joining today"]),
+    )
+
+    transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (transcript, is_valid) == (None, False)
+    assert reason == f"insufficient_words: 4/{speaker_sample.MIN_WORDS}"
+
+
+def test_the_dominant_ratio_weighs_segments_by_their_words(monkeypatch):
+    """Two segments, one long and one short: counting entries would call it a 50/50 split.
+
+    Entry counting gives ratio 0.50 and rejects a sample that is 90% one speaker; word counting
+    gives 0.90 and accepts it. The inverse case — one entry per speaker with equal weight — is what
+    used to let a genuinely mixed sample through on a single-segment provider.
+    """
+    segments = _make_segments(
+        ["one two three four five six seven eight nine", "interrupting"],
+        speakers=["SPEAKER_00", "SPEAKER_01"],
+    )
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    _transcript, is_valid, reason = asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000))
+
+    assert (is_valid, reason) == (True, "ok")
+
+
+def test_cjk_segment_is_counted_by_characters_not_split_as_one_word(monkeypatch):
+    """Regression for #12899: Japanese/Chinese/Thai have no spaces between words, so a whole
+    segment-granular entry (parakeet, Modulate) reads as a single "word" under `.split()` no
+    matter how long it actually is, and gets rejected as insufficient_words regardless of content.
+    """
+    # "Today I met a friend and we had a fun talk." (16 characters, well past MIN_CJK_CHARS).
+    segments = _make_segments(["今日は友達と会って楽しく話しました"], speakers=["SPEAKER_00"])
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", lambda *_a, **_k: segments)
+
+    transcript, is_valid, reason = asyncio.run(
+        speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="ja")
+    )
+
+    assert (is_valid, reason) == (True, "ok")
+    assert transcript == "今日は友達と会って楽しく話しました"
+
+
+def test_cjk_segment_short_of_the_char_floor_is_still_refused(monkeypatch):
+    """The character-counting fix must not remove the floor entirely: a short CJK entry still fails."""
+    monkeypatch.setattr(
+        speaker_sample,
+        "deepgram_prerecorded_from_bytes",
+        lambda *_a, **_k: _make_segments(["こんにちは"]),  # "hello" — 5 characters
+    )
+
+    transcript, is_valid, reason = asyncio.run(
+        speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="ja")
+    )
+
+    assert (transcript, is_valid) == (None, False)
+    assert reason == f"insufficient_words: 5/{speaker_sample.MIN_CJK_CHARS}"
+
+
+def test_verify_and_transcribe_sample_passes_language_to_transcriber(monkeypatch):
+    """A non-English sample must be transcribed in its own language, not silently as English.
+
+    Regression for #12899: the transcriber previously received no language argument at all, so it
+    always fell back to English, and the resulting mistranscription failed containment against the
+    original non-English segment text on every sample.
+    """
+    received_kwargs = {}
+
+    def fake_deepgram(*_args, **kwargs):
+        received_kwargs.update(kwargs)
+        return _make_words(["danke", "für", "das", "treffen", "heute"], speakers=["SPEAKER_00"] * 5)
+
+    monkeypatch.setattr(speaker_sample, "deepgram_prerecorded_from_bytes", fake_deepgram)
+
+    asyncio.run(speaker_sample.verify_and_transcribe_sample(b"audio", 16000, language="de"))
+
+    assert received_kwargs.get("language") == "de"

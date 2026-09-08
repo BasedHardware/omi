@@ -1,151 +1,87 @@
 """Tests for the desktop trial paywall reconnect gate (#7318).
 
 Validates:
-- Admission phase rejects paywalled desktop before gauge increment
+- Admission phase rejects paywalled desktop before session start
 - No paywall close block inside the session body (removed, handled in admission)
 - Cache invalidation on payment/BYOK changes
 - is_trial_paywalled handles platform filtering (only desktop/macos affected)
 - Behavioral tests for is_trial_paywalled and clear_trial_paywall_cache
 """
 
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
+from routers.listen.contracts import ListenRequest
+from routers.listen.runtime import ListenSessionRuntime
 
-TRANSCRIBE_SRC_PATH = 'routers/transcribe.py'
-PAYMENT_SRC_PATH = 'routers/payment.py'
-USERS_SRC_PATH = 'routers/users.py'
-SUBSCRIPTION_SRC_PATH = 'utils/subscription.py'
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+RUNTIME_SRC_PATH = BACKEND_DIR / 'routers' / 'listen' / 'runtime.py'
+PAYMENT_SRC_PATH = BACKEND_DIR / 'routers' / 'payment.py'
+USERS_SRC_PATH = BACKEND_DIR / 'routers' / 'users.py'
+SUBSCRIPTION_SRC_PATH = BACKEND_DIR / 'utils' / 'subscription.py'
 
 
 def _read_source(path):
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         return f.read()
 
 
+class FakeWebSocket:
+    def __init__(self):
+        self.headers = {}
+        self.events = []
+        self.closed = []
+
+    async def send_json(self, event):
+        self.events.append(event)
+
+    async def close(self, *, code, reason):
+        self.closed.append((code, reason))
+
+
+def _runtime(uid='test-user', source='desktop'):
+    websocket = FakeWebSocket()
+    return ListenSessionRuntime(ListenRequest(websocket=websocket, uid=uid, source=source)), websocket
+
+
 class TestAdmissionPhase:
-    """Verify paywalled desktop users are rejected in the admission phase, before gauge increment."""
+    """Exercise admission through the extracted runtime instead of source ordering."""
 
-    def test_paywall_check_before_gauge_inc(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
-        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
-        assert paywall_pos < gauge_pos, "paywall check must come before gauge inc"
+    @pytest.mark.asyncio
+    async def test_paywall_rejects_before_session_start(self, monkeypatch):
+        runtime, websocket = _runtime()
 
-    def test_paywall_rejection_returns_before_gauge(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
-        assert 'return' in paywall_block, "paywall rejection must return before gauge inc"
+        async def fake_run_blocking(_executor, function, *args):
+            assert function.__name__ == 'is_trial_paywalled'
+            assert args == ('test-user', 'desktop')
+            return True
 
-    def test_paywall_close_uses_1008(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
-        assert (
-            'websocket.close' in paywall_block and '1008' in paywall_block
-        ), "admission paywall must close with code 1008"
+        monkeypatch.setattr('routers.listen.runtime.run_blocking', fake_run_blocking)
+        assert await runtime._admit() is False
+        assert websocket.events[0]['type'] == 'freemium_threshold_reached'
+        assert websocket.closed == [(1008, 'trial_expired')]
+        assert runtime.task_supervisor._session_started is False
 
-    def test_paywall_close_reason_is_trial_expired(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
-        assert 'trial_expired' in paywall_block, "paywall close must use reason 'trial_expired'"
+    @pytest.mark.asyncio
+    async def test_bad_uid_and_audio_format_are_rejected_without_starting_session(self, monkeypatch):
+        missing_uid, missing_uid_socket = _runtime(uid='')
+        assert await missing_uid._admit() is False
+        assert missing_uid_socket.closed == [(1008, 'Bad uid')]
 
-    def test_uid_check_before_gauge(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        uid_check_pos = handler_body.find('Bad uid')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        assert uid_check_pos != -1, "uid check not found in _stream_handler"
-        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
-        assert uid_check_pos < gauge_pos, "uid check must come before gauge inc"
-
-    def test_freemium_event_sent_before_close(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        paywall_pos = handler_body.find('if is_trial_paywalled(')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        paywall_block = handler_body[paywall_pos:gauge_pos]
-        event_pos = paywall_block.find('FreemiumThresholdReachedEvent')
-        close_pos = paywall_block.find('websocket.close')
-        assert event_pos != -1, "admission must send FreemiumThresholdReachedEvent for desktop client"
-        assert close_pos != -1
-        assert event_pos < close_pos, "freemium event must be sent before websocket close"
-
-
-class TestGaugeIncTryFinally:
-    """Verify gauge inc is immediately before the try/finally that decrements it — no leakable returns."""
-
-    def test_inc_immediately_before_try(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        inc_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        try_pos = handler_body.find('try:', inc_pos)
-        between = handler_body[inc_pos + len('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()') : try_pos]
-        assert 'return' not in between, "no return statements allowed between gauge inc and try block"
-
-    def test_unsupported_language_return_before_gauge(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        lang_pos = handler_body.find('The language is not supported')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        assert lang_pos != -1, "unsupported language check not found"
-        assert lang_pos < gauge_pos, "unsupported language return must come before gauge inc"
-
-    def test_bad_user_return_before_gauge(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        user_pos = handler_body.find('Bad user')
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        assert user_pos != -1, "bad user check not found"
-        assert user_pos < gauge_pos, "bad user return must come before gauge inc"
+        invalid_audio, invalid_audio_socket = _runtime()
+        monkeypatch.setattr('routers.listen.runtime.validate_audio_format', lambda *_args: 'bad_audio')
+        assert await invalid_audio._admit() is False
+        assert invalid_audio_socket.closed == [(1003, 'bad_audio')]
+        assert invalid_audio.task_supervisor._session_started is False
 
 
 class TestNoPaywallBlockInSession:
-    """Verify the old paywall close block was removed from inside the session."""
-
-    def test_no_paywalled_desktop_variable(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        after_gauge = handler_body[gauge_pos:]
-        assert (
-            'is_paywalled_desktop' not in after_gauge
-        ), "is_paywalled_desktop variable should not exist after gauge inc — handled in admission"
-
-    def test_no_cooldown_calls(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert 'check_trial_paywall_ws_cooldown' not in src, "cooldown check removed"
-        assert 'set_trial_paywall_ws_cooldown' not in src, "cooldown set removed"
-
-    def test_gauge_dec_in_finally(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        finally_pos = handler_body.rfind('finally:')
-        assert finally_pos != -1
-        finally_block = handler_body[finally_pos:]
-        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in finally_block, "gauge dec must be in the finally block"
+    def test_runtime_has_no_legacy_cooldown_logic(self):
+        source = _read_source(RUNTIME_SRC_PATH)
+        assert 'check_trial_paywall_ws_cooldown' not in source
+        assert 'set_trial_paywall_ws_cooldown' not in source
 
 
 class TestCacheInvalidation:
@@ -218,8 +154,12 @@ class TestCacheInvalidationBehavioral:
         assert 'trial_paywall:expired:' in fn_body
         delete_count = fn_body.count('delete_generic_cache')
         assert (
-            delete_count == 1
-        ), f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
+            delete_count >= 2
+        ), f"clear_trial_paywall_cache should clear general and provider-specific keys, got {delete_count}"
+        assert 'gemini' in fn_body
+        assert 'openai' in fn_body
+        assert 'openrouter' in fn_body
+        assert 'anthropic' in fn_body
 
 
 class TestPlatformFiltering:
@@ -231,19 +171,23 @@ class TestPlatformFiltering:
         assert 'macos' in src, "desktop tokens must include 'macos'"
         assert 'desktop' in src, "desktop tokens must include 'desktop'"
 
-    def test_is_trial_paywalled_respects_kill_switch(self):
+    def test_is_trial_paywalled_filters_before_expiry_lookup(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         fn_start = src.find('def is_trial_paywalled(')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert '_TRIAL_PAYWALL_ENABLED' in fn_body, "is_trial_paywalled must respect kill switch"
+        filter_pos = fn_body.find('platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS')
+        expiry_pos = fn_body.find('_is_trial_expired_cached')
+        assert filter_pos != -1, "is_trial_paywalled must filter non-desktop platforms"
+        assert expiry_pos != -1, "is_trial_paywalled must call the cached expiry lookup"
+        assert filter_pos < expiry_pos, "platform filtering must happen before the expiry lookup"
 
-    def test_is_trial_paywalled_respects_test_uid_gating(self):
+    def test_is_trial_paywalled_delegates_to_cached_expiry(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         fn_start = src.find('def is_trial_paywalled(')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert '_TRIAL_PAYWALL_TEST_UIDS' in fn_body, "is_trial_paywalled must respect test UID gating"
+        assert '_is_trial_expired_cached' in fn_body, "desktop paywall decisions must use the cached expiry lookup"
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
@@ -253,14 +197,13 @@ class TestPlatformFiltering:
         assert '.lower()' in fn_body, "is_trial_paywalled must use .lower() for case-insensitive matching"
 
     def test_admission_calls_is_trial_paywalled_with_source(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_body = src[handler_start:]
-        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        admission_body = handler_body[:gauge_pos]
+        src = _read_source(RUNTIME_SRC_PATH)
+        admission_start = src.find('async def _admit(')
+        admission_end = src.find('    async def _bootstrap', admission_start)
+        admission_body = src[admission_start:admission_end]
         assert (
-            'is_trial_paywalled(uid, source)' in admission_body
-        ), "admission phase must call is_trial_paywalled with uid and source"
+            'run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source)' in admission_body
+        ), "admission phase must offload is_trial_paywalled with uid and source"
 
 
 class TestIsTrialPaywalledBehavioral:
@@ -319,12 +262,14 @@ class TestIsTrialPaywalledBehavioral:
 
         import utils.subscription as sub
 
+        # The trial paywall is OFF by default (freemium). Force it on so the delegation
+        # logic under test is reachable.
+        sub.TRIAL_PAYWALL_ENABLED = True
+
         self._sub = sub
         self._mock_expired = MagicMock(return_value=True)
         self._orig_expired = sub._is_trial_expired_cached
         sub._is_trial_expired_cached = self._mock_expired
-        sub._TRIAL_PAYWALL_ENABLED = True
-        sub._TRIAL_PAYWALL_TEST_UIDS = set()
 
         yield
 
@@ -340,6 +285,13 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_macos_expired_returns_true(self):
         assert self._sub.is_trial_paywalled('uid1', 'macos') is True
+
+    def test_windows_expired_returns_true(self):
+        # Windows is a desktop platform: it must be subject to the desktop trial
+        # paywall exactly like macOS (regression for the platform defect where
+        # only 'macos'/'desktop' were recognized as desktop tokens).
+        assert self._sub.is_trial_paywalled('uid1', 'windows') is True
+        assert self._sub.is_trial_paywalled('uid1', 'WINDOWS') is True
 
     def test_ios_returns_false(self):
         assert self._sub.is_trial_paywalled('uid1', 'ios') is False
@@ -361,20 +313,19 @@ class TestIsTrialPaywalledBehavioral:
         assert self._sub.is_trial_paywalled('uid1', 'Desktop') is True
         assert self._sub.is_trial_paywalled('uid1', 'MACOS') is True
 
-    def test_kill_switch_disabled(self):
-        self._sub._TRIAL_PAYWALL_ENABLED = False
+    def test_desktop_cache_false_returns_false(self):
+        self._mock_expired.return_value = False
         assert self._sub.is_trial_paywalled('uid1', 'desktop') is False
-        self._sub._TRIAL_PAYWALL_ENABLED = True
 
-    def test_test_uid_gating_allows_listed(self):
-        self._sub._TRIAL_PAYWALL_TEST_UIDS = {'uid1', 'uid2'}
+    def test_desktop_uid_delegates_to_expiry_cache(self):
         assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
-        self._sub._TRIAL_PAYWALL_TEST_UIDS = set()
+        # Routing kwargs (which Firestore client, whether to provision) belong to
+        # the caller; this asserts only that the decision is delegated for this uid.
+        assert self._mock_expired.call_args.args == ('uid1',)
 
-    def test_test_uid_gating_blocks_unlisted(self):
-        self._sub._TRIAL_PAYWALL_TEST_UIDS = {'uid1', 'uid2'}
-        assert self._sub.is_trial_paywalled('uid99', 'desktop') is False
-        self._sub._TRIAL_PAYWALL_TEST_UIDS = set()
+    def test_different_desktop_uid_uses_same_expiry_path(self):
+        assert self._sub.is_trial_paywalled('uid99', 'desktop') is True
+        assert self._mock_expired.call_args.args == ('uid99',)
 
     def test_not_expired_returns_false(self):
         self._mock_expired.return_value = False
@@ -382,7 +333,16 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_clear_cache_calls_redis_delete(self):
         self._sub.clear_trial_paywall_cache('test-uid-123')
-        self._sub.redis_db.delete_generic_cache.assert_called_with('trial_paywall:expired:test-uid-123')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:gemini')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openrouter')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:anthropic')
+        # The transcription allowance (S16) asks the paywall with required_byok_provider='deepgram',
+        # which writes a sixth key; a stale cached False there would keep a billed socket open.
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram:strict')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
+        assert self._sub.redis_db.delete_generic_cache.call_count == 7
 
 
 class TestByokRequestEscapeHatch:
@@ -444,15 +404,42 @@ class TestByokRequestEscapeHatch:
         import utils.subscription as sub
         from utils import byok
 
+        # Paywall is OFF by default (freemium); force it on for these BYOK-bypass tests.
+        sub.TRIAL_PAYWALL_ENABLED = True
+
+        # Never hit Firestore from the live byok state cache in this isolated file.
+        # The except-path in request_has_llm_byok_key then reads the request keys.
+        def _isolated_byok_state(_uid):
+            raise RuntimeError('isolated paywall test')
+
+        sub.get_cached_byok_state = _isolated_byok_state
+
         self._sub = sub
         self._byok = byok
-        sub._TRIAL_PAYWALL_ENABLED = True
-        sub._TRIAL_PAYWALL_TEST_UIDS = set()
+        # The middleware validates request keys against enrollment and warms
+        # this cache before subscription checks run. Model that boundary
+        # directly; falling through to a real Firestore lookup makes this unit
+        # test retry external credentials for minutes.
+        original_cached_byok_state = sub.get_cached_byok_state
+        sub.get_cached_byok_state = MagicMock(
+            return_value={
+                'fingerprints': {
+                    'openrouter': 'enrolled',
+                    'openai': 'enrolled',
+                    'anthropic': 'enrolled',
+                    'gemini': 'enrolled',
+                    'deepgram': 'enrolled',
+                }
+            }
+        )
 
         yield
 
-        # Reset BYOK contextvar between tests so leftover keys don't bleed.
+        # Reset BYOK contextvars between tests so leftover keys/uid don't bleed.
+        sub.get_cached_byok_state = original_cached_byok_state
         byok._byok_ctx.set(None)
+        byok._byok_validated_ctx.set(False)
+        byok.set_byok_uid(None)
         for name in stubs:
             if saved[name] is None:
                 sys.modules.pop(name, None)
@@ -468,18 +455,23 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok.set_byok_uid('uid-stale-firestore')
+        self._byok._byok_validated_ctx.set(True)
+        # The enrollment-verifying escape hatch needs the request uid on the
+        # context (middleware sets it in production).
+        self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
 
-    def test_partial_byok_headers_still_paywall(self):
-        # Only 3 of 4 — not a fully-enrolled BYOK request, paywall remains.
-        self._byok.set_byok_keys(
-            {
-                'openai': 'sk-stub',
-                'anthropic': 'sk-stub',
-                'gemini': 'stub',
-                # deepgram missing
-            }
-        )
+    def test_validated_llm_byok_header_bypasses_paywall(self):
+        self._byok.set_byok_keys({'openrouter': 'sk-stub'})
+        self._byok.set_byok_uid('uid-stale-firestore')
+        self._byok._byok_validated_ctx.set(True)
+        self._byok.set_byok_uid('uid-stale-firestore')
+        assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
+
+    def test_validated_deepgram_only_header_still_paywalls(self):
+        self._byok.set_byok_keys({'deepgram': 'stub-deepgram'})
+        self._byok._byok_validated_ctx.set(True)
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is True
 
     def test_empty_byok_keys_still_paywall(self):
@@ -507,5 +499,36 @@ class TestByokRequestEscapeHatch:
                 'deepgram': 'stub-deepgram',
             }
         )
+        self._byok._byok_validated_ctx.set(True)
         meta = self._sub.get_trial_metadata('uid-stale-firestore')
         assert meta.trial_expired is False
+
+
+class TestDesktopTrialGateClientResolution:
+    """`is_desktop_trial_paywalled` reads the customer Firestore, so resolving its
+    client initializes credentials. Decisions that need no Firestore must be made
+    before that: the paywall is off by default, and mobile is never gated.
+    """
+
+    @staticmethod
+    def _subscription_with_exploding_client(monkeypatch):
+        import utils.subscription as sub
+
+        def _explode():
+            raise AssertionError('customer Firestore client resolved without a Firestore decision')
+
+        monkeypatch.setattr(sub, 'get_customer_firestore_client', _explode)
+        return sub
+
+    def test_disabled_paywall_never_resolves_the_customer_client(self, monkeypatch):
+        sub = self._subscription_with_exploding_client(monkeypatch)
+        monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', False)
+
+        assert sub.is_desktop_trial_paywalled('uid1', 'desktop') is False
+
+    def test_non_desktop_platform_never_resolves_the_customer_client(self, monkeypatch):
+        sub = self._subscription_with_exploding_client(monkeypatch)
+        monkeypatch.setattr(sub, 'TRIAL_PAYWALL_ENABLED', True)
+
+        assert sub.is_desktop_trial_paywalled('uid1', 'ios') is False
+        assert sub.is_desktop_trial_paywalled('uid1', None) is False

@@ -1,0 +1,428 @@
+import XCTest
+
+@testable import Omi_Computer
+
+final class OnboardingFlowTests: XCTestCase {
+  func testMergedFlowUsesEighteenSteps() {
+    XCTAssertEqual(
+      OnboardingFlow.steps,
+      [
+        "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
+        "FullDiskAccess", "FileScan", "Microphone", "Accessibility", "Automation",
+        "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "DataSources",
+        "Exports", "Goal", "Tasks",
+      ])
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
+  }
+
+  func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
+    let migrated = OnboardingFlow.migratedStep(
+      currentStep: 4,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: false,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    XCTAssertEqual(migrated, 3)
+  }
+
+  func testMigrationClampsOverflowToTasksStep() {
+    let migrated = OnboardingFlow.migratedStep(
+      currentStep: 99,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    XCTAssertEqual(migrated, OnboardingFlow.lastStepIndex)
+  }
+
+  func testMigrationMapsRemovedResearchStepToDataSourcesAndShiftsLaterSteps() {
+    let migratedResearch = OnboardingFlow.migratedStep(
+      currentStep: 15,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    let migratedLegacyGoalAfterExportInsert = OnboardingFlow.migratedStep(
+      currentStep: 16,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: false,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true
+    )
+
+    let migratedGoal = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    let migratedTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: false
+    )
+
+    XCTAssertEqual(migratedResearch, 15)
+    XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
+    XCTAssertEqual(migratedGoal, 17)
+    // After Research removal and BYOK removal, legacy Tasks (19) lands on Tasks (17).
+    XCTAssertEqual(migratedTasks, 17)
+  }
+
+  func testMigrationRemovesBYOKStepAndKeepsUsersOnTasks() {
+    let migratedFromBYOK = OnboardingFlow.migratedStep(
+      currentStep: 17,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    let migratedFromTasks = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false
+    )
+
+    XCTAssertEqual(migratedFromBYOK, 17)
+    XCTAssertEqual(migratedFromTasks, 17)
+  }
+
+  func testMigrationRemovesBYOKAfterPendingNotificationPermissionRemoval() {
+    // Legacy index 18 = BYOK while the old notification-permission step (index 8)
+    // was still counted. Notification removal must run before BYOK removal so the
+    // user lands on Tasks (17), not Goal (16).
+    let migratedFromLegacyBYOK = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    let migratedFromLegacyTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    // Users paused on the removed notification-permission step (8) advance to
+    // Accessibility (still 8), not back to Microphone (7).
+    let migratedFromLegacyNotificationPermission = OnboardingFlow.migratedStep(
+      currentStep: 8,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    XCTAssertEqual(migratedFromLegacyBYOK, 17)
+    XCTAssertEqual(migratedFromLegacyTasks, 17)
+    XCTAssertEqual(migratedFromLegacyNotificationPermission, 8)
+    XCTAssertEqual(OnboardingFlow.steps[8], "Accessibility")
+  }
+
+  func testCanJumpAllowsBackwardAndReachedStepsAlways() {
+    XCTAssertTrue(OnboardingFlow.canJump(to: 0, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 10, furthestStep: 10))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 2, furthestStep: 2))
+  }
+
+  func testCanJumpBlocksForwardOverUnansweredRequiredSteps() {
+    // Steps 0-3 (Name/Language/HowDidYouHear/Trust) have no Skip button.
+    XCTAssertFalse(OnboardingFlow.canJump(to: 3, furthestStep: 2))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 9, furthestStep: 0))
+    XCTAssertFalse(OnboardingFlow.canJump(to: 4, furthestStep: 3))
+  }
+
+  func testCanJumpAllowsForwardOverSkippableSteps() {
+    // Every step from ScreenRecording (4) onward has a Skip button, so once the
+    // required intro is cleared the user may jump anywhere forward.
+    XCTAssertTrue(OnboardingFlow.canJump(to: 9, furthestStep: 4))
+    XCTAssertTrue(
+      OnboardingFlow.canJump(to: OnboardingFlow.lastStepIndex, furthestStep: 4))
+    XCTAssertTrue(OnboardingFlow.canJump(to: 17, furthestStep: 10))
+  }
+
+  func testCanJumpRejectsOutOfRangeTargets() {
+    XCTAssertFalse(OnboardingFlow.canJump(to: -1, furthestStep: 10))
+    XCTAssertFalse(
+      OnboardingFlow.canJump(to: OnboardingFlow.steps.count, furthestStep: 17))
+  }
+
+  func testUnskippableStepsMatchFlowLayout() {
+    // Static tripwire: if steps are reordered/inserted so that the Skip-less
+    // intro block moves, unskippableSteps must be updated with it.
+    XCTAssertEqual(OnboardingFlow.steps[0], "Name")
+    XCTAssertEqual(OnboardingFlow.steps[1], "Language")
+    XCTAssertEqual(OnboardingFlow.steps[2], "HowDidYouHear")
+    XCTAssertEqual(OnboardingFlow.steps[3], "Trust")
+    XCTAssertEqual(OnboardingFlow.unskippableSteps, [0, 1, 2, 3])
+  }
+
+  func testPhasesTileAllStepsContiguously() {
+    // The segmented progress bar renders one segment per phase; a step outside
+    // every phase (or in two) would render a broken bar. Phases must cover
+    // 0..<steps.count exactly, in order, with no gaps or overlaps.
+    var nextStep = 0
+    for phase in OnboardingFlow.phases {
+      XCTAssertFalse(phase.steps.isEmpty, "phase \(phase.title) is empty")
+      XCTAssertEqual(phase.steps.lowerBound, nextStep, "phase \(phase.title) leaves a gap or overlaps")
+      nextStep = phase.steps.upperBound
+    }
+    XCTAssertEqual(nextStep, OnboardingFlow.steps.count)
+  }
+
+  func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
+    XCTAssertFalse(
+      OnboardingFlow.shouldUnlockVoiceShortcutContinue(
+        observedShortcutPress: false,
+        voiceTurnPhase: nil
+      )
+    )
+    XCTAssertFalse(
+      OnboardingFlow.shouldUnlockVoiceShortcutContinue(
+        observedShortcutPress: true,
+        voiceTurnPhase: .recording
+      )
+    )
+    XCTAssertTrue(
+      OnboardingFlow.shouldUnlockVoiceShortcutContinue(
+        observedShortcutPress: true,
+        voiceTurnPhase: nil
+      )
+    )
+  }
+
+  func testNameFieldNeverPrefillsTherePlaceholder() {
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("there"), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill(""), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("Skander"), "Skander")
+  }
+
+  func testPermissionContinueAdvancesWhenGrantAlreadyApplies() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: false), .advance)
+  }
+
+  func testPermissionContinueOffersReopenOnlyWhenGrantNeedsRelaunch() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: true), .offerReopen)
+  }
+
+  /// Static tripwire: keyboard shortcut registration is a SwiftUI wiring
+  /// contract, so assert every visible onboarding proceed action remains the
+  /// default action without trying to synthesize AppKit key events in a unit test.
+  func testOnboardingProceedActionsUseDefaultActionKeyboardShortcut() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies SwiftUI default-action wiring on every visible onboarding proceed control
+    let fileIndexingSource = try desktopSourceFile("FileIndexing/FileIndexingView.swift")
+    XCTAssertTrue(
+      fileIndexingSource.contains("onComplete(totalFilesScanned)")
+        && fileIndexingSource.contains(".keyboardShortcut(.defaultAction)\n        .padding(.bottom"),
+      "the file-index onboarding Continue button must accept Return")
+
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    for title in ["Set up Omi →", "Continue", "Open the doors"] {
+      XCTAssertTrue(
+        secondBrainSource.contains("SBInkButton(title: \"\(title)\", isDefaultAction: true)"),
+        "the second-brain \(title) action must accept Return")
+    }
+    // Promise, language, files, screen-demo (Open the doors / Continue, mutually exclusive),
+    // agents, context, referral: nine sites, never two visible at once.
+    XCTAssertEqual(
+      secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
+      9,
+      "every visible second-brain proceed action must register Return")
+    XCTAssertTrue(
+      secondBrainSource.contains("SBInkButton(title: \"Take me to Omi\", isDefaultAction: true)"),
+      "the final referral action must accept Return")
+    XCTAssertTrue(
+      secondBrainSource.contains("Text(\"Continue →\")")
+        && secondBrainSource.contains(".keyboardShortcut(.defaultAction)\n      } else {"),
+      "the granted-permission Continue action must accept Return")
+
+    let componentsSource = try desktopSourceFile("MainWindow/SecondBrain/SBComponents.swift")
+    XCTAssertTrue(
+      componentsSource.contains("content.keyboardShortcut(.defaultAction)"),
+      "SBInkButton must wire opted-in proceed actions to Return")
+  }
+
+  func testSecondBrainCaptureDefaultsToMeetingsWithoutShortcutReminder() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies the SwiftUI capture-choice hierarchy and copy
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    let defaultChoice = try XCTUnwrap(
+      secondBrainSource.range(of: "model.capture(SBOnboardingModel.defaultCaptureSelection)"))
+    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.always)"))
+
+    XCTAssertLessThan(
+      defaultChoice.lowerBound,
+      continuousChoice.lowerBound,
+      "Meeting-only recording must be the first capture choice")
+    XCTAssertTrue(
+      secondBrainSource[defaultChoice.lowerBound..<continuousChoice.lowerBound]
+        .contains(".keyboardShortcut(.defaultAction)"),
+      "Return must choose the meeting-only capture default")
+    XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Only Meetings\")"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Always On\")"))
+    XCTAssertFalse(secondBrainSource.contains("from my calendar"))
+  }
+
+  // Regression: arrow navigation must be computed from persisted step state and
+  // applied by the mounted view — the NSEvent monitor's captured view copy drops
+  // @AppStorage writes on some macOS versions. These cover the extracted
+  // decision + validation seam the monitor and .onReceive now route through.
+  func testArrowNavigationDecisions() {
+    // Left/up go back one step; blocked at the first step.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 123, step: 10, furthestStep: 15), .jump(to: 9))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 126, step: 1, furthestStep: 1), .jump(to: 0))
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 123, step: 0, furthestStep: 5))
+    // Right/down jump when the next step is cleared or skippable.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 10, furthestStep: 15), .jump(to: 11))
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 125, step: 5, furthestStep: 5), .jump(to: 6))
+    // At an uncleared required step, defer to the step's own Continue gating.
+    XCTAssertEqual(
+      OnboardingFlow.arrowNavigation(keyCode: 124, step: 1, furthestStep: 1),
+      .forwardDefaultAction)
+    // Non-arrow keys navigate nothing.
+    XCTAssertNil(OnboardingFlow.arrowNavigation(keyCode: 36, step: 5, furthestStep: 10))
+  }
+
+  func testValidatedNavigationTargetPolicy() {
+    // Backward always allowed, forward gated by canJump, range clamped.
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(9, currentStep: 10, furthestStep: 15), 9)
+    XCTAssertEqual(
+      OnboardingFlow.validatedNavigationTarget(11, currentStep: 10, furthestStep: 15), 11)
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(2, currentStep: 1, furthestStep: 1))
+    XCTAssertNil(OnboardingFlow.validatedNavigationTarget(-1, currentStep: 0, furthestStep: 0))
+    XCTAssertNil(
+      OnboardingFlow.validatedNavigationTarget(
+        OnboardingFlow.lastStepIndex + 1, currentStep: 5, furthestStep: 17))
+  }
+
+  private func desktopSourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+}

@@ -2,10 +2,37 @@
 
 from __future__ import annotations
 
+import io
 import json
+
+import pytest
 
 from omi_cli import __version__
 from omi_cli.main import app
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, EOFError])
+def test_login_prompt_interruption_exits_cleanly(config_path, monkeypatch, capsys, interruption) -> None:
+    """Regression: Ctrl-C / Ctrl-D at an interactive prompt must print
+    "Aborted." and exit 130 — not fall through to the generic handler with
+    an empty ``str(click.Abort())`` message ("unexpected error: ``")."""
+    from omi_cli.main import main
+
+    class InterruptedInput(io.StringIO):
+        def isatty(self):
+            return True
+
+        def readline(self, *args, **kwargs):
+            raise interruption
+
+    monkeypatch.setattr("sys.stdin", InterruptedInput())
+    monkeypatch.setattr("sys.argv", ["omi", "auth", "login"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 130
+    stderr = capsys.readouterr().err
+    assert "Aborted." in stderr
+    assert "unexpected error" not in stderr
 
 
 def test_version_flag(cli_runner) -> None:
@@ -55,3 +82,29 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
     result = cli_runner.invoke(app, ["--json", "memory", "list"])
     assert result.exit_code == 0
     assert result.stdout.strip() == "[]"
+
+
+def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch, tmp_path) -> None:
+    """Issue #12998: `python -m omi_cli` must route through omi_cli.main.main()
+    so the documented --json error contract survives module invocation."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    package_root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ, OMI_API_KEY="not-a-real-key")
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, [package_root, env.get("PYTHONPATH", "")])
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(tmp_path),
+        check=False,
+    )
+    assert result.returncode == 1
+    payload = json.loads(result.stderr)
+    assert "error" in payload

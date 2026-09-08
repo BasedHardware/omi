@@ -32,9 +32,13 @@ from omi_cli.commands import auth as auth_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
+from omi_cli.commands import local as local_cmd
 from omi_cli.commands import memory as memory_cmd
 from omi_cli.errors import CliError
+from omi_cli.local_client import LocalOmiClient
 from omi_cli.output import Renderer
+
+_LAST_RENDERER: Optional[Renderer] = None
 
 app = typer.Typer(
     name="omi",
@@ -89,6 +93,12 @@ class AppContext:
     def make_client(self) -> OmiClient:
         return OmiClient(self.get_profile(), verbose=self.verbose)
 
+    def make_local_client(self) -> LocalOmiClient:
+        profile = self.get_profile()
+        local_api_url = os.environ.get(cfg.ENV_LOCAL_API_URL) or profile.local_api_url
+        local_token = os.environ.get(cfg.ENV_LOCAL_TOKEN) or profile.local_token
+        return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -127,6 +137,8 @@ def _root(
     profile_name = cfg.resolve_profile_name(profile, config)
 
     renderer = Renderer(json_mode=json_output, no_color=no_color, verbose=verbose)
+    global _LAST_RENDERER
+    _LAST_RENDERER = renderer
     ctx.obj = AppContext(
         profile_name=profile_name,
         api_base_override=api_base,
@@ -140,6 +152,31 @@ def version() -> None:
     typer.echo(f"omi-cli {__version__}")
 
 
+@app.command(help="Ask a natural-language question, answered from your own Omi conversations.")
+def ask(
+    typer_ctx: typer.Context,
+    question: str = typer.Argument(..., help='Your question, e.g. "what did I decide about pricing last week?"'),
+    limit: int = typer.Option(5, "--limit", min=1, max=10, help="How many conversations to ground the answer on."),
+    timezone: str = typer.Option("UTC", "--timezone", help="IANA timezone for resolving relative dates."),
+) -> None:
+    ctx: AppContext = typer_ctx.obj
+    with ctx.make_client() as client:
+        result = client.post(
+            "/v1/dev/user/ask",
+            json_body={"question": question, "limit": limit, "timezone": timezone},
+        )
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(result)
+        return
+    payload = result or {}
+    typer.echo(payload.get("answer", ""))
+    sources = payload.get("sources") or []
+    if sources:
+        typer.echo("\nSources:")
+        for s in sources:
+            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+
+
 # ---------------------------------------------------------------------------
 # Sub-command registration
 # ---------------------------------------------------------------------------
@@ -150,6 +187,7 @@ app.add_typer(memory_cmd.app, name="memory", help="Memories — facts and learni
 app.add_typer(conversation_cmd.app, name="conversation", help="Conversations — captured & processed audio + text.")
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
+app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +196,7 @@ app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metric
 
 
 def _exit_with_cli_error(error: CliError, renderer: Renderer) -> int:
-    renderer.error(error.message, detail=error.detail)
+    renderer.error(error.message, detail=error.detail, extra=error.extra)
     return error.exit_code
 
 
@@ -177,14 +215,20 @@ def main() -> None:
     * :class:`typer.Exit` — Typer's "clean exit at this code", e.g. from
       ``--version``. Pass through.
     * KeyboardInterrupt / EOFError — Ctrl-C / Ctrl-D. Conventional 130.
+    * :class:`click.Abort` — prompt interruption (subclasses RuntimeError, not
+      KeyboardInterrupt, so it needs its own rung). Same "Aborted." + 130.
     * Anything else — last-chance handler. Print a clean line, exit 1.
     """
+    global _LAST_RENDERER
+    _LAST_RENDERER = None
     try:
         app(standalone_mode=False)
     except CliError as exc:
         # If the error happens before the root callback ran, ``ctx.obj`` might
-        # not exist — fall back to a default Renderer reading the env.
-        renderer = Renderer(json_mode=False)
+        # not exist — fall back to a default Renderer preserving --json.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
         # Click's own usage errors (unknown flag, missing argument, etc.).
@@ -193,6 +237,13 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except click.Abort:
+        # Ctrl-C during an interactive prompt (Click raises click.Abort, which
+        # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught
+        # explicitly, otherwise it falls through to the generic handler with an
+        # empty str() and prints "unexpected error: ").
+        sys.stderr.write("\nAborted.\n")
+        sys.exit(130)
     except (KeyboardInterrupt, EOFError):
         sys.stderr.write("\nAborted.\n")
         sys.exit(130)

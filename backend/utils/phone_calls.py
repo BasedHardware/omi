@@ -10,14 +10,14 @@ again (same behavior as before this module existed); the quota snapshot
 returned to the client in that case reports ``has_access = False``.
 """
 
-from typing import FrozenSet, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from fastapi import HTTPException
 
 import database.phone_call_usage as phone_call_usage_db
 import database.users as users_db
-from database.phone_call_config import get_config_for_plan
-from utils.subscription import is_paid_plan
+from database.phone_call_config import get_config_for_plan, is_paid_phone_call_plan
+from models.users import PlanType
 
 # Minimal E.164 prefix → ISO-2 mapping. Intentionally covers the cheap/common
 # destinations; anything not on the list falls through to an empty match and
@@ -96,12 +96,12 @@ class QuotaSnapshot:
 
     def __init__(
         self,
-        plan,
+        plan: Optional[PlanType],
         is_paid: bool,
         monthly_limit: Optional[int],
         monthly_used: int,
         max_duration_seconds: Optional[int],
-        allowed_countries: list,
+        allowed_countries: List[str],
         reset_at: int,
     ):
         self.plan = plan
@@ -129,7 +129,7 @@ class QuotaSnapshot:
             return None
         return max(0, self.monthly_limit - self.monthly_used)
 
-    def to_client_dict(self) -> dict:
+    def to_client_dict(self) -> Dict[str, Any]:
         return {
             'has_access': self.has_access,
             'is_paid': self.is_paid,
@@ -146,13 +146,37 @@ def get_quota_snapshot(uid: str) -> QuotaSnapshot:
     """Resolve the user's plan + config + current usage into a snapshot."""
     subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else None
-    paid = bool(subscription and is_paid_plan(subscription.plan))
-    config = get_config_for_plan(paid)
+    paid = is_paid_phone_call_plan(plan)
+    config = get_config_for_plan(plan)
     used, reset_at = phone_call_usage_db.get_current_month_count(uid)
     return QuotaSnapshot(
         plan=plan,
         is_paid=paid,
         monthly_limit=config.get('monthly_call_limit'),
+        monthly_used=used,
+        max_duration_seconds=config.get('max_duration_seconds'),
+        allowed_countries=config.get('allowed_countries') or [],
+        reset_at=reset_at,
+    )
+
+
+def reserve_phone_call_quota(uid: str) -> QuotaSnapshot:
+    """Resolve plan/config and reserve one free-tier call slot atomically."""
+    subscription = users_db.get_user_valid_subscription(uid)
+    plan = subscription.plan if subscription else None
+    paid = is_paid_phone_call_plan(plan)
+    config = get_config_for_plan(plan)
+    monthly_limit = config.get('monthly_call_limit')
+
+    if paid or monthly_limit is None:
+        used, reset_at = phone_call_usage_db.get_current_month_count(uid)
+    else:
+        _, used, reset_at = phone_call_usage_db.reserve_current_month_slot(uid, monthly_limit)
+
+    return QuotaSnapshot(
+        plan=plan,
+        is_paid=paid,
+        monthly_limit=monthly_limit,
         monthly_used=used,
         max_duration_seconds=config.get('max_duration_seconds'),
         allowed_countries=config.get('allowed_countries') or [],

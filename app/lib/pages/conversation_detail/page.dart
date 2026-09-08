@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,19 +11,24 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:tuple/tuple.dart';
+import 'package:omi/utils/share_sheet.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -52,12 +59,18 @@ class ConversationDetailPage extends StatefulWidget {
   final bool openShareToContactsOnLoad;
   final int initialTabIndex;
 
+  /// When set (e.g. from search match snippet), open transcript and play this moment.
+  final double? initialSeekStart;
+  final double? initialSeekEnd;
+
   const ConversationDetailPage({
     super.key,
     this.isFromOnboarding = false,
     required this.conversation,
     this.openShareToContactsOnLoad = false,
     this.initialTabIndex = 1, // Default to summary tab
+    this.initialSeekStart,
+    this.initialSeekEnd,
   });
 
   @override
@@ -73,11 +86,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
-  // Callback to seek audio to transcript segment
-  Future<void> Function(double)? _seekToSegmentCallback;
+  // Callback to seek audio to transcript segment (start, end) in wall seconds
+  Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
+  bool _providerInitialized = false;
+  bool _didInitialSeek = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -156,6 +171,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.initState();
 
     _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
+    selectedTab = switch (widget.initialTabIndex) {
+      0 => ConversationTab.transcript,
+      2 => ConversationTab.actionItems,
+      _ => ConversationTab.summary,
+    };
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -193,8 +213,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
-
-      conversationProvider.groupConversationsByDate();
+      _providerInitialized = true;
 
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
@@ -203,17 +222,27 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         provider.updateConversation(widget.conversation.id, date);
       } else {
         final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
-        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+        provider.selectedDate = conversationLocalDayKey(effectiveDate);
       }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        final date = provider.selectedDate;
-        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
-        if (idx != -1) {
-          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        final conversationId = provider.conversation.id;
+        if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
+          // The initial list payload is enough to render the detail page. Fill
+          // in omitted app results after the first usable frame instead of
+          // holding the destination's startup sequence on this request. The
+          // provider re-locates the conversation by ID after the await because
+          // refreshes can reorder or replace the grouped list meanwhile.
+          unawaited(
+            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
+              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+              provider.updateConversation(conversationId, provider.selectedDate);
+            }),
+          );
+        } else {
+          provider.updateConversation(provider.conversation.id, provider.selectedDate);
         }
-        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -264,6 +293,26 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return context.l10n.conversationTab;
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
+    }
+  }
+
+  Future<void> _maybePlayInitialSeek() async {
+    if (_didInitialSeek || !mounted) return;
+    final start = widget.initialSeekStart;
+    if (start == null || _seekToSegmentCallback == null) return;
+    _didInitialSeek = true;
+    final end = widget.initialSeekEnd ?? start;
+    if (selectedTab != ConversationTab.transcript) {
+      setState(() {
+        selectedTab = ConversationTab.transcript;
+      });
+      _controller?.animateTo(0);
+    }
+    try {
+      await _seekToSegmentCallback!(start, end);
+      if (mounted) HapticFeedback.lightImpact();
+    } catch (_) {
+      // Audio may be unavailable offline; search still opened the transcript tab.
     }
   }
 
@@ -335,21 +384,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case 'download_audio':
         await _downloadAudio(context, provider);
         break;
-      // case 'export_transcript':
-      //   showShareBottomSheet(context, provider.conversation, (fn) {});
-      //   break;
-      // case 'export_summary':
-      //   showShareBottomSheet(context, provider.conversation, (fn) {});
-      //   break;
-      // case 'copy_raw_transcript':
-      //   _copyContent(context, provider.conversation.getTranscript());
-      //   break;
-      // case 'copy_conversation_raw':
-      //   _copyContent(context, provider.conversation.toJson().toString());
-      //   break;
-      // case 'trigger_integration':
-      //   _triggerWebhookIntegration(context, provider.conversation);
-      //   break;
       case 'test_prompt':
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
@@ -357,6 +391,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         if (!provider.loadingReprocessConversation) {
           await provider.reprocessConversation();
         }
+        break;
+      case 'link_event':
+        _handleLinkEvent(context, provider);
         break;
       case 'copy_conversation_id':
         Clipboard.setData(ClipboardData(text: provider.conversation.id));
@@ -367,6 +404,52 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _handleDelete(context, provider);
         break;
     }
+  }
+
+  void _handleLinkEvent(BuildContext context, ConversationDetailProvider provider) {
+    // Check if Google Calendar is connected
+    final integrationProvider = Provider.of<IntegrationProvider>(context, listen: false);
+    final isConnected = integrationProvider.hasLoaded
+        ? integrationProvider.isAppConnected(IntegrationApp.googleCalendar)
+        : SharedPreferencesUtil().getBool('google_calendar_connected');
+
+    if (!isConnected) {
+      _showCalendarNotConnectedDialog(context);
+      return;
+    }
+
+    // Show event picker directly
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const CalendarEventPickerSheet(),
+    );
+  }
+
+  void _showCalendarNotConnectedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(context.l10n.googleCalendarNotConnected, style: const TextStyle(color: Colors.white)),
+        content: Text(context.l10n.googleCalendarConnectPrompt, style: const TextStyle(color: Color(0xFF8E8E93))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(c);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const IntegrationsPage()));
+            },
+            child: Text(context.l10n.connect, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
@@ -438,7 +521,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       isDismissible: false,
       enableDrag: false,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           updateSheet = setState;
@@ -479,11 +562,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await Future.delayed(const Duration(milliseconds: 500));
 
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
-        await Share.shareXFiles([XFile(file.path, mimeType: 'audio/wav')]);
+        final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
+        await Share.shareXFiles([
+          XFile(file.path, mimeType: mimeType),
+        ], sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -496,8 +582,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await service.cleanup();
       } else {
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        currentState = AudioDownloadState.error;
+        updateSheet?.call(() {});
+
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
         // Track failure (no audio available)
@@ -505,6 +596,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           conversationId: provider.conversation.id,
           errorMessage: 'No audio files available',
         );
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.audioDownloadFailed),
+              action: SnackBarAction(label: context.l10n.retry, onPressed: () => _downloadAudio(context, provider)),
+            ),
+          );
+        }
       }
     } catch (e) {
       Logger.debug('Error downloading audio: $e');
@@ -520,9 +620,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await Future.delayed(const Duration(seconds: 2));
 
-      if (mounted) {
-        Navigator.of(sheetContext).pop();
-
+      if (sheetContext.mounted) {
+        Navigator.maybeOf(sheetContext)?.pop();
+      }
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.audioDownloadFailed),
@@ -540,43 +641,23 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     }
   }
 
-  // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
-  //   if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
-  //     showDialog(
-  //       context: context,
-  //       builder: (c) => getDialog(
-  //         context,
-  //         () => Navigator.pop(context),
-  //         () {
-  //           Navigator.pop(context);
-  //           routeToPage(context, const DeveloperSettingsPage());
-  //         },
-  //         'Webhook URL not set',
-  //         'Please set the webhook URL in developer settings to use this feature.',
-  //         okButtonText: 'Settings',
-  //       ),
-  //     );
-  //     return;
-  //   }
-  //
-  //   webhookOnConversationCreatedCall(conversation, returnRawBody: true).then((response) {
-  //     showDialog(
-  //       context: context,
-  //       builder: (c) => getDialog(
-  //         context,
-  //         () => Navigator.pop(context),
-  //         () => Navigator.pop(context),
-  //         'Result:',
-  //         response,
-  //         okButtonText: 'Ok',
-  //         singleButton: true,
-  //       ),
-  //     );
-  //   });
-  // }
-
   @override
   Widget build(BuildContext context) {
+    // Empty shell on first build (before initState's setCachedConversation
+    // post-frame); after init, an unresolved conversation pops the route.
+    final detailProvider = context.watch<ConversationDetailProvider>();
+    if (detailProvider.conversationOrNull == null) {
+      if (_providerInitialized) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+      return Scaffold(backgroundColor: Theme.of(context).colorScheme.primary);
+    }
+
     return PopScope(
       canPop: true,
       child: MessageListener<ConversationDetailProvider>(
@@ -599,7 +680,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               width: 36,
               height: 36,
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
                 onPressed: () {
@@ -619,16 +700,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
-            title: Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Text(
-                  _getTabTitle(context, selectedTab),
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            // No title: the tab bar below already names the active view, so a
+            // header label only crowds the row with the back button and actions.
+            // _getTabTitle still backs the `active_tab` search analytics property.
             titleSpacing: 0,
             actions: [
               Consumer<ConversationDetailProvider>(
@@ -638,6 +712,34 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Ask about this conversation (#4515)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            tooltip: context.l10n.askAboutThisConversation,
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              final convo = provider.conversation;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatPage(
+                                    isPivotBottom: false,
+                                    initialChatContext: ChatPageContext(
+                                      type: 'conversation',
+                                      id: convo.id,
+                                      title: convo.structured.title,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const FaIcon(FontAwesomeIcons.solidComments, size: 14.0, color: Colors.white),
+                          ),
+                        ),
                         // Star button (first) - toggle starred status
                         Container(
                           width: 36,
@@ -664,7 +766,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.id,
                                         newStarredState,
                                       );
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       if (success) {
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
@@ -714,7 +816,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             onPressed: _isSharing
@@ -728,9 +830,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       // Directly share the summary link
                                       bool shared = await setConversationVisibility(provider.conversation.id);
                                       if (!shared) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
+                                          );
+                                        }
                                         setState(() {
                                           _isSharing = false;
                                         });
@@ -742,17 +846,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      final RenderBox? box =
-                                          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                      final shareOrigin = box != null
-                                          ? Rect.fromLTWH(
-                                              box.localToGlobal(Offset.zero).dx,
-                                              box.localToGlobal(Offset.zero).dy,
-                                              box.size.width,
-                                              box.size.height,
-                                            )
-                                          : null;
-                                      shareConversationLink(provider.conversation, sharePositionOrigin: shareOrigin);
+                                      shareConversationLink(
+                                        provider.conversation,
+                                        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+                                      );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {
@@ -783,7 +880,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             height: 36,
                             margin: const EdgeInsets.only(right: 8),
                             decoration: BoxDecoration(
-                              color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                              color: _isSearching
+                                  ? Colors.deepPurple.withValues(alpha: 0.8)
+                                  : Colors.grey.withValues(alpha: 0.3),
                               shape: BoxShape.circle,
                             ),
                             child: IconButton(
@@ -816,17 +915,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             itemBuilder: (context) => [
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
-                                iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copySummary,
-                                iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copyConversationId,
-                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clipboard, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
@@ -842,20 +941,34 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
                               //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                               // ),
+                              if (provider.conversation.calendarEvent == null)
+                                PullDownMenuItem(
+                                  title: 'Link Event',
+                                  iconWidget: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Image.asset(
+                                      'assets/integration_app_logos/google-calendar.png',
+                                      width: 17,
+                                      height: 17,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  onTap: () => _handleMenuSelection(context, 'link_event', provider),
+                                ),
                               PullDownMenuItem(
                                 title: context.l10n.testPrompt,
-                                iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.commentDots, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                               ),
                               if (!provider.conversation.discarded)
                                 PullDownMenuItem(
                                   title: context.l10n.reprocessConversation,
-                                  iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+                                  iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                   onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.deleteConversation,
-                                iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                                iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
@@ -870,7 +983,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               child: Container(
                                 width: 36,
                                 height: 36,
-                                decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.3),
+                                  shape: BoxShape.circle,
+                                ),
                                 child: const Center(
                                   child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                                 ),
@@ -949,9 +1065,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _controller!.animateTo(0);
                                     }
 
-                                    // Seek to segment using callback
+                                    // Seek to segment using callback (start + end for bounded play)
                                     if (_seekToSegmentCallback != null) {
-                                      await _seekToSegmentCallback!(segment.start);
+                                      await _seekToSegmentCallback!(segment.start, segment.end);
                                       HapticFeedback.lightImpact();
                                     }
                                   },
@@ -969,7 +1085,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     }
                                   },
                                 ),
-                                ActionItemsTab(),
+                                const ActionItemsTab(),
                               ],
                             );
                           },
@@ -983,6 +1099,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
+                  // Stable key so the body Stack's collection-`if` diff matches
+                  // by identity, not by slot+type. Without it the surviving
+                  // search-overlay Positioned below was being reused into this
+                  // slot when the keyboard rose, tearing down the search
+                  // TextField subtree and dropping the IME mid-frame.
+                  key: const ValueKey('detail_floating_bottom_bar'),
                   bottom: 32,
                   left: 0,
                   right: 0,
@@ -1005,6 +1127,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               setState(() {
                                 _seekToSegmentCallback = seekFunction;
                               });
+                              _maybePlayInitialSeek();
                             }
                           });
                         },
@@ -1031,113 +1154,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   ),
                 ),
 
-              // thinh's comment: temporary disabled
-              //// Unassigned segments notification - positioned above the bottom bar
-              //Positioned(
-              //  bottom: 88, // Position above the bottom bar
-              //  left: 16,
-              //  right: 16,
-              //  child: Selector<ConversationDetailProvider, ({bool shouldShow, int count})>(
-              //    selector: (context, provider) {
-              //      final conversation = provider.conversation;
-              //      if (conversation == null) {
-              //        return (
-              //          count: 0,
-              //          shouldShow: false,
-              //        );
-              //      }
-              //      return (
-              //        count: conversation.unassignedSegmentsLength(),
-              //        shouldShow: provider.showUnassignedFloatingButton && (selectedTab == ConversationTab.transcript),
-              //      );
-              //    },
-              //    builder: (context, value, child) {
-              //      if (value.count == 0 || !value.shouldShow) return const SizedBox.shrink();
-              //      return Container(
-              //        padding: const EdgeInsets.symmetric(
-              //          vertical: 8,
-              //          horizontal: 16,
-              //        ),
-              //        decoration: BoxDecoration(
-              //          borderRadius: BorderRadius.circular(16),
-              //          color: const Color(0xFF1F1F25),
-              //          boxShadow: [
-              //            BoxShadow(
-              //              color: Colors.black.withOpacity(0.3),
-              //              spreadRadius: 1,
-              //              blurRadius: 2,
-              //              offset: const Offset(0, 1),
-              //            ),
-              //          ],
-              //        ),
-              //        child: Row(
-              //          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              //          children: [
-              //            Row(
-              //              children: [
-              //                InkWell(
-              //                  onTap: () {
-              //                    var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-              //                    provider.setShowUnassignedFloatingButton(false);
-              //                  },
-              //                  child: const Icon(
-              //                    Icons.close,
-              //                    color: Colors.white,
-              //                  ),
-              //                ),
-              //                const SizedBox(width: 8),
-              //                Text(
-              //                  "${value.count} unassigned segment${value.count == 1 ? '' : 's'}",
-              //                  style: const TextStyle(
-              //                    color: Colors.white,
-              //                    fontSize: 16,
-              //                  ),
-              //                ),
-              //              ],
-              //            ),
-              //            ElevatedButton(
-              //              style: ElevatedButton.styleFrom(
-              //                backgroundColor: Colors.deepPurple.withOpacity(0.5),
-              //                shape: RoundedRectangleBorder(
-              //                  borderRadius: BorderRadius.circular(16),
-              //                ),
-              //              ),
-              //              onPressed: () {
-              //                var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-              //                var speakerId = provider.conversation.speakerWithMostUnassignedSegments();
-              //                var segmentIdx = provider.conversation.firstSegmentIndexForSpeaker(speakerId);
-              //                showModalBottomSheet(
-              //                  context: context,
-              //                  isScrollControlled: true,
-              //                  backgroundColor: Colors.black,
-              //                  shape: const RoundedRectangleBorder(
-              //                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              //                  ),
-              //                  builder: (context) {
-              //                    return NameSpeakerBottomSheet(
-              //                      segmentIdx: segmentIdx,
-              //                      speakerId: speakerId,
-              //                    );
-              //                  },
-              //                );
-              //              },
-              //              child: const Text(
-              //                "Tag",
-              //                style: TextStyle(
-              //                  color: Colors.white,
-              //                  fontWeight: FontWeight.bold,
-              //                ),
-              //              ),
-              //            ),
-              //          ],
-              //        ),
-              //      );
-              //    },
-              //  ),
-              //),
               // Search overlay
               if (_isSearching)
                 Positioned(
+                  // Stable key — same reason as the floating bottom bar above.
+                  // Without it the keyboard pop-up flickered closed because
+                  // the body Stack's diff was reusing this Positioned's
+                  // element into the bar's slot and remounting the TextField.
+                  key: const ValueKey('detail_search_overlay'),
                   top: 0,
                   left: 0,
                   right: 0,
@@ -1170,7 +1194,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.withOpacity(0.3),
+                                                  color: Colors.grey.withValues(alpha: 0.3),
                                                   borderRadius: BorderRadius.circular(8),
                                                 ),
                                                 child: Text(
@@ -1244,7 +1268,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       )
                                     : null,
                                 filled: true,
-                                fillColor: const Color(0xFF1C1C1E).withOpacity(0.95),
+                                fillColor: const Color(0xFF1C1C1E).withValues(alpha: 0.95),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide.none,
@@ -1309,19 +1333,17 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           widget.onTapWhenSearchEmpty!();
         }
       },
-      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-        selector: (context, provider) =>
-            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
-        builder: (context, data, child) {
+      child: Selector<ConversationDetailProvider, bool>(
+        selector: (context, provider) => provider.conversation.discarded,
+        builder: (context, discarded, child) {
           return Stack(
             children: [
-              ListView(
-                shrinkWrap: true,
+              CustomScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                children: [
-                  const GetSummaryWidgets(),
-                  data.item1
-                      ? const ReprocessDiscardedWidget()
+                slivers: [
+                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
+                  discarded
+                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,
                           currentResultIndex: widget.currentResultIndex,
@@ -1340,13 +1362,308 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
-                  const GetGeolocationWidgets(),
-                  const SizedBox(height: 150),
+                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
                 ],
               ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for picking a calendar event to link
+class CalendarEventPickerSheet extends StatefulWidget {
+  const CalendarEventPickerSheet({super.key});
+
+  @override
+  State<CalendarEventPickerSheet> createState() => _CalendarEventPickerSheetState();
+}
+
+class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
+  List<CalendarEventLink> _events = [];
+  String? _suggestedEventId;
+  bool _isLoading = true;
+  bool _isLinking = false;
+  String? _linkingEventId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final events = await provider.listCalendarEventsForPicker();
+
+    if (mounted) {
+      final conversation = provider.conversation;
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      String? bestMatchId;
+      double bestOverlapSeconds = 0;
+
+      for (final event in events) {
+        final overlapStart = event.startTime.isAfter(conversationStart) ? event.startTime : conversationStart;
+        final overlapEnd = event.endTime.isBefore(conversationEnd) ? event.endTime : conversationEnd;
+        final overlapDuration = overlapEnd.difference(overlapStart).inSeconds.toDouble();
+
+        if (overlapDuration > 0) {
+          final eventDuration = event.endTime.difference(event.startTime).inSeconds.toDouble();
+          final overlapPercentage = eventDuration > 0 ? overlapDuration / eventDuration : 0;
+
+          if ((overlapDuration >= 300 || overlapPercentage >= 0.5) && overlapDuration > bestOverlapSeconds) {
+            bestOverlapSeconds = overlapDuration;
+            bestMatchId = event.eventId;
+          }
+        }
+      }
+
+      final sortedEvents = List<CalendarEventLink>.from(events);
+      if (bestMatchId != null) {
+        sortedEvents.sort((a, b) {
+          if (a.eventId == bestMatchId) return -1;
+          if (b.eventId == bestMatchId) return 1;
+          return a.startTime.compareTo(b.startTime);
+        });
+      }
+
+      setState(() {
+        _events = sortedEvents;
+        _suggestedEventId = bestMatchId;
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTime(DateTime time) {
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _formatDate(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(time.year, time.month, time.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (time.year == now.year) {
+      return dateTimeFormat('MMM d', time);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', time);
+    }
+  }
+
+  Future<void> _linkEvent(CalendarEventLink event) async {
+    setState(() {
+      _isLinking = true;
+      _linkingEventId = event.eventId;
+    });
+    HapticFeedback.mediumImpact();
+
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final linked = await provider.linkCalendarEvent(event.eventId);
+
+    if (!mounted) return;
+
+    if (linked != null) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.linkedToEvent(event.title))));
+    } else {
+      setState(() {
+        _isLinking = false;
+        _linkingEventId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToLinkCalendarEvent)));
+    }
+  }
+
+  Widget _buildShimmerList() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 14,
+                        width: double.infinity,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 12,
+                        width: 140,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEventTile(CalendarEventLink event, bool isSuggested, bool isLinkingThis) {
+    return GestureDetector(
+      onTap: _isLinking ? null : () => _linkEvent(event),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/integration_app_logos/google-calendar.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  if (isSuggested)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Suggested',
+                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    )
+                  else
+                    Text(
+                      '${_formatDate(event.startTime)}, ${_formatTime(event.startTime)} – ${_formatTime(event.endTime)}',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            _isLinking && isLinkingThis
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                  )
+                : Icon(Icons.add_circle_outline, color: _isLinking ? Colors.grey.shade700 : Colors.grey, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Text(
+                  'Link Event',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.grey, size: 24),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Color(0xFF2A2A2E), height: 1),
+          Flexible(
+            child: _isLoading
+                ? _buildShimmerList()
+                : _events.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'No calendar events found around this time.',
+                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _events.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                        itemBuilder: (context, index) {
+                          final event = _events[index];
+                          final isLinkingThis = _linkingEventId == event.eventId;
+                          final isSuggested = event.eventId == _suggestedEventId;
+                          return _buildEventTile(event, isSuggested, isLinkingThis);
+                        },
+                      ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
       ),
     );
   }
@@ -1419,6 +1736,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               segments,
               photos,
               null,
+              conversationId: conversation.id,
               horizontalMargin: false,
               topMargin: false,
               canDisplaySeconds: provider.canDisplaySeconds,
@@ -1665,7 +1983,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
 
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
-            _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            if (mounted) {
+              _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            }
           }
         } else {
           PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);

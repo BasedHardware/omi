@@ -1,0 +1,14 @@
+{
+  "name": "omi-provider",
+  "version": "1.0.0",
+  "description": "Pi-mono extension that registers Omi as an LLM provider and enforces a Windows dangerous-command denylist before pi runs tools, while routing all inference through the Omi backend",
+  "type": "module",
+  "private": true,
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6"
+  }
+}

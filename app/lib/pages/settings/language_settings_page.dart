@@ -177,11 +177,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   value: isAutoTranslationEnabled,
                   onChanged: (value) async {
                     final success = await userProvider.setSingleLanguageMode(!value);
-                    if (success && context.mounted) {
+                    if (success && mounted) {
                       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
                     }
                   },
-                  activeColor: const Color(0xFF22C55E),
+                  activeThumbColor: const Color(0xFF22C55E),
                 ),
             ],
           ),

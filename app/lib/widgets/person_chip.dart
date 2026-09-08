@@ -30,7 +30,7 @@ class PersonChip extends StatelessWidget {
       showCheckmark: !isAddButton,
       selectedColor: Theme.of(context).colorScheme.secondary,
       checkmarkColor: Colors.white,
-      backgroundColor: Colors.grey.shade800.withOpacity(0.6),
+      backgroundColor: Colors.grey.shade800.withValues(alpha: 0.6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.transparent, width: 1),

@@ -6,23 +6,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
-import 'package:omi/backend/http/shared.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/mic/mic_arbiter.dart';
+import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
-  late IDeviceService _device;
+  late IMicRecorderService _phoneMic;
+  late DeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
   static ServiceManager? _instance;
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
+    final micArbiter = MicArbiter();
+    sm._mic = ArbitratedMic(
+      inner: MicRecorderBackgroundService(runner: BackgroundService()),
+      arbiter: micArbiter,
+      owner: 'mic',
+    );
+    // Conversation capture uses the native recorder on iOS (AVAudioEngine) and
+    // Android (AudioRecord); chat voice memos and the speech profile stay on the
+    // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
+    // contending for the microphone.
+    sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
+        ? ArbitratedMic(inner: NativeMicRecorderService(), arbiter: micArbiter, owner: 'conversation')
+        : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -40,7 +54,11 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
-  IDeviceService get device => _device;
+  /// The recorder for conversation capture: native on iOS and Android,
+  /// flutter_sound elsewhere. Chat voice memos and speech profile keep using [mic].
+  IMicRecorderService get phoneMic => _phoneMic;
+
+  DeviceService get device => _device;
 
   ISocketService get socket => _socket;
 
@@ -63,6 +81,9 @@ class ServiceManager {
     ConnectivityService().dispose();
     await _wal.stop();
     _mic.stop();
+    if (!identical(_phoneMic, _mic)) {
+      _phoneMic.stop();
+    }
     _device.stop();
   }
 }
@@ -177,6 +198,7 @@ class BackgroundService {
 
   void stop() {
     Logger.debug("invoke stop");
+    if (_status == null) return;
     _service.invoke("stop");
   }
 
@@ -230,6 +252,7 @@ class BackgroundService {
   }
 
   void stopRecorder() {
+    if (_status == null) return;
     _service.invoke("recorder.stop");
   }
 }
@@ -243,8 +266,32 @@ abstract class IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    // Fired with began=true/false around an audio-session interruption. Only
+    // NativeMicRecorderService emits it — capture resumes natively; Dart just
+    // mirrors the state.
+    Function(bool began)? onInterruption,
   });
+
+  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
+  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
+  // fires when the native liveness feed (onBatchProgress) goes silent; onError
+  // forwards non-fatal native failures (e.g. batch_storage_full). Requires the native
+  // recorder (`ServiceManager.phoneMic` on iOS/Android); the flutter_sound
+  // implementations throw UnsupportedError.
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  });
+
   void stop();
+
+  /// Soft-rearm frame/progress liveness after the app returns to foreground.
+  /// iOS may suspend Dart timers while Stage Manager lets another app steal
+  /// the mic (#4706). Must not immediately escalate — that races native rebuild
+  /// and false-restarts healthy sessions. No-op on flutter_sound stacks.
+  void probeStallAfterForeground();
 }
 
 class MicRecorderBackgroundService implements IMicRecorderService {
@@ -261,6 +308,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     await _runner.ensureRunning();
 
@@ -276,9 +324,22 @@ class MicRecorderBackgroundService implements IMicRecorderService {
   }
 
   @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native recorder');
+  }
+
+  @override
   void stop() {
     _runner.stopRecorder();
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }
 
 class MicRecorderService implements IMicRecorderService {
@@ -319,6 +380,7 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
       throw Exception("Recorder is recording, please stop it before start new recording.");
@@ -376,6 +438,16 @@ class MicRecorderService implements IMicRecorderService {
   }
 
   @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native recorder');
+  }
+
+  @override
   void stop() {
     _stallTimer?.cancel();
     _stallTimer = null;
@@ -397,4 +469,7 @@ class MicRecorderService implements IMicRecorderService {
     _onRecording = null;
     _onStalled = null;
   }
+
+  @override
+  void probeStallAfterForeground() {}
 }

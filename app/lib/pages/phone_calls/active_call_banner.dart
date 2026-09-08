@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/phone_calls/call_duration_format.dart';
 
 /// Compact call banner shown on the home screen when a phone call is active.
 /// Displays contact info, live transcript snippet, and inline call controls.
@@ -89,14 +90,6 @@ class _CallInfoRow extends StatelessWidget {
     required this.state,
   });
 
-  String _formatDuration(Duration d) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    if (d.inHours > 0) {
-      return '${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}';
-    }
-    return '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
-  }
-
   @override
   Widget build(BuildContext context) {
     String statusText;
@@ -108,7 +101,7 @@ class _CallInfoRow extends StatelessWidget {
         statusText = context.l10n.callStateRinging;
         break;
       case PhoneCallState.active:
-        statusText = _formatDuration(duration);
+        statusText = formatPhoneCallDuration(duration);
         break;
       default:
         statusText = '';
@@ -324,11 +317,7 @@ class ActiveCallTopBar extends StatelessWidget {
 
         if (!isCallInProgress) return const SizedBox.shrink();
 
-        String twoDigits(int n) => n.toString().padLeft(2, '0');
-        Duration d = provider.callDuration;
-        String timeStr = d.inHours > 0
-            ? '${twoDigits(d.inHours)}:${twoDigits(d.inMinutes.remainder(60))}:${twoDigits(d.inSeconds.remainder(60))}'
-            : '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
+        String timeStr = formatPhoneCallDuration(provider.callDuration);
 
         String displayName = provider.contactName ?? provider.remoteNumber ?? '';
 

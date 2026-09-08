@@ -1,83 +1,79 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
-import uuid
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from models.daily_summary_payload import LearnedMemoryRef
 
 
-class ActionItemSummary(BaseModel):
-    description: str
-    priority: str = "medium"  # high, medium, low
-    completed: bool = False
+class DailySummaryActionItem(BaseModel):
+    description: Optional[str] = None
+    priority: Optional[str] = None
     source_conversation_id: Optional[str] = None
+    completed: Optional[bool] = None
 
 
-class TopicHighlight(BaseModel):
-    topic: str
-    emoji: str
-    summary: str  # Keep it snappy - 1-2 sentences max
-    conversation_ids: List[str] = []
+class DailySummaryTopicHighlight(BaseModel):
+    topic: Optional[str] = None
+    emoji: Optional[str] = None
+    summary: Optional[str] = None
+    conversation_ids: Optional[List[str]] = None
 
 
-class UnresolvedQuestion(BaseModel):
-    question: str
+class DailySummaryUnresolvedQuestion(BaseModel):
+    question: Optional[str] = None
     conversation_id: Optional[str] = None
 
 
-class DecisionMade(BaseModel):
-    decision: str
+class DailySummaryDecisionMade(BaseModel):
+    decision: Optional[str] = None
     conversation_id: Optional[str] = None
 
 
-class KnowledgeNugget(BaseModel):
-    insight: str
+class DailySummaryKnowledgeNugget(BaseModel):
+    insight: Optional[str] = None
     conversation_id: Optional[str] = None
 
 
-class DayStats(BaseModel):
-    total_conversations: int = 0  # Excluding discarded
-    total_duration_minutes: int = 0  # Excluding discarded
-    action_items_count: int = 0
+class DailySummaryDayStats(BaseModel):
+    total_conversations: Optional[int] = None
+    total_duration_minutes: Optional[int] = None
+    action_items_count: Optional[int] = None
+    memories_created: Optional[int] = None
+    action_items_created: Optional[int] = None
+    watching_minutes: Optional[int] = None
+    proactive_moments: Optional[int] = None
 
 
-class LocationPin(BaseModel):
-    latitude: float
-    longitude: float
+class DailySummaryLocationPin(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     address: Optional[str] = None
     conversation_id: Optional[str] = None
-    time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None
 
 
-class DailySummary(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    date: str  # YYYY-MM-DD format
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+class DailySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
 
-    # Headline & Overview
-    headline: str  # Catchy one-liner for the day
-    overview: str  # 2-3 snappy lines, 1 paragraph
-    day_emoji: str = "📅"
+    id: Optional[str] = None
+    date: Optional[str] = None
+    created_at: Optional[datetime] = None
+    headline: Optional[str] = None
+    overview: Optional[str] = None
+    day_emoji: Optional[str] = None
+    stats: Optional[DailySummaryDayStats] = None
+    highlights: Optional[List[DailySummaryTopicHighlight]] = None
+    action_items: Optional[List[DailySummaryActionItem]] = None
+    unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
+    decisions_made: Optional[List[DailySummaryDecisionMade]] = None
+    knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
+    # Memories the day actually produced, addressed by canonical memory id, so a
+    # shell can render a native review card. Older summaries have no field;
+    # clients prefer this over `knowledge_nuggets` when it is non-empty.
+    memories_learned: List[LearnedMemoryRef] = Field(default_factory=list)
+    locations: Optional[List[DailySummaryLocationPin]] = None
 
-    # Stats
-    stats: DayStats = Field(default_factory=DayStats)
 
-    # Core content (all optional - skip if not enough quality data)
-    highlights: List[TopicHighlight] = []
-    action_items: List[ActionItemSummary] = []
-    unresolved_questions: List[UnresolvedQuestion] = []  # Max 3
-    decisions_made: List[DecisionMade] = []  # Max 3
-    knowledge_nuggets: List[KnowledgeNugget] = []  # Max 3
-
-    # Locations
-    locations: List[LocationPin] = []
-
-    def dict(self, **kwargs):
-        data = super().dict(**kwargs)
-        if isinstance(data.get('created_at'), datetime):
-            data['created_at'] = data['created_at'].isoformat()
-        return data
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'DailySummary':
-        if isinstance(data.get('created_at'), str):
-            data['created_at'] = datetime.fromisoformat(data['created_at'].replace('Z', '+00:00'))
-        return cls(**data)
+class DailySummariesResponse(BaseModel):
+    summaries: List[DailySummaryResponse] = Field(default_factory=list)

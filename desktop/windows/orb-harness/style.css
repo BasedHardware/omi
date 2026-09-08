@@ -1,0 +1,16 @@
+/* Orb harness page chrome. Imported from main.ts (an inline <style> in
+   index.html trips vite's html-inline-proxy on Windows drive-case paths). */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #151515;
+  display: grid;
+  place-items: center;
+}
+body.checker {
+  background: repeating-conic-gradient(#202020 0% 25%, #2c2c2c 0% 50%) 0 0 / 24px 24px;
+}
+canvas {
+  display: block;
+}

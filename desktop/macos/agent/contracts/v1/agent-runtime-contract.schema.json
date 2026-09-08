@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Omi Agent Runtime Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "contextSnapshot", "toolResultEnvelope", "toolInvocation", "permissionDecision", "lifecycle", "failureTaxonomy", "sessionListingBudget", "adapterConformance"],
+  "properties": {
+    "version": {"const": 1},
+    "contextSnapshot": {
+      "type": "object", "additionalProperties": false, "required": ["contextPlan"],
+      "properties": {
+        "contextPlan": {
+          "type": "object", "additionalProperties": false,
+          "required": ["version", "planId", "semanticGuidanceVersion", "semanticGuidance", "retainedTurnStartSeq", "retainedTurnEndSeq", "retainedTurnCount", "totalTurnCount", "omittedTurnCount", "olderHistoryStrategy", "stableCacheIdentity", "dynamicContextIdentity"],
+          "properties": {
+            "version": {"const": 1}, "planId": {"type": "string", "minLength": 1},
+            "semanticGuidanceVersion": {"type": "string", "minLength": 1}, "semanticGuidance": {"type": "string", "minLength": 1},
+            "retainedTurnStartSeq": {"type": ["integer", "null"], "minimum": 0}, "retainedTurnEndSeq": {"type": ["integer", "null"], "minimum": 0},
+            "retainedTurnCount": {"type": "integer", "minimum": 0}, "totalTurnCount": {"type": "integer", "minimum": 0},
+            "omittedTurnCount": {"type": "integer", "minimum": 0}, "olderHistoryStrategy": {"enum": ["none", "truncated"]},
+            "stableCacheIdentity": {"type": "string", "minLength": 1}, "dynamicContextIdentity": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "toolResultEnvelope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "status", "truncated", "originalBytes", "projectedBytes", "fullOutputRef", "provenance"],
+      "properties": {
+        "version": {"const": 1}, "status": {"enum": ["succeeded", "failed", "cancelled"]}, "truncated": {"type": "boolean"},
+        "originalBytes": {"type": "integer", "minimum": 0}, "projectedBytes": {"type": "integer", "minimum": 0}, "fullOutputRef": {"type": ["string", "null"]},
+        "provenance": {
+          "type": "object", "additionalProperties": false, "required": ["invocationId", "runId", "attemptId", "toolName"],
+          "properties": {
+            "invocationId": {"type": "string", "minLength": 1}, "runId": {"type": "string", "minLength": 1},
+            "attemptId": {"type": "string", "minLength": 1}, "toolName": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "toolInvocation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["invocationId", "runId", "attemptId", "toolName", "status"],
+      "properties": {
+        "invocationId": {"type": "string", "minLength": 1}, "runId": {"type": "string", "minLength": 1},
+        "attemptId": {"type": "string", "minLength": 1}, "toolName": {"type": "string", "minLength": 1},
+        "status": {"enum": ["prepared", "dispatched", "succeeded", "failed", "outcome_unknown"]}
+      }
+    },
+    "permissionDecision": {
+      "type": "object", "additionalProperties": false, "required": ["decision", "invocationId"],
+      "properties": {"decision": {"enum": ["approved", "denied"]}, "invocationId": {"type": "string", "minLength": 1}}
+    },
+    "lifecycle": {
+      "type": "object", "additionalProperties": false, "required": ["session", "run", "attempt", "turn"],
+      "properties": {
+        "session": {"type": "array", "minItems": 3, "items": {"enum": ["open", "archived", "closed"]}},
+        "run": {"type": "array", "minItems": 11, "items": {"enum": ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"]}},
+        "attempt": {"type": "array", "minItems": 11, "items": {"enum": ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"]}},
+        "turn": {"type": "array", "minItems": 4, "items": {"enum": ["pending", "streaming", "completed", "failed"]}}
+      }
+    },
+    "failureTaxonomy": {
+      "type": "array", "minItems": 14,
+      "items": {"enum": ["authentication", "quota_exceeded", "invalid_request", "timeout", "transport_interruption", "adapter_unavailable", "adapter_incompatible", "bridge_start_failed", "provider_setup_needed", "malformed_or_oversized_tool_result", "cancelled", "stale_owner", "policy_denied", "unknown"]}
+    },
+    "sessionListingBudget": {
+      "type": "object", "additionalProperties": false, "required": ["maxBytes", "mustExclude"],
+      "properties": {"maxBytes": {"const": 8192}, "mustExclude": {"type": "array", "items": {"type": "string"}}}
+    },
+    "adapterConformance": {
+      "type": "array", "minItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["adapterId", "surface", "transport", "expectsToolEnvelope", "scenarios"],
+        "properties": {
+          "adapterId": {"type": "string", "minLength": 1},
+          "surface": {"enum": ["desktop_chat", "realtime_voice"]},
+          "transport": {"enum": ["node_runtime", "swift_realtime"]},
+          "expectsToolEnvelope": {"const": true},
+          "scenarios": {
+            "type": "array", "minItems": 2,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["name", "runState", "attemptState", "turnState", "failureCode", "consumesToolInvocation", "expectsTruncatedToolEnvelope"],
+              "properties": {
+                "name": {"enum": ["lifecycle_failure", "oversized_tool_result"]},
+                "runState": {"enum": ["failed"]}, "attemptState": {"enum": ["failed"]}, "turnState": {"enum": ["failed"]},
+                "failureCode": {"enum": ["bridge_start_failed", "malformed_or_oversized_tool_result"]},
+                "consumesToolInvocation": {"const": true}, "expectsTruncatedToolEnvelope": {"const": true}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

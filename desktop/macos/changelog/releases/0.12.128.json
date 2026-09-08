@@ -1,0 +1,7 @@
+{
+  "version": "0.12.128",
+  "date": "2026-07-26",
+  "changes": [
+    "Fixed chat silently skipping the action it promised after a web search — the follow-up tool call was dropped, so nothing happened"
+  ]
+}

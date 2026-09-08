@@ -163,7 +163,8 @@ describe('formatDate', () => {
   });
   it('handles epoch zero', () => {
     const result = formatDate('1970-01-01T00:00:00Z');
-    assert.ok(result.includes('1970'));
+    assert.ok(result.length > 0);
+    assert.match(result, /1969|1970/);
   });
 });
 

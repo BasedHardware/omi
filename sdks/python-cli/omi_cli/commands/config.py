@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import typer
+from rich.markup import escape
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
@@ -38,6 +39,8 @@ def show(typer_ctx: typer.Context) -> None:
                 "auth_method": profile.auth_method,
                 "api_base": profile.api_base,
                 "credential": profile.masked_credential(),
+                "local_api_url": profile.local_api_url,
+                "local_token": profile.masked_local_token(),
             }
         )
     payload = {
@@ -58,10 +61,10 @@ def path(typer_ctx: typer.Context) -> None:
         typer.echo(str(config.path))
 
 
-_SETTABLE_KEYS = {"api_base"}
+_SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
 
 
-@app.command("set", help="Set a per-profile config value. Keys: api_base.")
+@app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
 def set_value(
     typer_ctx: typer.Context,
     key: str = typer.Argument(..., help=f"Config key to set. One of: {sorted(_SETTABLE_KEYS)}"),
@@ -77,9 +80,19 @@ def set_value(
     profile = config.get_profile(ctx.profile_name)
     if key == "api_base":
         profile.api_base = value.rstrip("/")
+    elif key == "local_api_url":
+        profile.local_api_url = value.rstrip("/")
+    elif key == "local_token":
+        profile.local_token = value
     config.set_profile(profile)
     cfg.save(config)
-    ctx.renderer.success(f"Set [bold]{key}[/bold] = {value} on profile [bold]{profile.name}[/bold].")
+    display_value = (
+        cfg.Profile(name=profile.name, local_token=value).masked_local_token() if key == "local_token" else value
+    )
+    ctx.renderer.success(
+        f"Set [bold]{escape(key)}[/bold] = {escape(display_value)} "
+        f"on profile [bold]{escape(profile.name)}[/bold]."
+    )
 
 
 @profile_app.command("list", help="List all configured profiles.")
@@ -96,9 +109,15 @@ def profile_list(typer_ctx: typer.Context) -> None:
                 "auth_method": profile.auth_method or "(none)",
                 "api_base": profile.api_base,
                 "credential": profile.masked_credential(),
+                "local_api_url": profile.local_api_url or "",
+                "local_token": profile.masked_local_token(),
             }
         )
-    ctx.renderer.emit(rows, columns=["name", "active", "auth_method", "api_base", "credential"], title="profiles")
+    ctx.renderer.emit(
+        rows,
+        columns=["name", "active", "auth_method", "api_base", "credential", "local_api_url", "local_token"],
+        title="profiles",
+    )
 
 
 @profile_app.command("use", help="Switch the active profile.")
@@ -114,7 +133,7 @@ def profile_use(
         config.profiles[name] = cfg.Profile(name=name)
     config.active_profile = name
     cfg.save(config)
-    ctx.renderer.success(f"Active profile: [bold]{name}[/bold].")
+    ctx.renderer.success(f"Active profile: [bold]{escape(name)}[/bold].")
 
 
 @profile_app.command("delete", help="Delete a profile and its credentials.")
@@ -131,4 +150,4 @@ def profile_delete(
         typer.confirm(f"Delete profile '{name}'?", abort=True)
     config.delete_profile(name)
     cfg.save(config)
-    ctx.renderer.success(f"Deleted profile [bold]{name}[/bold].")
+    ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")

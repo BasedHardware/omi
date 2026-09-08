@@ -1,0 +1,38 @@
+version: 2
+name: context-bucket-director-probe
+tier: 1
+description: Verify the non-production, no-delivery director replay seam fails closed for an ineligible snapshot.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbe.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbeRegistration.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Replay an ineligible synthetic snapshot without invoking the model
+    bridge.action:
+      name: probe_context_bucket_director
+      params:
+        bucket_id: synthetic-probe-bucket
+        version: "1"
+        header: Synthetic replay header
+        frozen: "[]"
+        tail: "[]"
+        validated_facts: "[]"
+        tasks: "[]"
+        app: SyntheticApp
+        window: Synthetic Window
+        captured_at: "2026-08-13T04:00:00Z"
+        notify_worthiness: "0"
+    expect:
+      result.detail.decision: silence
+      result.detail.model: not_invoked
+      result.detail.reasoning: ineligible_snapshot
+
+  - id: S2
+    name: Logs are clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

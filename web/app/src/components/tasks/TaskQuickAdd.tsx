@@ -11,7 +11,11 @@ interface TaskQuickAddProps {
   defaultDueDate?: Date | null;
 }
 
-export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQuickAddProps) {
+export function TaskQuickAdd({
+  onAdd,
+  disabled = false,
+  defaultDueDate,
+}: TaskQuickAddProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [value, setValue] = useState('');
   const [dueDate, setDueDate] = useState<string>('');
@@ -74,9 +78,9 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
           'flex items-center gap-2 w-full px-3 py-2.5',
           'rounded-lg border border-dashed border-bg-quaternary',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'hover:border-white/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
-          disabled && 'opacity-50 cursor-not-allowed'
+          disabled && 'opacity-50 cursor-not-allowed',
         )}
       >
         <Plus className="w-4 h-4" />
@@ -92,10 +96,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
-      className={cn(
-        'rounded-lg border border-purple-primary/50',
-        'bg-bg-secondary p-3 space-y-3'
-      )}
+      className={cn('rounded-lg border border-white/50', 'bg-bg-secondary p-3 space-y-3')}
     >
       {/* Input */}
       <input
@@ -109,7 +110,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
         className={cn(
           'w-full bg-transparent',
           'text-sm text-text-primary placeholder:text-text-quaternary',
-          'outline-none'
+          'outline-none',
         )}
       />
 
@@ -128,8 +129,8 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
                 'pl-8 pr-2 py-1 text-xs rounded',
                 'bg-bg-secondary border border-transparent',
                 'text-text-secondary',
-                'focus:border-purple-primary/50 focus:outline-none',
-                'transition-colors'
+                'focus:border-white/50 focus:outline-none',
+                'transition-colors',
               )}
             />
           </div>
@@ -153,7 +154,7 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
             className={cn(
               'px-3 py-1 text-xs rounded',
               'text-text-tertiary hover:text-text-secondary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             Cancel
@@ -163,10 +164,10 @@ export function TaskQuickAdd({ onAdd, disabled = false, defaultDueDate }: TaskQu
             disabled={!value.trim() || isSubmitting}
             className={cn(
               'px-3 py-1 text-xs rounded',
-              'bg-purple-primary hover:bg-purple-secondary',
-              'text-white font-medium',
+              'bg-white hover:bg-white/90',
+              'text-black font-medium',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             {isSubmitting ? 'Adding...' : 'Add Task'}

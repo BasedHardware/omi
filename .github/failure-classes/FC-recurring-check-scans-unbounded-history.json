@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-recurring-check-scans-unbounded-history",
+  "violated_contract": "A recurring health check that aggregates over a collection nothing ever deletes must window its scan to a recent period, not just bound the stale end with an age threshold. An upper age bound alone still leaves the query unbounded on the near side: read cost grows in lockstep with the collection's all-time size, and once a single record is ever counted bad, an all-time aggregate has no path back to healthy -- the same missing lower bound produces both failures at once.",
+  "canonical_prevention": "Add an explicit lower-bound filter (or equivalent recency cutoff) sized to the check's own cadence, so the query answers 'how does the current period look' instead of 'how does all of history look,' and give a deliberate, separate operator-invoked path (a CLI flag or script mode) for anyone who genuinely needs the unwindowed, all-time answer.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_chat_first_materialization_drop_rate.py"
+  ],
+  "evidence_prs": [
+    11949
+  ],
+  "scope_hints": [
+    "backend/utils/task_intelligence/**",
+    "backend/database/chat_first_intents.py"
+  ],
+  "status": "open"
+}

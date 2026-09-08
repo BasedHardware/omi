@@ -3,11 +3,18 @@ Tests for memories validation filtering logic.
 Regression test for issue #4501: ResponseValidationError after KeyError fix.
 """
 
+import os
+import sys
+
 import pytest
+from types import ModuleType
 from datetime import datetime, timezone
 from pydantic import BaseModel, ValidationError, Field
 from typing import Optional, List
 from enum import Enum
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class MemoryCategory(str, Enum):
@@ -231,3 +238,86 @@ class TestMemoryValidationFiltering:
 
         assert len(valid_memories) == 1
         assert valid_memories[0].id == 'valid'
+
+
+class TestExtractedMemoryValidation:
+    def _ensure_memory_model_dependencies(self):
+        os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
+
+        models = sys.modules.setdefault('models', ModuleType('models'))
+        models.__path__ = [str(BACKEND_DIR / 'models')]
+
+        database = sys.modules.setdefault('database', ModuleType('database'))
+        if not hasattr(database, '__path__'):
+            database.__path__ = []
+
+        client = sys.modules.get('database._client')
+        if client is None:
+            client = ModuleType('database._client')
+            sys.modules['database._client'] = client
+            database._client = client
+        if not hasattr(client, 'document_id_from_seed'):
+            client.document_id_from_seed = lambda value: f'id-{value}'
+
+        users = sys.modules.get('database.users')
+        if users is None:
+            users = ModuleType('database.users')
+            sys.modules['database.users'] = users
+            database.users = users
+        if not hasattr(users, 'get_user_language_preference'):
+            users.get_user_language_preference = lambda uid: 'en'
+
+        llm_usage = sys.modules.get('database.llm_usage')
+        if llm_usage is None:
+            llm_usage = ModuleType('database.llm_usage')
+            sys.modules['database.llm_usage'] = llm_usage
+            database.llm_usage = llm_usage
+        if not hasattr(llm_usage, 'record_llm_usage'):
+            llm_usage.record_llm_usage = lambda *args, **kwargs: None
+
+        tiktoken = sys.modules.get('tiktoken')
+        if tiktoken is None:
+            tiktoken = ModuleType('tiktoken')
+            tiktoken.encoding_for_model = lambda model: type(
+                'Encoding', (), {'encode': lambda self, text: list(text)}
+            )()
+            sys.modules['tiktoken'] = tiktoken
+
+        prompts = sys.modules.get('utils.prompts')
+        if prompts is None:
+            prompts = ModuleType('utils.prompts')
+            prompts.extract_memories_prompt = object()
+            prompts.extract_learnings_prompt = object()
+            prompts.extract_memories_text_content_prompt = object()
+            sys.modules['utils.prompts'] = prompts
+
+        llms_memory = sys.modules.get('utils.llms.memory')
+        if llms_memory is None:
+            llms = sys.modules.setdefault('utils.llms', ModuleType('utils.llms'))
+            if not hasattr(llms, '__path__'):
+                llms.__path__ = []
+            llms_memory = ModuleType('utils.llms.memory')
+            llms_memory.get_prompt_memories = lambda uid: ('Test User', '')
+            sys.modules['utils.llms.memory'] = llms_memory
+            llms.memory = llms_memory
+
+    @pytest.mark.slow
+    def test_unknown_llm_category_defaults_to_interesting(self):
+        self._ensure_memory_model_dependencies()
+        from models.memories import MemoryCategory
+        from utils.llm.memories import ExtractedMemory
+
+        extracted = ExtractedMemory(content='User likes short meetings', category='unexpected_llm_category')
+
+        assert extracted.category == MemoryCategory.interesting
+        assert extracted.to_memory().category == MemoryCategory.interesting
+
+    def test_legacy_llm_category_maps_to_current_category(self):
+        self._ensure_memory_model_dependencies()
+        from models.memories import MemoryCategory
+        from utils.llm.memories import ExtractedMemory
+
+        extracted = ExtractedMemory(content='User likes coffee', category='hobbies')
+
+        assert extracted.category == MemoryCategory.system
+        assert extracted.to_memory().category == MemoryCategory.system

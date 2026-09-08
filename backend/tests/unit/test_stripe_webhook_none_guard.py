@@ -18,7 +18,7 @@ PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 
 
 def _read_source():
-    return PAYMENT_SOURCE.read_text()
+    return PAYMENT_SOURCE.read_text(encoding="utf-8")
 
 
 # ── Fix 1: FirestoreNotFound guard for deleted users ─────────────────────────
@@ -67,7 +67,10 @@ def test_build_subscription_catches_unknown_price_id():
     next_func = source.index('\ndef ', func_start + 1)
     func_body = source[func_start:next_func]
 
-    assert 'except ValueError:' in func_body
+    # Matches both 'except ValueError:' and 'except ValueError as e:' -- the handler
+    # now binds the exception to log it. Asserting the exact source text made this a
+    # third source-parsing test that breaks on wording rather than on behavior.
+    assert 'except ValueError' in func_body
     assert 'return None' in func_body
 
 
@@ -148,7 +151,8 @@ def test_customer_subscription_logs_none_subscription():
     """customer.subscription.* handler must log when _build_subscription_from_stripe_object returns None."""
     source = _read_source()
     handler_start = source.index("'customer.subscription.updated'")
-    handler_section = source[handler_start : handler_start + 2500]
+    handler_end = source.index("subscription_schedule.completed", handler_start)
+    handler_section = source[handler_start:handler_end]
 
     # Must log unknown price ID when subscription build fails
     assert (
@@ -185,7 +189,8 @@ def test_checkout_path_checks_user_exists_before_processing():
     source = _read_source()
     # Find the regular user subscription branch within checkout handler
     branch_start = source.index("# Regular user subscription")
-    branch_section = source[branch_start : branch_start + 1500]
+    branch_end = source.index("await run_blocking(stripe_executor, _update_subscription_from_session", branch_start)
+    branch_section = source[branch_start:branch_end]
 
     # Must have user existence check before get_user_valid_subscription
     assert 'get_user_profile' in branch_section, (

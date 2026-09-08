@@ -102,7 +102,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                 // Bottom drawer card - wraps content
                 Container(
                   width: double.infinity,
-                  padding: EdgeInsets.fromLTRB(32, 24, 32, 20),
+                  padding: const EdgeInsets.fromLTRB(32, 24, 32, 20),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
@@ -128,7 +128,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                         Text(
                           context.l10n.captureEveryMoment,
                           style: TextStyle(
-                            color: Colors.black.withOpacity(0.7),
+                            color: Colors.black.withValues(alpha: 0.7),
                             fontSize: 16,
                             height: 1.4,
                             fontFamily: 'Manrope',
@@ -197,7 +197,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                   child: CircularProgressIndicator(
                     value: _videoProgress,
                     strokeWidth: 2,
-                    backgroundColor: Colors.grey.withOpacity(0.3),
+                    backgroundColor: Colors.grey.withValues(alpha: 0.3),
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[700]!),
                   ),
                 ),

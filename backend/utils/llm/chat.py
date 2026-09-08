@@ -1,9 +1,10 @@
-from .clients import get_llm
 import json
 import re
-import os
 from datetime import datetime, timezone
-from typing import List, Optional
+
+_MAX_WORDS_HINT = "Use a maximum of 3 words per item."
+from html import escape
+from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -11,20 +12,58 @@ from pydantic import BaseModel, Field, ValidationError
 import database.users as users_db
 import database.notifications as notification_db
 import database.goals as goals_db
+import database.apps as apps_db
 from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
 from models.conversation_enums import CategoryEnum
+from models.conversation_metadata import ConversationMetadata
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
+
+from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
+
+
+def resolve_app_display_name(app_id: str) -> Optional[str]:
+    """App-record -> display name. Lives here, not in models/chat.py: this layer already owns
+    the database import, so the model stays free of it. Bound as a module (like users_db /
+    goals_db above) rather than `from database.apps import ...`, so suites that stub
+    database.apps can still import this module."""
+    app = apps_db.get_app_by_id_db(app_id)
+    return app.get('name') if app else None
+
+
+def normalize_filter(value: str) -> str:
+    value = re.sub(r'[^\w\s-]', '', value.lower()).strip()
+    value = re.sub(r'\s+', ' ', value)
+    # Remove common filler words
+    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'of'}
+    value = ' '.join(word for word in value.split() if word not in filler_words)
+
+    # Standardize common variations
+    value = value.replace('artificial intelligence', 'ai')
+    value = value.replace('machine learning', 'ml')
+    value = value.replace('natural language processing', 'nlp')
+
+    words = value.split()
+    # After filler/abbrev, cap at 3 words by keeping first two + last so 3-word names stay intact.
+    if len(words) > 3:
+        return f'{words[0]} {words[1]} {words[-1]}'
+    return value
+
 
 # ****************************************
 # ************* CHAT BASICS **************
@@ -53,7 +92,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     with track_usage(uid, Features.CHAT):
-        return get_llm('chat_responses').invoke(prompt).content
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 # *********************************************
@@ -86,7 +125,7 @@ def requires_context(question: str) -> bool:
     {question}
     '''
     with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
-    response: RequiresContext = with_parser.invoke(prompt)
+    response = cast(RequiresContext, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -150,7 +189,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     Is this asking about the Omi/Friend app product itself?
     '''.replace('    ', '').strip()
     with_parser = get_llm('chat_extraction').with_structured_output(IsAnOmiQuestion)
-    response: IsAnOmiQuestion = with_parser.invoke(prompt)
+    response = cast(IsAnOmiQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -180,7 +219,7 @@ def retrieve_is_file_question(question: str) -> bool:
     '''
 
     with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
-    response: IsFileQuestion = with_parser.invoke(prompt)
+    response = cast(IsFileQuestion, with_parser.invoke(prompt))
     try:
         return response.value
     except ValidationError:
@@ -204,7 +243,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     # print(prompt)
     # print(get_llm('chat_extraction').invoke(prompt).content)
     with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
-    response: DatesContext = with_parser.invoke(prompt)
+    response = cast(DatesContext, with_parser.invoke(prompt))
     return response.dates_range
 
 
@@ -213,7 +252,10 @@ class SummaryOutput(BaseModel):
 
 
 def chunk_extraction(
-    segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None, user_name: str = None
+    segments: List[TranscriptSegment],
+    topics: List[str],
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
 ) -> str:
     content = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     prompt = f'''
@@ -229,13 +271,16 @@ def chunk_extraction(
     Topics: {topics}
     '''
     with_parser = get_llm('chat_extraction').with_structured_output(SummaryOutput)
-    response: SummaryOutput = with_parser.invoke(prompt)
+    response = cast(SummaryOutput, with_parser.invoke(prompt))
     return response.summary
 
 
 def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
     user_name, memories_str = get_prompt_memories(uid)
 
@@ -261,17 +306,24 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses').invoke(prompt).content
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(
+    uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks: List[Any] = []
+) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
 
     return f"""
@@ -292,12 +344,12 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction').invoke(prompt).content
+    return _content_str(get_llm('chat_extraction').invoke(prompt))
 
 
-def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
+def answer_omi_question_stream(messages: List[Message], context: str, callbacks: List[Any]) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    return _content_str(get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_qa_rag_prompt(
@@ -309,7 +361,7 @@ def _get_qa_rag_prompt(
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    _user_name, memories_str = get_prompt_memories(uid)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
@@ -388,8 +440,98 @@ def _get_qa_rag_prompt(
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
-def _get_agentic_qa_prompt(
-    uid: str, app: Optional[App] = None, messages: List[Message] = None, context: Optional[PageContext] = None
+# The agentic system prompt is wrapped in a single Anthropic cache_control breakpoint,
+# so any byte that changes per request invalidates the whole cached prefix. The current
+# datetime is the only such value (microsecond ISO), so it is kept OUT of the system prompt
+# and injected into the user turn instead (see get_current_datetime_block / agentic.py).
+# The system prompt references this placeholder so the datetime instructions still make sense.
+CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user message)"
+
+# Allowlist mapping of `X-App-Platform` header values to a platform-context line for the
+# agentic system prompt. Header values are client-controlled, so only these exact values
+# ever reach the prompt — anything unrecognized adds nothing (the allowlist is the
+# injection guard; raw header text is never interpolated into the prompt).
+_PLATFORM_CONTEXT_LINES = {
+    'windows': (
+        "The user is using Omi on a Windows PC — when giving instructions or troubleshooting, "
+        "give Windows-appropriate steps (not macOS)."
+    ),
+    'macos': (
+        "The user is using Omi on a Mac — when giving instructions or troubleshooting, " "give macOS-appropriate steps."
+    ),
+    'ios': (
+        "The user is using Omi on an iPhone (iOS app) — when giving instructions or troubleshooting, "
+        "give iOS-appropriate steps."
+    ),
+    'android': (
+        "The user is using Omi on an Android phone — when giving instructions or troubleshooting, "
+        "give Android-appropriate steps."
+    ),
+}
+
+
+def _get_platform_context_section(platform: Optional[str]) -> str:
+    """Return a <user_platform> section for a recognized client platform, else ''.
+
+    Unknown or missing platform values return the empty string so the system prompt
+    stays byte-identical to the pre-platform behavior. The section is appended at the
+    very end of the prompt; platform is stable per client, so the Anthropic
+    cache_control prefix stays stable across requests from the same client.
+    """
+    if not platform:
+        return ""
+    line = _PLATFORM_CONTEXT_LINES.get(platform.strip().lower())
+    if not line:
+        return ""
+    return f"\n\n<user_platform>\n{line}\n</user_platform>"
+
+
+def get_user_timezone(uid: str) -> str:
+    """Resolve the user's timezone, falling back to UTC when missing/invalid."""
+    tz = notification_db.get_user_time_zone(uid)
+    if tz is None:
+        return "UTC"
+    try:
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "UTC"
+
+
+def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Optional[str] = None) -> str:
+    """Build the current-datetime block injected into the user turn.
+
+    Kept out of the cached system prefix so the cached bytes stay stable across requests
+    while the model still receives the live time. Mirrors the timezone resolution used by
+    _get_agentic_qa_prompt. Pass a pre-resolved ``tz`` to avoid a duplicate timezone lookup
+    when the caller already resolved it for the system prompt.
+    """
+    if tz is None:
+        tz = get_user_timezone(uid)
+    try:
+        current_datetime_user = datetime.now(ZoneInfo(tz))
+    except Exception:
+        current_datetime_user = datetime.now(timezone.utc)
+        tz = "UTC"
+    current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+    current_datetime_iso = current_datetime_user.isoformat()
+    location_line = f"Current city-level location: {escape(location, quote=False)}\n" if location else ""
+    return (
+        "<current_datetime>\n"
+        f"Current date time in {tz}: {current_datetime_str}\n"
+        f"Current date time ISO format: {current_datetime_iso}\n"
+        f"{location_line}"
+        "</current_datetime>"
+    )
+
+
+def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by retrieval/agentic.py
+    uid: str,
+    app: Optional[App] = None,
+    messages: Optional[List[Message]] = None,
+    context: Optional[PageContext] = None,
+    tz: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -397,38 +539,37 @@ def _get_agentic_qa_prompt(
     Uses LangSmith-controlled prompt template with dynamic variable injection.
     Falls back to hardcoded prompt if LangSmith is unavailable.
 
+    The current datetime is intentionally NOT embedded here — it changes every request and
+    would invalidate the cache_control prefix. It is injected into the user turn instead
+    (see get_current_datetime_block); the prompt only carries a stable placeholder.
+
     Args:
         uid: User ID
         app: Optional app/plugin for personalized behavior
         messages: Optional message history for file context
         context: Optional page context (type, id, title)
+        platform: Optional `X-App-Platform` header value; recognized values append a
+            platform-context section (see _get_platform_context_section), anything else
+            leaves the prompt unchanged
 
     Returns:
         System prompt string
     """
     user_name = get_user_name(uid)
+    platform_section = _get_platform_context_section(platform)
 
-    # Get timezone and current datetime in user's timezone
-    tz = notification_db.get_user_time_zone(uid)
-    try:
-        user_tz = ZoneInfo(tz)
-        current_datetime_user = datetime.now(user_tz)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
-        current_datetime_iso = current_datetime_user.isoformat()
-        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
-    except Exception:
-        # Fallback to UTC if timezone is invalid
-        current_datetime_user = datetime.now(timezone.utc)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
-        current_datetime_iso = current_datetime_user.isoformat()
-        tz = "UTC"
-        logger.warning(
-            f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}"
-        )
+    # Resolve timezone only — the live datetime is injected into the user turn, not here,
+    # so the cached system prefix stays byte-identical across requests. A caller that already
+    # resolved the timezone (for the datetime block) can pass it in to skip a duplicate lookup.
+    if tz is None:
+        tz = get_user_timezone(uid)
+    current_datetime_str = CURRENT_DATETIME_PLACEHOLDER
+    current_datetime_iso = CURRENT_DATETIME_PLACEHOLDER
+    logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}")
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
-        return app.persona_prompt or app.chat_prompt
+        return app.persona_prompt or app.chat_prompt or ''
 
     # Plugin-specific instructions for regular apps
     plugin_info = ""
@@ -460,7 +601,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
     user_goals = goals_db.get_user_goals(uid)
     goal_section = ""
     if user_goals:
-        goals_lines = []
+        goals_lines: List[str] = []
         for g in user_goals:
             g_title = g.get('title', '')
             g_current = g.get('current_value', 0)
@@ -476,17 +617,34 @@ Keep these goals in mind when giving advice or suggestions.
 
 """
 
-    # Add page context if provided
+    # Add page context if provided. Conversation id and/or start/end dates hard-scope
+    # retrieval tools (#4515); the prompt must match that fail-closed contract.
     context_section = ""
     if context:
         # Sanitize title to prevent prompt injection (escape angle brackets and quotes)
         safe_title = (context.title or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-        context_section = f"""<current_context>
-{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or 'unknown'})
-Keep this context in mind when answering their question.
-</current_context>
-
-"""
+        scope_lines = [
+            f'{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or "unknown"})'
+        ]
+        hard_scope = False
+        if context.type == "conversation" and (context.id or "").strip():
+            hard_scope = True
+            scope_lines.append(
+                "HARD SCOPE: Answer ONLY using this conversation. Do not use other conversations, "
+                "memories, or time ranges. If the question is outside this conversation, say so."
+            )
+        start_date = context.start_date if isinstance(context.start_date, str) else ""
+        end_date = context.end_date if isinstance(context.end_date, str) else ""
+        if start_date.strip() or end_date.strip():
+            hard_scope = True
+            window = " to ".join(part for part in [start_date.strip(), end_date.strip()] if part)
+            scope_lines.append(
+                f"HARD SCOPE timeframe: {window}. Answer ONLY using conversations inside this window. "
+                "If the answer is outside it, say so."
+            )
+        if not hard_scope:
+            scope_lines.append("Keep this context in mind when answering their question.")
+        context_section = "<current_context>\n" + "\n".join(scope_lines) + "\n</current_context>\n\n"
 
     # Build conditional instruction hints for the template
     plugin_instruction_hint = "- Regard the <plugin_instructions>" if plugin_info else ""
@@ -517,7 +675,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip()
+        return base_prompt.strip() + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -686,19 +844,19 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
    - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
    - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
    - The timezone offset must match {user_name}'s timezone ({tz})
-   - Current time reference: {current_datetime_iso}
+   - Use the current time from the <current_datetime> block in the latest user message as your reference
 
 2. **For "X hours ago" or "X minutes ago" queries:**
    - Work in {user_name}'s timezone: {tz}
    - Identify the specific hour that was X hours/minutes ago
    - start_date: Beginning of that hour (HH:00:00)
    - end_date: End of that hour (HH:59:59)
-   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
-     * Calculate: {current_datetime_iso} minus 3 hours
-     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+   - Example (illustrative): if the current time were "2024-01-19T17:23:45-08:00" and the user asks "3 hours ago"
+     * Calculate: 17:23:45 minus 3 hours
+     * Get the hour boundary: result is 2024-01-19T14:23:45-08:00, so use hour 14
      * start_date = "2024-01-19T14:00:00-08:00"
      * end_date = "2024-01-19T14:59:59-08:00"
-   - Format both with the timezone offset for {tz}
+   - Always use the actual current time from the <current_datetime> block, formatted with the timezone offset for {tz}
 
 3. **For "today" queries:**
    - start_date: Start of today in {tz} (00:00:00)
@@ -741,10 +899,10 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip()
+    return base_prompt.strip() + platform_section
 
 
-def _get_agentic_qa_prompt_fallback(variables: dict) -> str:
+def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails
     """
     Fallback prompt template rendered with variables.
     Used when LangSmith prompt fetching fails.
@@ -825,7 +983,8 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return get_llm('chat_responses').invoke(prompt).content
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def qa_rag_stream(
@@ -836,11 +995,12 @@ def qa_rag_stream(
     cited: Optional[bool] = False,
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
-    callbacks=[],
+    callbacks: List[Any] = [],
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 # **************************************************
@@ -874,9 +1034,10 @@ def retrieve_memory_context_params(
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
-        response: TopicsContext = with_parser.invoke(prompt)
-        return response.topics
+        with track_usage(uid, Features.CHAT):
+            with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
+            response = cast(TopicsContext, with_parser.invoke(prompt))
+        return [e.value if hasattr(e, 'value') else str(e) for e in response.topics]
     except Exception as e:
         logger.error(f'Error determining memory discard: {e}')
         return []
@@ -918,7 +1079,7 @@ def obtain_emotional_message(
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.CHAT):
-        return get_llm('chat_extraction').invoke(prompt).content
+        return _content_str(get_llm('chat_extraction').invoke(prompt))
 
 
 # **********************************************
@@ -930,17 +1091,17 @@ class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
         examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation.',
+        description=f'Identify all the people names who were mentioned during the conversation. {_MAX_WORDS_HINT}',
     )
     topics: List[str] = Field(
         default=[],
         examples=[['Artificial Intelligence', 'Machine Learning']],
-        description='List all the main topics and subtopics that were discussed.',
+        description=f'List all the main topics and subtopics that were discussed. {_MAX_WORDS_HINT}',
     )
     entities: List[str] = Field(
         default=[],
         examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation.',
+        description=f'List any products, technologies, places, or other entities that are relevant to the conversation. {_MAX_WORDS_HINT}',
     )
     dates: List[str] = Field(
         default=[],
@@ -1034,15 +1195,21 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </date_in_term>
     '''.replace('    ', '').strip()
     # print(prompt)
-    question = get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
+    question = cast(
+        OutputQuestion, get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt)
+    ).question
     # print(question)
     return question
 
 
 def retrieve_metadata_fields_from_transcript(
-    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
-) -> ExtractedInformation:
-    context_parts = []
+    uid: str,
+    created_at: datetime,
+    transcript_segment: List[dict[str, Any]],
+    tz: str,
+    photos: Optional[List[ConversationPhoto]] = None,
+) -> dict[str, Any]:
+    context_parts: List[str] = []
     if transcript_segment:
         transcript = ''
         for segment in transcript_segment:
@@ -1059,21 +1226,21 @@ def retrieve_metadata_fields_from_transcript(
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     full_context = "\n\n".join(context_parts)
+    today = date_in_tz(created_at, tz)
 
-    # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
-    Your task is to extract the most accurate information from the content in the output object indicated below.
+    Your task is to extract the most accurate information from the content in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
+    For context when extracting dates, today is {today} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
     If one says "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Content:
     ```
@@ -1082,47 +1249,20 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result: ExtractedInformation = (
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+            result = cast(
+                ExtractedInformation,
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
             )
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.topics],
-        'dates': [],
-    }
-    # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
-    for date in result.dates:
-        try:
-            date = datetime.strptime(date, '%Y-%m-%d')
-            # if date.year > 2025:
-            #    continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
-        except Exception as e:
-            logger.error(f'Error parsing date: {e}')
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=normalize_extracted_dates(result.dates, today),
+    ).to_vector_metadata()
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1136,16 +1276,34 @@ def retrieve_metadata_fields_from_transcript(
     return metadata
 
 
+def retrieve_metadata_fields_from_structured(
+    uid: str,
+    created_at: datetime,
+    structured: Any,
+    tz: str,
+) -> dict[str, Any]:
+    """Extract vector filters from the canonical note, not a second raw-transcript pass."""
+    parts = [
+        str(getattr(structured, 'title', '') or '').strip(),
+        str(getattr(structured, 'overview', '') or '').strip(),
+    ]
+    content = '\n\n'.join(part for part in parts if part)
+    if not content:
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+    return retrieve_metadata_fields_from_transcript(uid, created_at, [{'text': content}], tz)
+
+
 def retrieve_metadata_from_message(
-    uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None
-) -> ExtractedInformation:
+    uid: str, created_at: datetime, message_text: str, tz: str, source_spec: Optional[str] = None
+) -> dict[str, Any]:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
+    today = date_in_tz(created_at, tz)
 
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
 
-    Your task is to extract the most accurate information from the message in the output object indicated below.
+    Your task is to extract the most accurate information from the message in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the message (sender, recipients, and anyone referenced)
@@ -1153,13 +1311,13 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
     If the message mentions "yesterday", it means the day before today.
     If the message mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Message Content:
     ```
@@ -1167,19 +1325,20 @@ def retrieve_metadata_from_message(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt)
+    return _process_extracted_metadata(uid, prompt, today)
 
 
 def retrieve_metadata_from_text(
-    uid: str, created_at: datetime, text: str, tz: str, source_spec: str = None
-) -> ExtractedInformation:
+    uid: str, created_at: datetime, text: str, tz: str, source_spec: Optional[str] = None
+) -> dict[str, Any]:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
+    today = date_in_tz(created_at, tz)
 
     prompt = f'''
     You will be given the content of a text {source_context}.
 
-    Your task is to extract the most accurate information from the text in the output object indicated below.
+    Your task is to extract the most accurate information from the text in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the text (author, recipients, and anyone referenced)
@@ -1187,13 +1346,13 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
     If the text mentions "yesterday", it means the day before today.
     If the text mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Text Content:
     ```
@@ -1201,53 +1360,27 @@ def retrieve_metadata_from_text(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt)
+    return _process_extracted_metadata(uid, prompt, today)
 
 
-def _process_extracted_metadata(uid: str, prompt: str) -> dict:
+def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
-        result: ExtractedInformation = (
-            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
-        )
+        with track_usage(uid, Features.CONVERSATION_PROCESSING):
+            result = cast(
+                ExtractedInformation,
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
+            )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.entities],
-        'dates': [],
-    }
-
-    for date in result.dates:
-        try:
-            date = datetime.strptime(date, '%Y-%m-%d')
-            if date.year > 2025:
-                continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
-        except Exception as e:
-            logger.error(f'Error parsing date: {e}')
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=normalize_extracted_dates(result.dates, reference_date),
+    ).to_vector_metadata()
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1261,7 +1394,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     return metadata
 
 
-def select_structured_filters(question: str, filters_available: dict) -> dict:
+def select_structured_filters(question: str, filters_available: dict[str, Any]) -> dict[str, Any]:
     prompt = f'''
     Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
     Your task is to identify the correct fields that can be related to the question and can help answering.
@@ -1278,12 +1411,12 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     # print(prompt)
     with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
     try:
-        response: FiltersToUse = with_parser.invoke(prompt)
+        response = cast(FiltersToUse, with_parser.invoke(prompt))
         # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
-        return response.dict()
+        return response.model_dump()
     except ValidationError:
         return {}
 
@@ -1324,7 +1457,9 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     '''.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
+        return cast(
+            OutputQuestion, get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt)
+        ).question
 
 
 class OutputMessage(BaseModel):
@@ -1374,4 +1509,6 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt).message
+        return cast(
+            OutputMessage, get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt)
+        ).message

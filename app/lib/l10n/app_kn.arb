@@ -1,5 +1,6 @@
 {
     "@@locale": "kn",
+    "sessionExpiredSignInAgain": "ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "@@last_modified": "2024-12-26",
     "appTitle": "ಓಮಿ",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "ನನ್ನ ಅಪ್ಲಿಕೇಶನ",
+    "myApps": "ನಾನು ರಚಿಸಿದವು",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್",
+    "autoSync": "ಸ್ವಯಂಚಾಲಿತ ಸಿಂಕ್",
+    "autoSyncDescription": "ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ರಲ್ಲಿ ನವೀಕರಣ ಮಾಡುತ್ತದೆ.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "ಉಚ್ಛ ಯೋಜನೆ",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "{used} of {limit} ಸೂಚನೆ ಈ ತಿಂಗಳು ಗುಳಿದ",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} of {limit} ಸ್ಮೃತಿಗಳು ಈ ತಿಂಗಳು ರಚಿತ",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "ಕಾನ್ಫಿಗರೇಶನ್ ರಫ್ತು ಮಾಡಿ",
     "bringYourOwn": "ನಿಮ್ಮ ಸ್ವಂತ ತರಿಸಿ",
     "payYourSttProvider": "Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.",
-    "freeMinutesMonth": "1,200 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
+    "freeMinutesMonth": "300 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ಹೋಸ್ಟ್ ಅಗತ್ಯ",
     "validPortRequired": "ಮಾನ್ಯ ಪೋರ್ಟ್ ಅಗತ್ಯ",
@@ -1580,7 +1562,7 @@
     "designingApp": "ಅ್ಯಪ್ ವಿನ್ಯಾಸಿತ ಮಾಡುತ್ತಿದೆ",
     "generatingIconStep": "ಐಕನ್ ರಚಿಸಲಾಗುತ್ತಿದೆ",
     "finalTouches": "ಅಂತಿಮ ಸ್ಪರ್ಶ",
-    "processing": "ಪ್ರಕ್ರಿಯೆಕರಣ...",
+    "processing": "ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
     "features": "ವೈಶಿಷ್ಟ್ಯಗಳು",
     "creatingYourApp": "ನಿಮ್ಮ ಅ್ಯಪ್ ರಚಿಸಲಾಗುತ್ತಿದೆ...",
     "generatingIcon": "ಐಕನ್ ರಚಿಸುತ್ತಿದೆ...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Omi ಪಸಂದ ಮಾಡುತ್ತಿದ್ದೀರೆ?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "App Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "ಬಹುಶಃ ನಂತರ",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi ಸಿಂಕ್ ಸಂಯೋಜನೆಗಳು",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "ನಿಮ್ಮ ಫೋನ್‌ನ ಹಾಟ್‌ಸ್ಪಾಟ್ ಪ್ರಮಾಣಪತ್ರ ನಮೂದಿಸಿ",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi ಸಿಂಕ್ ನಿಮ್ಮ ಫೋನ್‌ನನ್ನು ಹಾಟ್‌ಸ್ಪಾಟ್ ಆಗಿ ಬಳಸುತ್ತದೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳು > ಪರ್ಸನಲ್ ಹಾಟ್‌ಸ್ಪಾಟ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಕಂಡುಕೊಳ್ಳಿ.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "ಉದಾಹರಣೆ iPhone ಹಾಟ್‌ಸ್ಪಾಟ್",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "ಪಾಸ್‌ವರ್ಡ್",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "ಹಾಟ್‌ಸ್ಪಾಟ್ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "ಪ್ರಮಾಣಪತ್ರ ಉಳಿಸಿ",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "ಪ್ರಮಾಣಪತ್ರ ತೀಕ್ಷ್ಣ ಮಾಡಿ",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "ದಯವಿಟ್ಟು ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು ನಮೂದಿಸಿ",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi ಪ್ರಮಾಣಪತ್ರ ಉಳಿಸಲಾಗಿದೆ",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi ಪ್ರಮಾಣಪತ್ರ ತೀಕ್ಷ್ಣ ಮಾಡಲಾಗಿದೆ",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} ಗೆ ಸಾರಾಂಶ ತಯಾರಿತವಾಗಿದೆ",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
+    "basicPlanDescription": "300 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "ವೇಗ ವರ್ಗಾವಣೆ",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "ವರ್ಗಾವಣೆ ವಿಧಾನ",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "ವೇಗ",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "ಫೋನ್",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "ಸಾಧನದಲ್ಲಿ WiFi ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "ನಿಮ್ಮ ಸಾಧನವು ವೇಗ ವರ್ಗಾವಣೆ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ಬದಲಿ Bluetooth ಬಳಸಿ.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಫೋನ್‌ನ ಹಾಟ್‌ಸ್ಪಾಟ್ ಸಕ್ರಿಯಗೊಳಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "ವರ್ಗಾವಣೆ ಪ್ರಾರಂಭಗೊಳಿಸಲು ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "ಸಾಧನವು ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "ಅಮಾನ್ಯ WiFi ಆಖ್ಯಾನ. ನಿಮ್ಮ ಹಾಟ್‌ಸ್ಪಾಟ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "WiFi ಸಂಪರ್ಕ ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD ಕಾರ್ಡ್ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವುದು",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi ಸಿಂಕ್ ವಿಫಲ",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವುದು ವಿಫಲ",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 1,200 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 1,200 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi ಸಿಂಕ್",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಯಿತು",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "ಸಂಪರ್ಕ ವಿಫಲ",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} ಗೆ ಸಂಪರ್ಕಿಸುತ್ತಿದೆ",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} ನ WiFi ಸಕ್ರಿಯಗೊಳಿಸಿ",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "ವೇಗದ ವರ್ಗಾವಣೆಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ವರ್ಗಾವಣೆ ಪೂರ್ಣ! ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ಈಗ ಪ್ಲೇ ಮಾಡಬಹುದು.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "ವೇಗದ ವರ್ಗಾವಣೆ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "ಬ್ಲೂಟೂತ್ ಸಿಂಕ್ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "ವೇಗದ ವರ್ಗಾವಣೆ ಸಕ್ರಿಯಗೊಳಿಸಿ",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "ವೇಗದ ವರ್ಗಾವಣೆ WiFi ಬಳಸಿ ಸುಮಾರು 5 ಪಟ್ಟು ವೇಗವಾನ ಗತಿಯನ್ನು ಬಳಸುತ್ತದೆ. ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ನಿಮ್ಮ ಫೋನ್ ಠಾಯಿ Omi ಸಾಧನದ WiFi ನೆಟ್ವರ್ಕ್ಗೆ ಠಾಯಿಗೆ ಸಂಪರ್ಕ ಸ್ಥಾಪಿಸುತ್ತದೆ.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ಇಂಟರ್ನೆಟ್ ಪ್ರವೇಶ ಸ್ಥಗಿತಗೊಂಡಿದೆ",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "ರೆಕಾರ್ಡಿಂಗ್ಗಳನ್ನು ನಿಮ್ಮ Omi ಸಾಧನದಿಂದ ಫೋನ್ಗೆ ವರ್ಗಾವಣೆ ಮಾಡುವ ವಿಧಾನವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi ಮೂಲಕ ~150 KB/s",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ವೇಗವಾಯಿತು",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "ನಿಮ್ಮ Omi ಸಾಧನಕ್ಕೆ ನೇರ WiFi ಸಂಪರ್ಕವನ್ನು ರಚಿಸುತ್ತದೆ. ನಿಮ್ಮ ಫೋನ್ ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ಠಾಯಿಗೆ ಸಾಮಾನ್ಯ WiFi ನಿಂದ ಸಂಪರ್ಕವಿಚ್ಛಿನ್ನ ಆಗುತ್ತದೆ.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "ಬ್ಲೂಟೂತ್",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "ನಿಮ್ಮ ಸಾಧನವು ಬ್ಯಾಟರಿ ಕಡಿಮೆಯಿದೆ. ಚಾರ್ಜ್ ಮಾಡುವ ಸಮಯ! 🔋",
+    "lowBatteryAlertBody": "ನಿಮ್ಮ ಬ್ಯಾಟರಿ {level}% ನಲ್ಲಿದೆ. ಚಾರ್ಜ್ ಮಾಡುವ ಸಮಯ! 🔋",
     "batteryFullyChargedTitle": "Omi ಸಂಪೂರ್ಣ ಚಾರ್ಜ್ ಆಗಿದೆ",
     "batteryFullyChargedBody": "ನಿಮ್ಮ Omi ಸಾಧನ ಸಂಪೂರ್ಣ ಚಾರ್ಜ್ ಆಗಿದೆ. ಅನ್‌ಪ್ಲಗ್ ಮಾಡಬಹುದು!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "ನಿಮ್ಮ Omi ಸಾಧನ ಸಂಪರ್ಕ ಸ್ವಲ್ಪ",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "ಸ್ಥಳ ಅನುಮತಿ ಅಗತ್ಯ",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "ವೇಗದ ವರ್ಗಾವಣೆ WiFi ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಲು ಸ್ಥಳ ಅನುಮತಿ ಅಗತ್ಯ. ದಯವಿಟ್ಟು ಸ್ಥಳ ಅನುಮತಿ ನೀಡಿ ಮುಂದುವರೆಯಲು.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್ ರಕಷ್ಯ",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "ಇನ್ನೂ ದೈನಿಕ ಸಾರಾಂಶಗಳಿಲ್ಲ",
     "dailyRecapsDescription": "ನಿಮ್ಮ ದೈನಿಕ ಸಾರಾಂಶಗಳು ಉತ್ಪನ್ನ ಮಾಡಿದ ನಂತರ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ",
-    "chooseTransferMethod": "ವರ್ಗಾವಣೆ ವಿಧಾನ ಆಯ್ಕೆ ಮಾಡಿ",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi ಮೂಲಕ ~150 KB/s",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "ದೊಡ್ಡ ಸಮಯ ಮಧ್ಯಂತರ ಕಂಡುಹಿಡಿಯಲಾಗಿದೆ ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ಸಾಧನವು WiFi ಸಿಂಕ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ, ಬ್ಲೂಟೂತ್ಗೆ ಬದಲಾಯಿಸಿಕೊಳ್ಳುತ್ತಿದೆ",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health ಈ ಸಾಧನದಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
     "downloadAudio": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ",
+    "expand": "ವಿಸ್ತರಿಸಿ",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "ನಿಮ್ಮ ಫೋನಕ್ಕೆ ಸುರಕ್ಷಿತವಾಗಿ ನೆರವಾಯ್ದೆ",
+    "safelyBackedUp": "ರಚಿಸಿದ ಸಂವಾದಗಳು",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "ಯೋಜನೆ ಅಪ್‌ಗ್ರೇಡ್",
     "billingMonthly": "ಮಾಸಿಕ",
     "billingYearly": "ವಾರ್ಷಿಕ",
-    "savePercent": "~17% ಉಳಿಸಿ",
+    "savePercent": "~{percent}% ಉಳಿಸಿ",
     "popular": "ಜನಪ್ರಿಯ",
     "currentPlan": "ಪ್ರಸ್ತುತ",
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
     "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
     "bulkExportAlreadyExported": "ಆಯ್ಕೆಮಾಡಿದ ಎಲ್ಲಾ ಕಾರ್ಯಗಳು ಈಗಾಗಲೇ ರಫ್ತಾಗಿವೆ",
-    "bulkDeleteFailed": "ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+    "bulkDeleteFailed": "ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "deleteRecap": "ಸಾರಾಂಶ ಅಳಿಸಿ",
+    "deleteRecapConfirmTitle": "ಈ ಸಾರಾಂಶವನ್ನು ಅಳಿಸುವುದೇ?",
+    "deleteRecapConfirmBody": "ಈ ಸಾರಾಂಶವನ್ನು ಶಾಶ್ವತವಾಗಿ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಆ ದಿನದ ಮೂಲ ಸಂಭಾಷಣೆಗಳಿಗೆ ಪರಿಣಾಮ ಉಂಟಾಗುವುದಿಲ್ಲ.",
+    "deleteRecapAction": "ಅಳಿಸಿ",
+    "recapDeletedSnackbar": "ಸಾರಾಂಶ ಅಳಿಸಲಾಗಿದೆ",
+    "recapDeleteFailed": "ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
+    "syncStatusBackedUp": "ಬ್ಯಾಕಪ್ ಆಗಿದೆ",
+    "syncStatusBackingUp": "ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…",
+    "syncStatusWaiting": "ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ",
+    "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
+    "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
+    "syncStatusTooOld": "ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ",
+    "syncStatusFileUnavailable": "ಫೈಲ್ ಲಭ್ಯವಿಲ್ಲ",
+    "syncStatusUploaded": "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ · Omi ನಲ್ಲಿ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
+    "noRecordingsYet": "ಇನ್ನೂ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
+    "syncInProgress": "ಸಿಂಕ್ ನಡೆಯುತ್ತಿದೆ",
+    "deleteWhileProcessingTitle": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
+    "deleteWhileProcessingMessage": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಆದರೆ Omi ಇನ್ನೂ ಸಂಭಾಷಣೆ ರಚಿಸುತ್ತಿದೆ. ಈಗ ಅಳಿಸಿ ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ ಮರುಪಡೆಯಲಾಗದು. ಹೇಗಿದ್ದರೂ ಅಳಿಸಬೇಕೆ?",
+    "syncCardAllBackedUp": "ಎಲ್ಲಾ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗಿವೆ",
+    "syncCardReadyCount": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧವಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧವಿವೆ}}",
+    "syncCardProcessing": "Omi ಯಲ್ಲಿ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ…",
+    "syncCardWaitingInternet": "ಇಂಟರ್ನೆಟ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
+    "syncCardNeedsAttention": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್‌ಗೆ ಗಮನ ಅಗತ್ಯ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಗೆ ಗಮನ ಅಗತ್ಯ}}",
+    "syncFlowIntro": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ನಿಮ್ಮ ಸಾಧನದಿಂದ ಈ ಫೋನ್‌ಗೆ ವರ್ಗಾಯಿಸಿ ಸ್ಥಳೀಯವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ, ನಂತರ Omi ನ ಸರ್ವರ್‌ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತದೆ, ಅಲ್ಲಿ ಅವುಗಳನ್ನು ಲಿಪ್ಯಂತರ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತದೆ.",
+    "syncStepUpload": "ಸಿಂಕ್",
+    "syncStepUploadDesc": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್ Omi ಸರ್ವರ್‌ಗೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ",
+    "syncStepProcess": "ಪ್ರತಿಲಿಪಿ",
+    "syncStepProcessDesc": "Omi ಆಡಿಯೋವನ್ನು ಸಂವಾದವಾಗಿ ಪರಿವರ್ತಿಸುತ್ತದೆ",
+    "syncStepBackedUp": "ಸಂವಾದ ಸಿದ್ಧವಾಗಿದೆ",
+    "syncStepBackedUpDesc": "ಸಂವಾದಗಳು ಅಡಿಯಲ್ಲಿ ಹುಡುಕಿ",
+    "syncFailureFootnote": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ, ಮುಂದಿನ ಸಿಂಕ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಪ್ರಯತ್ನವಾಗುತ್ತದೆ.",
+    "syncStatusConversationCreated": "ಸಂಭಾಷಣೆ ರಚಿಸಲಾಗಿದೆ",
+    "syncCardUploadingTitle": "Omi ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
+    "syncCardDownloadingTitle": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+    "syncCardProgressOf": "{total} ರಲ್ಲಿ {current}",
+    "syncStatusOnDevice": "ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ",
+    "syncStatusDownloadingFromDevice": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+    "newestFirst": "ಹೊಸದು ಮೊದಲು",
+    "noSyncedRecordingsYet": "ಇನ್ನೂ ಸಿಂಕ್ ಆದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಲ್ಲ",
+    "morePaymentMethodsComingSoon": "ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು.",
+    "syncCardRateLimited": "ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ",
+    "syncCardBackendBusy": "Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ",
+    "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
+    "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ",
+    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.",
+    "backgroundModeTitle": "ಹಿನ್ನೆಲೆ ಮೋಡ್",
+    "backgroundModeDescription": "ಆ್ಯಪ್ ಸಂಪೂರ್ಣವಾಗಿ ಮುಚ್ಚಿದ್ದರೂ ನಿಮ್ಮ Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.",
+    "backgroundModeNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.",
+    "regenerateRecap": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ",
+    "recapRegeneratedSnackbar": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲಾಗಿದೆ",
+    "recapRegenerateFailed": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "recapRegenerateCooldown": "ಪುನರುತ್ಪಾದಿಸುವ ಮೊದಲು ದಯವಿಟ್ಟು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ನಿರೀಕ್ಷಿಸಿ.",
+    "recapRegenerateNoConversations": "ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ.",
+    "syncCustomSttWarningTitle": "ಸಿಂಕ್ Omi ಪ್ರತಿಲೇಖನವನ್ನು ಬಳಸುತ್ತದೆ",
+    "syncCustomSttWarningMessage": "ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.",
+    "transcribeLaterTitle": "ನಂತರ ಲಿಪ್ಯಂತರಿಸಿ",
+    "transcribeLaterDescription": "ನೇರ ಪ್ರಸಾರದ ಬದಲು ಈಗ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ, ಬೇಕೆಂದಾಗ ಲಿಪ್ಯಂತರಿಸಿ. ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತವೆ; ನಂತರ ಅವುಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಿ.",
+    "transcribeLaterNote": "ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
+    "transcribeLaterStorageFull": "ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.",
+    "unmute": "ಮ್ಯೂಟ್ ತೆಗೆ",
+    "newRecording": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
+    "transcribeLaterPaused": "ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ",
+    "recordingMode": "ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್",
+    "captureModeLater": "ನಂತರ",
+    "captureModeLiveDescription": "ನೀವು ಮಾತನಾಡುತ್ತಿರುವಾಗ ನೈಜ ಸಮಯದಲ್ಲಿ ಲಿಪ್ಯಂತರಿಸಿ.",
+    "captureModeLaterDescription": "ಈಗ ಆಡಿಯೋ ಉಳಿಸಿ ಮತ್ತು ನಿಮಗೆ ಬೇಕಾದಾಗ ಲಿಪ್ಯಂತರಿಸಿ.",
+    "backgroundModeUnavailable": "ಹೊಂದಾಣಿಕೆಯ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲದ ಕಾರಣ ಹಿನ್ನೆಲೆ ಮೋಡ್ ಲಭ್ಯವಿಲ್ಲ. ಈ ವೈಶಿಷ್ಟ್ಯವನ್ನು ಬಳಸಲು Omi, OpenGlass ಅಥವಾ Friend Pendant ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "memoryThisDevice": "ಈ ಸಾಧನ",
+    "memoryThisIphone": "ಈ iPhone",
+    "memoryThisPhone": "ಈ ಫೋನ್",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು",
+    "deviceOnboardingTranscriptionTitle": "ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ",
+    "deviceOnboardingTranscriptionSubtitle": "ಕೆಲವು ಪದಗಳನ್ನು ಹೇಳಿ, ಅವು ತಕ್ಷಣವೇ ಕಾಣಿಸುವುದನ್ನು ನೋಡಿ",
+    "deviceOnboardingGoodJob": "ಭೇಷ್‌!",
+    "deviceOnboardingStartSpeaking": "ಮಾತನಾಡಲು ಆರಂಭಿಸಿ...",
+    "deviceOnboardingAskQuestionTitle": "Omi ಗೆ ಪ್ರಶ್ನೆ ಕೇಳಿ",
+    "deviceOnboardingAskQuestionSubtitle": "ಬಟನ್ ಒಮ್ಮೆ ಒತ್ತಿ, ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ, ಮುಗಿದ ಮೇಲೆ ಮತ್ತೆ ಒತ್ತಿ",
+    "deviceOnboardingProcessingQuestion": "ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
+    "deviceOnboardingListening": "ಆಲಿಸುತ್ತಿದೆ...",
+    "deviceOnboardingTurnOffTitle": "ಆಫ್ ಮಾಡಿ",
+    "deviceOnboardingTurnOnTitle": "ಆನ್ ಮಾಡಿ",
+    "deviceOnboardingTurnOffSubtitle": "ಬಟನ್ ಅನ್ನು 3 ಸೆಕೆಂಡ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ",
+    "deviceOnboardingTurnOnSubtitle": "ಮತ್ತೆ ಆನ್ ಮಾಡಲು ಬಟನ್ ಒತ್ತಿ",
+    "deviceOnboardingHoldButtonHint": "ಬೆಳಕು ಆರಿ ಹೋಗುವವರೆಗೆ ಬಟನ್ ಅನ್ನು ಗಟ್ಟಿಯಾಗಿ ಒತ್ತಿ ಹಿಡಿಯಿರಿ",
+    "deviceOnboardingStatusConnected": "ಸಂಪರ್ಕಗೊಂಡಿದೆ",
+    "deviceOnboardingStatusConnectedDone": "ಸಂಪರ್ಕಗೊಂಡಿದೆ!",
+    "deviceOnboardingStatusDisconnected": "ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ",
+    "deviceOnboardingStatusTurningOff": "ಆಫ್ ಆಗುತ್ತಿದೆ...",
+    "deviceOnboardingDoubleTapTitle": "ಡಬಲ್ ಟ್ಯಾಪ್ ಕಸ್ಟಮೈಸ್ ಮಾಡಿ",
+    "deviceOnboardingEndConversation": "ಸಂಭಾಷಣೆ ಮುಗಿಸಿ",
+    "deviceOnboardingEndConversationDesc": "ಪ್ರಸ್ತುತ ಸಂಭಾಷಣೆಯನ್ನು ಉಳಿಸಿ ಮುಗಿಸಿ",
+    "deviceOnboardingMuteUnmute": "ಮ್ಯೂಟ್ / ಅನ್‌ಮ್ಯೂಟ್",
+    "deviceOnboardingMuteUnmuteDesc": "ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ಆನ್ ಅಥವಾ ಆಫ್ ಮಾಡಿ",
+    "deviceOnboardingStarConversation": "ನಡೆಯುತ್ತಿರುವ ಸಂಭಾಷಣೆಗೆ ಸ್ಟಾರ್ ಹಾಕಿ",
+    "deviceOnboardingStarConversationDesc": "ಸಂಭಾಷಣೆಯನ್ನು ಮುಖ್ಯ ಎಂದು ಗುರುತಿಸಿ",
+    "deviceOnboardingSingleTapHint": "ಅದು ಒಂದೇ ಟ್ಯಾಪ್ ಆಗಿತ್ತು — ವೇಗವಾಗಿ ಎರಡು ಬಾರಿ ಟ್ಯಾಪ್ ಮಾಡಿ ನೋಡಿ!",
+    "deviceOnboardingTryDoubleTap": "ಈಗಲೇ ಪ್ರಯತ್ನಿಸಿ! ನಿಮ್ಮ Omi ಅನ್ನು ಡಬಲ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "deviceOnboardingContinue": "ಮುಂದುವರಿಸಿ",
+    "deviceOnboardingFinish": "ಮುಗಿಸಿ",
+    "deviceOnboardingIntroTitle": "ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ",
+    "deviceOnboardingIntroSubtitle": "ನಿಮ್ಮ Omi ಮಾಡಬಲ್ಲ ಎಲ್ಲದರ ತ್ವರಿತ, ಪ್ರಾಯೋಗಿಕ ಪರಿಚಯ.",
+    "deviceOnboardingIntroDuration": "ಸುಮಾರು 1 ನಿಮಿಷ",
+    "jumpToLatestMessage": "ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ",
+    "latest": "ಇತ್ತೀಚಿನ",
+    "flashFirmware": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",
+    "pendantRecordingTitle": "ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್",
+    "pendantRecordingNote": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.",
+    "pendantSyncingRecordings": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "pendantMinutesStored": "~{minutes} ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.",
+    "connectRayBanMeta": "Ray-Ban Meta ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaSetupDescription": "ಸಂವಾದಗಳು ಮತ್ತು ದೃಶ್ಯ ಸನ್ನಿವೇಶಕ್ಕಾಗಿ ನಿಮ್ಮ Ray-Ban Meta ಕನ್ನಡಕವನ್ನು ನಿಮ್ಮ Omi ಸೆರೆಹಿಡಿಯುವ ಸಾಧನವಾಗಿ ಬಳಸಿ. ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಲಿಂಕ್ ಮಾಡಲು Omi Meta AI ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತೆರೆಯುತ್ತದೆ.",
+    "raybanMetaOpenMetaAI": "Meta AI ಮೂಲಕ ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaWaitingForMetaAI": "Meta AI ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ ಇಲ್ಲಿಗೆ ಹಿಂತಿರುಗಿ.",
+    "raybanMetaCheckAgain": "ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ",
+    "raybanMetaAllowCamera": "ಕನ್ನಡಕದಲ್ಲಿ ಕ್ಯಾಮೆರಾವನ್ನು ಅನುಮತಿಸಿ",
+    "raybanMetaCameraExplanation": "ನಿಮ್ಮ ಸಂವಾದಗಳಿಗೆ ಫೋಟೋಗಳನ್ನು ಸೇರಿಸಲು Omi ನಿಮ್ಮ ಕನ್ನಡಕದ ಕ್ಯಾಮೆರಾವನ್ನು ಬಳಸುತ್ತದೆ. ನೀವು ಇದನ್ನು ಬಿಟ್ಟುಬಿಟ್ಟು ಕೇವಲ ಆಡಿಯೊವನ್ನು ಬಳಸಬಹುದು.",
+    "raybanMetaSkipForNow": "ಸದ್ಯಕ್ಕೆ ಬಿಟ್ಟುಬಿಡಿ",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್",
+    "raybanMetaAudioOnlyExplanation": "Omi ನ ಈ ಆವೃತ್ತಿಯು ಬ್ಲೂಟೂತ್ ಮೂಲಕ ನಿಮ್ಮ ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಅನ್ನು ಬಳಸಬಹುದು. ಫೋಟೋ ಸೆರೆಹಿಡಿಯಲು Omi ನ Meta ಡೆವಲಪರ್ ಬಿಲ್ಡ್ ಅಗತ್ಯವಿದೆ.",
+    "raybanMetaMusicPauseNote": "ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಬಳಕೆಯಲ್ಲಿರುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿನ ಸಂಗೀತವು ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaContinue": "ಮುಂದುವರಿಸಿ",
+    "raybanMetaCapturePhoto": "ಫೋಟೋ ಸೆರೆಹಿಡಿಯಿರಿ",
+    "raybanMetaPhotoRequested": "ಫೋಟೋ ವಿನಂತಿಸಲಾಗಿದೆ — ಇದು ನಿಮ್ಮ ಸಂವಾದದಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaMicrophoneReady": "ಮೈಕ್ರೋಫೋನ್ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureReady": "ಚಿತ್ರ ಸೆರೆಹಿಡಿಯುವಿಕೆ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureUnavailable": "ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
+    "raybanMetaCamera": "ಕ್ಯಾಮೆರಾ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.",
+    "phoneMicOfflineFallbackMessage": "ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "dataEncryptedBanner": "ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.",
+    "rayBanMetaMicPickerTitle": "ನಿಮ್ಮ Ray-Ban Meta ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ",
+    "rayBanMetaMicPickerDescription": "ನಿಮ್ಮ ಕನ್ನಡಕದ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ. Omi ಅದನ್ನು ಬಳಸುವಾಗ ಸಂಗೀತ ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "rayBanMetaMicPickerEmpty": "ಯಾವುದೇ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಕಂಡುಬಂದಿಲ್ಲ. iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕನ್ನಡಕವನ್ನು ಸಂಪರ್ಕಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth ಮೈಕ್ರೊಫೋನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. Bluetooth ಆನ್ ಆಗಿದೆಯೇ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerConnectError": "ಆ ಮೈಕ್ರೊಫೋನ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅದು iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಸಂಪರ್ಕಗೊಂಡಿದೆಯೇ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.",
+    "cloudTranscription": "ಕ್ಲೌಡ್ ಪ್ರತಿಲೇಖನ",
+    "copyMessage": "ಸಂದೇಶವನ್ನು ನಕಲಿಸಿ",
+    "deleteOnDeviceModel": "ಮಾದರಿಯನ್ನು ಅಳಿಸಿ",
+    "deleteOnDeviceModelConfirm": "ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?",
+    "downgradeAnyway": "ಆದರೂ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
+    "downgradeLimitBattery": "7 ಪಟ್ಟು ಹೆಚ್ಚು ಬ್ಯಾಟರಿ ಬಳಕೆ",
+    "downgradeLimitDelay": "5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ",
+    "downgradeLimitQuality": "30% ಕಡಿಮೆ ಪ್ರತಿಲೇಖನ ಗುಣಮಟ್ಟ",
+    "downgradeLimitSpeakers": "ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ",
+    "downgradeLimitationsHeading": "ನೀವು ಈ ಮಿತಿಗಳನ್ನು ಎದುರಿಸುತ್ತೀರಿ:",
+    "downgradeToFreemiumTitle": "ಉಚಿತ ಯೋಜನೆಗೆ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡುವುದೇ?",
+    "errorLoadingAudio": "ಆಡಿಯೊ ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷ",
+    "failedToLinkCalendarEvent": "ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
+    "googleCalendarConnectPrompt": "ಸಂವಾದಗಳನ್ನು ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳಿಗೆ ಲಿಂಕ್ ಮಾಡಲು ನಿಮ್ಮ Google Calendar ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "googleCalendarNotConnected": "Google Calendar ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ",
+    "linkedToEvent": "“{title}” ಗೆ ಲಿಂಕ್ ಮಾಡಲಾಗಿದೆ",
+    "onDeviceModelDeleted": "ಮಾದರಿಯನ್ನು ಅಳಿಸಲಾಗಿದೆ",
+    "onDeviceModelDownloadFailed": "ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ",
+    "onDeviceModelDownloadFailedDesc": "Whisper ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "onDeviceModelDownloadSuccess": "ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ",
+    "onDeviceModelDownloadSuccessDesc": "Whisper ಮಾದರಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ",
+    "onDeviceModelDownloaded": "ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ",
+    "onDeviceModelSize": "ಮಾದರಿಯ ಗಾತ್ರ",
+    "onDeviceTranscription": "ಸಾಧನದಲ್ಲಿ ಪ್ರತಿಲೇಖನ",
+    "onDeviceTranscriptionDesc": "ಪ್ರತಿಲೇಖನವನ್ನು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿಯೇ ಸ್ಥಳೀಯವಾಗಿ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ",
+    "searchSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹುಡುಕಿ…",
+    "speechToTextProvider": "ಮಾತಿನಿಂದ ಪಠ್ಯ ಸೇವಾ ಪೂರೈಕೆದಾರ",
+    "speechToTextProviderDesc": "ಪ್ರತಿಲೇಖನಕ್ಕೆ ಬಳಸುವ ಸೇವೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "sttFilterAuto": "ಸ್ವಯಂ",
+    "sttModelAccuracy": "ನಿಖರತೆ",
+    "sttModelFaster": "ವೇಗವಾಗಿ",
+    "sttModelHigher": "ಹೆಚ್ಚು",
+    "sttModelLower": "ಕಡಿಮೆ",
+    "sttModelSlower": "ನಿಧಾನವಾಗಿ",
+    "sttModelSpeed": "ವೇಗ",
+    "sttNone": "ಯಾವುದೂ ಇಲ್ಲ",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "ನಿಮ್ಮ ಅಭಿಪ್ರಾಯಕ್ಕೆ ಧನ್ಯವಾದ!",
+    "transcriptionLanguage": "ಪ್ರತಿಲೇಖನ ಭಾಷೆ",
+    "transcriptionLanguageDesc": "ಮಾತಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "whisperModel": "Whisper ಮಾದರಿ",
+    "whisperModelDesc": "ಸಾಧನದಲ್ಲಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಮಾದರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "whisperModelSizeBase": "ಮೂಲ",
+    "whisperModelSizeLarge": "ದೊಡ್ಡದು",
+    "whisperModelSizeMedium": "ಮಧ್ಯಮ",
+    "whisperModelSizeSmall": "ಚಿಕ್ಕದು",
+    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು",
+    "planSheetChooseYourPlan": "ಅಮಿತ Omi ಅನ್‌ಲಾಕ್ ಮಾಡಲು ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "availableOnMacMobileWeb": "Mac, ಮೊಬೈಲ್ ಮತ್ತು ವೆಬ್‌ನಲ್ಲಿ ಲಭ್ಯ",
+    "popularBadge": "ಜನಪ್ರಿಯ",
+    "worksOnDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ",
+    "noDesktopAccess": "ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ",
+    "annualBillingSummary": "{months} ತಿಂಗಳು / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 ತಿಂಗಳು ಉಚಿತ} other{{count} ತಿಂಗಳು ಉಚಿತ}}",
+    "freemiumLimitsIntro": "Omi ಉಚಿತ, ಆದರೆ ಉಚಿತ ಆವೃತ್ತಿಯಲ್ಲಿ ನಿಮ್ಮ ಅನುಭವದ ಮೇಲೆ ಪರಿಣಾಮ ಬೀರುವ ಮಿತಿಗಳಿವೆ:",
+    "downgradeLimitDelayNotRealTime": "5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ (ನೈಜ ಸಮಯವಲ್ಲ)",
+    "downgradeToFreemiumAction": "ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ",
+    "getFreeUnlimitedAccess": "ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ",
+    "shareDataForTraining": "ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ",
+    "yourRequestUnderReview": "ನಿಮ್ಮ ವಿನಂತಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ",
+    "pinAsBaseline": "ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ",
+    "unpinAsBaseline": "ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ",
+    "baselineMemory": "ಆಧಾರ ಸ್ಮೃತಿ",
+    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "chatScopeAbout": "{title} ಕುರಿತು",
+    "askAboutThisConversation": "ಇದರ ಕುರಿತು ಕೇಳಿ",
+    "sendRawAudioToOmi": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ",
+    "sendRawAudioToOmiDescription": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.",
+    "findDevice": "ಹುಡುಕಿ",
+    "diagnosticsShareFailed": "ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "appDisabledTitle": "ಈ ಆ್ಯಪ್ ನಿಷ್ಕ್ರಿಯಗೊಂಡಿದೆ ಮತ್ತು ಅನುಸ್ಥಾಪಿಸಲಾಗುವುದಿಲ್ಲ.",
+    "appDisabledWebhookFailures": "ಇದರ ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸತತ 72 ಗಂಟೆಗಳ ಕಾಲ ವಿಫಲವಾಯಿತು, ಆದ್ದರಿಂದ ರವಾನೆಗಳನ್ನು ನಿಲ್ಲಿಸಲಾಯಿತು.",
+    "appDisabledGeneric": "ಇದನ್ನು Omi ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿತು.",
+    "appDisabledOwnerHint": "ಮೊದಲು ಎಂಡ್‌ಪಾಯಿಂಟ್ ಸರಿಪಡಿಸಿ — ಮರು-ಸಕ್ರಿಯಗೊಳಿಸುವಾಗ ಕಾನ್ಫಿಗರ್ ಮಾಡಿದ ಪ್ರತಿ URL ಅನ್ನು ಮತ್ತೆ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ.",
+    "appReEnable": "ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "appReEnableFailedTitle": "ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
+    "appReEnableFailedBody": "ಈ ಆ್ಯಪ್ ಅನ್ನು ಮರು-ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "appDisabledOn": "{date} ರಂದು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ.",
+    "appDisabledLastError": "ಕೊನೆಯ ದೋಷ: {error}",
+    "prerecordedTranscript": "ಮುಂಚಿತವಾಗಿ ರೆಕಾರ್ಡ್",
+    "pendantRecordingSyncBlocked": "Pendant ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.",
+    "pendantFullSyncBlocked": "Pendant ನ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ ಮತ್ತು ಅದು ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್‌ನಲ್ಲಿದೆ, ಆದ್ದರಿಂದ ಸಂಗ್ರಹಿಸಿದ ಆಡಿಯೊವನ್ನು ವರ್ಗಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಲು Pendant ನ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಸಿಂಕ್ ಮಾಡಿ.",
+    "conversationsNotCapturedCount": "ದಾಖಲಾಗಿಲ್ಲ ({count})",
+    "transcriptionNoAudio": "ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ",
+    "chatBlockTask": "ಕಾರ್ಯ",
+    "chatBlockGoal": "ಗುರಿ",
+    "chatBlockConversation": "ಸಂಭಾಷಣೆ",
+    "chatBlockMemory": "ನೆನಪು",
+    "chatBlockQuestion": "ಪ್ರಶ್ನೆ",
+    "chatBlockOpenInGoals": "ಗುರಿಗಳಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "chatBlockOpenConversation": "ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ",
+    "chatBlockOpenInMemories": "ನೆನಪುಗಳಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "chatBlockUnavailable": "ಇನ್ನು ಲಭ್ಯವಿಲ್ಲ",
+    "chatBlockRecommendedNextSteps": "ಶಿಫಾರಸು ಮಾಡಿದ ಮುಂದಿನ ಹಂತಗಳು",
+    "couldNotLoadMemories": "ನೆನಪುಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "couldNotLoadKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಅನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "speechProfileOwnerTitle": "{name} ಅವರ ಧ್ವನಿ ಪ್ರೊಫೈಲ್",
+    "play": "ಪ್ಲೇ ಮಾಡಿ",
+    "redo": "ಮತ್ತೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "answerWithYourVoice": "ನಿಮ್ಮ ಧ್ವನಿಯಲ್ಲಿ ಉತ್ತರಿಸಿ:",
+    "speechProfileTopicLocation": "ನೀವು ಎಲ್ಲಿ ವಾಸಿಸುತ್ತೀರಿ?",
+    "speechProfileTopicWork": "ನೀವು ಯಾವ ಕೆಲಸ ಮಾಡುತ್ತೀರಿ?",
+    "speechProfileTopicGoal": "ನಿಮ್ಮ ದೀರ್ಘಾವಧಿಯ ಗುರಿ ಏನು?",
+    "speechToTextUnavailableDesc": "ಮಾತನ್ನು ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸುವ ಸೌಲಭ್ಯ ಸದ್ಯ ಲಭ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಮತ್ತು ಸಾಧನದ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "memoryHistoryPartial": "ನೆನಪುಗಳ ಇತಿಹಾಸದ ಕೆಲವು ಭಾಗಗಳು ಲಭ್ಯವಿಲ್ಲ. ಇದುವರೆಗೆ ಸ್ವೀಕರಿಸಿದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.",
+    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ"
 }

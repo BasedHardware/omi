@@ -1,0 +1,282 @@
+/* The top-edge bar window is TRANSPARENT (no DWM material) — the page paints
+   everything. The window is oversized and static; all motion is CSS/canvas.
+   ⚠ Read desktop/windows/docs/bar-gotchas.md before changing bar animations —
+   entering conversation content must stay clip-revealed (opaque + seated from
+   frame 1), never faded/translated in, or the "plummet"/black-flash returns. */
+html,
+body.bar-body {
+  background: transparent !important;
+  overflow: hidden;
+}
+
+/* Root fills the window; clicks fall through except on the surface (main
+   toggles real hit-testing via bar:setInteractive as the cursor enters). */
+.bar-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Reveal layer: the bar GROWS out of its top-edge seat (the pill's spot) on
+   summon — a scale + fade from top-center — so revealing reads as inflating from
+   the top edge, never a whole-surface DROP from above it. Hide reverses it
+   (deflate toward the same seat), so summon/dismiss mirror the pill⇄panel deflate
+   language the user already likes. transform + opacity only; the pre-reveal state
+   is invisible (opacity 0), which also makes the paint-ack anti-blank guarantee
+   stronger than the old off-screen translate (nothing to flash). */
+.bar-slide {
+  transform-origin: top center;
+  transform: scale(0.7);
+  opacity: 0;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1),
+    opacity 150ms ease;
+  will-change: transform, opacity;
+}
+.bar-slide.bar-slide-in {
+  transform: none;
+  opacity: 1;
+}
+.bar-slide.bar-slide-out {
+  transform: scale(0.7);
+  opacity: 0;
+  transition:
+    transform 180ms cubic-bezier(0.6, 0, 0.8, 0.4),
+    opacity 140ms ease;
+}
+
+/* The morphing surface — ONE element interpolating pill ⇄ panel (size +
+   corner radius), never a crossfade between two components. Hugs the top edge
+   (no top radius: it reads as part of the screen edge, notch-like). */
+.bar-surface {
+  position: relative;
+  /* overflow:CLIP, not hidden: `hidden` makes the surface a scroll container, and
+     when a tall conversation mounts into the still-small box it overflows and the
+     browser scroll-anchors the surface (scrollTop > 0), then unwinds it to 0 as
+     the box grows — which slid the whole conversation down from above (the
+     reported "page drops in from the top"). `clip` clips identically but is NOT
+     scrollable, so the content stays seated and the growing box reveals it
+     top-down — the exact mirror of how the shrinking box conceals the list. */
+  overflow: clip;
+  background: rgba(15, 15, 15, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: none;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* Collapse (this is the destination-state rule when leaving expanded) is
+     quicker than expand — the macOS notch asymmetry (0.16s/0.10s), scaled up
+     for the bar's larger surface. */
+  transition:
+    width 170ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    height 170ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    border-radius 170ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  will-change: width, height;
+}
+.bar-surface.bar-surface-expanded {
+  border-radius: 0 0 24px 24px;
+  transition:
+    width 240ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    height 240ms cubic-bezier(0.3, 0.8, 0.3, 1),
+    border-radius 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+/* Content layers cross-dissolve INSIDE the single morphing surface. The base
+   rules (below) also carry a top-center scale so the *collapse* deflates the
+   body back into the pill — that direction already reads right. The load-bearing
+   fix for OPEN is the expand-scoped override further down: at shipped speed the
+   box grows ~150px downward in 240ms, so ANY content painted during that growth
+   (even scaled) reads as "falling in from the top" as the descending edge
+   uncovers it. So on expand we hold the body invisible while the empty panel
+   INFLATES from the pill, then bloom it in place once the box has mostly
+   settled. transform + opacity only (GPU-cheap); the box owns the size morph. */
+.bar-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: top center;
+  transform: scale(0.9);
+  transition:
+    opacity 130ms ease,
+    transform 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+.bar-content.bar-content-active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    opacity 150ms ease,
+    transform 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+/* EXPAND ONLY (scoped to the expanded surface, so COLLAPSE keeps the base rules
+   the user already likes): the panel body waits out the box inflation, then
+   fades + settles into the near-full panel — the pill grows into an empty panel
+   first, then fills. This is what kills the top-slide on open. The box height
+   morph is 240ms; content bloom starts at ~55% of that. */
+.bar-surface-expanded .bar-content-active {
+  transform: none;
+  transition:
+    opacity 150ms ease 130ms,
+    transform 190ms cubic-bezier(0.3, 0.8, 0.3, 1) 120ms;
+}
+
+/* ONE persistent orb, hoisted ABOVE both cross-dissolving content layers and the
+   box morph. It never remounts, never fades, and never changes canvas size or
+   preset — any of those rebuilds the WebGL animator (Orb.tsx: build effect keyed
+   on cssW/cssH/preset), which blinks the logo. Instead it GLIDES from its pill
+   seat to its panel-header seat on a transform-only FLIP (translate + CSS-scale
+   of the single 34px canvas), so open/close/view-swap read as one logo that
+   never flickers. pointer-events:none so the pill's click-to-expand passes
+   through the orb sitting over it. z-index keeps it over the content fade. */
+.bar-orb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.bar-orb-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 34px;
+  transform-origin: top left;
+  /* Pill seat: the 26px pill orb sat at left:10 top:5 (10px pad, centered in the
+     36px row). Scale the 34px canvas by 26/34 to match — downscale stays crisp. */
+  transform: translate(10px, 5px) scale(0.7647);
+  transition: transform 170ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  will-change: transform;
+}
+.bar-surface-expanded .bar-orb-wrap {
+  /* Panel-header seat: horizontally centered in the 336px panel, pt-3 (12px) down.
+     Matches the surface's own expand timing (240ms) so orb and box move together. */
+  transform: translate(151px, 12px) scale(1);
+  transition: transform 240ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+/* Inner view swap (chat list ⇄ inline conversation) morphs in place — a gentle
+   grow-and-fade seated at the top, never a fresh sheet sliding down from the
+   edge. Keyed remount in BarChatSurface replays this on every view change.
+   Used by the LIST view (the back/collapse direction the user already likes:
+   the box shrinks up around a short, top-pinned list — no slide). */
+.bar-view-enter {
+  animation: bar-view-enter 200ms cubic-bezier(0.3, 0.8, 0.3, 1);
+  transform-origin: top center;
+}
+@keyframes bar-view-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ENTER the inline conversation (list → conversation): NO content animation.
+   The conversation renders at its final seated layout, fully opaque, from the
+   first frame; because the surface is overflow:CLIP (not a scroll container) the
+   content stays put while the box grows DOWNWARD and reveals it — the exact
+   mirror of how BACK's shrinking box conceals the stationary list. Any opacity
+   hold here reads as a black flash, and any transform reads as the page sliding
+   in from above (both user-rejected); so the conversation root carries no enter
+   class at all. The exiting list keeps .bar-view-enter (its quick fade), and the
+   incoming conversation is already opaque underneath it, so there is never an
+   empty frame. */
+
+/* Respect reduced-motion: swap instantly, no morph, no inflate. */
+@media (prefers-reduced-motion: reduce) {
+  .bar-slide,
+  .bar-surface,
+  .bar-surface.bar-surface-expanded,
+  .bar-content,
+  .bar-content.bar-content-active,
+  .bar-orb-wrap,
+  .bar-surface-expanded .bar-orb-wrap {
+    transition: none;
+  }
+  .bar-content {
+    transform: none;
+  }
+  .bar-view-enter {
+    animation: none;
+  }
+}
+
+/* Collapsed pill row. */
+.bar-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 10px;
+  height: 36px;
+  cursor: pointer;
+  user-select: none;
+}
+.bar-pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgb(212 212 212);
+  /* The pill is a fixed 148px hit-rect; "Listening" must never wrap or push the
+     orb (the label swaps in place, orb stays put — no jank). */
+  white-space: nowrap;
+}
+
+/* The expanded ask panel lays out at the overlay's original 480px and paints
+   at 0.7 — identical look to the old overlay surface. */
+.bar-zoom {
+  zoom: 0.7;
+  width: 480px;
+}
+
+/* Transient push-to-talk feedback chip (BarHintStrip): a detached "notch" that
+   drops just below the collapsed pill to say why a failed hold produced no reply
+   (too-short / dead mic / mic unavailable / transcription failed). macOS shows the
+   same pttHintText inline in the notch (FloatingControlBarView); the narrow
+   Windows pill can't fit a sentence, so it sits underneath. It lives OUTSIDE the
+   morphing surface (a sibling of .bar-slide) so it never touches the pill's size,
+   the orb, or the box morph — and is click-through, so it can't affect the pill
+   hit-rect. Shown only when the hook has a hint/error; the success path renders
+   nothing at all. */
+.bar-hint {
+  position: absolute;
+  top: 44px; /* just below the 36px pill + a small gap */
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 300px;
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: rgba(15, 15, 15, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* Amber, matching the panel's usage-limit notice — the one existing strip tone. */
+  color: rgb(252 211 77 / 0.9);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  animation: bar-hint-in 140ms ease;
+}
+@keyframes bar-hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -3px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-hint {
+    animation: none;
+  }
+}

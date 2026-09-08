@@ -1,0 +1,9 @@
+{
+  "version": "0.12.145",
+  "date": "2026-07-30",
+  "changes": [
+    "Improved macOS device pairing diagnostics and reliability reporting.",
+    "Fixed a stale sign-in prompt that could remain visible after switching accounts.",
+    "Stream push-to-talk responses into the shared chat timeline as they arrive"
+  ]
+}

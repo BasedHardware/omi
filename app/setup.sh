@@ -5,7 +5,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.35.3)
+# - Flutter SDK (v3.44.5)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -29,7 +29,7 @@ echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us o
 echo "Prerequisites (stable versions, use these or higher):"
 echo ""
 echo "Common for all developers:"
-echo "- Flutter SDK (v3.35.3)"
+echo "- Flutter SDK (v3.44.5)"
 echo "- Opus Codec: https://opus-codec.org"
 echo ""
 echo "For iOS Developers:"
@@ -46,10 +46,47 @@ echo ""
 echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
+echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
+echo "- bash setup.sh android beta   # explicit production-data dogfood build"
+echo "- OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # AOT build that opens from the Home Screen without flutter run"
 echo ""
 
+LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
+LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${LOCAL_DEV_HOST}:8000/}"
+ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
+ANDROID_LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${ANDROID_DEV_HOST}:8000/}"
+BETA_API_BASE_URL="${OMI_BETA_API_BASE_URL:-https://api.omiapi.com/}"
 
-API_BASE_URL=https://api.omiapi.com/
+# Maps OMI_MOBILE_BUILD_MODE (debug|profile|release, default debug) to the
+# `flutter run` flag. Debug builds are JIT, and iOS 14+ only lets Flutter
+# tooling start a JIT Dart VM on a physical device: FlutterEngine init returns
+# nil, the storyboard FlutterViewController has no engine, and the first Swift
+# plugin crashes on a nil registrar the moment the app is opened from the Home
+# Screen with `flutter run` gone. profile/release builds are AOT and open on
+# their own, at the cost of hot reload.
+function mobile_build_mode_flag() {
+  local mode="${OMI_MOBILE_BUILD_MODE:-debug}"
+  case "$mode" in
+    debug) ;;
+    profile) echo "--profile" ;;
+    release) echo "--release" ;;
+    *)
+      echo "ERROR: OMI_MOBILE_BUILD_MODE must be debug, profile, or release (got '${mode}')." >&2
+      return 1
+      ;;
+  esac
+}
+
+# Printed when a dev debug build is about to land on a physical iPhone, so the
+# "works under flutter run, dead from the Home Screen" symptom is explained
+# before the developer walks away from the Mac with it.
+function warn_ios_debug_build_untethered() {
+  echo "⚠️  Installing a DEBUG build on a physical iPhone. iOS only lets Flutter tooling" >&2
+  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached;" >&2
+  echo "   opened from the Home Screen without it, it shows an engine-unavailable notice" >&2
+  echo "   instead of running. For a build that opens on its own (no hot reload):" >&2
+  echo "     OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios" >&2
+}
 
 ######################################
 # Generate device suffix from hostname
@@ -64,58 +101,71 @@ function generate_device_suffix() {
 # Generate custom configs for iOS
 ######################################
 function generate_ios_custom_config() {
-  bash scripts/generate_ios_custom_config.sh ios/Config/Dev/GoogleService-Info.plist ios/Flutter \
+  local config_name="${1:-Dev}"
+  local callback_scheme="${2:-omi-dev}"
+  bash scripts/generate_ios_custom_config.sh "ios/Config/${config_name}/GoogleService-Info.plist" ios/Flutter
 
-  # Custom bundle identifier
-  SUFFIX=$(generate_device_suffix)
-  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
-  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "ios/Flutter/Custom.xcconfig"
+  if [[ "$config_name" == "Dev" ]]; then
+    # Keep ordinary local builds installable beside the App Store build.
+    local suffix
+    suffix=$(generate_device_suffix)
+    echo "APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12-${suffix}" >> ios/Flutter/Custom.xcconfig
+    # The prebuilt/placeholder GoogleService-Info.plist (setup_firebase) carries the
+    # stock unsuffixed BUNDLE_ID. Firebase's native SDK validates that field against
+    # the running app's actual bundle identifier at Firebase.initializeApp() and
+    # refuses to start if they don't match. Runner/GoogleService-Info.plist is what
+    # Xcode actually bundles (project.pbxproj references that path directly, not
+    # Config/Dev/); patch both so on-disk copies stay consistent.
+    local suffixed_bundle_id="com.friend-app-with-wearable.ios12-${suffix}"
+    /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" "ios/Config/${config_name}/GoogleService-Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" ios/Runner/GoogleService-Info.plist
+  else
+    # Beta uses a distinct bundle/callback identity and must be provisioned
+    # explicitly by the developer's Apple team.
+    echo "APP_BUNDLE_IDENTIFIER=${OMI_MOBILE_BETA_BUNDLE_ID:-com.friend-app-with-wearable.ios12.beta}" >> ios/Flutter/Custom.xcconfig
+    echo "AUTH_CALLBACK_SCHEME=${callback_scheme}" >> ios/Flutter/Custom.xcconfig
+  fi
 }
 
 ######################################
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
-  mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-  cp setup/prebuilt/google-services.json android/app/src/dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
-
-  # Warn: Mocking, should remove
-  mkdir -p android/app/src/prod/ ios/Config/Prod/
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
-  cp setup/prebuilt/google-services.json android/app/src/prod/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
+  mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev/ ios/Config/Prod/ ios/Runner/
+  cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+  cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
 }
 
 ##########################################
 # Setup Firebase with Service Account Json
 ##########################################
-function setup_firebase_with_service_account() {
+function setup_firebase_with_service_account_ios() {
   dart pub global activate flutterfire_cli
   flutterfire config \
-    --platforms="android,ios,web" \
-    --out=lib/firebase_options_dev.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/dev/  \
-    --ios-out=ios/Config/Dev/ \
-    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
-    --ios-target="Runner" \
-    --yes
-
-  flutterfire config \
-    --platforms="android,ios,web" \
+    --platforms=ios \
     --out=lib/firebase_options_prod.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/prod/ \
+    --ios-bundle-id=${OMI_MOBILE_BETA_BUNDLE_ID:-com.friend-app-with-wearable.ios12.beta} \
     --ios-out=ios/Config/Prod/ \
     --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
+    --project="based-hardware" \
     --ios-target="Runner" \
+    --yes
+}
+
+function setup_firebase_with_service_account_android() {
+  dart pub global activate flutterfire_cli
+  flutterfire config \
+    --platforms=android \
+    --out=lib/firebase_options_prod.dart \
+    --android-app-id=com.friend.ios \
+    --android-out=android/app/src/prod/ \
+    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
+    --project="based-hardware" \
     --yes
 }
 
@@ -139,9 +189,94 @@ function setup_provisioning_profile() {
 # Set up App .env
 #################
 function setup_app_env() {
-  echo API_BASE_URL=$API_BASE_URL > .dev.env
-  echo USE_WEB_AUTH=true >> .dev.env
-  echo USE_AUTH_CUSTOM_TOKEN=true >> .dev.env
+  local profile="${1:-local_dev}"
+  local configured_api_base_url="${2:-}"
+  local env_file='.dev.env'
+  local api_base_url="${configured_api_base_url:-$LOCAL_API_BASE_URL}"
+  if [[ "$profile" == "mobile_beta" ]]; then
+    env_file='.env'
+    api_base_url="$BETA_API_BASE_URL"
+  fi
+
+  # Keep developer-owned settings and comments intact. These are the only keys
+  # owned by setup, so update them in place and replace the file atomically.
+  local temp_file source_file="/dev/null"
+  if [[ -f "$env_file" ]]; then source_file="$env_file"; fi
+  temp_file=$(mktemp "${env_file}.tmp.XXXXXX")
+  if ! awk \
+    -v api_base_url="$api_base_url" \
+    'BEGIN { api_written = 0; web_auth_written = 0; custom_token_written = 0 }
+     /^[[:space:]]*API_BASE_URL[[:space:]]*=/ {
+       if (!api_written) { print "API_BASE_URL=" api_base_url; api_written = 1 }
+       next
+     }
+     /^[[:space:]]*USE_WEB_AUTH[[:space:]]*=/ {
+       if (!web_auth_written) { print "USE_WEB_AUTH=true"; web_auth_written = 1 }
+       next
+     }
+     /^[[:space:]]*USE_AUTH_CUSTOM_TOKEN[[:space:]]*=/ {
+       if (!custom_token_written) { print "USE_AUTH_CUSTOM_TOKEN=true"; custom_token_written = 1 }
+       next
+     }
+     { print }
+     END {
+       if (!api_written) print "API_BASE_URL=" api_base_url
+       if (!web_auth_written) print "USE_WEB_AUTH=true"
+       if (!custom_token_written) print "USE_AUTH_CUSTOM_TOKEN=true"
+     }' \
+    "$source_file" 2>/dev/null >"$temp_file"; then
+    rm -f "$temp_file"
+    return 1
+  fi
+  if ! mv "$temp_file" "$env_file"; then
+    rm -f "$temp_file"
+    return 1
+  fi
+}
+
+function validate_flutter_profile_arg() {
+  local expected_profile="$1"
+  shift
+  local arg requested_profile profile_arg_count=0
+  for arg in "$@"; do
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      profile_arg_count=$((profile_arg_count + 1))
+      requested_profile="${arg#--dart-define=OMI_APP_PROFILE=}"
+      if [[ "$requested_profile" != "$expected_profile" ]]; then
+        echo "ERROR: this flavor requires OMI_APP_PROFILE=$expected_profile, got '$requested_profile'." >&2
+        return 1
+      fi
+    fi
+  done
+  if [[ "$profile_arg_count" -gt 1 ]]; then
+    echo "ERROR: pass OMI_APP_PROFILE only once; the wrapper supplies the required value." >&2
+    return 1
+  fi
+}
+
+function prepare_mobile_build_env() {
+  local flavor="$1"
+  local configured_api_base_url="${2:-}"
+  local profile api_base_url
+  case "$flavor" in
+    dev)
+      profile='local_dev'
+      api_base_url="$LOCAL_API_BASE_URL"
+      ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  if [[ "$flavor" == 'dev' && -n "$configured_api_base_url" ]]; then
+    api_base_url="$configured_api_base_url"
+  fi
+  setup_app_env "$profile" "$api_base_url" || return 1
+  scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
 }
 
 # #######################
@@ -155,36 +290,275 @@ function setup_keystore_android() {
 # Build
 # #####
 function run_build_android() {
+  local flavor="${1:-dev}"
+  local profile='local_dev'
+  local api_base_url="$ANDROID_LOCAL_API_BASE_URL"
+  local emulator_host="$ANDROID_DEV_HOST"
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      emulator_host=''
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  prepare_mobile_build_env "$flavor" "$api_base_url"
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
+  local flutter_args=(
+    --flavor "$flavor"
+    "--dart-define=OMI_APP_PROFILE=$profile"
+    "--dart-define=OMI_API_BASE_URL=$api_base_url"
+  )
+  if [[ -n "$emulator_host" ]]; then
+    flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$emulator_host")
+  fi
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
   flutter pub get \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run "${flutter_args[@]}"
+}
+
+# #####################################
+# iOS prerequisite and device selection
+# #####################################
+
+# True if $1 (a dotted version, e.g. "16.4") is >= $2. Relies on `sort -V`,
+# which Apple's /usr/bin/sort on macOS supports (verified; this is iOS-only
+# tooling, so a non-macOS sort is not a concern).
+function _version_at_least() {
+  local have="$1" want="$2"
+  [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" = "$want" ]
+}
+
+# Named checks with remedies, matching the harness's own pattern
+# (scripts/dev-harness's `Cannot start; missing prerequisites:` block) instead
+# of letting a missing/outdated tool surface as a confusing downstream failure
+# several minutes into a build.
+function check_ios_prerequisites() {
+  local missing=()
+
+  local flutter_version
+  flutter_version=$(flutter --version 2>/dev/null | grep -oE '^Flutter [0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}')
+  if [[ -z "$flutter_version" ]]; then
+    missing+=("Flutter SDK (v3.44.5 or later) — install from https://docs.flutter.dev/get-started/install")
+  elif ! _version_at_least "$flutter_version" "3.44.5"; then
+    missing+=("Flutter ${flutter_version} found, but v3.44.5 or later is required — run: flutter upgrade")
+  fi
+
+  if ! command -v xcodebuild &>/dev/null; then
+    missing+=("Xcode (v16.4 or later) — install from the App Store, then run: sudo xcode-select --switch /Applications/Xcode.app")
+  else
+    local xcode_version
+    xcode_version=$(xcodebuild -version 2>/dev/null | awk '/^Xcode/ {print $2; exit}')
+    if [[ -z "$xcode_version" ]]; then
+      # xcodebuild is on PATH but produced no version line — an unaccepted
+      # license or missing components, not a real "Xcode is fine" signal.
+      # Left unchecked, this passes the gate silently and surfaces as a
+      # confusing failure deep into the build, exactly what this check exists
+      # to prevent.
+      missing+=("xcodebuild is on PATH but not usable (license not accepted or components missing) — run: sudo xcodebuild -license accept && sudo xcodebuild -runFirstLaunch")
+    elif ! _version_at_least "$xcode_version" "16.4"; then
+      missing+=("Xcode ${xcode_version} found, but v16.4 or later is required — update via the App Store")
+    fi
+  fi
+
+  if ! command -v pod &>/dev/null; then
+    missing+=("CocoaPods (v1.16.2 or later) — install with: sudo gem install cocoapods")
+  else
+    local pod_version
+    pod_version=$(pod --version 2>/dev/null)
+    if [[ -n "$pod_version" ]] && ! _version_at_least "$pod_version" "1.16.2"; then
+      missing+=("CocoaPods ${pod_version} found, but v1.16.2 or later is required — update with: brew upgrade cocoapods (Homebrew) or sudo gem install cocoapods (gem)")
+    fi
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    missing+=("jq (used to select an iOS build destination) — install with: brew install jq")
+  fi
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    echo "❌ Cannot build for iOS; missing prerequisites:" >&2
+    local item
+    for item in "${missing[@]}"; do
+      echo "   - ${item}" >&2
+    done
+    return 1
+  fi
+}
+
+# Picks the iOS destination `flutter run -d` should target, instead of leaving
+# Flutter to fall back to whatever else it finds (macOS desktop, on a machine
+# with no simulator runtime and only a wirelessly-paired phone visible) and
+# reporting an error about a platform the developer never asked for.
+function select_ios_device() {
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || {
+    echo "❌ Could not query connected devices (flutter devices --machine failed)." >&2
+    return 1
+  }
+
+  local ios_devices
+  ios_devices=$(echo "$devices_json" | jq -c '[.[] | select(.targetPlatform == "ios")]')
+  local count
+  count=$(echo "$ios_devices" | jq 'length')
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "❌ No iOS device or simulator found." >&2
+    echo "   Boot a simulator (open -a Simulator) or connect a physical device, then retry." >&2
+    return 1
+  fi
+
+  if [[ "$count" -eq 1 ]]; then
+    echo "$ios_devices" | jq -r '.[0].id'
+    return 0
+  fi
+
+  echo "⚠️  Multiple iOS destinations found. Choose one:" >&2
+  local i=0 line
+  while IFS= read -r line; do
+    i=$((i + 1))
+    echo "   $i) $line" >&2
+  done < <(echo "$ios_devices" | jq -r '.[] | "\(.name) (\(.id))"')
+
+  # Never block on read without a TTY, or a non-interactive run (CI, nested
+  # automation) hangs indefinitely instead of failing with a usable message.
+  if [[ ! -t 0 ]]; then
+    echo "   ❌ No terminal available to choose a device." >&2
+    echo "      Disconnect the extras, or boot only the simulator you want, and re-run." >&2
+    return 1
+  fi
+
+  local choice
+  read -rp "   Enter number [1-${count}]: " choice
+  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+    echo "$ios_devices" | jq -r ".[$((choice - 1))].id"
+    return 0
+  fi
+  echo "❌ Invalid selection." >&2
+  return 1
+}
+
+# True if $1 is the id of a physical iOS device rather than a simulator, per
+# `flutter devices --machine`'s own "emulator" field.
+function _ios_device_is_physical() {
+  local device_id="$1"
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || return 1
+  local emulator
+  emulator=$(echo "$devices_json" | jq -r --arg id "$device_id" '.[] | select(.id == $id) | .emulator')
+  [[ "$emulator" == "false" ]]
 }
 
 # #########
 # Build iOS
 # #########
 function run_build_ios() {
+  local flavor="${1:-dev}"
+  shift || true
+  local profile='local_dev'
+  local api_base_url="$LOCAL_API_BASE_URL"
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  validate_flutter_profile_arg "$profile" "$@" || return 1
+  prepare_mobile_build_env "$flavor" "$api_base_url" || return 1
+  local flutter_args=("--dart-define=OMI_APP_PROFILE=$profile")
+  local arg
+  for arg in "$@"; do
+    # The wrapper owns this invariant and injects exactly one profile define.
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      continue
+    fi
+    flutter_args+=("$arg")
+  done
+  check_ios_prerequisites || return 1
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
+  local device_id
+  device_id=$(select_ios_device) || return 1
+  local physical_device=0
+  if _ios_device_is_physical "$device_id"; then
+    physical_device=1
+  fi
+  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" && "$physical_device" == 1 ]]; then
+    echo "⚠️  Building for a physical device with OMI_DEV_HOST unset — the dev backend" >&2
+    echo "   will default to 127.0.0.1, which on the device is itself, not this Mac." >&2
+    echo "   Set OMI_DEV_HOST to this Mac's LAN or Tailscale address before running" >&2
+    echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
+    echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
+  fi
+  if [[ "$flavor" == "dev" && -z "$mode_flag" && "$physical_device" == 1 ]]; then
+    warn_ios_debug_build_untethered
+  fi
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor dev
+    && flutter run --flavor "$flavor" -d "$device_id" "${flutter_args[@]}"
 }
 
 
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 case "${1}" in
   ios)
-      setup_firebase \
-      && generate_ios_custom_config \
-      && setup_app_env \
-      && run_build_ios
+    if [[ "${2:-}" == "beta" ]]; then
+      if [[ -z "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ]]; then
+        echo "ios beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
+        exit 1
+      fi
+      prepare_mobile_build_env prod \
+        && setup_firebase \
+        && setup_firebase_with_service_account_ios \
+        && generate_ios_custom_config Prod omi-beta \
+        && run_build_ios prod --dart-define=OMI_APP_PROFILE=mobile_beta
+    else
+      prepare_mobile_build_env dev \
+        && setup_firebase \
+        && bash scripts/generate_ios_dev_info_plist.sh \
+        && generate_ios_custom_config Dev omi-dev \
+        && run_build_ios dev \
+          --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
+          --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
+    fi
     ;;
   android)
-    setup_keystore_android \
-      && setup_firebase \
-      && setup_app_env \
-      && run_build_android
+    if [[ "${2:-}" == "beta" ]]; then
+      if [[ -z "${FIREBASE_SERVICE_ACCOUNT_KEY:-}" ]]; then
+        echo "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
+        exit 1
+      fi
+      prepare_mobile_build_env prod \
+        && setup_keystore_android \
+        && setup_firebase \
+        && setup_firebase_with_service_account_android \
+        && run_build_android prod
+    else
+      prepare_mobile_build_env dev \
+        && setup_keystore_android \
+        && setup_firebase \
+        && run_build_android dev
+    fi
     ;;
   *)
-    error "Unexpected platform '${1}'"
+    echo "Unexpected platform '${1}'" >&2
+    exit 1
     ;;
 esac
+fi

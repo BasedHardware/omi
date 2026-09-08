@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LocalStoragePage extends StatefulWidget {
@@ -27,7 +28,9 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     setState(() => _isSaving = true);
     try {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-      context.read<SyncProvider>().refreshWals();
+      if (mounted) {
+        context.read<SyncProvider>().refreshWals();
+      }
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -41,7 +44,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToUpdateSettings(e.toString())), backgroundColor: Colors.red),
+          SnackBar(content: Text(context.l10n.failedToUpdateSettings(readableError(e))), backgroundColor: Colors.red),
         );
       }
     }
@@ -83,7 +86,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     );
   }
 
-  Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+  Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, top: 1),
       child: FaIcon(icon, size: size, color: color),
@@ -133,7 +136,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isEnabled ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                          color: isEnabled ? Colors.green.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
                           borderRadius: BorderRadius.circular(100),
                         ),
                         child: Text(

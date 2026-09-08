@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
+import { cachedPosthogFetch } from '@/lib/posthog';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
+
+function cacheKey(days: number): string {
+  return `notifications:v1:${days}`;
+}
+
+export { cacheKey as notificationsCacheKey };
 
 const MENTOR_APP_ID = 'mentor';
+const FALLBACK_USER_LIMIT = 5000;
 const MARKETPLACE_MENTOR_APP_ID = 'omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1';
 
 type FloatingBarCtrPoint = {
@@ -28,15 +38,7 @@ type FloatingBarCtrStats = {
 };
 
 async function queryPostHog(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
-    signal: AbortSignal.timeout(15000),
-  });
+  const response = await cachedPosthogFetch(host, projectId, apiKey, query);
 
   if (!response.ok) {
     const text = await response.text();
@@ -46,14 +48,8 @@ async function queryPostHog(host: string, projectId: string, apiKey: string, que
   return response.json();
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
-
-  try {
+export async function computeNotifications(days: number) {
     const db = getDb();
-    const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '30', 10);
     const posthogHost = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
     const posthogApiKey = process.env.POSTHOG_PERSONAL_API_KEY;
     const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
@@ -102,6 +98,7 @@ export async function GET(request: NextRequest) {
     const endMs = endDate.getTime();
     const usersRef = db.collection('users');
     let floatingBarCtr: FloatingBarCtrStats | null = null;
+    let fallbackTruncated = false;
 
     const fetchNotifications = async () => {
       // Try collection group first
@@ -145,16 +142,21 @@ export async function GET(request: NextRequest) {
         // Collection group needs index — fall back to per-user queries
       }
 
-      // Fallback: query all mentor-enabled users
+      // Fallback: query all mentor-enabled users, capped at FALLBACK_USER_LIMIT
+      // because this path fans out two Firestore queries per user.
       const enabledUsersSnap = await usersRef
         .where('mentor_notification_frequency', '>', 0)
         .select()
-        .limit(5000)
+        .limit(FALLBACK_USER_LIMIT)
         .get();
 
       const enabledUserIds = enabledUsersSnap.docs.map(doc => doc.id);
+      // At the cap the user list is cut short, so every count this path
+      // produces is a floor. Say so in the payload rather than publishing a
+      // silently short number.
+      if (enabledUserIds.length >= FALLBACK_USER_LIMIT) fallbackTruncated = true;
 
-      // Fire ALL queries at once — only ~400 users × 2 = ~800 queries
+      // Fire all queries at once: FALLBACK_USER_LIMIT users x 2 in the worst case.
       const allPromises = enabledUserIds.flatMap(uid => [
         db.collection('users').doc(uid).collection('messages')
           .where('app_id', '==', MENTOR_APP_ID)
@@ -192,8 +194,13 @@ export async function GET(request: NextRequest) {
       }
     };
 
+    // Three counts, not two. `notifications_enabled` is absent on a large slice
+    // of user docs, and `total - disabled` silently folded that unknown
+    // population into "enabled" — inflating the enabled share. Count the
+    // explicit `true` instead and report the unknowns as their own bucket.
     const countsPromise = Promise.all([
       usersRef.where('notifications_enabled', '==', false).count().get(),
+      usersRef.where('notifications_enabled', '==', true).count().get(),
       usersRef.count().get(),
     ]);
 
@@ -325,10 +332,14 @@ export async function GET(request: NextRequest) {
     ]);
     floatingBarCtr = floatingBarCtrResult;
 
-    const [disabledSnap, totalSnap] = countResults;
+    const [disabledSnap, enabledSnap, totalSnap] = countResults;
     const disabledCount = disabledSnap.data().count;
+    const enabledCount = enabledSnap.data().count;
     const totalUsers = totalSnap.data().count;
-    const enabledCount = Math.max(totalUsers - disabledCount, 0);
+    // Users whose doc carries no `notifications_enabled` field at all. Not
+    // enabled, not disabled — the panel's enabled share is enabled/total, so
+    // leaving these out of `enabled` is what keeps that share honest.
+    const unsetCount = Math.max(totalUsers - enabledCount - disabledCount, 0);
 
     // Build daily data
     const dailyData = dateKeys.map(key => ({
@@ -380,7 +391,7 @@ export async function GET(request: NextRequest) {
       total: hourlyTimeline[hk].mentor + hourlyTimeline[hk].marketplace,
     }));
 
-    return NextResponse.json({
+    return {
       dailyData,
       weeklyData,
       hourlyData,
@@ -388,9 +399,30 @@ export async function GET(request: NextRequest) {
       enabledDisabled: {
         enabled: enabledCount,
         disabled: disabledCount,
+        unset: unsetCount,
         total: totalUsers,
       },
-    });
+      fallbackTruncated,
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const days = parseInt(searchParams.get('days') || '30', 10);
+    const key = cacheKey(days);
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeNotifications>>>(key);
+    if (cached) {
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+    }
+
+    const payload = await computeNotifications(days);
+    await setPayload(key, payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
     console.error('Error fetching notification stats:', error);
     return NextResponse.json(

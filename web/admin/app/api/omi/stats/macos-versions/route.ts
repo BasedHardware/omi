@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogResults, POSTHOG_SERVED_MAX_ROWS } from "@/lib/posthog";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
+import {
+  parsePlatformScope,
+  scopeFilterAnd,
+  type PlatformScope,
+} from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 3600;
+
+function cacheKey(platform: PlatformScope = "macos"): string {
+  return `macos-versions:v1:${platform}`;
+}
+
+export { cacheKey as macosVersionsCacheKey };
 
 const VERSION_COLORS = [
   "#6366f1",
@@ -31,28 +45,7 @@ type Breakdown = {
 };
 
 async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      query: {
-        kind: "HogQLQuery",
-        query,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PostHog API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json();
-  return Array.isArray(raw.results) ? raw.results : [];
+  return posthogResults(host, projectId, apiKey, query);
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -92,28 +85,27 @@ function breakdownFromEntries(entries: [string, number][], colors: string[] | Re
   }));
 }
 
-function formatTodayLabel() {
+// Derived at SERVE time from the payload's `freshAt`, never baked in at
+// compute time: a payload computed on Monday and served on Friday used to
+// carry a "today" label that claimed Friday's date.
+function formatDateLabel(epochMs: number) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(new Date());
+  }).format(new Date(epochMs));
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+export async function computeMacosVersions(platform: PlatformScope = "macos") {
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
 
-  try {
-    const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
-    const projectId = process.env.POSTHOG_PROJECT_ID;
-    const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
+  if (!apiKey || !projectId) {
+    throw new Error("PostHog credentials not configured");
+  }
 
-    if (!apiKey || !projectId) {
-      return NextResponse.json({ error: "PostHog credentials not configured" }, { status: 500 });
-    }
-
-    const activeUsersQuery = `
+  const activeUsersQuery = `
       SELECT
         distinct_id AS actor_id,
         argMax(
@@ -124,33 +116,45 @@ export async function GET(request: NextRequest) {
           ),
           timestamp
         ) AS app_version
+        ,
+        argMax(COALESCE(nullIf(properties.$os_name, ''), 'unknown'), timestamp) AS os_name
       FROM events
-      WHERE event = 'App Became Active'
-        AND properties.$os_name = 'macOS'
-        AND toDate(timestamp) = today()
+      WHERE toDate(timestamp) = today()
+        ${scopeFilterAnd(platform)}
       GROUP BY actor_id
       ORDER BY actor_id ASC
-      LIMIT 100000
+      LIMIT ${POSTHOG_SERVED_MAX_ROWS}
     `;
 
-    const rows = (await posthogQuery(host, projectId, apiKey, activeUsersQuery)) as [unknown, unknown][];
+    const rows = (await posthogQuery(host, projectId, apiKey, activeUsersQuery)) as [unknown, unknown, unknown][];
+    // The shared wrapper binds an outer LIMIT of POSTHOG_SERVED_MAX_ROWS, which
+    // is also PostHog's served maximum. Hitting it means the actor list was cut
+    // short and every breakdown below is a floor, not a count.
+    const truncated = rows.length >= POSTHOG_SERVED_MAX_ROWS;
     const activeUsers = rows
-      .map((row: [unknown, unknown]) => ({
+      .map((row: [unknown, unknown, unknown]) => ({
         userId: String(row[0] ?? "").trim(),
         appVersion: String(row[1] ?? "unknown").trim() || "unknown",
+        osName: String(row[2] ?? "unknown").trim() || "unknown",
       }))
       .filter((row) => row.userId.length > 0);
 
     if (activeUsers.length === 0) {
-      return NextResponse.json({
-        date: formatTodayLabel(),
+      return {
         activeUsers: 0,
-        channelBreakdown: [],
-        versionBreakdown: [],
-      });
+        channelBreakdown: [] as Breakdown[],
+        versionBreakdown: [] as Breakdown[],
+        truncated,
+      };
     }
 
-    const channelMap = await getUserChannels(activeUsers.map((user) => user.userId));
+    // The first pie is release channel on macOS (Firestore update_channel);
+    // for mobile/all scopes it becomes the OS split — there is no channel
+    // concept for the app-store builds.
+    const channelMap =
+      platform === "macos"
+        ? await getUserChannels(activeUsers.map((user) => user.userId))
+        : new Map<string, string>();
 
     const channelCounts = new Map<string, number>();
     const versionCounts = new Map<string, number>();
@@ -158,9 +162,13 @@ export async function GET(request: NextRequest) {
     for (const user of activeUsers) {
       versionCounts.set(user.appVersion, (versionCounts.get(user.appVersion) || 0) + 1);
 
-      const channel = channelMap.get(user.userId);
-      const channelLabel = channel === "beta" || channel === "staging" ? "Beta" : "Production";
-      channelCounts.set(channelLabel, (channelCounts.get(channelLabel) || 0) + 1);
+      if (platform === "macos") {
+        const channel = channelMap.get(user.userId);
+        const channelLabel = channel === "beta" || channel === "staging" ? "Beta" : "Production";
+        channelCounts.set(channelLabel, (channelCounts.get(channelLabel) || 0) + 1);
+      } else {
+        channelCounts.set(user.osName, (channelCounts.get(user.osName) || 0) + 1);
+      }
     }
 
     const channelBreakdown = breakdownFromEntries(
@@ -173,12 +181,35 @@ export async function GET(request: NextRequest) {
       VERSION_COLORS
     );
 
-    return NextResponse.json({
-      date: formatTodayLabel(),
+    return {
       activeUsers: activeUsers.length,
       channelBreakdown,
       versionBreakdown,
-    });
+      truncated,
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const platform = parsePlatformScope(request.nextUrl.searchParams.get("platform") ?? "macos");
+    const key = cacheKey(platform);
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeMacosVersions>>>(key);
+    if (cached) {
+      return NextResponse.json(
+        withFreshness({ ...cached.data, date: formatDateLabel(cached.freshAt) }, cached.freshAt),
+      );
+    }
+
+    const payload = await computeMacosVersions(platform);
+    await setPayload(key, payload);
+    const freshAt = Date.now();
+    return NextResponse.json(
+      withFreshness({ ...payload, date: formatDateLabel(freshAt) }, freshAt),
+    );
   } catch (error: any) {
     console.error("macOS version stats error:", error);
     return NextResponse.json(

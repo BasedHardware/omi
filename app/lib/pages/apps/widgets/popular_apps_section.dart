@@ -96,7 +96,7 @@ class PopularAppsSection extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25).withOpacity(0.3),
+                  color: const Color(0xFF1F1F25).withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -107,7 +107,10 @@ class PopularAppsSection extends StatelessWidget {
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF35343B),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {
@@ -156,7 +159,7 @@ class PopularAppsSection extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
+                                const Icon(Icons.star_rounded, color: Colors.white, size: 14),
                                 const SizedBox(width: 4),
                                 Text(
                                   app.getRatingAvg()!,
@@ -185,13 +188,18 @@ class PopularAppsSection extends StatelessWidget {
                       width: 72,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: app.enabled ? Colors.grey.shade700 : Color(0xFF8B5CF6),
+                        color: app.enabled ? Colors.grey.shade700 : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Center(
                         child: Text(
                           app.enabled ? context.l10n.open : 'Enable',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                          // Black on the white "Enable" fill, white on the grey "Open" one.
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: app.enabled ? Colors.white : Colors.black,
+                          ),
                         ),
                       ),
                     ),

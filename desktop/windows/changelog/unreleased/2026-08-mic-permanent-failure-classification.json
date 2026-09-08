@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "A permanently missing/blocked microphone (no device, permission denied) no longer retries silently for minutes with no error shown — it's now classified as terminal, matching how quota/sign-in failures are already handled."
+  ]
+}

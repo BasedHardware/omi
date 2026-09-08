@@ -1,0 +1,34 @@
+{
+  "authorized": [
+    "Please remember that I prefer tea.",
+    "Remember I prefer tea.",
+    "Remember that I prefer tea.",
+    "Please save this: I prefer tea.",
+    "Please save that I prefer tea.",
+    "Save this as a memory.",
+    "Please keep this in mind.",
+    "I prefer tea, remember this.",
+    "I want you to remember that I prefer tea.",
+    "Could you please remember this?",
+    "Please remember that I am currently testing proactivity in Omi",
+    "Remember this",
+    "Add this to memory.",
+    "Create a memory for my tea preference.",
+    "Make this a memory."
+  ],
+  "unauthorized": [
+    "I prefer tea.",
+    "Should I save this?",
+    "Please do not remember this.",
+    "Do you remember that I prefer tea?",
+    "Can you remember this?",
+    "I don't want you to save that.",
+    "I remember that I prefer tea.",
+    "I asked you not to remember that.",
+    "I asked you not to save that.",
+    "I wondered whether they should remember this?",
+    "Ask Sarah to remember that I prefer tea.",
+    "The model should remember that I prefer tea.",
+    "Your ability to remember that I prefer tea is impressive."
+  ]
+}

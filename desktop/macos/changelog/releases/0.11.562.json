@@ -1,0 +1,15 @@
+{
+  "version": "0.11.562",
+  "date": "2026-06-29",
+  "changes": [
+    "Agent browser tools now expose Playwright only when the user has an existing configured Playwright bridge installed",
+    "Fixed the Claude connector setup guidance bubble so its arrow points directly at the Add button instead of below the modal",
+    "Added a dismissible instruction card when Claude connector setup needs Screen Recording, so System Settings no longer opens with no explanation",
+    "Claude connector setup now actually requests Screen Recording, so Omi shows up in the Screen & System Audio Recording list with a toggle to flip on instead of an empty Settings pane",
+    "Polished the Claude setup guidance cards with a frosted glass surface, gradient accent icon, and a cleaner dismiss button",
+    "Improved desktop overlay positioning for Claude connector setup and assistant guidance",
+    "Tightened the Claude setup guidance card height so short instructions no longer leave excess empty space",
+    "Fixed desktop conversations so local transcription sessions are finalized and retried through one durable path",
+    "Fixed desktop OAuth setup failures when the backend callback URL is missing"
+  ]
+}

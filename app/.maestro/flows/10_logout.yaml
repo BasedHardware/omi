@@ -1,0 +1,41 @@
+# Flow: Logout — Sign out and verify return to auth screen
+# Tags: core, auth
+# Tests: Navigate to settings, sign out, verify auth screen is shown
+# Requires: User signed in
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - auth
+
+---
+
+# Navigate to Settings
+- tapOn:
+    text: "Settings"
+    optional: true
+- tapOn:
+    id: ".*settings.*|.*gear.*|.*profile.*"
+    optional: true
+- takeScreenshot: "10_logout_settings"
+
+# Scroll to find Sign Out
+- scroll
+- scroll
+
+# Tap Sign Out
+- tapOn:
+    text: "Sign Out|Log Out"
+- takeScreenshot: "10_logout_confirm"
+
+# Handle confirmation dialog if present
+- tapOn:
+    text: "Sign Out|Log Out|Yes|Confirm"
+    optional: true
+
+# Verify return to auth screen
+- extendedWaitUntil:
+    visible:
+      text: "Sign in with Google"
+    timeout: 10000
+- takeScreenshot: "10_logout_success"

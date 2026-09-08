@@ -1,0 +1,8 @@
+{
+  "version": "0.11.573",
+  "date": "2026-06-30",
+  "changes": [
+    "Fixed failed agents so their error details appear in the agent chat transcript",
+    "Reduced desktop agent dependency audit findings and build warning noise"
+  ]
+}

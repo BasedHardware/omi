@@ -1,7 +1,7 @@
 import UIKit
 
 /// Manages proximity sensor during phone calls.
-/// Matches Granola's implementation: uses @MainActor for all UI updates.
+/// Uses @MainActor for all UI updates.
 final class OmiProximitySensor {
     private var observer: NSObjectProtocol?
 

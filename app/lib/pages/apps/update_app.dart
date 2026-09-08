@@ -8,7 +8,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/api_keys_widget.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'widgets/app_metadata_widget.dart';
@@ -172,7 +172,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                               height: height,
                                               margin: const EdgeInsets.only(right: 8),
                                               decoration: BoxDecoration(
-                                                color: Color(0xFF35343B),
+                                                color: const Color(0xFF35343B),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
                                               child: provider.isUploadingThumbnail
@@ -200,8 +200,17 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (context) =>
-                                                        FullScreenImageViewer(imageUrl: provider.thumbnailUrls[index]),
+                                                    builder: (context) => MediaViewerPage(
+                                                      items: provider.thumbnailUrls
+                                                          .map((url) => MediaViewerItem(
+                                                                imageUrl: url,
+                                                              ))
+                                                          .toList(),
+                                                      initialIndex: index,
+                                                      maxScaleMultiplier: 2,
+                                                      showCloseButton: true,
+                                                      wrapBodyInSafeArea: false,
+                                                    ),
                                                   ),
                                                 );
                                               },
@@ -464,7 +473,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                       ),
                     ),
                     child: GestureDetector(
-                      onTap: !provider.isValid
+                      onTap: (!provider.isValid || !provider.hasChanges)
                           ? null
                           : () {
                               var isValid = provider.validateForm();
@@ -477,7 +486,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     () async {
                                       Navigator.pop(context);
                                       bool ok = await provider.updateApp();
-                                      if (ok) {
+                                      if (ok && context.mounted) {
                                         Navigator.pop(context);
                                       }
                                     },
@@ -492,7 +501,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         padding: const EdgeInsets.all(12.0),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12.0),
-                          color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                          color: (provider.isValid && provider.hasChanges) ? Colors.white : Colors.grey.shade700,
                         ),
                         child: Text(
                           context.l10n.updateApp,

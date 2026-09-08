@@ -1,8 +1,10 @@
 from datetime import timedelta
-from typing import Optional, List, Tuple
+from enum import Enum
+from typing import Any, Optional, List, Tuple, cast
 import uuid
 import re
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
 
@@ -23,6 +25,15 @@ class Translation(BaseModel):
     text: str
 
 
+class SpeakerIdentityStatus(str, Enum):
+    """Evidence state behind the legacy boolean ``is_user`` projection."""
+
+    unknown = 'unknown'
+    user = 'user'
+    not_user = 'not_user'
+    no_match = 'no_match'
+
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -32,15 +43,25 @@ class TranscriptSegment(BaseModel):
     person_id: Optional[str] = None
     start: float
     end: float
-    translations: Optional[List[Translation]] = []
+    translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
+    # the generated OpenAPI/Dart/Swift client schema while validation and
+    # model_dump (Firestore persistence, and the pusher transcript frames that
+    # document them) stay intact.
+    speaker_id_scope: SkipJsonSchema[Optional[str]] = None
+    speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
 
-    def __init__(self, **data):
+    def __init__(self, **data: Any):
+        if 'speaker_identity_status' not in data and data.get('is_user') is True:
+            data['speaker_identity_status'] = SpeakerIdentityStatus.user
         super().__init__(**data)
         if not self.id:
             self.id = str(uuid.uuid4())
 
+        if self.speaker_id is not None:
+            return
         if self.speaker:
             try:
                 self.speaker_id = int(self.speaker.split('_', 1)[1])
@@ -49,13 +70,18 @@ class TranscriptSegment(BaseModel):
         else:
             self.speaker_id = 0
 
-    def get_timestamp_string(self):
+    def get_timestamp_string(self) -> str:
         start_duration = timedelta(seconds=int(self.start))
         end_duration = timedelta(seconds=int(self.end))
         return f'{str(start_duration).split(".")[0]} - {str(end_duration).split(".")[0]}'
 
     @staticmethod
-    def segments_as_string(segments, include_timestamps=False, user_name: str = None, people: List[Person] = None):
+    def segments_as_string(
+        segments: List['TranscriptSegment'],
+        include_timestamps: bool = False,
+        user_name: Optional[str] = None,
+        people: Optional[List[Person]] = None,
+    ) -> str:
         if not user_name:
             user_name = 'User'
         transcript = ''
@@ -75,7 +101,7 @@ class TranscriptSegment(BaseModel):
         return transcript.strip()
 
     @staticmethod
-    def can_display_seconds(segments):
+    def can_display_seconds(segments: List['TranscriptSegment']) -> bool:
         for i in range(len(segments)):
             for j in range(i + 1, len(segments)):
                 if segments[i].start > segments[j].end or segments[i].end > segments[j].start:
@@ -83,7 +109,9 @@ class TranscriptSegment(BaseModel):
         return True
 
     @staticmethod
-    def combine_segments(segments: [], new_segments: List['TranscriptSegment'], delta_seconds: int = 0):
+    def combine_segments(
+        segments: List['TranscriptSegment'], new_segments: List['TranscriptSegment'], delta_seconds: int = 0
+    ) -> Tuple[List['TranscriptSegment'], List['TranscriptSegment'], List[str]]:
         if not new_segments or len(new_segments) == 0:
             return segments, [], []
 
@@ -145,8 +173,8 @@ class TranscriptSegment(BaseModel):
 
         def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
-                a.text
-                and b.text
+                bool(a.text)
+                and bool(b.text)
                 and (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
@@ -154,10 +182,14 @@ class TranscriptSegment(BaseModel):
             )
 
         # Combined
-        def _merge(a, b: TranscriptSegment):
+        def _merge(
+            a: Optional['TranscriptSegment'], b: Optional['TranscriptSegment']
+        ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
             if not a or not b:
                 return a, b
             if b.stt_provider != a.stt_provider:
+                return a, b
+            if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
 
             if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
@@ -191,10 +223,10 @@ class TranscriptSegment(BaseModel):
 
             return a, b
 
-        removed_ids = []
+        removed_ids: List[str] = []
 
         # Join
-        joined_similar_segments = [segments[-1].model_copy(deep=True)] if segments else []
+        joined_similar_segments: List[TranscriptSegment] = [segments[-1].model_copy(deep=True)] if segments else []
         dropped_existing_tail = False
         for new_segment in new_segments:
             if delta_seconds > 0:
@@ -206,7 +238,7 @@ class TranscriptSegment(BaseModel):
                 joined_similar_segments[-1] = a
             elif joined_similar_segments and joined_similar_segments[-1].text == "":
                 if segments and joined_similar_segments[-1].id == segments[-1].id:
-                    removed_ids.append(segments[-1].id)
+                    removed_ids.append(cast(str, segments[-1].id))
                     dropped_existing_tail = True
                 joined_similar_segments.pop()
             if b:
@@ -220,9 +252,9 @@ class TranscriptSegment(BaseModel):
         segments.extend(joined_similar_segments)
 
         # Normalize punctuation spacing
-        for i, segment in enumerate(segments):
-            segments[i].text = (
-                segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
+        for segment in segments:
+            segment.text = (
+                segment.text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
         return segments, joined_similar_segments, removed_ids

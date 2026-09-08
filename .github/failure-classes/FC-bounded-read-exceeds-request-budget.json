@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-bounded-read-exceeds-request-budget",
+  "violated_contract": "A request-scoped collection read must bound its aggregate document work low enough to finish within the request middleware budget; a large per-query limit is not a sufficient bound when several reads compose.",
+  "canonical_prevention": "Choose deterministic per-collection limits from one aggregate request budget, return explicit truncation metadata, and exercise the production assembler with a large fixture that rejects uncapped stream consumption.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_bounded_firestore_list_reads.py"],
+  "evidence_prs": [10750],
+  "scope_hints": ["backend/**"],
+  "status": "open"
+}

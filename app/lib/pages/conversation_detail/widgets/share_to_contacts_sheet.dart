@@ -12,8 +12,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/share_links.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -76,7 +76,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     });
 
     // Request contacts permission using flutter_contacts' own method
-    final permissionGranted = await FlutterContacts.requestPermission();
+    final status = await FlutterContacts.permissions.request(PermissionType.readWrite);
+    final permissionGranted = status == PermissionStatus.granted || status == PermissionStatus.limited;
 
     if (!permissionGranted) {
       if (!mounted) return;
@@ -90,17 +91,18 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
     try {
       // Fetch contacts with phone numbers
-      final contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
 
       // Filter contacts that have phone numbers and create ShareableContact list
       final shareableContacts = <ShareableContact>[];
       for (final contact in contacts) {
         for (final phone in contact.phones) {
           if (phone.number.isNotEmpty) {
+            final displayName = contact.displayName;
             shareableContacts.add(
               ShareableContact(
                 id: '${contact.id}_${phone.number}',
-                displayName: contact.displayName.isNotEmpty ? contact.displayName : phone.number,
+                displayName: displayName != null && displayName.isNotEmpty ? displayName : phone.number,
                 phoneNumber: _cleanPhoneNumber(phone.number),
               ),
             );
@@ -163,6 +165,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     final selected = _selectedContacts;
     if (selected.isEmpty) return;
 
+    final l10n = context.l10n;
     setState(() {
       _isPreparingShare = true;
       _errorMessage = null;
@@ -175,7 +178,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         if (!mounted) return;
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = context.l10n.failedToPrepareConversationForSharing;
+          _errorMessage = l10n.failedToPrepareConversationForSharing;
         });
         return;
       }
@@ -184,8 +187,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       }
 
       // Build the share link and message
-      final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
-      final message = context.l10n.heresWhatWeDiscussed(shareLink);
+      final shareLink = conversationShareUrl(widget.conversation.id);
+      final message = l10n.heresWhatWeDiscussed(shareLink);
 
       // Build recipients string (comma-separated phone numbers)
       final recipients = selected.map((c) => c.phoneNumber).join(',');
@@ -206,12 +209,14 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         // Track SMS opened
         PlatformManager.instance.analytics.shareToContactsSmsOpened(widget.conversation.id, selected.length);
         HapticFeedback.mediumImpact();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
         await launchUrl(smsUri);
       } else {
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = context.l10n.couldNotOpenSmsApp;
+          _errorMessage = l10n.couldNotOpenSmsApp;
         });
       }
     } catch (e) {
@@ -299,7 +304,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withOpacity(0.3),
+                          color: Colors.deepPurple.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -328,7 +333,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.2),
+                      color: Colors.red.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(

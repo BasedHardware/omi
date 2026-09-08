@@ -1,7 +1,6 @@
 import asyncio
 import os
-import threading
-import pprint
+from typing import Any, cast
 
 from dotenv import load_dotenv
 
@@ -9,22 +8,16 @@ dotenv_dir = os.path.join(os.path.dirname(__file__), '../../')
 load_dotenv(dotenv_path=f'{dotenv_dir}/.env')
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f"{dotenv_dir}/google-credentials.json"
 
-# pprint.pprint(dict(os.environ))
-
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
-from models.conversation import Conversation
 
 llm_mini = ChatOpenAI(model='gpt-4o-mini')
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-import database.conversations as conversations_db
-import models.chat as chat_models
 import routers.chat as chat_routers
 
 
 async def test_stream():
     # uid = "eLCx***"
-    response = chat_routers.send_message(
+    response: Any = chat_routers.send_message(  # type: ignore[reportCallIssue]  # test script with commented-out params
         # data=chat_models.SendMessageRequest(
         #    text="Did i discuss anything abt yacht party recently? If yes do you think that partnership makes sense for us",
         #    file_ids=[],  # ['x']
@@ -136,7 +129,7 @@ async def test_stream():
     )
 
     # Read the stream
-    async for chunk in response.body_iterator:
+    async for chunk in cast(Any, response).body_iterator:
         if isinstance(chunk, bytes):
             print(chunk.decode('utf-8'))
         else:

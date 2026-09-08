@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-guard-encodes-incident-literals",
+  "violated_contract": "A guard authored in response to an incident must assert the property that made that incident wrong, never the literal values it happened to carry. A predicate built from the observed spelling passes the next instance of the same class while reporting success, which is worse than no guard: the incident recurs behind a green check nobody re-examines. check_git_author_identity.py was written after PR #11525 minted `Ratchet Test <ratchet-test@example.invalid>` from a clone-local user.email, and it learned that display name, that local-part, and three reserved TLDs. PR #12239 hit the identical mechanism with `r <r@r>`; the guard ran on all 66 commits over five days and printed \"OK: Git author identity is not a test fixture\" every time, because email_tld(\"r@r\") returns \"r\" — the domain has no dot to split on.",
+  "canonical_prevention": "State the invariant as a decidable property of the value and test it against an instance the original incident did not contain. Here: an address whose domain cannot resolve can never be delivered or attributed to anyone, whatever it is named — one predicate that covers both incidents and needs no allowlist to maintain. When a guard must enumerate (a genuine allowlist), the enumeration belongs in data with a test asserting the general rule still rejects a novel member of the class.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_check_git_author_identity.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/scripts/check_git_author_identity.py",
+    ".github/failure-classes"
+  ],
+  "status": "open"
+}

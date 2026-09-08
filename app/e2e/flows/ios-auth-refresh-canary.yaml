@@ -1,0 +1,54 @@
+# Release canary: persisted TestFlight login -> forced refresh -> authenticated conversations
+
+version: 2
+name: ios-auth-refresh-canary
+description: Verify a persisted signed iOS session refreshes its Firebase token and loads conversations after relaunch
+app: com.friend.ios
+evidence:
+  video: true
+covers:
+  - app/lib/services/auth_service.dart
+  - app/lib/backend/http/shared.dart
+  - app/lib/backend/http/api/conversations.dart
+  - app/lib/providers/conversation_provider.dart
+  - app/lib/providers/auth_provider.dart
+  - app/lib/mobile/mobile_app.dart
+preconditions:
+  - Install the signed TestFlight release candidate on a physical iPhone
+  - Sign in and complete onboarding once with an account that has at least one conversation
+  - Force-quit the app before starting the canary
+
+steps:
+  - id: S1
+    name: Relaunch persisted session
+    do: "Launch the TestFlight app after the force-quit and wait for startup to complete. Startup forces a Firebase ID-token refresh for the restored user."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+
+  - id: S2
+    name: Verify authenticated shell
+    do: "Verify the home screen is visible without showing Get Started or a sign-in prompt."
+    verify: true
+    evidence:
+      - screenshot: step-S2.webp
+
+  - id: S3
+    name: Verify conversation-list access
+    do: "Open the Conversations tab and verify at least one server-backed conversation appears. This proves the refreshed token authorized GET /v1/conversations."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S3.webp
+
+  - id: S4
+    name: Verify stable refresh cadence
+    do: "Keep the app foregrounded for at least 45 seconds and verify the conversation list remains loaded with no repeated loading/reset cycle or sign-in transition."
+    verify: true
+    evidence:
+      - screenshot: step-S4.webp

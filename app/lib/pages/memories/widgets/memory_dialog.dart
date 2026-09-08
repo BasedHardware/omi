@@ -57,7 +57,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -95,6 +95,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
               constraints: const BoxConstraints(maxHeight: 250),
               child: SingleChildScrollView(
                 child: TextField(
+                  key: const ValueKey('memory_content_field'),
                   controller: contentController,
                   autofocus: true,
                   maxLines: null,
@@ -124,14 +125,15 @@ class _MemoryDialogState extends State<MemoryDialog> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
+                key: const ValueKey('memory_save_button'),
                 onPressed: _isSaving ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
-                  disabledForegroundColor: Colors.white.withOpacity(0.7),
+                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                 ),
                 child: _isSaving
                     ? const SizedBox(
@@ -156,6 +158,16 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
   Future<void> _handleSave() async {
     if (contentController.text.trim().isEmpty) return;
+    final existingMemory = widget.memory;
+    if (existingMemory != null &&
+        existingMemory.isKnowledgeLedger &&
+        (existingMemory.deleted ||
+            existingMemory.invalidAt != null ||
+            (existingMemory.supersededBy ?? '').trim().isNotEmpty ||
+            existingMemory.ledgerKind != KnowledgeLedgerKind.fact ||
+            existingMemory.isLocked)) {
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -204,7 +216,9 @@ class _MemoryDialogState extends State<MemoryDialog> {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
       widget.provider.deleteMemory(widget.memory!);
-      Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 }

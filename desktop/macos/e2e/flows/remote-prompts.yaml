@@ -1,0 +1,47 @@
+version: 2
+name: remote-prompts
+tier: 2
+description: Remote prompt engine — bridge surface for admin-authored prompts (fetch, state, reset)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/RemotePrompts.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RemotePrompts.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DesktopPrompts.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Reset persisted prompt resolutions
+    bridge.action:
+      name: remote_prompts_reset
+    expect:
+      ok: true
+      result.detail.reset: "true"
+
+  - id: S2
+    name: Engine state is reachable and empty by default
+    bridge.action:
+      name: remote_prompts_state
+    expect:
+      ok: true
+      result.detail.schema: "current_id,current_type,spec_count,spec_ids"
+      result.detail.current_id: ""
+
+  - id: S3
+    name: A live fetch succeeds against the configured backend
+    bridge.action:
+      name: remote_prompts_refresh
+    expect:
+      ok: true
+      result.detail.refreshed: "true"
+
+  - id: S4
+    name: Answering with no active prompt is refused
+    bridge.action:
+      name: remote_prompt_answer
+      params:
+        value: "5"
+    expect:
+      ok: true
+      result.detail.answered: "false"

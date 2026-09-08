@@ -1,0 +1,7 @@
+{
+  "version": "0.11.567",
+  "date": "2026-06-29",
+  "changes": [
+    "Fixed desktop recordings so stop and retry finalize the exact backend conversation when available"
+  ]
+}

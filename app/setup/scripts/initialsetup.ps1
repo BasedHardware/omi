@@ -32,4 +32,4 @@ $null = Read-Host
 Write-Host "Running Build Runner..."
 dart run build_runner build
 
-Write-Host "Setup complete. You can now run the app." 
+Write-Host "Setup complete. You can now run the app."

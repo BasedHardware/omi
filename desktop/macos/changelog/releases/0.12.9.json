@@ -1,0 +1,7 @@
+{
+  "version": "0.12.9",
+  "date": "2026-07-04",
+  "changes": [
+    "Fixed onboarding language step silently continuing when your primary language failed to save to your account"
+  ]
+}

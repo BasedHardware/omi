@@ -69,8 +69,6 @@ ingress:
       paths:
         - path: /v1/vad
           pathType: Prefix
-        - path: /v1/speaker-identification
-          pathType: Prefix
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
@@ -185,3 +183,10 @@ affinity:
               operator: In
               values:
                 - v2
+
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0

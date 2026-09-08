@@ -4,14 +4,21 @@ Generates app configuration from a natural language prompt using LLM
 """
 
 import json
+import re
 import base64
 import httpx
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 from pydantic import BaseModel
-from openai import OpenAI
-
 from langchain_core.messages import SystemMessage, HumanMessage
+from utils.executors import llm_executor, run_blocking
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import generate_image_via_gateway
+
+
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
+
 
 # App categories available in the system
 APP_CATEGORIES = [
@@ -110,7 +117,7 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
     response = await get_llm('app_generator').ainvoke(messages)
 
     # Parse the JSON response
-    content = response.content.strip()
+    content = _content_str(response).strip()
 
     # Handle potential markdown code blocks
     if content.startswith("```"):
@@ -122,28 +129,30 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
         app_data = json.loads(content)
     except json.JSONDecodeError:
         # Try to extract JSON from the response
-        import re
-
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             app_data = json.loads(json_match.group())
         else:
             raise ValueError("Failed to parse LLM response as JSON")
 
-    # Validate and construct the response
+    # Coerce present-but-null LLM fields to their defaults. app_data.get(k, default) only applies the
+    # default when k is ABSENT, so a null value ({"name": null}, {"capabilities": null}) slips through
+    # and then crashes here (None[:50], "chat" in None) or fails GeneratedAppData validation - all
+    # outside the JSON try/except above, so an uncaught 500 on app generation.
+    caps = app_data.get("capabilities") or ["chat"]
     return GeneratedAppData(
-        name=app_data.get("name", "My App")[:50],
-        description=app_data.get("description", "An AI-powered app"),
-        category=app_data.get("category", "other"),
-        capabilities=app_data.get("capabilities", ["chat"]),
-        chat_prompt=app_data.get("chat_prompt") if "chat" in app_data.get("capabilities", []) else None,
-        memory_prompt=app_data.get("memory_prompt") if "memories" in app_data.get("capabilities", []) else None,
+        name=(app_data.get("name") or "My App")[:50],
+        description=app_data.get("description") or "An AI-powered app",
+        category=app_data.get("category") or "other",
+        capabilities=caps,
+        chat_prompt=app_data.get("chat_prompt") if "chat" in caps else None,
+        memory_prompt=app_data.get("memory_prompt") if "memories" in caps else None,
     )
 
 
 async def generate_app_icon(app_name: str, app_description: str, category: str) -> bytes:
     """
-    Generate an app icon using OpenAI's DALL-E.
+    Generate an app icon through the internal LLM gateway.
 
     Args:
         app_name: Name of the app
@@ -153,8 +162,6 @@ async def generate_app_icon(app_name: str, app_description: str, category: str) 
     Returns:
         PNG image bytes of the generated icon
     """
-    client = OpenAI()
-
     # Create a prompt for icon generation
     icon_prompt = f"""Create a modern, minimal app icon for an AI app called "{app_name}".
 
@@ -167,17 +174,27 @@ Design requirements:
 - Simple geometric shapes or abstract representation
 - Professional and polished look
 - Should work well at small sizes (app icon)
-- No text or letters in the icon
-- Vibrant but not overwhelming colors
-- Style: Similar to modern iOS/Android app icons"""
+    - No text or letters in the icon
+    - Vibrant but not overwhelming colors
+    - Style: Similar to modern iOS/Android app icons"""
 
-    response = client.images.generate(
-        model="dall-e-3", prompt=icon_prompt, size="1024x1024", quality="standard", n=1, response_format="b64_json"
+    # gpt-image-1 with an explicit size/quality pair the gateway rate card prices
+    # (openai.gpt-image-1.medium.1024x1024). The retired dall-e-3 `standard` quality and the
+    # `response_format` parameter are both rejected by the images API now, and it always
+    # returns base64 image data.
+    response = await run_blocking(
+        llm_executor,
+        generate_image_via_gateway,
+        model="gpt-image-1",
+        prompt=icon_prompt,
+        size="1024x1024",
+        quality="medium",
+        n=1,
     )
 
     # Get the base64 image data and decode it
-    image_data = response.data[0].b64_json
-    return base64.b64decode(image_data)
+    image_data = cast("list[dict[str, Any]]", response["data"])[0]["b64_json"]
+    return base64.b64decode(cast(str, image_data))
 
 
 async def download_image_from_url(url: str) -> bytes:
@@ -201,10 +218,10 @@ def generate_description(app_name: str, description: str) -> str:
     Description: {description}
     """
     prompt = prompt.replace('    ', '').strip()
-    return get_llm('app_integration').invoke(prompt).content
+    return _content_str(get_llm('app_integration').invoke(prompt))
 
 
-def generate_description_and_emoji(app_name: str, prompt: str) -> dict:
+def generate_description_and_emoji(app_name: str, prompt: str) -> Dict[str, str]:
     """
     Generate an app description and a representative emoji for the app.
     Used by the quick template creator feature.
@@ -224,7 +241,7 @@ What it does: {prompt}"""
         [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     )
 
-    content = response.content.strip()
+    content = _content_str(response).strip()
 
     # Parse JSON from response
     if content.startswith("```"):

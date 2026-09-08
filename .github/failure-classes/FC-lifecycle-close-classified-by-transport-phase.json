@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-lifecycle-close-classified-by-transport-phase",
+  "violated_contract": "A connection teardown the system already recognizes as an expected lifecycle event must classify as expected on every path it can arrive on. Dispatching on the transport phase that surfaced the close ahead of the lifecycle predicate reports an ordinary teardown as a production fault and as a dependency-health failure, and buries the genuine fast-fail closes the classifier exists to surface.",
+  "canonical_prevention": "Evaluate the expected-lifecycle predicate before dispatching on transport phase or failure kind, key it on typed signals the transport already carries (errno, elapsed socket lifetime, turn ownership) rather than localized failure text, and cover both an expected instance and its adjacent genuine failure — the same errno seen fast, or during an owned turn — in the classifier's regression suite.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift",
+    "desktop/macos/Desktop/Tests/RealtimeHubCloseClassifierTests.swift"
+  ],
+  "evidence_prs": [
+    10935
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

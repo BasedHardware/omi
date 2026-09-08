@@ -1,0 +1,8 @@
+{
+  "version": "0.11.593",
+  "date": "2026-07-02",
+  "changes": [
+    "Improved desktop app packaging so the bundled agent runtime no longer depends on developer-machine Node libraries",
+    "Fixed OpenClaw memory setup so Omi can use OpenClaw's bundled Node runtime when updating MCP config"
+  ]
+}

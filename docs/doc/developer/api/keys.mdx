@@ -18,6 +18,12 @@ description: "Manage your Developer API keys"
   </Card>
 </CardGroup>
 
+<Note>
+Developer API keys are self-service: while signed in to Omi, open **Developer → API Keys** to create,
+list, and revoke your keys. The lifecycle endpoints below use that signed-in Omi/Firebase session; an
+`omi_dev_...` key cannot create, list, or revoke keys itself.
+</Note>
+
 ---
 
 ## List API Keys
@@ -27,13 +33,13 @@ description: "Manage your Developer API keys"
 </Card>
 
 <Note>
-This endpoint requires authentication with an existing API key or user session. The secret key values are not returned (only the prefix is shown).
+This endpoint requires your signed-in Omi/Firebase session. The secret key values are not returned (only the prefix is shown).
 </Note>
 
 <Tabs>
   <Tab title="cURL">
     ```bash
-    curl -H "Authorization: Bearer $API_KEY" \
+    curl -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
       "https://api.omi.me/v1/dev/keys"
     ```
   </Tab>
@@ -43,7 +49,7 @@ This endpoint requires authentication with an existing API key or user session. 
 
     response = requests.get(
         "https://api.omi.me/v1/dev/keys",
-        headers={"Authorization": f"Bearer {API_KEY}"}
+        headers={"Authorization": f"Bearer {firebase_id_token}"}
     )
     keys = response.json()
     ```
@@ -52,7 +58,7 @@ This endpoint requires authentication with an existing API key or user session. 
     ```javascript
     const response = await fetch(
       "https://api.omi.me/v1/dev/keys",
-      { headers: { Authorization: `Bearer ${API_KEY}` } }
+      { headers: { Authorization: `Bearer ${firebaseIdToken}` } }
     );
     const keys = await response.json();
     ```
@@ -68,14 +74,16 @@ This endpoint requires authentication with an existing API key or user session. 
         "name": "My Analytics Dashboard",
         "key_prefix": "omi_dev_abc123",
         "created_at": "2025-01-15T10:30:00Z",
-        "last_used_at": "2025-01-20T14:22:00Z"
+        "last_used_at": "2025-01-20T14:22:00Z",
+        "scopes": ["conversations:read", "memories:read"]
       },
       {
         "id": "key_456def",
         "name": "Automation Script",
         "key_prefix": "omi_dev_def456",
         "created_at": "2025-01-18T09:00:00Z",
-        "last_used_at": null
+        "last_used_at": null,
+        "scopes": ["memories:read"]
       }
     ]
     ```
@@ -88,6 +96,7 @@ This endpoint requires authentication with an existing API key or user session. 
     | `key_prefix` | string | First part of the key (for identification) |
     | `created_at` | datetime | When the key was created |
     | `last_used_at` | datetime | When the key was last used (null if never used) |
+    | `scopes` | array | Permissions assigned to the key |
   </Accordion>
 </AccordionGroup>
 
@@ -99,11 +108,17 @@ This endpoint requires authentication with an existing API key or user session. 
   Create a new developer API key
 </Card>
 
+<Note>
+Create keys from the signed-in Omi web app. The REST endpoint is the same self-service flow and requires a
+Firebase ID token, not an existing `omi_dev_...` key. The new secret is returned only once.
+</Note>
+
 <AccordionGroup>
   <Accordion title="Request Body" icon="code" defaultOpen={true}>
     | Parameter | Type | Required | Description |
     |-----------|------|----------|-------------|
     | `name` | string | **Yes** | Descriptive name for the key |
+    | `scopes` | array of strings | No | Permissions for the key. If omitted, the key receives the read-only scopes. |
   </Accordion>
 </AccordionGroup>
 
@@ -111,9 +126,9 @@ This endpoint requires authentication with an existing API key or user session. 
   <Tab title="cURL">
     ```bash
     curl -X POST "https://api.omi.me/v1/dev/keys" \
-      -H "Authorization: Bearer $API_KEY" \
+      -H "Authorization: Bearer $FIREBASE_ID_TOKEN" \
       -H "Content-Type: application/json" \
-      -d '{"name": "My New Integration"}'
+      -d '{"name": "My New Integration", "scopes": ["memories:read"]}'
     ```
   </Tab>
   <Tab title="Python">
@@ -123,10 +138,10 @@ This endpoint requires authentication with an existing API key or user session. 
     response = requests.post(
         "https://api.omi.me/v1/dev/keys",
         headers={
-            "Authorization": f"Bearer {API_KEY}",
+            "Authorization": f"Bearer {firebase_id_token}",
             "Content-Type": "application/json"
         },
-        json={"name": "My New Integration"}
+        json={"name": "My New Integration", "scopes": ["memories:read"]}
     )
     new_key = response.json()
     print(f"Store this key securely: {new_key['key']}")
@@ -139,10 +154,10 @@ This endpoint requires authentication with an existing API key or user session. 
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${firebaseIdToken}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ name: "My New Integration" })
+        body: JSON.stringify({ name: "My New Integration", scopes: ["memories:read"] })
       }
     );
     const newKey = await response.json();
@@ -159,7 +174,8 @@ This endpoint requires authentication with an existing API key or user session. 
     "key_prefix": "omi_dev_ghi789",
     "key": "omi_dev_ghi789_full_secret_key_here",
     "created_at": "2025-01-20T15:00:00Z",
-    "last_used_at": null
+    "last_used_at": null,
+    "scopes": ["memories:read"]
   }
   ```
 </Accordion>
@@ -167,6 +183,16 @@ This endpoint requires authentication with an existing API key or user session. 
 <Warning>
 The full API key (`key` field) is only returned once during creation. Store it securely immediately - you won't be able to see it again!
 </Warning>
+
+### Scopes
+
+Choose the least-privileged scopes needed by your integration:
+
+- Read: `conversations:read`, `memories:read`, `action_items:read`, `goals:read`
+- Write: `conversations:write`, `memories:write`, `action_items:write`, `goals:write`
+
+Memory scopes authorize the key, but they do not bypass the account-level Developer Memory API readiness
+gate. See [Memories](/doc/developer/api/memories) for that availability contract.
 
 ---
 
@@ -188,7 +214,7 @@ The full API key (`key` field) is only returned once during creation. Store it s
   <Tab title="cURL">
     ```bash
     curl -X DELETE "https://api.omi.me/v1/dev/keys/key_789ghi" \
-      -H "Authorization: Bearer $API_KEY"
+      -H "Authorization: Bearer $FIREBASE_ID_TOKEN"
     ```
   </Tab>
   <Tab title="Python">
@@ -197,7 +223,7 @@ The full API key (`key` field) is only returned once during creation. Store it s
 
     response = requests.delete(
         f"https://api.omi.me/v1/dev/keys/key_789ghi",
-        headers={"Authorization": f"Bearer {API_KEY}"}
+        headers={"Authorization": f"Bearer {firebase_id_token}"}
     )
     if response.status_code == 204:
         print("Key revoked successfully")
@@ -209,7 +235,7 @@ The full API key (`key` field) is only returned once during creation. Store it s
       "https://api.omi.me/v1/dev/keys/key_789ghi",
       {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${API_KEY}` }
+        headers: { Authorization: `Bearer ${firebaseIdToken}` }
       }
     );
     if (response.status === 204) {

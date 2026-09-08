@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "demo-omi-local",
+    "storage_bucket": "demo-omi-local.localhost"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "com.friend.ios.dev"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEMOOMILOCALFAKEKEY00000000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

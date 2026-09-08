@@ -13,33 +13,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Stub heavy deps before importing the app
-# ---------------------------------------------------------------------------
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
-
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-
-# In-memory fair_use DB
+# In-memory fair_use DB. The autouse ``cleanup`` fixture installs fakes that read
+# and write here, replacing the former module-scope ``sys.modules`` stubs.
 _state_store = {}
 _events = []
 
-_fair_use_db = types.ModuleType('database.fair_use')
-_fair_use_db.get_fair_use_state = lambda uid: _state_store.get(uid, {})
-_fair_use_db.update_fair_use_state = lambda uid, u: _state_store.setdefault(uid, {}).update(u)
-_fair_use_db.create_fair_use_event = lambda uid, d: (_events.append({**d, 'uid': uid}), f'evt-{len(_events)}')[1]
-_fair_use_db.get_fair_use_events = lambda uid, limit=50: [e for e in _events if e.get('uid') == uid][:limit]
-_fair_use_db.get_violation_counts = lambda uid: {'violation_count_7d': 0, 'violation_count_30d': 0}
-_fair_use_db.resolve_fair_use_event = lambda uid, eid, admin_uid='', notes='': None
-_fair_use_db.reset_fair_use_state = lambda uid, admin_uid='': _state_store.pop(uid, None)
-_fair_use_db.get_flagged_users = lambda stage_filter=None, limit=50: []
-sys.modules['database.fair_use'] = _fair_use_db
-
-sys.modules.setdefault('database.users', MagicMock())
-sys.modules.setdefault('utils.notifications', MagicMock())
+# Stand-in for ``database._client.db`` consumed by the admin router's case-lookup
+# endpoints. The autouse fixture patches ``routers.fair_use_admin.db`` to this mock
+# so individual tests can drive ``collection_group`` via ``patch.object``.
+_fake_db = MagicMock()
 
 os.environ['FAIR_USE_ENABLED'] = 'true'
 os.environ['FAIR_USE_DAILY_SPEECH_MS'] = '10000'
@@ -50,6 +32,8 @@ os.environ['ADMIN_KEY'] = 'test-admin-key-12345'
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import database.fair_use as _fair_use_db_module
+import routers.fair_use_admin as _admin_module
 import utils.fair_use as fair_use
 
 # Import the router
@@ -79,7 +63,37 @@ def _cleanup():
 
 
 @pytest.fixture(autouse=True)
-def cleanup():
+def cleanup(monkeypatch):
+    """Install in-memory fakes for ``database.fair_use`` and patch the admin router's ``db``.
+
+    Replaces the former module-scope ``sys.modules`` stubs with fixture-scoped
+    ``monkeypatch.setattr`` (the sanctioned Tier-2 seam). Test bodies and assertions
+    are unchanged.
+    """
+    monkeypatch.setattr(_fair_use_db_module, 'get_fair_use_state', lambda uid: _state_store.get(uid, {}))
+    monkeypatch.setattr(
+        _fair_use_db_module, 'update_fair_use_state', lambda uid, u: _state_store.setdefault(uid, {}).update(u)
+    )
+    monkeypatch.setattr(
+        _fair_use_db_module,
+        'create_fair_use_event',
+        lambda uid, d: (_events.append({**d, 'uid': uid}), f'evt-{len(_events)}')[1],
+    )
+    monkeypatch.setattr(
+        _fair_use_db_module,
+        'get_fair_use_events',
+        lambda uid, limit=50: [e for e in _events if e.get('uid') == uid][:limit],
+    )
+    monkeypatch.setattr(
+        _fair_use_db_module, 'get_violation_counts', lambda uid: {'violation_count_7d': 0, 'violation_count_30d': 0}
+    )
+    monkeypatch.setattr(_fair_use_db_module, 'resolve_fair_use_event', lambda uid, eid, admin_uid='', notes='': None)
+    monkeypatch.setattr(
+        _fair_use_db_module, 'reset_fair_use_state', lambda uid, admin_uid='': _state_store.pop(uid, None)
+    )
+    monkeypatch.setattr(_fair_use_db_module, 'get_flagged_users', lambda stage_filter=None, limit=50: [])
+    monkeypatch.setattr(_admin_module, 'db', _fake_db)
+
     _cleanup()
     yield
     _cleanup()
@@ -211,7 +225,10 @@ class TestUserFacingEndpoint:
 
     def test_status_shows_restrict_message(self):
         """Restrict stage shows support contact info."""
-        _state_store[TEST_UID] = {'stage': 'restrict'}
+        _state_store[TEST_UID] = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() + timedelta(days=1),
+        }
 
         app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
         resp = client.get('/v1/fair-use/status')
@@ -221,6 +238,23 @@ class TestUserFacingEndpoint:
         data = resp.json()
         assert data['stage'] == 'restrict'
         assert 'team@basedhardware.com' in data['message']
+
+    def test_status_naturally_expired_restriction_reports_throttle(self):
+        _state_store[TEST_UID] = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() - timedelta(seconds=1),
+        }
+
+        app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+        resp = client.get('/v1/fair-use/status')
+        app.dependency_overrides.pop(get_current_user_uid, None)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['stage'] == 'throttle'
+        assert 'temporarily reduced' in data['message']
+        assert _state_store[TEST_UID]['stage'] == 'throttle'
+        assert _state_store[TEST_UID]['restrict_until'] is None
 
 
 class TestPublicCaseStatusEndpoint:
@@ -245,7 +279,7 @@ class TestPublicCaseStatusEndpoint:
         }
         mock_doc.reference.path = f'users/{TEST_UID}/fair_use_events/evt-1'
 
-        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+        with patch.object(_fake_db, 'collection_group') as mock_cg:
             mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = [mock_doc]
             resp = client.get('/v1/fair-use/case/FU-AABBCCDDEEFF/status')
 
@@ -264,7 +298,7 @@ class TestPublicCaseStatusEndpoint:
 
     def test_invalid_case_ref_returns_404(self):
         """Unknown case ref returns 404."""
-        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+        with patch.object(_fake_db, 'collection_group') as mock_cg:
             mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = []
             resp = client.get('/v1/fair-use/case/FU-DOESNOTEXIST/status')
 
@@ -272,7 +306,7 @@ class TestPublicCaseStatusEndpoint:
 
     def test_no_auth_required(self):
         """Public endpoint works without any auth headers."""
-        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+        with patch.object(_fake_db, 'collection_group') as mock_cg:
             mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = []
             resp = client.get('/v1/fair-use/case/FU-ANYTHING/status')
 
@@ -346,7 +380,7 @@ class TestPublicEndpointRateLimit:
 
         ep_mod.cached.clear()
 
-        with patch.object(_db_client.db, 'collection_group') as mock_cg:
+        with patch.object(_fake_db, 'collection_group') as mock_cg:
             mock_cg.return_value.where.return_value.limit.return_value.stream.return_value = []
             # First 10 should succeed (404 = not found, but not rate-limited)
             for i in range(10):
@@ -358,8 +392,8 @@ class TestPublicEndpointRateLimit:
             assert resp.status_code == 429
 
 
-class TestTranscribePathFairUseImports:
-    """Structural test: transcribe.py fair-use imports match expected design.
+class TestListenPathFairUseImports:
+    """Structural test: extracted listen fair-use imports match expected design.
 
     Reads the source file directly (avoids heavy dep chain import).
     Warning/throttle are notify-only. Restrict enforces DG budget cap only.
@@ -367,21 +401,22 @@ class TestTranscribePathFairUseImports:
     """
 
     @staticmethod
-    def _read_transcribe_source():
-        transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(transcribe_path) as f:
-            return f.read()
+    def _read_listen_sources():
+        listen_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen')
+        return '\n'.join(
+            open(os.path.join(listen_dir, module)).read() for module in ('runtime.py', 'receiver.py', 'contracts.py')
+        )
 
-    def test_transcribe_does_not_import_hard_restriction(self):
-        """transcribe.py must not use is_hard_restricted (blanket block) or VAD throttle."""
-        source = self._read_transcribe_source()
-        assert 'is_hard_restricted' not in source, 'transcribe.py must not reference is_hard_restricted'
-        assert 'fair_use_restricted' not in source, 'transcribe.py must not have fair_use_restricted variable'
-        assert 'get_user_vad_threshold_delta' not in source, 'transcribe.py must not use VAD throttle'
+    def test_listen_does_not_import_hard_restriction(self):
+        """Listen must not use a blanket restriction or VAD throttle."""
+        source = self._read_listen_sources()
+        assert 'is_hard_restricted' not in source
+        assert 'fair_use_restricted' not in source
+        assert 'get_user_vad_threshold_delta' not in source
 
     def test_fair_use_imports_include_budget_gate(self):
         """Tracking + DG budget gate functions should be imported from fair_use."""
-        source = self._read_transcribe_source()
+        source = self._read_listen_sources()
         # Tracking functions
         assert 'record_speech_ms' in source
         assert 'check_soft_caps' in source
@@ -396,14 +431,16 @@ class TestTranscribePathFairUseImports:
         """fair_use_dg_budget_exhausted must appear in if-conditionals, not just as an import/comment."""
         import re
 
-        source = self._read_transcribe_source()
-        # Must be used as a conditional guard (if/not/and), not just defined or commented
-        conditional_uses = re.findall(r'(?:if|and|not)\s+fair_use_dg_budget_exhausted', source)
+        source = self._read_listen_sources()
+        # Must be used as a guard, either inline or passed into the STT decision helpers.
+        guard_uses = re.findall(
+            r'(?:if|and|not)\s+self\.(?:host\.)?state\.fair_use_dg_budget_exhausted'
+            r'|fair_use_dg_budget_exhausted=self\.(?:host\.)?state\.fair_use_dg_budget_exhausted',
+            source,
+        )
         # Expect at least 3 guard points: session-start, periodic check, single-ch DG,
         # multi-channel (speech-profile excluded — small chunks, not budget-gated)
-        assert (
-            len(conditional_uses) >= 3
-        ), f'Expected >=3 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
+        assert len(guard_uses) >= 3, f'Expected >=3 guard uses of fair_use_dg_budget_exhausted, found {len(guard_uses)}'
 
     def test_budget_accounting_across_providers(self):
         """DG usage must be tracked for STT provider paths (DG single-channel + multi-channel).
@@ -412,13 +449,16 @@ class TestTranscribePathFairUseImports:
         record_dg_usage_ms is called only at periodic flush + session-end flush.
         The accumulation points (dg_usage_ms_pending +=) cover all active provider paths.
         """
-        source = self._read_transcribe_source()
+        receiver_source = self._read_listen_sources()
+        runtime_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', 'runtime.py')
+        runtime_source = open(runtime_path).read()
         import re
 
         # Verify accumulation points cover DG single + multi-channel (#5854 batching)
-        accum_calls = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        accum_calls = re.findall(r'^\s+self\.host\.state\.dg_usage_ms_pending\s*\+=', receiver_source, re.MULTILINE)
         assert len(accum_calls) >= 2, f'Expected >=2 dg_usage_ms_pending accumulation points, found {len(accum_calls)}'
 
-        # Verify flush calls exist (periodic + session-end)
-        flush_calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
-        assert len(flush_calls) >= 2, f'Expected >=2 record_dg_usage_ms flush calls, found {len(flush_calls)}'
+        # Periodic and final writes share one flush implementation.
+        assert 'record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending' in runtime_source
+        assert '_flush_usage(final=False)' in runtime_source
+        assert '_flush_usage(final=True)' in runtime_source

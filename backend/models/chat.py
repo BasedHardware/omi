@@ -1,8 +1,16 @@
+import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+
+from models.feedback import MAX_COMMENT_LENGTH, FeedbackReason
+
+# App display names are resolved by an injected callable, never by importing the database
+# layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
+# client into every import graph that touches a chat message.
+AppNameResolver = Callable[[str], Optional[str]]
 
 
 class MessageSender(str, Enum):
@@ -38,9 +46,14 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
-    def dict(self, **kwargs):
+    def is_pdf(self) -> bool:
+        if (self.mime_type or '').lower() == 'application/pdf':
+            return True
+        return (self.name or '').lower().endswith('.pdf')
+
+    def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
-        return super().dict(exclude=exclude_fields, **kwargs)
+        return super().model_dump(exclude=exclude_fields, **kwargs)
 
 
 class ChartDataPoint(BaseModel):
@@ -62,6 +75,119 @@ class ChartData(BaseModel):
     datasets: List[ChartDataset]
 
 
+class ChatEvidenceReference(BaseModel):
+    """One bounded, optional source reference attached to a chat answer.
+
+    The answer text remains authoritative.  Clients may render these references
+    as supplemental chrome, but an unavailable or future reference must never
+    make the answer itself unreadable.
+    """
+
+    id: str = Field(..., min_length=1, max_length=256)
+    kind: str
+    state: str
+    title: Optional[str] = Field(None, max_length=160)
+    summary: Optional[str] = Field(None, max_length=600)
+    conversation_id: Optional[str] = Field(None, max_length=256)
+    segment_id: Optional[str] = Field(None, max_length=256)
+    frame_id: Optional[str] = Field(None, max_length=256)
+    request_id: Optional[str] = Field(None, max_length=256)
+    start_ms: Optional[int] = Field(None, ge=0)
+    end_ms: Optional[int] = Field(None, ge=0)
+    captured_at_ms: Optional[int] = Field(None, ge=0)
+    error_code: Optional[str] = Field(None, max_length=128)
+    error_message: Optional[str] = Field(None, max_length=600)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator('id')
+    @classmethod
+    def _normalize_evidence_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('evidence id must not be blank')
+        return normalized
+
+    @field_validator('kind')
+    @classmethod
+    def _normalize_evidence_kind(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return (
+            normalized
+            if normalized in {'conversation_summary', 'conversation_segment', 'screen', 'keyframe', 'request'}
+            else 'unknown'
+        )
+
+    @field_validator('state')
+    @classmethod
+    def _normalize_evidence_state(cls, value: str) -> str:
+        normalized = (value or '').strip().lower()
+        return normalized if normalized in {'available', 'loading', 'offline', 'pruned', 'failed'} else 'unknown'
+
+    @field_validator(
+        'title',
+        'summary',
+        'conversation_id',
+        'segment_id',
+        'frame_id',
+        'request_id',
+        'error_code',
+        'error_message',
+    )
+    @classmethod
+    def _strip_evidence_strings(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _validate_evidence_identity(self) -> 'ChatEvidenceReference':
+        try:
+            serialized_metadata = json.dumps(self.metadata, sort_keys=True, separators=(',', ':'))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('evidence metadata must be JSON serializable') from exc
+        if len(self.metadata) > 16 or len(serialized_metadata) > 2_000:
+            raise ValueError('evidence metadata exceeds the bounded transport limit')
+        if self.end_ms is not None and self.start_ms is not None and self.end_ms < self.start_ms:
+            raise ValueError('end_ms must be greater than or equal to start_ms')
+        if self.kind == 'conversation_summary' and not self.conversation_id:
+            raise ValueError('conversation_summary requires conversation_id')
+        if self.kind == 'conversation_segment' and not (self.conversation_id and self.segment_id):
+            raise ValueError('conversation_segment requires conversation_id and segment_id')
+        if self.kind in {'screen', 'keyframe'} and not self.frame_id:
+            raise ValueError(f'{self.kind} requires frame_id')
+        if self.kind == 'request' and not self.request_id:
+            raise ValueError('request requires request_id')
+        return self
+
+
+class ChatEvidenceEnvelope(BaseModel):
+    """Versioned transport envelope for supplemental chat evidence."""
+
+    schema_version: int = Field(default=1, ge=1, le=2_147_483_647)
+    request_id: Optional[str] = Field(None, max_length=256)
+    references: List[ChatEvidenceReference] = Field(default_factory=list, max_length=24)
+
+    @field_validator('request_id')
+    @classmethod
+    def _strip_request_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @model_validator(mode='after')
+    def _reject_duplicate_reference_ids(self) -> 'ChatEvidenceEnvelope':
+        identities = [reference.id for reference in self.references]
+        if len(identities) != len(set(identities)):
+            raise ValueError('evidence reference ids must be unique')
+        if self.schema_version != 1:
+            self.references = [
+                reference.model_copy(update={'kind': 'unknown', 'state': 'unknown'}) for reference in self.references
+            ]
+        return self
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -79,11 +205,27 @@ class Message(BaseModel):
     files_id: List[str] = []
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
+    session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     langsmith_run_id: Optional[str] = None  # LangSmith run ID for feedback tracking
     prompt_name: Optional[str] = None  # LangSmith prompt name for versioning
     prompt_commit: Optional[str] = None  # LangSmith prompt commit/version for traceability
     rating: Optional[int] = None  # User feedback: 1 = thumbs up, -1 = thumbs down, None = no rating
+    # Desktop journal compatibility fields. These are optional so the existing
+    # message response remains readable by older clients while a new client can
+    # reconcile the canonical turn identity and structured payload exactly.
+    metadata: Optional[str] = None
+    content_blocks: List[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            'Structured chat content blocks. New rows store these directly; '
+            'legacy rows are projected from metadata.content_blocks.'
+        ),
+    )
+    evidence: Optional[ChatEvidenceEnvelope] = None
+    client_message_id: Optional[str] = None
+    message_source: Optional[str] = None
+    journal_revision: Optional[int] = None
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
 
     @model_validator(mode='before')
@@ -97,7 +239,51 @@ class Message(BaseModel):
                 data['plugin_id'] = app_id_val
             elif plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
+
+            if 'content_blocks' not in data:
+                metadata = data.get('metadata')
+                if isinstance(metadata, str):
+                    try:
+                        legacy_blocks = json.loads(metadata).get('content_blocks')
+                    except (AttributeError, TypeError, ValueError):
+                        legacy_blocks = None
+                    if isinstance(legacy_blocks, list):
+                        data['content_blocks'] = legacy_blocks
         return data
+
+    @classmethod
+    def deserialize_many_safe(cls, records, on_error=None) -> List['Message']:
+        """Build Message objects from raw stored records, skipping any that fail
+        validation so one malformed or legacy chat message cannot 500 a whole history
+        load. on_error(record, exception), when provided, is called for each skip."""
+        parsed: List['Message'] = []
+        for record in records:
+            try:
+                parsed.append(cls(**record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the history
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
+
+    @staticmethod
+    def _resolve_sender_name(
+        message: 'Message',
+        *,
+        use_plugin_name_if_available: bool,
+        app_name_by_id: Dict[str, Optional[str]],
+        app_name_resolver: Optional[AppNameResolver],
+    ) -> str:
+        if message.sender == 'human':
+            return 'User'
+        if use_plugin_name_if_available and app_name_resolver and message.app_id and message.app_id.strip():
+            app_id = message.app_id.strip()
+            if app_id not in app_name_by_id:
+                name = app_name_resolver(app_id)
+                app_name_by_id[app_id] = name.strip() if isinstance(name, str) and name.strip() else None
+            resolved_name = app_name_by_id[app_id]
+            if resolved_name:
+                return resolved_name
+        return message.sender.upper()
 
     @staticmethod
     def get_messages_as_string(
@@ -105,23 +291,20 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-
-        def get_sender_name(message: Message) -> str:
-            if message.sender == 'human':
-                return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+        app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
         for message in sorted_messages:
-            msg_text = (
-                f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
+            sender_name = Message._resolve_sender_name(
+                message,
+                use_plugin_name_if_available=use_plugin_name_if_available,
+                app_name_by_id=app_name_by_id,
+                app_name_resolver=app_name_resolver,
             )
+            msg_text = f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
             # Add file info if requested and files exist
             if include_file_info and message.files_id and len(message.files_id) > 0:
@@ -138,17 +321,10 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-
-        def get_sender_name(message: Message) -> str:
-            if message.sender == 'human':
-                return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+        app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
         for message in sorted_messages:
@@ -173,12 +349,15 @@ class Message(BaseModel):
 
             msg = f"""<message>
 <created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
-<sender>{get_sender_name(message)}</sender>
+<sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>
 <content>{message.text}</content>
 {file_section}
 </message>"""
 
-            formatted_messages.append(msg.replace('    ', '').strip())
+            # Only strip the block's surrounding whitespace. The template above is flush-left, so a
+            # .replace('    ', '') here would instead delete 4-space runs from message.text (code,
+            # tables, aligned or pasted text), corrupting the history shown to the LLM.
+            formatted_messages.append(msg.strip())
 
         return '\n'.join(formatted_messages)
 
@@ -188,17 +367,82 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing."""
+    """Page context for chat - indicates what the user is currently viewing.
+
+    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
+    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
+    timeframe (#4515). Dates must include a timezone offset
+    (YYYY-MM-DDTHH:MM:SS+HH:MM).
+    """
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+    @staticmethod
+    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be ISO-8601 with timezone " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"{field_name} must include a timezone offset " f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            )
+        return stripped
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
+        field_name = info.field_name if isinstance(info.field_name, str) else "date"
+        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+
+
+class GenerateReplyTurn(BaseModel):
+    """A prior turn supplied by the caller purely as generation context."""
+
+    text: str = Field(..., min_length=1, max_length=100000)
+    sender: MessageSender
+
+
+class GenerateReplyRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100000)
+    history: List[GenerateReplyTurn] = Field(default_factory=list, max_length=50)
+    app_id: Optional[str] = Field(None, max_length=200)
+
+
+class GenerateReplyResponse(BaseModel):
+    text: str
+    app_id: Optional[str] = None
+
+
+class RateMessageRequest(BaseModel):
+    rating: Optional[int] = None
+    # Optional so existing clients keep working; a thumbs-down that arrives
+    # without a reason is recorded as "not captured", never as "no reason".
+    reason: Optional[FeedbackReason] = None
+    comment: Optional[str] = Field(None, max_length=MAX_COMMENT_LENGTH)
+
+
+class ShareChatMessagesRequest(BaseModel):
+    message_ids: list[str] = []
 
 
 class ChatSession(BaseModel):
@@ -208,6 +452,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    # Legacy Assistants IDs remain readable on old session docs; nothing writes them.
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
 

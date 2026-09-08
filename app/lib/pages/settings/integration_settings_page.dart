@@ -37,6 +37,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
     final provider = context.read<TaskIntegrationProvider>();
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -84,7 +85,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       }
       provider.refresh();
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text(context.l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
+        SnackBar(content: Text(l10n.disconnectedFrom(widget.appName)), duration: const Duration(seconds: 2)),
       );
       navigator.pop();
     }
@@ -125,9 +126,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -164,9 +165,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

@@ -1,9 +1,32 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue, lazy, Suspense } from 'react';
-import { motion } from 'framer-motion';
-import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useTransition,
+  useEffect,
+  useDeferredValue,
+  lazy,
+  Suspense,
+} from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import {
+  List,
+  Network,
+  Loader2,
+  Tag,
+  Flame,
+  TrendingUp,
+  Plus,
+  ArrowUpDown,
+  ChevronDown,
+  CheckSquare,
+  Square,
+  Sparkles,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { matchesCategories } from '@/lib/memoryCategory';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
 import { MemoryFilters } from './MemoryFilters';
@@ -11,14 +34,18 @@ import { MemoryQuickAdd } from './MemoryQuickAdd';
 import { LifeBalanceChart, TrendingSidebar } from './InsightsDashboard';
 import { useInsightsDashboard } from '@/hooks/useInsightsDashboard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 // Lazy load heavy components for better performance
-const KnowledgeGraph = lazy(() => import('./KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
-const InsightsDashboard = lazy(() => import('./InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
+const KnowledgeGraph = lazy(() =>
+  import('./KnowledgeGraph').then((m) => ({ default: m.KnowledgeGraph })),
+);
+const InsightsDashboard = lazy(() =>
+  import('./InsightsDashboard').then((m) => ({ default: m.InsightsDashboard })),
+);
 
 type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -42,6 +69,7 @@ export function MemoriesPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const {
     memories,
@@ -49,10 +77,10 @@ export function MemoriesPage() {
     error,
     hasMore,
     loadMore,
-    refresh,
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
@@ -68,8 +96,8 @@ export function MemoriesPage() {
 
   // Create memoized lookup map for O(1) memory access
   const memoriesById = useMemo(() => {
-    const map = new Map<string, typeof memories[0]>();
-    memories.forEach(m => map.set(m.id, m));
+    const map = new Map<string, (typeof memories)[0]>();
+    memories.forEach((m) => map.set(m.id, m));
     return map;
   }, [memories]);
 
@@ -82,7 +110,8 @@ export function MemoriesPage() {
         setContext({
           type: 'memory',
           id: memory.id,
-          title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+          title:
+            memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
           summary: memory.content,
         });
       } else {
@@ -183,12 +212,24 @@ export function MemoriesPage() {
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
     // If no filters and backend's default sort (score), return original deferred array (no copy needed)
-    if (!searchQuery && !selectedTag && sortBy === 'score') {
+    if (
+      !searchQuery &&
+      !selectedTag &&
+      activeCategories.length === 0 &&
+      sortBy === 'score'
+    ) {
       return deferredMemories;
     }
 
     // Only filter what we need
     let result = deferredMemories;
+
+    // Filter by category. `/v3/memories` has no `categories` parameter, so this
+    // cannot be pushed to the server — selecting a category used to change
+    // nothing at all.
+    if (activeCategories.length > 0) {
+      result = result.filter((m) => matchesCategories(m, activeCategories));
+    }
 
     // Filter by search query
     if (searchQuery) {
@@ -209,19 +250,25 @@ export function MemoriesPage() {
 
       switch (sortBy) {
         case 'created_desc':
-          result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          result.sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          );
           break;
         case 'created_asc':
-          result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          result.sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+          );
           break;
         case 'updated_desc':
-          result.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+          result.sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+          );
           break;
       }
     }
 
     return result;
-  }, [deferredMemories, searchQuery, selectedTag, sortBy]);
+  }, [deferredMemories, searchQuery, selectedTag, activeCategories, sortBy]);
 
   // Handle node selection from graph
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -258,8 +305,8 @@ export function MemoriesPage() {
   const handleToggleSelect = useCallback((memoryId: string) => {
     setSelectedIds((prev) =>
       prev.includes(memoryId)
-        ? prev.filter(id => id !== memoryId)
-        : [...prev, memoryId]
+        ? prev.filter((id) => id !== memoryId)
+        : [...prev, memoryId],
     );
   }, []);
 
@@ -299,28 +346,41 @@ export function MemoriesPage() {
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      // Delete each selected memory
-      const deletePromises = selectedIds.map((id) => removeMemory(id));
-      await Promise.all(deletePromises);
-      setSelectedIds([]);
-      setIsSelectMode(false);
-      setShowDeleteConfirm(false);
+      // Single batched request (chunked internally by removeMemories) instead of N
+      // concurrent DELETEs that triggered 429s. On full success the selection clears;
+      // on partial failure only the not-yet-deleted ids stay selected, so a retry never
+      // re-sends ids the server already removed (which the all-or-nothing endpoint
+      // would 404 on).
+      const { success, deletedIds } = await removeMemories(selectedIds);
+      if (success) {
+        setSelectedIds([]);
+        setIsSelectMode(false);
+        setShowDeleteConfirm(false);
+      } else if (deletedIds.length > 0) {
+        // Drop ids already deleted by earlier successful chunks; keep only the failed /
+        // un-attempted ids selected and retryable.
+        const deleted = new Set(deletedIds);
+        setSelectedIds((prev) => prev.filter((id) => !deleted.has(id)));
+      }
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, removeMemory]);
+  }, [selectedIds, removeMemories]);
 
   // Handle copy to clipboard
   const handleCopy = useCallback(async () => {
-    const selected = memories.filter(m => selectedIds.includes(m.id));
+    const selected = memories.filter((m) => selectedIds.includes(m.id));
     await copyMemoriesToClipboard(selected);
   }, [memories, selectedIds]);
 
   // Handle export
-  const handleExport = useCallback((format: 'csv' | 'json' | 'markdown') => {
-    const selected = memories.filter(m => selectedIds.includes(m.id));
-    downloadMemories(selected, format);
-  }, [memories, selectedIds]);
+  const handleExport = useCallback(
+    (format: 'csv' | 'json' | 'markdown') => {
+      const selected = memories.filter((m) => selectedIds.includes(m.id));
+      downloadMemories(selected, format);
+    },
+    [memories, selectedIds],
+  );
 
   // Clear selection
   const clearSelection = useCallback(() => {
@@ -332,14 +392,18 @@ export function MemoriesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Page Header */}
-      <PageHeader title="Memories" icon={Brain} />
-
-      {/* Toolbar */}
-      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary w-full max-w-full">
-        <div className="py-3 px-4 max-w-full">
-          {/* Row 1: View toggle + Select + Sort + Filter + Search + Refresh */}
-          <div className="flex items-center gap-3 max-w-full">
+      <PageToolbar
+        search={
+          viewMode === 'list'
+            ? {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: 'Search memories...',
+              }
+            : undefined
+        }
+        controls={
+          <>
             {/* Left: View toggle */}
             <div className="flex items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
@@ -349,8 +413,8 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'list'
-                      ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      ? 'bg-white text-black'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <List className="w-4 h-4" />
@@ -362,8 +426,8 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'graph'
-                      ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      ? 'bg-white text-black'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <Network className="w-4 h-4" />
@@ -375,8 +439,8 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
                     'transition-all duration-150',
                     viewMode === 'tags'
-                      ? 'bg-purple-primary text-white'
-                      : 'text-text-tertiary hover:text-text-primary'
+                      ? 'bg-white text-black'
+                      : 'text-text-tertiary hover:text-text-primary',
                   )}
                 >
                   <Sparkles className="w-4 h-4" />
@@ -392,8 +456,8 @@ export function MemoriesPage() {
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
                     'transition-colors',
                     isSelectMode
-                      ? 'bg-purple-primary/10 text-purple-primary'
-                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                      ? 'bg-white/10 text-white'
+                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
                   )}
                 >
                   {isSelectMode ? (
@@ -419,12 +483,19 @@ export function MemoriesPage() {
                       'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
                       'bg-bg-tertiary border border-bg-quaternary',
                       'text-sm text-text-secondary hover:text-text-primary',
-                      'transition-colors'
+                      'transition-colors',
                     )}
                   >
                     <ArrowUpDown className="w-4 h-4" />
-                    <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
-                    <ChevronDown className={cn('w-3 h-3 transition-transform', showSortMenu && 'rotate-180')} />
+                    <span className="hidden sm:inline">
+                      {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'w-3 h-3 transition-transform',
+                        showSortMenu && 'rotate-180',
+                      )}
+                    />
                   </button>
                   {showSortMenu && (
                     <>
@@ -444,8 +515,8 @@ export function MemoriesPage() {
                               'w-full text-left px-3 py-2 text-sm',
                               'hover:bg-bg-tertiary transition-colors',
                               sortBy === option.value
-                                ? 'text-purple-primary'
-                                : 'text-text-secondary'
+                                ? 'text-white'
+                                : 'text-text-secondary',
                             )}
                           >
                             {option.label}
@@ -465,56 +536,18 @@ export function MemoriesPage() {
                 />
               )}
             </div>
-
-            {/* Center: Search (only in list view) */}
-            {viewMode === 'list' && (
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search memories..."
-                  className={cn(
-                    'w-full pl-9 pr-4 py-1.5 rounded-lg',
-                    'bg-bg-tertiary border border-bg-quaternary',
-                    'text-sm text-text-primary',
-                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                    'placeholder:text-text-quaternary'
-                  )}
-                />
-              </div>
-            )}
-
-            {/* Right: Refresh only */}
-            <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-              <button
-                onClick={refresh}
-                disabled={loading}
-                className={cn(
-                  'p-2 rounded-lg',
-                  'text-text-tertiary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-                title="Refresh memories"
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-5 h-5" />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
         <div className="h-full flex flex-col lg:flex-row w-full max-w-full overflow-x-hidden">
           {/* Left Column - Memories list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0 order-1">
+          <div
+            data-testid="memories-list-column"
+            className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden p-4 space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 min-w-0 order-1"
+          >
             {viewMode === 'list' ? (
               <>
                 {/* Quick add */}
@@ -531,7 +564,10 @@ export function MemoriesPage() {
                     onExport={handleExport}
                     onSelectAll={handleSelectAll}
                     onDone={toggleSelectMode}
-                    allSelected={selectedIds.length === filteredMemories.length && filteredMemories.length > 0}
+                    allSelected={
+                      selectedIds.length === filteredMemories.length &&
+                      filteredMemories.length > 0
+                    }
                     totalCount={filteredMemories.length}
                     hideComplete
                     hideSnooze
@@ -553,7 +589,7 @@ export function MemoriesPage() {
                     </span>
                     <button
                       onClick={() => setSelectedTag(null)}
-                      className="text-xs text-purple-primary hover:underline"
+                      className="text-xs text-white hover:underline"
                     >
                       Clear filter
                     </button>
@@ -561,33 +597,65 @@ export function MemoriesPage() {
                 )}
 
                 {/* Memory list */}
-                {(loading && memories.length === 0) || isPending ? (
-                  <MemoryListSkeleton />
-                ) : (
-                  <MemoryList
-                    memories={filteredMemories}
-                    loading={loading}
-                    hasMore={hasMore && !searchQuery && !selectedTag}
-                    onLoadMore={loadMore}
-                    onEdit={editMemory}
-                    onDelete={removeMemory}
-                    onToggleVisibility={toggleVisibility}
-                    onAccept={acceptMemory}
-                    onReject={rejectMemory}
-                    highlightedMemoryId={highlightedMemoryId}
-                    // Only pass selection props when in select mode
-                    selectedIds={isSelectMode ? selectedIds : undefined}
-                    onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
-                    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
-                    onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
-                  />
-                )}
+                <div data-testid="memory-list-transition" className="grid flex-1 min-h-0">
+                  <AnimatePresence mode="sync" initial={false}>
+                    {(loading && memories.length === 0) || isPending ? (
+                      <motion.div
+                        key="memory-list-skeleton"
+                        data-testid="memory-list-skeleton-state"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{
+                          duration: reduceMotion ? 0.08 : 0.18,
+                          ease: [0.23, 1, 0.32, 1],
+                        }}
+                        className="col-start-1 row-start-1 min-h-0 overflow-hidden"
+                      >
+                        <MemoryListSkeleton />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="memory-list-content"
+                        data-testid="memory-list-content-state"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{
+                          duration: reduceMotion ? 0.08 : 0.18,
+                          ease: [0.23, 1, 0.32, 1],
+                        }}
+                        className="col-start-1 row-start-1 flex min-h-0 flex-col"
+                      >
+                        <MemoryList
+                          memories={filteredMemories}
+                          loading={loading}
+                          hasMore={hasMore && !searchQuery && !selectedTag}
+                          onLoadMore={loadMore}
+                          onEdit={editMemory}
+                          onDelete={removeMemory}
+                          onToggleVisibility={toggleVisibility}
+                          onAccept={acceptMemory}
+                          onReject={rejectMemory}
+                          highlightedMemoryId={highlightedMemoryId}
+                          // Only pass selection props when in select mode
+                          selectedIds={isSelectMode ? selectedIds : undefined}
+                          onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
+                          // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+                          onEnterSelectionMode={
+                            !isSelectMode ? enterSelectionModeWithId : undefined
+                          }
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </>
             ) : viewMode === 'graph' ? (
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <Loader2 className="w-8 h-8 animate-spin text-white" />
                     <span className="ml-2 text-text-tertiary">Loading graph...</span>
                   </div>
                 }
@@ -598,7 +666,7 @@ export function MemoriesPage() {
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <Loader2 className="w-8 h-8 animate-spin text-white" />
                     <span className="ml-2 text-text-tertiary">Loading insights...</span>
                   </div>
                 }
@@ -629,13 +697,15 @@ export function MemoriesPage() {
                   {/* Stats Card */}
                   <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                     <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-purple-primary" />
+                      <TrendingUp className="w-4 h-4 text-white" />
                       Insights
                     </h3>
 
                     {/* Total memories */}
                     <div className="mb-3">
-                      <div className="text-2xl font-bold text-purple-primary">{memories.length}</div>
+                      <div className="text-2xl font-bold text-white">
+                        {memories.length}
+                      </div>
                       <div className="text-sm text-text-secondary">Total Memories</div>
                       {recentMemoriesCount > 0 && (
                         <div className="text-xs text-green-400 mt-1">
@@ -659,7 +729,9 @@ export function MemoriesPage() {
                     {/* Activity Chart (30 days) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-text-quaternary">Activity (30 days)</span>
+                        <span className="text-xs text-text-quaternary">
+                          Activity (30 days)
+                        </span>
                         <span className="text-xs text-text-quaternary">
                           {recentMemoriesCount} memories
                         </span>
@@ -668,7 +740,7 @@ export function MemoriesPage() {
                         {activityData.map((day) => (
                           <div
                             key={day.date}
-                            className="flex-1 bg-purple-primary/20 rounded-t transition-all hover:bg-purple-primary/40"
+                            className="flex-1 bg-white/20 rounded-t transition-all hover:bg-white/40"
                             style={{
                               height: `${Math.max((day.count / maxActivity) * 100, 4)}%`,
                             }}
@@ -680,10 +752,10 @@ export function MemoriesPage() {
                   </div>
 
                   {/* Life Balance Radar */}
-                  {lifeBalance.length > 0 && lifeBalance.some(d => d.rawCount > 0) && (
+                  {lifeBalance.length > 0 && lifeBalance.some((d) => d.rawCount > 0) && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-purple-primary" />
+                        <Sparkles className="w-4 h-4 text-white" />
                         Life Balance
                       </h3>
                       <LifeBalanceChart data={lifeBalance} compact />
@@ -694,7 +766,7 @@ export function MemoriesPage() {
                   {(risingTags.length > 0 || fadingTags.length > 0) && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-purple-primary" />
+                        <TrendingUp className="w-4 h-4 text-white" />
                         Trending
                       </h3>
                       <TrendingSidebar
@@ -710,14 +782,14 @@ export function MemoriesPage() {
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-2">
-                          <Tag className="w-4 h-4 text-purple-primary" />
+                          <Tag className="w-4 h-4 text-white" />
                           Top Tags
                         </h3>
                         <button
                           onClick={() => setViewMode('tags')}
                           className={cn(
                             'p-1.5 rounded-md transition-colors',
-                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10'
+                            'text-text-quaternary hover:text-white hover:bg-white/10',
                           )}
                           title="View all tags"
                         >
@@ -734,18 +806,20 @@ export function MemoriesPage() {
                               onClick={() => handleTagClick(tag)}
                               className={cn(
                                 'w-full text-left group p-1 -m-1 rounded-md',
-                                selectedTag === tag && 'ring-1 ring-purple-primary bg-purple-primary/5'
+                                selectedTag === tag && 'ring-1 ring-white bg-white/5',
                               )}
                             >
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm text-text-primary group-hover:text-purple-primary transition-colors">
+                                <span className="text-sm text-text-primary group-hover:text-white transition-colors">
                                   {tag}
                                 </span>
-                                <span className="text-xs text-text-quaternary">{count}</span>
+                                <span className="text-xs text-text-quaternary">
+                                  {count}
+                                </span>
                               </div>
                               <div className="h-1 bg-bg-quaternary rounded-full overflow-hidden">
                                 <div
-                                  className="h-full bg-gradient-to-r from-purple-primary to-purple-secondary rounded-full transition-all"
+                                  className="h-full bg-gradient-to-r from-white/60 to-white/30 rounded-full transition-all"
                                   style={{ width: `${percent}%` }}
                                 />
                               </div>
@@ -760,7 +834,7 @@ export function MemoriesPage() {
                   {todayMemories.length > 0 && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
                       <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Plus className="w-4 h-4 text-purple-primary" />
+                        <Plus className="w-4 h-4 text-white" />
                         Added Today
                       </h3>
                       <div className="space-y-2">

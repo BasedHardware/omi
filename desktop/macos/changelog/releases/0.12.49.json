@@ -1,0 +1,9 @@
+{
+  "version": "0.12.49",
+  "date": "2026-07-08",
+  "changes": [
+    "Restored normal launch visibility for the enabled floating bar on notched Macs while keeping deferred reveal scoped to explicit opt-in contexts.",
+    "Improved push-to-talk reliability by preventing realtime and fallback voices from speaking over each other",
+    "Reduced random-language push-to-talk replies by tightening short speech detection and rejecting misheard realtime tool queries"
+  ]
+}

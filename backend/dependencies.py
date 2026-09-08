@@ -1,37 +1,92 @@
+import logging
 from typing import List, Optional
 
-from fastapi import Depends, HTTPException, Security
+from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
+from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
+from utils.executors import critical_executor, db_executor, run_blocking
+from utils.log_sanitizer import sanitize
+from utils.observability.api_keys import record_api_key_repairs
+from utils.memory.product_authorization import ProductAuthorizationContext
+from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
+    build_mcp_default_memory_write_context,
+)
+from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
-import logging
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
+check_api_key_rate_limit = auth_endpoints.check_api_key_rate_limit
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    """Keep transport enforcement behind a call-time module boundary."""
+    auth_endpoints.enforce_account_deletion_http_access(uid)
+
+
+async def _enforce_account_deletion_access(uid: str) -> None:
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
+
+
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing when FastAPI injected a Request (MCP/API-key lanes)."""
+    if request is None or not auth_endpoints.cutover_enforcement_enabled():
+        return
+    auth_endpoints.enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
+async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
+    await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
+
+
+def _enforce_jit_qa_http_access(uid: str) -> None:
+    """Apply the isolated QA UID fence after every verified owner lookup."""
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
+
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         id_token = credentials.credentials
-        decoded_token = auth.verify_id_token(id_token)
-        return decoded_token["uid"]
+        decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    uid = decoded_token["uid"]
+    _enforce_jit_qa_http_access(uid)
+    await _enforce_account_deletion_access(uid)
+    await _enforce_cutover_access(uid, request)
+    return uid
 
 
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 
-async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> str:
+async def get_uid_from_mcp_api_key(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
@@ -39,20 +94,139 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
         )
 
     token = api_key.replace("Bearer ", "")
-    user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-    if not user_id:
+    mismatch = wrong_key_family_detail(token, MCP_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
+    if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
+    user_id = user_data["user_id"]
+    _enforce_jit_qa_http_access(user_id)
+    await _enforce_account_deletion_access(user_id)
+    await _enforce_cutover_access(user_id, request)
+    await _check_api_key_rate_limit_async(
+        prefix="mcp",
+        uid=user_id,
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+        policy_name="mcp:read",
+    )
     return user_id
+
+
+async def get_mcp_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> "ApiKeyAuth":
+    """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
+
+    Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
+    Missing scopes/app_id/key_id are preserved as missing values so memory memory
+    authorization fails closed instead of inferring advertised MCP tool scopes.
+    """
+    if not api_key or not api_key.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
+        )
+
+    token = api_key.replace("Bearer ", "")
+    mismatch = wrong_key_family_detail(token, MCP_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
+    auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
+    record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    _enforce_jit_qa_http_access(user_data["user_id"])
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
+
+    return ApiKeyAuth(
+        uid=user_data["user_id"],
+        scopes=user_data.get("scopes"),
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+    )
+
+
+async def get_mcp_memory_default_memory_read_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, 'memories.read'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.read")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    await _check_api_key_rate_limit_async(
+        prefix="mcp",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="mcp:memories_read",
+    )
+    return build_mcp_default_memory_read_context(
+        McpVerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
+
+
+async def get_mcp_memory_default_memory_write_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> ProductAuthorizationContext:
+    """Authenticate an MCP key and build the memory write authorization context.
+
+    Requires a persisted ``memories.write`` scope so legacy/read-only MCP keys
+    cannot mutate canonical memories. Missing app/key identity fails closed; the
+    shared grant seam enforces the persisted ``write`` capability separately.
+    """
+    if not has_scope(auth.scopes, 'memories.write'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.write")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    await _check_api_key_rate_limit_async(
+        prefix="mcp",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="mcp:memories_write",
+    )
+    return build_mcp_default_memory_write_context(
+        McpVerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
 
 
 # Data structure to return from auth
 class ApiKeyAuth:
-    def __init__(self, uid: str, scopes: Optional[List[str]]):
+    def __init__(
+        self,
+        uid: str,
+        scopes: Optional[List[str]],
+        app_id: Optional[str] = None,
+        key_id: Optional[str] = None,
+    ):
         self.uid = uid
         self.scopes = scopes
+        self.app_id = app_id
+        self.key_id = key_id
 
 
-async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAuth:
+async def get_api_key_auth(
+    api_key: str = Security(api_key_header),
+    request: Request = None,  # pyright: ignore[reportArgumentType]
+) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -61,12 +235,26 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
         )
 
     token = api_key.replace("Bearer ", "")
-    user_data = dev_api_key_db.get_user_and_scopes_by_api_key(token)
+    mismatch = wrong_key_family_detail(token, DEV_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
+    auth_result = await run_blocking(db_executor, dev_api_key_db.get_api_key_auth_result, token)
+    record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
 
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    return ApiKeyAuth(uid=user_data["user_id"], scopes=user_data.get("scopes"))
+    _enforce_jit_qa_http_access(user_data["user_id"])
+    await _enforce_account_deletion_access(user_data["user_id"])
+    await _enforce_cutover_access(user_data["user_id"], request)
+
+    return ApiKeyAuth(
+        uid=user_data["user_id"],
+        scopes=user_data.get("scopes"),
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+    )
 
 
 async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
@@ -76,59 +264,375 @@ async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> s
 
 
 # Scope-specific dependencies
-async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+def _log_dev_api_rate_limit_failure(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    policy_name: str,
+    status_code: int,
+):
+    path = request.url.path if request else 'unknown_path'
+    remote_ip = request.client.host if request and request.client else None
+    user_agent = sanitize(request.headers.get('user-agent')) if request else None
+    logger.warning(
+        "developer_api_rate_limit_failure policy=%s status=%s path=%s uid=%s app_id=%s key_id=%s remote_ip=%s user_agent=%s",
+        policy_name,
+        status_code,
+        path,
+        auth.uid,
+        auth.app_id or 'unknown_app',
+        auth.key_id or 'unknown_key',
+        remote_ip,
+        user_agent,
+    )
+
+
+def _check_dev_api_key_rate_limit(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    policy_name: str,
+):
+    try:
+        check_api_key_rate_limit(
+            prefix="dev",
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            policy_name=policy_name,
+        )
+    except HTTPException as exc:
+        _log_dev_api_rate_limit_failure(
+            request=request,
+            auth=auth,
+            policy_name=policy_name,
+            status_code=exc.status_code,
+        )
+        raise
+
+
+async def _check_api_key_rate_limit_async(
+    *,
+    prefix: str,
+    uid: str,
+    app_id: Optional[str],
+    key_id: Optional[str],
+    policy_name: str,
+) -> None:
+    await run_blocking(
+        critical_executor,
+        check_api_key_rate_limit,
+        prefix=prefix,
+        uid=uid,
+        app_id=app_id,
+        key_id=key_id,
+        policy_name=policy_name,
+    )
+
+
+async def _check_dev_api_key_rate_limit_async(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    policy_name: str,
+) -> None:
+    await run_blocking(
+        critical_executor,
+        _check_dev_api_key_rate_limit,
+        request=request,
+        auth=auth,
+        policy_name=policy_name,
+    )
+
+
+def _require_conversations_read_scope(auth: ApiKeyAuth):
     if not has_scope(auth.scopes, Scopes.CONVERSATIONS_READ):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.CONVERSATIONS_READ}"
         )
+
+
+async def _check_conversation_read_budgets_async(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    route_policy_name: str,
+) -> None:
+    """Charge a conversation read against the shared ceiling, then its per-route budget.
+
+    The shared ceiling is checked first so sustained polling is rejected on the
+    aggregate budget regardless of which read route it targets. Without it, adding a
+    per-route policy would hand each key a fresh bucket and raise the total number of
+    conversation reads it can make -- the opposite of what these limits are for.
+    """
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+
+
+async def get_auth_with_conversations_read(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> ApiKeyAuth:
+    _require_conversations_read_scope(auth)
+    await _check_conversation_read_budgets_async(request=request, auth=auth, route_policy_name="dev:conversations_read")
+    return auth
+
+
+async def get_auth_with_conversation_detail_read(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> ApiKeyAuth:
+    _require_conversations_read_scope(auth)
+    await _check_conversation_read_budgets_async(
+        request=request, auth=auth, route_policy_name="dev:conversation_detail_read"
+    )
+    return auth
+
+
+async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    await get_auth_with_conversations_read(auth)
     return auth.uid
 
 
-async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+async def get_uid_with_conversations_read_ask(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
+) -> str:
+    """conversations:read plus the tighter dev:ask budget for the billable RAG endpoint.
+
+    POST /v1/dev/user/ask invokes an LLM (qa_rag) per call, so it carries its own low
+    per-key hourly cap rather than riding the cheap dev:conversations_read list limit —
+    a leaked or overused key can't turn it into an unbounded billable endpoint.
+    """
+    _require_conversations_read_scope(auth)
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
+    return auth.uid
+
+
+def check_conversation_transcript_read_limit(
+    auth: ApiKeyAuth,
+    request: Optional[Request] = None,
+):
+    _require_conversations_read_scope(auth)
+    _check_dev_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversation_transcript_read")
+
+
+async def get_auth_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.CONVERSATIONS_WRITE):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.CONVERSATIONS_WRITE}"
         )
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:conversations",
+    )
+    return auth
+
+
+async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    await get_auth_with_conversations_write(auth)
     return auth.uid
+
+
+async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
+        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:memories_read",
+    )
+    return auth
 
 
 async def get_uid_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
-        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
+    await get_auth_with_memories_read(auth)
     return auth.uid
 
 
-async def get_uid_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+async def get_auth_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_WRITE}"
         )
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:memories",
+    )
+    return auth
+
+
+async def get_uid_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    await get_auth_with_memories_write(auth)
     return auth.uid
 
 
-async def get_uid_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+async def get_auth_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.ACTION_ITEMS_READ):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.ACTION_ITEMS_READ}"
         )
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:action_items_read",
+    )
+    return auth
+
+
+async def get_uid_with_action_items_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    await get_auth_with_action_items_read(auth)
     return auth.uid
 
 
-async def get_uid_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+async def get_auth_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.ACTION_ITEMS_WRITE):
         raise HTTPException(
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.ACTION_ITEMS_WRITE}"
         )
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:action_items_write",
+    )
+    return auth
+
+
+async def get_uid_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    await get_auth_with_action_items_write(auth)
     return auth.uid
+
+
+async def get_auth_with_goals_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+    if not has_scope(auth.scopes, Scopes.GOALS_READ):
+        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.GOALS_READ}")
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:goals_read",
+    )
+    return auth
 
 
 async def get_uid_with_goals_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    if not has_scope(auth.scopes, Scopes.GOALS_READ):
-        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.GOALS_READ}")
+    await get_auth_with_goals_read(auth)
     return auth.uid
+
+
+async def get_auth_with_goals_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
+    if not has_scope(auth.scopes, Scopes.GOALS_WRITE):
+        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.GOALS_WRITE}")
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:goals_write",
+    )
+    return auth
 
 
 async def get_uid_with_goals_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
-    if not has_scope(auth.scopes, Scopes.GOALS_WRITE):
-        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.GOALS_WRITE}")
+    await get_auth_with_goals_write(auth)
     return auth.uid
+
+
+DEVELOPER_TO_MEMORY_SCOPES = {
+    Scopes.MEMORIES_READ: 'memories.read',
+    Scopes.MEMORIES_WRITE: 'memories.write',
+}
+
+
+def _memory_memory_scopes_from_developer_scopes(scopes: Optional[List[str]]) -> tuple[str, ...]:
+    return tuple(
+        memory_scope
+        for developer_scope, memory_scope in DEVELOPER_TO_MEMORY_SCOPES.items()
+        if has_scope(scopes, developer_scope)
+    )
+
+
+async def get_developer_memory_default_memory_read_context(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
+        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(
+            status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
+        )
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth.uid,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        policy_name="dev:memories_read",
+    )
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='developer_api',
+        surface='developer_default_memory_read',
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=_memory_memory_scopes_from_developer_scopes(auth.scopes),
+    )
+
+
+def get_developer_memory_default_memory_write_auth_context(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
+        raise HTTPException(
+            status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_WRITE}"
+        )
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(
+            status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
+        )
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='developer_api',
+        surface='developer_default_memory_write',
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=_memory_memory_scopes_from_developer_scopes(auth.scopes),
+    )
+
+
+async def get_developer_memory_default_memory_write_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_auth_context),
+) -> ProductAuthorizationContext:
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories",
+    )
+    return auth_context
+
+
+async def get_developer_memory_default_memory_batch_write_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_auth_context),
+) -> ProductAuthorizationContext:
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories_batch",
+    )
+    return auth_context

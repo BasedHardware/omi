@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-backoff-conflated-independent-budgets",
+  "violated_contract": "A client-side cooldown that backs off from a server quota must be keyed to the same identity the server uses to reserve that quota. Sharing one process-wide deadline across independently governed operations converts a partial exhaustion into a total outage of unrelated lanes.",
+  "canonical_prevention": "Key the cooldown by the operation string the server reserves, clamp Retry-After into a closed [60s, 3600s] range so the lane re-checks within an hour, and record self-suppressed attempts as quota_cooldown rather than http_error.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ProactiveLaneClientTests.swift",
+    "desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift"
+  ],
+  "evidence_prs": [
+    11538
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
+  ],
+  "status": "open"
+}

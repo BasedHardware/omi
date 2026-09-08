@@ -231,7 +231,7 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, fontFamily: 'Manrope'),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12, fontFamily: 'Manrope'),
                 ),
               ],
             ),

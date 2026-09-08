@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-import-unstable-identity",
+  "violated_contract": "An imported conversation must have a deterministic identity derived from the source record so a re-import cannot insert a duplicate or overwrite user edits. Random document IDs plus last-writer-wins upsert violate first-import-wins.",
+  "canonical_prevention": "Key Limitless lifelogs with document_id_from_seed(limitless:uid:start-time) and persist through the lifecycle owner's create-if-absent (Firestore document.create). Skip when the document already exists.",
+  "canonical_prevention_artifact": [
+    "backend/utils/imports/limitless.py",
+    "backend/utils/conversations/lifecycle.py",
+    "backend/tests/unit/test_limitless_import_idempotency.py"
+  ],
+  "evidence_prs": [11928],
+  "scope_hints": [
+    "backend/utils/imports/**",
+    "backend/utils/conversations/lifecycle.py"
+  ],
+  "status": "open"
+}

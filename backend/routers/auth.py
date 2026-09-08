@@ -1,21 +1,29 @@
+import base64
+import hmac
 import os
 import uuid
 import json
 import hashlib
 import time
 import jwt
-from typing import Optional
-from urllib.parse import quote, urlparse
+from typing import Any, Dict, Optional, cast
+from urllib.parse import quote, urlencode, urlparse, urlsplit, urlunsplit
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
+from database.referrals import claim_referral_trial
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
+from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
+from utils.observability.fallback import record_fallback
+from utils.integration_telemetry import emit_posthog_event
+from utils.referrals import REFERRAL_COOKIE_NAME, REFERRAL_PROGRAM, ReferralCodeError, referrer_uid_from_code
 import logging
 
 logger = logging.getLogger(__name__)
@@ -121,6 +129,9 @@ def _validate_redirect_uri(redirect_uri: str) -> None:
 
 _ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyz")
 _ASCII_ALNUM = _ASCII_LETTERS | frozenset("0123456789")
+_PKCE_ALLOWED_CHARS = _ASCII_ALNUM | frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ-._~")
+_PKCE_MIN_LENGTH = 43
+_PKCE_MAX_LENGTH = 128
 
 
 def _is_valid_scheme(scheme: str) -> bool:
@@ -138,22 +149,218 @@ def _is_valid_scheme(scheme: str) -> bool:
     return all(c in _ASCII_ALNUM or c in "+-." for c in lowered)
 
 
+def _is_valid_pkce_value(value: str) -> bool:
+    return _PKCE_MIN_LENGTH <= len(value) <= _PKCE_MAX_LENGTH and all(c in _PKCE_ALLOWED_CHARS for c in value)
+
+
+def _validate_pkce_challenge(code_challenge: Optional[str], code_challenge_method: Optional[str]) -> str:
+    if not code_challenge:
+        raise HTTPException(status_code=400, detail="code_challenge is required")
+
+    if not _is_valid_pkce_value(code_challenge):
+        raise HTTPException(status_code=400, detail="code_challenge is malformed")
+
+    method = (code_challenge_method or "").strip().upper()
+    if method != "S256":
+        raise HTTPException(status_code=400, detail="code_challenge_method must be S256")
+
+    return method
+
+
+def _code_challenge_for_verifier(code_verifier: str) -> str:
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def _verify_pkce_code_verifier(
+    code_verifier: Optional[str],
+    expected_code_challenge: Optional[str],
+    code_challenge_method: Optional[str],
+) -> None:
+    method = _validate_pkce_challenge(expected_code_challenge, code_challenge_method)
+
+    if not code_verifier:
+        raise HTTPException(status_code=400, detail="code_verifier is required")
+
+    if not _is_valid_pkce_value(code_verifier):
+        raise HTTPException(status_code=400, detail="code_verifier is malformed")
+
+    if method != "S256":
+        raise HTTPException(status_code=400, detail="code_challenge_method must be S256")
+
+    actual_code_challenge = _code_challenge_for_verifier(code_verifier)
+    if not hmac.compare_digest(actual_code_challenge, cast(str, expected_code_challenge)):
+        raise HTTPException(status_code=400, detail="invalid code_verifier")
+
+
+def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, session_data: Dict[str, Any]) -> str:
+    code_challenge = session_data.get('code_challenge')
+    code_challenge_method = session_data.get('code_challenge_method')
+    _validate_pkce_challenge(code_challenge, code_challenge_method)
+
+    return json.dumps(
+        {
+            'credentials': oauth_credentials,
+            'redirect_uri': redirect_uri,
+            'code_challenge': code_challenge,
+            'code_challenge_method': code_challenge_method,
+            'provider': session_data.get('provider'),
+            'auth_flow_id': session_data.get('auth_flow_id'),
+            'created_at': session_data.get('created_at'),
+            'referral_code': session_data.get('referral_code'),
+        }
+    )
+
+
+def _valid_referral_code_from_request(request: Request) -> Optional[str]:
+    code = request.cookies.get(REFERRAL_COOKIE_NAME)
+    if not code:
+        return None
+    try:
+        referrer_uid_from_code(code)
+    except ReferralCodeError:
+        return None
+    return code
+
+
+def _auth_flow_id_from_state(state: Optional[str]) -> str:
+    if not state:
+        return "missing"
+    return state.split("|", 1)[0][:64] or "missing"
+
+
+def _redirect_scheme(redirect_uri: Optional[str]) -> str:
+    if not redirect_uri:
+        return "missing"
+    return (urlparse(redirect_uri).scheme or "missing").lower()[:64]
+
+
+def _build_callback_redirect_url(redirect_uri: str, code: str, state: Optional[str]) -> str:
+    """Append the one-time callback parameters without losing a URI fragment.
+
+    The value is rendered into the callback page's native link as well as used
+    by its automatic navigation. Rendering it in the HTML keeps the manual
+    fallback usable when a mobile browser blocks inline JavaScript or automatic
+    custom-scheme navigation.
+    """
+    parsed = urlsplit(redirect_uri)
+    callback_query = urlencode({"code": code, **({"state": state} if state else {})})
+    query = f"{parsed.query}&{callback_query}" if parsed.query else callback_query
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+
+
+def _failure_class(error: Optional[object]) -> str:
+    if error is None:
+        return "none"
+    if isinstance(error, HTTPException):
+        return f"http_{error.status_code}"
+    value = str(error).strip().lower().replace(" ", "_")
+    return value[:80] or error.__class__.__name__.lower()
+
+
+# RFC 6749 §4.1.2.1 error codes a provider may echo on the callback. The raw
+# `error` param is attacker-controlled free text and must never become a
+# Prometheus label value directly — that is unbounded cardinality on a
+# module-level (process-lifetime) metric registry.
+_OAUTH_ERROR_CODES = {
+    "access_denied",
+    "invalid_request",
+    "invalid_scope",
+    "unauthorized_client",
+    "unsupported_response_type",
+    "server_error",
+    "temporarily_unavailable",
+}
+
+
+def _bounded_provider_error(error: str) -> str:
+    normalized = error.strip().lower().replace(" ", "_")[:64]
+    return normalized if normalized in _OAUTH_ERROR_CODES else "provider_error_other"
+
+
+def _log_auth_event(
+    *,
+    provider: Optional[str],
+    stage: str,
+    outcome: str,
+    auth_flow_id: Optional[str] = None,
+    failure_class: str = "none",
+    status_code: Optional[int] = None,
+    redirect_scheme: Optional[str] = None,
+    duration_seconds: Optional[float] = None,
+) -> None:
+    safe_provider = provider if provider in {"apple", "google"} else "unknown"
+    safe_failure_class = _failure_class(failure_class)
+    AUTH_FLOW_EVENTS.labels(
+        provider=safe_provider,
+        stage=stage,
+        outcome=outcome,
+        failure_class=safe_failure_class,
+    ).inc()
+    if duration_seconds is not None:
+        AUTH_FLOW_DURATION_SECONDS.labels(provider=safe_provider, terminal_state=outcome).observe(duration_seconds)
+
+    logger.info(
+        "auth_flow_event provider=%s stage=%s outcome=%s failure_class=%s status_code=%s redirect_scheme=%s auth_flow_id=%s duration_ms=%s",
+        safe_provider,
+        stage,
+        outcome,
+        safe_failure_class,
+        status_code if status_code is not None else "",
+        sanitize(redirect_scheme or ""),
+        sanitize(auth_flow_id or ""),
+        int(duration_seconds * 1000) if duration_seconds is not None else "",
+    )
+
+
 @router.get("/authorize")
 async def auth_authorize(
     request: Request,
     provider: str,  # 'google', 'apple'
     redirect_uri: str,
     state: Optional[str] = None,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[str] = None,
 ):
     """
     User authentication authorization endpoint for the main Omi app
     Supports both initial sign-in and account linking flows
     """
+    auth_flow_id = _auth_flow_id_from_state(state)
+    redirect_scheme = _redirect_scheme(redirect_uri)
+    _log_auth_event(
+        provider=provider,
+        stage="authorize_received",
+        outcome="started",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=redirect_scheme,
+    )
     if provider not in ['google', 'apple']:
+        _log_auth_event(
+            provider=provider,
+            stage="authorize_validated",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="unsupported_provider",
+            redirect_scheme=redirect_scheme,
+        )
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     # Strict allowlist on where we'll deliver the auth code post-callback.
-    _validate_redirect_uri(redirect_uri)
+    try:
+        _validate_redirect_uri(redirect_uri)
+        normalized_code_challenge_method = _validate_pkce_challenge(code_challenge, code_challenge_method)
+    except HTTPException as exc:
+        _log_auth_event(
+            provider=provider,
+            stage="authorize_validated",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class=_failure_class(exc),
+            status_code=exc.status_code,
+            redirect_scheme=redirect_scheme,
+        )
+        raise
 
     # Store session for auth flow
     session_id = str(uuid.uuid4())
@@ -162,16 +369,37 @@ async def auth_authorize(
         'redirect_uri': redirect_uri,
         'state': state,
         'flow_type': 'user_auth',  # Distinguish from app oauth
+        'code_challenge': code_challenge,
+        'code_challenge_method': normalized_code_challenge_method,
+        'auth_flow_id': auth_flow_id,
+        'created_at': time.time(),
+        'referral_code': _valid_referral_code_from_request(request),
     }
 
     # Store in Redis with 5-minute expiration
-    set_auth_session(session_id, session_data, 300)
+    await run_blocking(critical_executor, set_auth_session, session_id, session_data, 300)
+    _log_auth_event(
+        provider=provider,
+        stage="authorize_session_created",
+        outcome="succeeded",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=redirect_scheme,
+    )
 
     # Redirect to provider OAuth
     if provider == 'google':
-        return await _google_auth_redirect(session_id)
-    elif provider == 'apple':
-        return await _apple_auth_redirect(session_id)
+        response = await _google_auth_redirect(session_id)
+    else:
+        # provider == 'apple' — only 'google'/'apple' reach here (validated above).
+        response = await _apple_auth_redirect(session_id)
+    _log_auth_event(
+        provider=provider,
+        stage="authorize_redirect_created",
+        outcome="succeeded",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=redirect_scheme,
+    )
+    return response
 
 
 @router.get("/callback/google")
@@ -184,35 +412,80 @@ async def auth_callback_google(
     """
     Google authentication callback handler (GET method)
     """
+    auth_flow_id = _auth_flow_id_from_state(state)
+    _log_auth_event(provider="google", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
     if error:
+        _log_auth_event(
+            provider="google",
+            stage="provider_callback_received",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class=_bounded_provider_error(error),
+            status_code=400,
+        )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
 
     # Retrieve session
-    session_data = get_auth_session(state)
+    session_data = await run_blocking(critical_executor, get_auth_session, state)
     if not session_data:
+        _log_auth_event(
+            provider="google",
+            stage="provider_callback_session_lookup",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="auth_session_not_found",
+            status_code=400,
+        )
         raise HTTPException(status_code=400, detail="Invalid auth session")
+    auth_flow_id = session_data.get('auth_flow_id') or auth_flow_id
+    _log_auth_event(
+        provider="google", stage="provider_callback_session_lookup", outcome="succeeded", auth_flow_id=auth_flow_id
+    )
 
     # Exchange code for OAuth credentials
-    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', code, session_data)
+    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', cast(str, code), session_data)
 
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
     app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
-    code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
-    set_auth_code(auth_code, code_data, 300)
+    code_data = _auth_code_data_from_session(oauth_credentials, app_redirect_uri, session_data)
+    await run_blocking(critical_executor, set_auth_code, auth_code, code_data, 300)
+    _log_auth_event(
+        provider="google",
+        stage="auth_code_created",
+        outcome="succeeded",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=_redirect_scheme(app_redirect_uri),
+    )
 
     # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
+
+
+def _parse_apple_user_name(user_json: Optional[str]) -> Optional[str]:
+    """Apple includes the user's name in the ``user`` form field ONLY on the very
+    first authorization (JSON: ``{"name": {"firstName", "lastName"}, ...}``).
+    Parse it into a display name; return None when absent or unparseable."""
+    if not user_json:
+        return None
+    try:
+        name = (json.loads(user_json) or {}).get('name') or {}
+        parts = [str(name.get('firstName', '')).strip(), str(name.get('lastName', '')).strip()]
+        full = ' '.join(p for p in parts if p)
+        return full or None
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
 
 
 @router.post("/callback/apple")
@@ -221,38 +494,83 @@ async def auth_callback_apple_post(
     code: str = Form(...),
     state: str = Form(...),
     error: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
 ):
     """
     Apple authentication callback handler (POST method)
-    Apple uses form_post response_mode, so we need a separate POST endpoint
+    Apple uses form_post response_mode, so we need a separate POST endpoint.
+    Apple's id_token carries no name, so the ``user`` form field (sent only on the
+    first authorization) is the sole source of the user's name — capture it here.
     """
+    auth_flow_id = _auth_flow_id_from_state(state)
+    _log_auth_event(provider="apple", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
     if error:
+        _log_auth_event(
+            provider="apple",
+            stage="provider_callback_received",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class=_bounded_provider_error(error),
+            status_code=400,
+        )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
 
     # Retrieve session
-    session_data = get_auth_session(state)
+    session_data = await run_blocking(critical_executor, get_auth_session, state)
     if not session_data:
+        _log_auth_event(
+            provider="apple",
+            stage="provider_callback_session_lookup",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="auth_session_not_found",
+            status_code=400,
+        )
         raise HTTPException(status_code=400, detail="Invalid auth session")
+    auth_flow_id = session_data.get('auth_flow_id') or auth_flow_id
+    _log_auth_event(
+        provider="apple", stage="provider_callback_session_lookup", outcome="succeeded", auth_flow_id=auth_flow_id
+    )
 
     # Exchange code for OAuth credentials
     oauth_credentials = await _exchange_provider_code_for_oauth_credentials('apple', code, session_data)
 
+    # Apple sends the name in the `user` form field only on first auth; carry it
+    # through the auth-code blob so `/token` can persist it (it never rides the
+    # id_token). Absent on every later sign-in — expected, not an error.
+    full_name = _parse_apple_user_name(user)
+    if full_name:
+        try:
+            creds = json.loads(oauth_credentials)
+            creds['full_name'] = full_name
+            oauth_credentials = json.dumps(creds)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
     app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
-    code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
-    set_auth_code(auth_code, code_data, 300)
+    code_data = _auth_code_data_from_session(oauth_credentials, app_redirect_uri, session_data)
+    await run_blocking(critical_executor, set_auth_code, auth_code, code_data, 300)
+    _log_auth_event(
+        provider="apple",
+        stage="auth_code_created",
+        outcome="succeeded",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=_redirect_scheme(app_redirect_uri),
+    )
 
     # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
 
@@ -264,6 +582,7 @@ async def auth_token(
     code: str = Form(...),
     redirect_uri: str = Form(...),
     use_custom_token: bool = Form(False),
+    code_verifier: Optional[str] = Form(None),
 ):
     """
     Exchange auth code for OAuth credentials
@@ -272,33 +591,111 @@ async def auth_token(
     Args:
         use_custom_token: If True, also generate Firebase custom token (default: True)
     """
+    started_at = time.monotonic()
+    provider = "unknown"
+    auth_flow_id = "missing"
+    redirect_scheme = _redirect_scheme(redirect_uri)
+    _log_auth_event(
+        provider=provider,
+        stage="token_exchange_received",
+        outcome="started",
+        auth_flow_id=auth_flow_id,
+        redirect_scheme=redirect_scheme,
+    )
     if grant_type != 'authorization_code':
+        _log_auth_event(
+            provider=provider,
+            stage="token_exchange_validated",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="unsupported_grant_type",
+            status_code=400,
+            redirect_scheme=redirect_scheme,
+        )
         raise HTTPException(status_code=400, detail="Unsupported grant type")
 
     # Get auth code data from Redis
-    raw_code_data = get_auth_code(code)
+    raw_code_data = await run_blocking(critical_executor, get_auth_code, code)
     if not raw_code_data:
+        _log_auth_event(
+            provider=provider,
+            stage="auth_code_lookup",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="auth_code_expired_or_not_found",
+            status_code=400,
+            redirect_scheme=redirect_scheme,
+        )
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     # Clean up used code
-    delete_auth_code(code)
+    await run_blocking(critical_executor, delete_auth_code, code)
 
     try:
         code_data = json.loads(raw_code_data)
 
         # Support both new format (with redirect_uri binding) and legacy format
+        referral_code: Optional[str] = None
         if 'credentials' in code_data:
             # New format: auth code bound to redirect_uri — fail closed if redirect_uri missing
             stored_redirect_uri = code_data.get('redirect_uri')
+            provider = code_data.get('provider') or provider
+            auth_flow_id = code_data.get('auth_flow_id') or auth_flow_id
+            created_at = code_data.get('created_at')
             if not stored_redirect_uri:
                 logger.error("auth code in new format but missing redirect_uri — rejecting (fail closed)")
+                _log_auth_event(
+                    provider=provider,
+                    stage="auth_code_validated",
+                    outcome="failed",
+                    auth_flow_id=auth_flow_id,
+                    failure_class="auth_code_missing_redirect_uri",
+                    status_code=400,
+                    redirect_scheme=redirect_scheme,
+                )
                 raise HTTPException(status_code=400, detail="malformed auth code")
             if redirect_uri != stored_redirect_uri:
                 logger.warning(
                     f"redirect_uri mismatch: expected={sanitize(stored_redirect_uri)}, got={sanitize(redirect_uri)}"
                 )
+                _log_auth_event(
+                    provider=provider,
+                    stage="auth_code_validated",
+                    outcome="failed",
+                    auth_flow_id=auth_flow_id,
+                    failure_class="redirect_uri_mismatch",
+                    status_code=400,
+                    redirect_scheme=redirect_scheme,
+                )
                 raise HTTPException(status_code=400, detail="redirect_uri mismatch")
+
+            try:
+                _verify_pkce_code_verifier(
+                    code_verifier,
+                    code_data.get('code_challenge'),
+                    code_data.get('code_challenge_method'),
+                )
+            except HTTPException as exc:
+                _log_auth_event(
+                    provider=provider,
+                    stage="pkce_verified",
+                    outcome="failed",
+                    auth_flow_id=auth_flow_id,
+                    failure_class=_failure_class(exc),
+                    status_code=exc.status_code,
+                    redirect_scheme=redirect_scheme,
+                )
+                raise
+            _log_auth_event(
+                provider=provider,
+                stage="auth_code_validated",
+                outcome="succeeded",
+                auth_flow_id=auth_flow_id,
+                redirect_scheme=redirect_scheme,
+                duration_seconds=(time.time() - created_at) if isinstance(created_at, (int, float)) else None,
+            )
             oauth_credentials_json = code_data['credentials']
+            referral_code = code_data.get('referral_code')
             oauth_credentials = (
                 json.loads(oauth_credentials_json)
                 if isinstance(oauth_credentials_json, str)
@@ -311,6 +708,7 @@ async def auth_token(
         provider = oauth_credentials.get('provider')
         id_token = oauth_credentials.get('id_token')
         access_token = oauth_credentials.get('access_token')
+        full_name = oauth_credentials.get('full_name')
 
         response = {
             "provider": provider,
@@ -324,18 +722,74 @@ async def auth_token(
         # Generate custom token if requested
         if use_custom_token:
             try:
-                custom_token = await _generate_custom_token(provider, id_token, access_token)
+                _log_auth_event(
+                    provider=provider,
+                    stage="firebase_custom_token_generation",
+                    outcome="started",
+                    auth_flow_id=auth_flow_id,
+                    redirect_scheme=redirect_scheme,
+                )
+                custom_token = await _generate_custom_token(
+                    provider,
+                    id_token,
+                    access_token,
+                    display_name=full_name,
+                    referral_code=referral_code,
+                )
                 response["custom_token"] = custom_token
+                _log_auth_event(
+                    provider=provider,
+                    stage="firebase_custom_token_generation",
+                    outcome="succeeded",
+                    auth_flow_id=auth_flow_id,
+                    redirect_scheme=redirect_scheme,
+                )
             except Exception as e:
-                logger.error(f"Error generating custom token: {e}")
-                # Don't fail the request, just log and continue without custom token
+                logger.error(f"Error generating custom token: {sanitize(str(e))}")
+                _log_auth_event(
+                    provider=provider,
+                    stage="firebase_custom_token_generation",
+                    outcome="failed",
+                    auth_flow_id=auth_flow_id,
+                    failure_class=e.__class__.__name__,
+                    redirect_scheme=redirect_scheme,
+                )
+                _log_auth_event(
+                    provider=provider,
+                    stage="token_exchange_completed",
+                    outcome="failed",
+                    auth_flow_id=auth_flow_id,
+                    failure_class="firebase_custom_token_generation_failed",
+                    status_code=502,
+                    redirect_scheme=redirect_scheme,
+                    duration_seconds=time.monotonic() - started_at,
+                )
+                raise HTTPException(status_code=502, detail="Failed to generate authentication token")
 
+        _log_auth_event(
+            provider=provider,
+            stage="token_exchange_completed",
+            outcome="succeeded",
+            auth_flow_id=auth_flow_id,
+            redirect_scheme=redirect_scheme,
+            duration_seconds=time.monotonic() - started_at,
+        )
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error parsing OAuth credentials: {e}")
+        logger.error(f"Error parsing OAuth credentials: {sanitize(str(e))}")
+        _log_auth_event(
+            provider=provider,
+            stage="token_exchange_completed",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class=e.__class__.__name__,
+            status_code=400,
+            redirect_scheme=redirect_scheme,
+            duration_seconds=time.monotonic() - started_at,
+        )
         raise HTTPException(status_code=400, detail="Invalid OAuth credentials")
 
 
@@ -392,7 +846,7 @@ async def _apple_auth_redirect(session_id: str):
     return RedirectResponse(url=apple_auth_url)
 
 
-async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: dict) -> str:
+async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange provider-specific code for OAuth credentials
     """
@@ -404,15 +858,25 @@ async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
 
-async def _exchange_google_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_google_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Google authorization code for Google OAuth tokens
     """
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
     api_base_url = os.getenv('BASE_API_URL')
+    auth_flow_id = session_data.get('auth_flow_id')
+    _log_auth_event(provider="google", stage="provider_token_exchange", outcome="started", auth_flow_id=auth_flow_id)
 
     if not all([client_id, client_secret, api_base_url]):
+        _log_auth_event(
+            provider="google",
+            stage="provider_token_exchange",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="oauth_not_configured",
+            status_code=500,
+        )
         raise HTTPException(status_code=500, detail="Google OAuth not properly configured")
 
     callback_url = f"{api_base_url}/v1/auth/callback/google"
@@ -430,6 +894,19 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     client = get_auth_client()
     token_response = await client.post(token_url, data=token_data)
     if token_response.status_code != 200:
+        logger.error(
+            "Google token exchange failed: status=%s body=%s",
+            token_response.status_code,
+            sanitize(token_response.text),
+        )
+        _log_auth_event(
+            provider="google",
+            stage="provider_token_exchange",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="provider_http_error",
+            status_code=token_response.status_code,
+        )
         raise HTTPException(status_code=400, detail="Failed to exchange Google code")
 
     token_json = token_response.json()
@@ -437,7 +914,16 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     access_token = token_json.get('access_token')
 
     if not id_token or not access_token:
+        _log_auth_event(
+            provider="google",
+            stage="provider_token_exchange",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class="missing_provider_token",
+            status_code=400,
+        )
         raise HTTPException(status_code=400, detail="Invalid Google token response")
+    _log_auth_event(provider="google", stage="provider_token_exchange", outcome="succeeded", auth_flow_id=auth_flow_id)
 
     # Return OAuth credentials for client-side Firebase authentication
     oauth_credentials = {
@@ -450,10 +936,12 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     return json.dumps(oauth_credentials)
 
 
-async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Apple authorization code for Apple OAuth tokens
     """
+    auth_flow_id = session_data.get('auth_flow_id')
+    _log_auth_event(provider="apple", stage="provider_token_exchange", outcome="started", auth_flow_id=auth_flow_id)
     try:
         # Get Apple configuration
         client_id = os.getenv('APPLE_CLIENT_ID')
@@ -462,16 +950,34 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         private_key_content = os.getenv('APPLE_PRIVATE_KEY')
 
         if not all([client_id, team_id, key_id, private_key_content]):
+            _log_auth_event(
+                provider="apple",
+                stage="provider_token_exchange",
+                outcome="failed",
+                auth_flow_id=auth_flow_id,
+                failure_class="oauth_not_configured",
+                status_code=500,
+            )
             raise HTTPException(
                 status_code=500, detail="Apple authentication not properly configured. Missing environment variables."
             )
 
         # Generate client secret JWT
-        client_secret = _generate_apple_client_secret(client_id, team_id, key_id, private_key_content)
+        client_secret = _generate_apple_client_secret(
+            cast(str, client_id), cast(str, team_id), cast(str, key_id), cast(str, private_key_content)
+        )
 
         # Exchange authorization code for Apple tokens
         api_base_url = os.getenv('BASE_API_URL')
         if not api_base_url:
+            _log_auth_event(
+                provider="apple",
+                stage="provider_token_exchange",
+                outcome="failed",
+                auth_flow_id=auth_flow_id,
+                failure_class="base_api_url_not_configured",
+                status_code=500,
+            )
             raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
 
         callback_url = f"{api_base_url}/v1/auth/callback/apple"
@@ -492,6 +998,14 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
 
         if token_response.status_code != 200:
             logger.error(f"Apple token exchange failed: {sanitize(token_response.text)}")
+            _log_auth_event(
+                provider="apple",
+                stage="provider_token_exchange",
+                outcome="failed",
+                auth_flow_id=auth_flow_id,
+                failure_class="provider_http_error",
+                status_code=token_response.status_code,
+            )
             raise HTTPException(status_code=400, detail="Failed to exchange Apple authorization code")
 
         token_json = token_response.json()
@@ -499,7 +1013,18 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         access_token = token_json.get('access_token')  # Apple typically returns access_token
 
         if not id_token:
+            _log_auth_event(
+                provider="apple",
+                stage="provider_token_exchange",
+                outcome="failed",
+                auth_flow_id=auth_flow_id,
+                failure_class="missing_provider_token",
+                status_code=400,
+            )
             raise HTTPException(status_code=400, detail="No ID token received from Apple")
+        _log_auth_event(
+            provider="apple", stage="provider_token_exchange", outcome="succeeded", auth_flow_id=auth_flow_id
+        )
 
         # Return OAuth credentials for client-side Firebase authentication
         oauth_credentials = {
@@ -514,11 +1039,25 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error exchanging Apple code for tokens: {e}")
+        logger.error(f"Error exchanging Apple code for tokens: {sanitize(str(e))}")
+        _log_auth_event(
+            provider="apple",
+            stage="provider_token_exchange",
+            outcome="failed",
+            auth_flow_id=auth_flow_id,
+            failure_class=e.__class__.__name__,
+            status_code=500,
+        )
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
-async def _generate_custom_token(provider: str, id_token: str, access_token: str = None) -> str:
+async def _generate_custom_token(
+    provider: str,
+    id_token: str,
+    access_token: Optional[str] = None,
+    display_name: Optional[str] = None,
+    referral_code: Optional[str] = None,
+) -> str:
     """
     Generate Firebase custom token by signing in with OAuth credentials
     This ensures we get the same Firebase UID that client-side auth would create
@@ -568,13 +1107,53 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
 
         logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
 
-        # Create custom token for this UID
-        custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
+        if referral_code and result.get('isNewUser') is True:
+            try:
+                referrer_uid = referrer_uid_from_code(referral_code)
+                claimed, reason = await run_blocking(
+                    db_executor,
+                    claim_referral_trial,
+                    firebase_uid,
+                    referrer_uid,
+                    is_new_user=True,
+                )
+                emit_posthog_event(
+                    firebase_uid,
+                    'Referral Claimed',
+                    {'program': REFERRAL_PROGRAM, 'claimed': claimed, 'reason': reason},
+                )
+            except Exception as error:
+                logger.error("Referral entitlement grant failed (non-fatal): %s", sanitize(str(error)))
+                record_fallback(
+                    component='other',
+                    from_mode='referral_entitlement',
+                    to_mode='authenticated_without_referral_entitlement',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
 
-        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+        # Apple's id_token has no name and Firebase can't auto-populate it (unlike
+        # Google), so persist the first-auth name onto the Firebase user. Only set
+        # it when missing — Apple sends the name once, so later sign-ins pass None
+        # and an already-named account is never overwritten.
+        if display_name and not result.get('displayName'):
+            try:
+                await run_blocking(
+                    critical_executor,
+                    lambda: firebase_admin.auth.update_user(firebase_uid, display_name=display_name),
+                )
+                logger.info(f"Set Firebase display_name for {provider} UID {firebase_uid}")
+            except Exception as e:
+                logger.error(f"Failed to set Firebase display_name (non-fatal): {sanitize(str(e))}")
+
+        # Create custom token for this UID
+        custom_token: object = firebase_admin.auth.create_custom_token(firebase_uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+
+        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else cast(str, custom_token)
 
     except Exception as e:
-        logger.error(f"Error in _generate_custom_token: {e}")
+        logger.error(f"Error in _generate_custom_token: {sanitize(str(e))}")
         raise
 
 
@@ -607,16 +1186,16 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         }
 
         # Generate the client secret
-        client_secret = jwt.encode(payload, private_key, algorithm='ES256', headers=headers)
+        client_secret = jwt.encode(payload, cast(Any, private_key), algorithm='ES256', headers=headers)
 
         return client_secret
 
     except Exception as e:
-        logger.error(f"Error generating Apple client secret: {e}")
+        logger.error(f"Error generating Apple client secret: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to generate Apple client secret")
 
 
-async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
+async def _verify_apple_id_token(id_token: str, client_id: str) -> Dict[str, Any]:  # type: ignore[reportUnusedFunction]  # public verification helper, reserved for Apple ID token validation
     """
     Verify Apple ID token and extract user information
     """
@@ -637,7 +1216,7 @@ async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
             raise Exception("No key ID found in token header")
 
         # Find the matching public key
-        public_key = None
+        public_key: Any = None
         for key in apple_keys['keys']:
             if key['kid'] == key_id:
                 public_key = RSAAlgorithm.from_jwk(key)

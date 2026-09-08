@@ -9,6 +9,9 @@ class AppLocalizationsMr extends AppLocalizations {
   AppLocalizationsMr([String locale = 'mr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'सत्राची मुदत संपली — पुन्हा साइन इन करा.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -319,7 +322,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get searchApps => 'अ‍ॅप शोधा...';
 
   @override
-  String get myApps => 'माझी अ‍ॅप्स';
+  String get myApps => 'माझे बनवलेले';
 
   @override
   String get installedApps => 'स्थापित अ‍ॅप्स';
@@ -427,6 +430,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get offlineSync => 'ऑफलाइन सिंक करा';
+
+  @override
+  String get autoSync => 'स्वयंचलित सिंक';
+
+  @override
+  String get autoSyncDescription => 'तुमचे डिव्हाइस कनेक्ट झाल्यावर ऑफलाइन रेकॉर्डिंग आपोआप सिंक करा';
 
   @override
   String get deviceSettings => 'डिव्हाइस सेटिंग्ज';
@@ -738,11 +747,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'आपल्या योजना $date वर नवीकरण होईल.';
-  }
-
-  @override
   String get basicPlan => 'मुक्त योजना';
 
   @override
@@ -962,11 +966,6 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return 'या महिन्यात $used of $limit अंतर्दृष्टी मिळवली';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'या महिन्यात $used of $limit स्मृती तयार केली';
   }
 
   @override
@@ -1464,7 +1463,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get payYourSttProvider => 'Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.';
 
   @override
-  String get freeMinutesMonth => '1,200 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
+  String get freeMinutesMonth => '300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
 
   @override
   String get omiUnlimited => 'Omi अमर्यादित';
@@ -1643,7 +1642,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get finalTouches => 'अंतिम स्पर्श';
 
   @override
-  String get processing => 'प्रक्रिया करत आहे...';
+  String get processing => 'प्रक्रिया सुरू';
 
   @override
   String get features => 'वैशिष्ट्ये';
@@ -1788,20 +1787,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get lovingOmi => 'Omi आवडतंय?';
 
   @override
-  String get leaveReviewIos =>
-      'App Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!';
-
-  @override
-  String get rateOnAppStore => 'App Store वर रेट करा';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play वर रेट करा';
-
-  @override
   String get maybeLater => 'कदाचित नंतर';
 
   @override
@@ -1873,9 +1858,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get openSettings => 'सेटिंग्ज खोला';
-
-  @override
-  String get wantDifferentName => 'अन्य काहीतरी नावाने जाऊ इच्छिता?';
 
   @override
   String get whatsYourName => 'आपले नाव काय आहे?';
@@ -2057,6 +2039,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryDeleted => 'स्मृती हटवली गेली.';
 
   @override
+  String get memoryHistoryPartial =>
+      'आठवणींच्या इतिहासाचा काही भाग उपलब्ध नाही. आतापर्यंत मिळालेला इतिहास दाखवला जात आहे.';
+
+  @override
   String get undo => 'पूर्ववत् करा';
 
   @override
@@ -2136,6 +2122,18 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ स्मृती संपादित करा';
+
+  @override
+  String get pinAsBaseline => 'आधार म्हणून पिन करा';
+
+  @override
+  String get unpinAsBaseline => 'आधारातून अनपिन करा';
+
+  @override
+  String get baselineMemory => 'आधार स्मृती';
+
+  @override
+  String get alwaysInContext => 'नेहमी संदर्भात';
 
   @override
   String get memoryContentHint => 'मला आयस्क्रीम खाण्यास आवडते...';
@@ -4639,41 +4637,13 @@ class AppLocalizationsMr extends AppLocalizations {
       'Omi चे मूल्यवान वापरकर्ता असल्याबद्दल धन्यवाद. आपल्याला कोणतीही प्रश्न किंवा चिंता असल्यास, आमच्याशी संपर्क करण्यास नेहमी स्वागत आहे team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi सिंक सेटिंग्ज';
-
-  @override
-  String get enterHotspotCredentials => 'आपल्या फोनच्या हॉटस्पॉट क्रेडेंशियल्स प्रविष्ट करा';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi सिंक आपल्या फोनला हॉटस्पॉट म्हणून वापरते. आपल्या हॉटस्पॉट नाव आणि पासवर्ड सेटिंग्ज > व्यक्तिगत हॉटस्पॉट मध्ये शोधा.';
-
-  @override
-  String get hotspotNameSsid => 'हॉटस्पॉट नाव (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'उदा. iPhone हॉटस्पॉट';
-
-  @override
   String get password => 'पासवर्ड';
-
-  @override
-  String get enterHotspotPassword => 'हॉटस्पॉट पासवर्ड प्रविष्ट करा';
 
   @override
   String get saveCredentials => 'क्रेडेंशियल्स सेव करा';
 
   @override
   String get clearCredentials => 'क्रेडेंशियल्स साफ करा';
-
-  @override
-  String get pleaseEnterHotspotName => 'कृपया हॉटस्पॉट नाव प्रविष्ट करा';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi क्रेडेंशियल्स सेव केली आहेत';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi क्रेडेंशियल्स साफ केली आहेत';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4742,7 +4712,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोणतेही विशिष्ट डेटा प्रवेश कॉन्फ़िगर केलेला नाही.';
 
   @override
-  String get basicPlanDescription => '१,२०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड';
+  String get basicPlanDescription => '३०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड';
 
   @override
   String get minutes => 'मिनिटे';
@@ -5819,9 +5789,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'जलद स्थानांतर';
-
-  @override
   String get syncingStatus => 'समन्वय करत आहे';
 
   @override
@@ -5831,15 +5798,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'स्थानांतर पद्धत';
-
-  @override
-  String get fast => 'जलद';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'फोन';
@@ -5860,25 +5818,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get processedFilesDeleted => 'प्रक्रिया केलेल्या फाइल्स हटवल्या';
 
   @override
-  String get wifiEnableFailed => 'डिव्हाइसवर WiFi सक्षम करणे अयोग्य. कृपया पुन्हा प्रयत्न करा.';
-
-  @override
-  String get deviceNoFastTransfer => 'आपल्या डिव्हाइसला जलद स्थानांतर समर्थित नाही. त्याऐवजी Bluetooth वापरा.';
-
-  @override
-  String get enableHotspotMessage => 'कृपया आपल्या फोनची हॉटस्पॉट सक्षम करा आणि पुन्हा प्रयत्न करा.';
-
-  @override
-  String get transferStartFailed => 'स्थानांतर सुरू करणे अयोग्य. कृपया पुन्हा प्रयत्न करा.';
-
-  @override
   String get deviceNotResponding => 'डिव्हाइस प्रतिसाद दिला नाही. कृपया पुन्हा प्रयत्न करा.';
-
-  @override
-  String get invalidWifiCredentials => 'अमान्य WiFi प्रमाणपत्र. आपल्या हॉटस्पॉट सेटिंग्स तपासा.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi कनेक्शन अयोग्य. कृपया पुन्हा प्रयत्न करा.';
 
   @override
   String get sdCardProcessing => 'SD कार्ड प्रक्रिया करणे';
@@ -5890,9 +5830,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get process => 'प्रक्रिया करा';
-
-  @override
-  String get wifiSyncFailed => 'WiFi समन्वय अयोग्य';
 
   @override
   String get processingFailed => 'प्रक्रिया अयोग्य';
@@ -6065,7 +6002,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1,200 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
 
   @override
   String get viewUsage => 'वापर पहा';
@@ -6147,7 +6084,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1,200 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6670,24 +6607,13 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi समन्वय';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item क्लिपबोर्डवर कॉपी केले';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'कनेक्शन अयोग्य';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName शी कनेक्ट करत आहे';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName चा WiFi सक्षम करा';
   }
 
   @override
@@ -6784,9 +6710,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get statusUnprocessed => 'अप्रक्रिया';
 
   @override
-  String get switchedToFastTransfer => 'फास्ट ट्रांसफरवर स्विच केले';
-
-  @override
   String get transferCompleteMessage => 'स्थानांतरण पूर्ण! आता आप्पण ही रेकॉर्डिंग प्ले करू शकता.';
 
   @override
@@ -6798,34 +6721,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transferCancelled => 'स्थानांतरण रद्द केले';
 
   @override
-  String get fastTransferEnabled => 'फास्ट ट्रांसफर सक्षम केले';
-
-  @override
   String get bluetoothSyncEnabled => 'ब्लूटूथ सिंक सक्षम केला';
-
-  @override
-  String get enableFastTransfer => 'फास्ट ट्रांसफर सक्षम करा';
-
-  @override
-  String get fastTransferDescription =>
-      'फास्ट ट्रांसफर WiFi वापरून ~5x वेगवान गती देतो. आपले फोन स्थानांतरणादरम्यान आपल्या Omi डिव्हाइसच्या WiFi नेटवर्कला तात्पुरते जोडेल.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'स्थानांतरणादरम्यान इंटरनेट प्रवेश सक्षम केला आहे';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'आपल्या Omi डिव्हाइसमधून आपल्या फोनवर रेकॉर्डिंग कसे स्थानांतरित करायचे ते निवडा.';
-
-  @override
-  String get wifiSpeed => 'WiFi द्वारे ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '५X वेगवान';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'आपल्या Omi डिव्हाइसला थेट WiFi कनेक्शन तयार करते. स्थानांतरणादरम्यान आपले फोन आपल्या नियमित WiFi पासून तात्पुरते डिस्कनेक्ट होईल.';
 
   @override
   String get bluetooth => 'ब्लूटूथ';
@@ -6847,7 +6743,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'कमी बॅटरी सूचना';
 
   @override
-  String get lowBatteryAlertBody => 'आपली डिव्हाइस बॅटरीवर कमी चल रही आहे. रिचार्जने वेळ आली! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'तुमची बॅटरी $level% आहे. रिचार्ज करण्याची वेळ! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi पूर्णपणे चार्ज झाला आहे';
@@ -7525,13 +7423,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ऑडिओ ट्रान्सक्राइब करण्यात अयशस्वी';
 
   @override
-  String get locationPermissionRequired => 'स्थान परवानगी आवश्यक';
-
-  @override
-  String get locationPermissionContent =>
-      'फास्ट ट्रांसफरला WiFi कनेक्शन सत्यापित करण्यासाठी स्थान परवानगी आवश्यक आहे. कृपया आगे जाण्यासाठी स्थान परवानगी द्या.';
-
-  @override
   String get pdfTranscriptExport => 'ट्रान्सक्रिप्ट निर्यात';
 
   @override
@@ -7676,12 +7567,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get dailyRecapsDescription => 'आपल्या दैनिक रीकॅप्स तयार झाल्या की येथे दिसतील';
 
   @override
-  String get chooseTransferMethod => 'स्थानांतरण पद्धती निवडा';
-
-  @override
-  String get fastTransferSpeed => 'WiFi द्वारे ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'मोठा वेळ अंतर शोधला ($gap)';
   }
@@ -7690,9 +7575,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'मोठे वेळ अंतर शोधले ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'डिव्हाइस WiFi सिंक समर्थन करत नाही, ब्लूटूथ वर स्विच करत आहे';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health या डिव्हाइसवर उपलब्ध नाही';
@@ -7891,6 +7773,9 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get viewAll => 'सर्व पाहा';
+
+  @override
+  String get expand => 'विस्तारित करा';
 
   @override
   String get addTask => 'कार्य जोडा';
@@ -8455,7 +8340,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get manageStorage => 'स्टोरेज व्यवस्थापित करा';
 
   @override
-  String get safelyBackedUp => 'तुमच्या फोनमध्ये सुरक्षितपणे बॅकअप केले गेले';
+  String get safelyBackedUp => 'तयार झालेली संभाषणे';
 
   @override
   String get notYetSynced => 'अद्याप तुमच्या फोनशी सिंक केले नाही';
@@ -9108,7 +8993,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get billingYearly => 'वार्षिक';
 
   @override
-  String get savePercent => '~17% बचत करा';
+  String savePercent(int percent) {
+    return '~$percent% बचत करा';
+  }
 
   @override
   String get popular => 'लोकप्रिय';
@@ -9257,4 +9144,848 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get deleteRecap => 'रीकॅप हटवा';
+
+  @override
+  String get deleteRecapConfirmTitle => 'हे रीकॅप हटवायचे आहे का?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'हे रीकॅप कायमचे काढून टाकले जाईल. त्या दिवसाच्या मूळ संभाषणांवर परिणाम होणार नाही.';
+
+  @override
+  String get deleteRecapAction => 'हटवा';
+
+  @override
+  String get recapDeletedSnackbar => 'रीकॅप हटवले';
+
+  @override
+  String get recapDeleteFailed => 'रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get syncStatusBackedUp => 'बॅकअप झाला';
+
+  @override
+  String get syncStatusBackingUp => 'समन्वय करत आहे…';
+
+  @override
+  String get syncStatusWaiting => 'सिंक होण्याची प्रतीक्षा';
+
+  @override
+  String get syncStatusRetrying => 'प्रक्रिया करता आली नाही — पुन्हा प्रयत्न';
+
+  @override
+  String get syncStatusFailed => 'अयशस्वी — Retry दाबा';
+
+  @override
+  String get syncStatusFileUnavailable => 'फाइल उपलब्ध नाही';
+
+  @override
+  String get noRecordingsYet => 'अद्याप कोणतीही रेकॉर्डिंग नाही';
+
+  @override
+  String get syncInProgress => 'सिंक सुरू आहे';
+
+  @override
+  String get syncStatusUploaded => 'अपलोड झाले · Omi वर प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingTitle => 'अद्याप प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ही रेकॉर्डिंग अपलोड झाली आहे पण Omi अद्याप संभाषण तयार करत आहे. आता हटवल्यास आणि प्रक्रिया अयशस्वी झाल्यास ती परत मिळवता येणार नाही. तरीही हटवायचे?';
+
+  @override
+  String get syncCardAllBackedUp => 'सर्व रेकॉर्डिंग सिंक झाली';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग सिंकसाठी तयार',
+      one: '1 रेकॉर्डिंग सिंकसाठी तयार',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi वर प्रक्रिया सुरू…';
+
+  @override
+  String get syncCardWaitingInternet => 'इंटरनेटची प्रतीक्षा';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+      one: '1 रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'रेकॉर्डिंग तुमच्या डिव्हाइसवरून या फोनवर हस्तांतरित होतात आणि स्थानिक पातळीवर साठवली जातात, त्यानंतर Omi च्या सर्व्हरवर अपलोड केली जातात, जिथे त्यांचे लिप्यंतरण होऊन संभाषणांमध्ये रूपांतर केले जाते.';
+
+  @override
+  String get syncStepUpload => 'सिंक';
+
+  @override
+  String get syncStepUploadDesc => 'तुमचे रेकॉर्डिंग Omi च्या सर्व्हरवर पाठवले जाते';
+
+  @override
+  String get syncStepProcess => 'ट्रान्स्क्राइब';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ऑडिओचे संभाषणात रूपांतर करते';
+
+  @override
+  String get syncStepBackedUp => 'संभाषण तयार';
+
+  @override
+  String get syncStepBackedUpDesc => 'ते संभाषण मध्ये सापडेल';
+
+  @override
+  String get syncFailureFootnote =>
+      'प्रक्रिया अयशस्वी झाल्यास, पुढील सिंकमध्ये रेकॉर्डिंग आपोआप पुन्हा प्रयत्न केले जाते.';
+
+  @override
+  String get syncStatusConversationCreated => 'संभाषण तयार झाले';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi वर अपलोड होत आहे';
+
+  @override
+  String get syncCardDownloadingTitle => 'तुमच्या डिव्हाइसवरून डाउनलोड होत आहे';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total पैकी $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'तुमच्या डिव्हाइसवर';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'तुमच्या डिव्हाइसवरून डाउनलोड होत आहे';
+
+  @override
+  String get newestFirst => 'नवीन आधी';
+
+  @override
+  String get noSyncedRecordingsYet => 'अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'लवकरच आणखी पेमेंट पद्धती';
+
+  @override
+  String get syncProcessingBackgroundHint => 'हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता.';
+
+  @override
+  String get syncCardRateLimited => 'वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल';
+
+  @override
+  String get syncCardBackendBusy => 'Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही';
+
+  @override
+  String get promoCode => 'प्रोमो कोड';
+
+  @override
+  String get enterPromoCode => 'प्रोमो कोड प्रविष्ट करा';
+
+  @override
+  String get invalidPromotionCode => 'अवैध प्रोमो कोड.';
+
+  @override
+  String get backgroundModeTitle => 'बॅकग्राउंड मोड';
+
+  @override
+  String get backgroundModeDescription => 'अ‍ॅप पूर्णपणे बंद असतानाही तुमचे Omi रेकॉर्डिंग सुरू ठेवा.';
+
+  @override
+  String get backgroundModeNote => 'सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'सुसंगत डिव्हाइस कनेक्ट नसल्यामुळे बॅकग्राउंड मोड उपलब्ध नाही. हे वैशिष्ट्य वापरण्यासाठी Omi, OpenGlass किंवा Friend Pendant डिव्हाइस कनेक्ट करा.';
+
+  @override
+  String get regenerateRecap => 'सारांश पुन्हा तयार करा';
+
+  @override
+  String get recapRegeneratedSnackbar => 'सारांश पुन्हा तयार केला';
+
+  @override
+  String get recapRegenerateFailed => 'सारांश पुन्हा तयार करता आला नाही. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get recapRegenerateCooldown => 'पुन्हा तयार करण्यापूर्वी कृपया काही सेकंद थांबा.';
+
+  @override
+  String get recapRegenerateNoConversations => 'या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'सिंक Omi ट्रान्सक्रिप्शन वापरते';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'तुम्ही तुमचा स्वतःचा ट्रान्सक्रिप्शन प्रदाता वापरता. ही रेकॉर्डिंग सिंक केल्यास ती Omi च्या सर्व्हरवर ट्रान्सक्राइब होतील आणि तुमच्या प्लॅनच्या ट्रान्सक्रिप्शन मर्यादेत मोजली जातील.';
+
+  @override
+  String get transcribeLaterTitle => 'नंतर ट्रान्सक्राइब करणे';
+
+  @override
+  String get transcribeLaterDescription =>
+      'थेट ट्रान्सक्राइब करण्याऐवजी आता ऑडिओ रेकॉर्ड करा आणि गरजेनुसार नंतर ट्रान्सक्राइब करा. रेकॉर्डिंग तुमच्या फोनवर साठवली जातात; नंतर ती अपलोड करून संभाषणे तयार करा.';
+
+  @override
+  String get transcribeLaterNote =>
+      'फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.';
+
+  @override
+  String get recordingMode => 'रेकॉर्डिंग मोड';
+
+  @override
+  String get captureModeLater => 'नंतर';
+
+  @override
+  String get captureModeLiveDescription => 'तुम्ही बोलत असताना रिअल-टाइममध्ये ट्रान्सक्राइब करा.';
+
+  @override
+  String get captureModeLaterDescription => 'आता ऑडिओ जतन करा आणि तुम्हाला हवे तेव्हा ट्रान्सक्राइब करा.';
+
+  @override
+  String get unmute => 'आवाज सुरू करा';
+
+  @override
+  String get newRecording => 'नवीन रेकॉर्डिंग';
+
+  @override
+  String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
+
+  @override
+  String get memoryThisDevice => 'हे डिव्हाइस';
+
+  @override
+  String get memoryThisIphone => 'हा iPhone';
+
+  @override
+  String get memoryThisPhone => 'हा फोन';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi कसे वापरावे';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'तुमच्या Omi शी बोला';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'काही शब्द बोला आणि ते रिअल-टाइममध्ये दिसताना पाहा';
+
+  @override
+  String get deviceOnboardingGoodJob => 'छान!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'बोलायला सुरुवात करा...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi ला प्रश्न विचारा';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'बटण एकदा दाबा, तुमचा प्रश्न बोला, आणि झाल्यावर पुन्हा दाबा';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'तुमचा प्रश्न प्रोसेस होत आहे...';
+
+  @override
+  String get deviceOnboardingListening => 'ऐकत आहे...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'बंद करा';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'चालू करा';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'बटण ३ सेकंद दाबून ठेवा';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'पुन्हा चालू करण्यासाठी बटण दाबा';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'दिवा बंद होईपर्यंत बटण घट्ट दाबून ठेवा';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'कनेक्ट झाले';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'कनेक्ट झाले!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'डिस्कनेक्ट झाले';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'बंद होत आहे...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'डबल टॅप सानुकूल करा';
+
+  @override
+  String get deviceOnboardingEndConversation => 'संभाषण संपवा';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'सध्याचे संभाषण जतन करून संपवा';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'म्यूट / अनम्यूट';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'मायक्रोफोन चालू किंवा बंद करा';
+
+  @override
+  String get deviceOnboardingStarConversation => 'सुरू असलेले संभाषण स्टार करा';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'संभाषण महत्त्वाचे म्हणून चिन्हांकित करा';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'तो एकच टॅप होता — पटकन दोनदा टॅप करून पाहा!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'आता करून पाहा! तुमच्या Omi वर डबल टॅप करा';
+
+  @override
+  String get deviceOnboardingContinue => 'पुढे जा';
+
+  @override
+  String get deviceOnboardingFinish => 'पूर्ण करा';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'तुमच्या Omi ला जाणून घ्या';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'तुमचा Omi जे काही करू शकतो त्याची झटपट, प्रत्यक्ष ओळख.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'सुमारे 1 मिनिट';
+
+  @override
+  String get jumpToLatestMessage => 'नवीनतम संदेशावर जा';
+
+  @override
+  String get latest => 'नवीनतम';
+
+  @override
+  String get flashFirmware => 'फर्मवेअर फ्लॅश करा';
+
+  @override
+  String get pendantRecordingTitle => 'पेंडंटवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get pendantRecordingNote =>
+      'तुमचे पेंडंट स्वतःहून रेकॉर्ड करत आहे. अ‍ॅप उघडे असताना रेकॉर्डिंग तुमच्या फोनवर सिंक होतात.';
+
+  @override
+  String get pendantSyncingRecordings => 'तुमच्या पेंडंटवरून रेकॉर्डिंग सिंक होत आहेत…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes मिनिटे संग्रहित';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'पेंडंटचे स्टोरेज जवळजवळ भरले आहे — सिंकसाठी अ‍ॅप उघडे ठेवा.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta कनेक्ट करा';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'संभाषणे आणि दृश्य संदर्भासाठी आपले Ray-Ban Meta चष्मे आपले Omi कॅप्चर डिव्हाइस म्हणून वापरा. आपले चष्मे लिंक करण्यासाठी Omi Meta AI अ‍ॅप उघडेल.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI द्वारे कनेक्ट करा';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI अ‍ॅपमध्ये कनेक्ट करणे पूर्ण करा, नंतर येथे परत या.';
+
+  @override
+  String get raybanMetaCheckAgain => 'पुन्हा तपासा';
+
+  @override
+  String get raybanMetaAllowCamera => 'चष्म्यावरील कॅमेराला परवानगी द्या';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'आपल्या संभाषणांमध्ये फोटो जोडण्यासाठी Omi आपल्या चष्म्याचा कॅमेरा वापरतो. आपण हे वगळू शकता आणि फक्त ऑडिओ वापरू शकता.';
+
+  @override
+  String get raybanMetaSkipForNow => 'आत्तासाठी वगळा';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta फक्त-ऑडिओ मोड';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi ची ही आवृत्ती Bluetooth द्वारे आपल्या चष्म्याचा मायक्रोफोन वापरू शकते. फोटो कॅप्चरसाठी Omi ची Meta डेव्हलपर आवृत्ती आवश्यक आहे.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'चष्म्याचा मायक्रोफोन वापरात असताना आपल्या फोनवरील संगीत थांबते.';
+
+  @override
+  String get raybanMetaContinue => 'पुढे जा';
+
+  @override
+  String get raybanMetaCapturePhoto => 'फोटो काढा';
+
+  @override
+  String get raybanMetaPhotoRequested => 'फोटोची विनंती केली आहे — तो आपल्या संभाषणात दिसेल.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'मायक्रोफोन तयार आहे';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'प्रतिमा कॅप्चर तयार आहे';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'फक्त-ऑडिओ मोडमध्ये अनुपलब्ध';
+
+  @override
+  String get raybanMetaCamera => 'कॅमेरा';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta शी कनेक्ट करताना त्रुटी: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'डिव्हाइस स्टोरेज';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% भरले';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total पैकी $used वापरले';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free रिकामे';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते.';
+
+  @override
+  String get sttModelAccuracy => 'अचूकता';
+
+  @override
+  String get whisperModelSizeBase => 'बेस';
+
+  @override
+  String get cloudTranscription => 'क्लाउड ट्रान्सक्रिप्शन';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'मॉडेल हटवा';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?';
+
+  @override
+  String get onDeviceModelDownloaded => 'डाउनलोड केले';
+
+  @override
+  String get sttModelFaster => 'अधिक जलद';
+
+  @override
+  String get sttFilterAuto => 'स्वयंचलित';
+
+  @override
+  String get sttModelHigher => 'जास्त';
+
+  @override
+  String get whisperModelSizeLarge => 'मोठे';
+
+  @override
+  String get sttModelLower => 'कमी';
+
+  @override
+  String get whisperModelSizeMedium => 'मध्यम';
+
+  @override
+  String get onDeviceModelDeleted => 'मॉडेल हटवले';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'मॉडेल डाउनलोड अयशस्वी';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper मॉडेल डाउनलोड करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'मॉडेल डाउनलोड झाले';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper मॉडेल यशस्वीरित्या डाउनलोड झाले';
+
+  @override
+  String get onDeviceModelSize => 'मॉडेलचा आकार';
+
+  @override
+  String get sttNone => 'काहीही नाही';
+
+  @override
+  String get onDeviceTranscription => 'डिव्हाइसवरील ट्रान्सक्रिप्शन';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'ट्रान्सक्रिप्शन तुमच्या डिव्हाइसवर स्थानिक पातळीवर प्रक्रिया केले जाते';
+
+  @override
+  String get sttModelSlower => 'अधिक संथ';
+
+  @override
+  String get whisperModelSizeSmall => 'लहान';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'स्पीच-टू-टेक्स्ट प्रदाता';
+
+  @override
+  String get speechToTextProviderDesc => 'ट्रान्सक्रिप्शनसाठी वापरली जाणारी सेवा निवडा';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'वेग';
+
+  @override
+  String get whisperModelSizeTiny => 'अतिशय लहान';
+
+  @override
+  String get transcriptionLanguage => 'ट्रान्सक्रिप्शन भाषा';
+
+  @override
+  String get transcriptionLanguageDesc => 'भाषण ट्रान्सक्रिप्शनसाठी भाषा निवडा';
+
+  @override
+  String get whisperModel => 'Whisper मॉडेल';
+
+  @override
+  String get whisperModelDesc => 'डिव्हाइसवरील ट्रान्सक्रिप्शनसाठी मॉडेल निवडा';
+
+  @override
+  String get downgradeToFreemiumTitle => 'मोफत प्लॅनवर डाउनग्रेड करायचे?';
+
+  @override
+  String get downgradeLimitationsHeading => 'तुम्हाला या मर्यादा जाणवतील:';
+
+  @override
+  String get downgradeLimitBattery => '७ पट जास्त बॅटरी वापर';
+
+  @override
+  String get downgradeLimitQuality => '३०% कमी ट्रान्सक्रिप्शन गुणवत्ता';
+
+  @override
+  String get downgradeLimitDelay => '५-७ सेकंदांचा विलंब';
+
+  @override
+  String get downgradeLimitSpeakers => 'वक्ते ओळखता येणार नाहीत';
+
+  @override
+  String get downgradeAnyway => 'तरीही डाउनग्रेड करा';
+
+  @override
+  String get googleCalendarNotConnected => 'Google कॅलेंडर कनेक्ट केलेले नाही';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'संभाषणे कॅलेंडर इव्हेंटशी लिंक करण्यासाठी तुमचे Google कॅलेंडर कनेक्ट करा.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title” शी लिंक केले';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'कॅलेंडर इव्हेंट लिंक करता आले नाही';
+
+  @override
+  String get thanksForYourFeedback => 'तुमच्या अभिप्रायाबद्दल धन्यवाद!';
+
+  @override
+  String get copyMessage => 'संदेश कॉपी करा';
+
+  @override
+  String get searchSettings => 'सेटिंग्ज शोधा…';
+
+  @override
+  String get errorLoadingAudio => 'ऑडिओ लोड करताना त्रुटी';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'तुमचा Ray-Ban Meta मायक्रोफोन निवडा';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'तुमच्या चष्म्याचा Bluetooth मायक्रोफोन निवडा. Omi तो वापरत असताना संगीत थांबते.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'कोणताही Bluetooth मायक्रोफोन सापडला नाही. iPhone सेटिंग्जमध्ये चष्मा कनेक्ट करा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth मायक्रोफोन लोड करता आले नाहीत. Bluetooth सुरू असल्याची खात्री करा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'त्या मायक्रोफोनशी कनेक्ट करता आले नाही. तो iPhone सेटिंग्जमध्ये कनेक्ट असल्याची खात्री करा.';
+
+  @override
+  String get syncStatusTooOld => 'सिंक करण्यासाठी खूप जुने — Omi ते स्वीकारू शकत नाही';
+
+  @override
+  String get planSheetChooseYourPlan => 'अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, मोबाइल आणि वेबवर उपलब्ध';
+
+  @override
+  String get popularBadge => 'लोकप्रिय';
+
+  @override
+  String get worksOnDesktop => 'डेस्कटॉपवर चालते';
+
+  @override
+  String get noDesktopAccess => 'डेस्कटॉपवर चालत नाही';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months महिने / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count महिने मोफत',
+      one: '1 महिना मोफत',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 सेकंद विलंब (रिअल-टाइम नाही)';
+
+  @override
+  String get downgradeToFreemiumAction => 'मोफत आवृत्तीवर जा';
+
+  @override
+  String get getFreeUnlimitedAccess => 'मोफत अमर्यादित प्रवेश मिळवा';
+
+  @override
+  String get shareDataForTraining => 'प्रशिक्षणासाठी डेटा सामायिक करा';
+
+  @override
+  String get yourRequestUnderReview => 'तुमची विनंती पुनरावलोकनाधीन आहे';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'अपडेट आवश्यक';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'माइग्रेशन जारी है';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।';
+
+  @override
+  String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String chatScopeAbout(String title) {
+    return '$title विषयी';
+  }
+
+  @override
+  String get askAboutThisConversation => 'याबद्दल विचारा';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ला कच्चा ऑडिओ पाठवा';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ला कच्चा ऑडिओ पाठवणे थांबवण्यासाठी हे बंद करा. प्रतिलेख आणि क्लाउड वैशिष्ट्यांसाठी आवश्यक डेटा अजूनही Omi ला पाठवला जाऊ शकतो.';
+
+  @override
+  String get findDevice => 'शोधा';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get appDisabledTitle => 'हे अ‍ॅप अक्षम आहे आणि ते स्थापित करता येणार नाही.';
+
+  @override
+  String get appDisabledWebhookFailures => 'त्याचा एंडपॉइंट सलग ७२ तास अयशस्वी झाला, त्यामुळे वितरण थांबवण्यात आले.';
+
+  @override
+  String get appDisabledGeneric => 'ते Omi ने अक्षम केले होते.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'आधी एंडपॉइंट दुरुस्त करा — पुन्हा सक्षम करताना प्रत्येक कॉन्फिगर केलेला URL पुन्हा तपासला जातो.';
+
+  @override
+  String get appReEnable => 'पुन्हा सक्षम करा';
+
+  @override
+  String get appReEnableFailedTitle => 'पुन्हा सक्षम करता आले नाही';
+
+  @override
+  String get appReEnableFailedBody => 'हे अ‍ॅप पुन्हा सक्षम करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date रोजी अक्षम केले.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'शेवटची त्रुटी: $error';
+  }
+
+  @override
+  String get prerecordedTranscript => 'पूर्व-रेकॉर्डेड';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Pendant अजूनही रेकॉर्ड करत आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Pendant चे स्टोरेज भरले आहे आणि ते अजूनही रेकॉर्डिंग मोडमध्ये आहे, त्यामुळे साठवलेला ऑडिओ हस्तांतरित करता येत नाही. रेकॉर्डिंग थांबवण्यासाठी Pendant चे बटण दाबा, नंतर पुन्हा सिंक करा.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'रेकॉर्ड झाले नाही ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return '$name यांची व्हॉइस प्रोफाइल';
+  }
+
+  @override
+  String get play => 'प्ले करा';
+
+  @override
+  String get redo => 'पुन्हा रेकॉर्ड करा';
+
+  @override
+  String get answerWithYourVoice => 'बोलून उत्तर द्या:';
+
+  @override
+  String get speechProfileTopicLocation => 'तुम्ही कुठे राहता?';
+
+  @override
+  String get speechProfileTopicWork => 'तुम्ही काय काम करता?';
+
+  @override
+  String get speechProfileTopicGoal => 'तुमचे दीर्घकालीन ध्येय काय आहे?';
+
+  @override
+  String get transcriptionNoAudio => 'ट्रान्सक्रिप्शन ऑडिओ घेत नाही';
+
+  @override
+  String get tapPlusToStartRecording => 'रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा';
+
+  @override
+  String get chatBlockTask => 'कार्य';
+
+  @override
+  String get chatBlockGoal => 'ध्येय';
+
+  @override
+  String get chatBlockConversation => 'संभाषण';
+
+  @override
+  String get chatBlockMemory => 'स्मृती';
+
+  @override
+  String get chatBlockQuestion => 'प्रश्न';
+
+  @override
+  String get chatBlockOpenInGoals => 'ध्येयांमध्ये उघडा';
+
+  @override
+  String get chatBlockOpenConversation => 'संभाषण उघडा';
+
+  @override
+  String get chatBlockOpenInMemories => 'स्मृतींमध्ये उघडा';
+
+  @override
+  String get chatBlockUnavailable => 'आता उपलब्ध नाही';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'शिफारस केलेली पुढील पावले';
+
+  @override
+  String get couldNotLoadMemories => 'आठवणी लोड करता आल्या नाहीत';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'ज्ञान आलेख लोड करता आला नाही';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'सध्या बोलण्याचे मजकुरात रूपांतर उपलब्ध नाही. तुमचे इंटरनेट कनेक्शन आणि डिव्हाइसवरील वाणी ओळख सेटिंग्ज तपासा, नंतर पुन्हा प्रयत्न करा.';
 }

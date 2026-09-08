@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-stale-event-payload-diff-base",
+  "violated_contract": "A CI check that diffs a PR against a base ref must resolve that ref live from the checkout it is running against, not from a value captured in a GitHub event payload; a payload field is only as fresh as the last event that populated it, and a trigger type that fires without a new commit (edited/labeled/unlabeled) does not refresh it even as the base branch keeps advancing.",
+  "canonical_prevention": "Resolve the diff base as origin/<base-branch> (or an equivalent live git ref) against a fetch-depth:0 checkout performed in the same job, the way the changes/detect-changes job in repo-checks.yml already does; never pass github.event.pull_request.base.sha (or any other event-payload SHA) as the diff base for a check that can run on a metadata-only re-trigger.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/repo-checks.yml",
+    ".github/scripts/test_pr_preflight.py"
+  ],
+  "evidence_prs": [10758],
+  "scope_hints": [
+    ".github/workflows/",
+    ".github/scripts/pr_preflight.py",
+    ".github/actions/detect-changes/"
+  ],
+  "status": "open"
+}

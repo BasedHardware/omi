@@ -3,18 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/payments/payments_page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/pages/memories/page.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
-import 'package:omi/pages/settings/data_privacy_page.dart';
+import 'package:omi/pages/settings/widgets/profile_settings_tile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-
-import 'package:omi/pages/settings/conversation_display_settings.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 import 'delete_account.dart';
 
@@ -48,73 +50,15 @@ class _ProfilePageState extends State<ProfilePage> {
     bool showBetaTag = false,
     bool showChevron = true,
   }) {
-    return GestureDetector(
+    return ProfileSettingsTile(
+      title: title,
+      subtitle: subtitle,
+      chipValue: chipValue,
+      icon: icon,
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          child: Row(
-            children: [
-              SizedBox(width: 24, height: 24, child: icon),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-                        ),
-                        if (showBetaTag) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Text(
-                              'BETA',
-                              style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (showSubtitle && subtitle != null && chipValue == null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.w400),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (chipValue != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
-                  child: Text(
-                    chipValue,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                if (showChevron) const SizedBox(width: 8),
-              ],
-              if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-            ],
-          ),
-        ),
-      ),
+      showSubtitle: showSubtitle,
+      showBetaTag: showBetaTag,
+      showChevron: showChevron,
     );
   }
 
@@ -195,40 +139,246 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildProfileStyleItem({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     String? chipValue,
     VoidCallback? onTap,
   }) {
-    return InkWell(
+    return ProfileSettingsTile(
+      title: title,
+      chipValue: chipValue,
+      icon: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Row(
-          children: [
-            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-              ),
-            ),
-            if (chipValue != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
-                child: Text(
-                  chipValue,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+      useInkWell: true,
+    );
+  }
+
+  void _showBackgroundModeSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final captureProvider = context.read<CaptureProvider>();
+            final enabled = SharedPreferencesUtil().backgroundModeEnabled;
+            final canEnable = captureProvider.hasNativeBackgroundStreamRoute;
+            void setEnabled(bool value) async {
+              if (value && !canEnable) return;
+              final accepted = await captureProvider.setBackgroundModeEnabled(value);
+              if (accepted) {
+                setSheetState(() {});
+                setState(() {});
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3C3C43),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.backgroundModeTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: (enabled || canEnable) ? (v) => setEnabled(v) : null,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.backgroundModeDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.backgroundModeNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!canEnable) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3A2A2A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.backgroundModeUnavailable,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-            ],
-            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showOfflineModeSheet() {
+    final captureProvider = context.read<CaptureProvider>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final enabled = SharedPreferencesUtil().batchModeEnabled;
+            Future<void> setEnabled(bool value) async {
+              final accepted = await captureProvider.setBatchMode(value);
+              if (!accepted && context.mounted) {
+                AppSnackbar.showSnackbarError(context.l10n.transcribeLaterNote);
+              }
+              if (sheetContext.mounted) {
+                setSheetState(() {});
+              }
+              if (mounted) {
+                setState(() {});
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3C3C43),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.transcribeLaterTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: (v) => setEnabled(v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.transcribeLaterDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.transcribeLaterNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (SharedPreferencesUtil().getBool('batchStorageFull')) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3A2A2A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.transcribeLaterStorageFull,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -296,6 +446,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const CustomVocabularyPage());
                   },
                 ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.memories,
+                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const MemoriesPage());
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -326,35 +484,23 @@ class _ProfilePageState extends State<ProfilePage> {
                   chipValue: _voiceResponseModeLabel(SharedPreferencesUtil().voiceResponseMode),
                   onTap: _showVoiceResponseModeSheet,
                 ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // PAYMENT & PRIVACY SECTION
-            _buildSectionContainer(
-              children: [
-                _buildProfileItem(
-                  title: context.l10n.paymentMethods,
-                  icon: const FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const PaymentsPage());
-                  },
-                ),
+                if (PlatformService.isAndroid) ...[
+                  const Divider(height: 1, color: Color(0xFF3C3C43)),
+                  _buildProfileItem(
+                    title: context.l10n.backgroundModeTitle,
+                    icon: const FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
+                    showBetaTag: true,
+                    chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
+                    onTap: _showBackgroundModeSheet,
+                  ),
+                ],
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: context.l10n.conversationDisplay,
-                  icon: const FaIcon(FontAwesomeIcons.list, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const ConversationDisplaySettings());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.dataPrivacy,
-                  icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
-                  },
+                  title: context.l10n.transcribeLaterTitle,
+                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
+                  chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
+                  onTap: _showOfflineModeSheet,
                 ),
               ],
             ),

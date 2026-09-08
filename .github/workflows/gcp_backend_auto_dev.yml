@@ -1,112 +1,310 @@
 name: Auto Deploy Backend to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
+
+# Share the development backend mutation domain with manual deploys, traffic
+# repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
 
 env:
   SERVICE: backend
   REGION: us-central1
+  # Cloud Run tags are service-scoped. Reusing this tag atomically moves each
+  # service's candidate URL without accumulating stale no-traffic routes.
+  CANDIDATE_TAG: candidate
+  CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+  CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+  CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+  LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
+  MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+  MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+  MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+  MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+  MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+  MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+  MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+  MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+  MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+  PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+  PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+  RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+  REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+  STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+  STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+  SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+  TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+  TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+  TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+  TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+  X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+  X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
 
 jobs:
+  scope:
+    name: Decide backend deployment scope
+    # This unprivileged decision runs before source admission, Firestore
+    # readiness, image work, or any cloud mutation. workflow_run does not
+    # support a safe workflow-level paths filter, so inspect its immutable SHA.
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering main commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # The parent diff is the only local scope proof required here. Current
+          # main/supersession proof below is bounded to read-only GitHub API calls.
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the backend deployment
+        id: scope
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "${RELEASE_SHA}^{commit}"; then
+            echo "Cannot resolve triggering Release Eligibility SHA: $RELEASE_SHA" >&2
+            exit 1
+          fi
+
+          # Supersession is deliberately NOT decided here any more. It used to
+          # green-no-op any triggering SHA that current main had moved past,
+          # which strands a backend change whenever an unrelated commit merges
+          # first: the backend commit no-ops for being behind, and the newer
+          # commit no-ops because its own diff is unrelated, so the change
+          # never deploys. Admission now resolves the newest eligible commit
+          # instead, which subsumes supersession without that hole.
+          if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
+            # An unavailable parent is uncertain scope: retain the existing
+            # exact-SHA admission and deployment path rather than skip.
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not resolve the triggering commit parent."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
+          printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: the triggering commit can affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy no-op"
+              echo "Green no-op: the triggering commit cannot affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  firestore_readiness:
+    # A workflow_run can access deployment credentials, so never run source
+    # code until the first completed proof identifies the exact current commit
+    # on this repository's main branch. Every later checkout and release vector
+    # uses that admitted SHA rather than a mutable default branch ref.
+    needs: scope
+    if: >-
+      needs.scope.outputs.applies == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: development
+    permissions:
+      # actions:read lists Release Eligibility proofs, exactly as the manual
+      # deploy lane's readiness job already does.
+      actions: 'read'
+      contents: 'read'
+    runs-on: ubuntu-latest
+    outputs:
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+    steps:
+      # This checks out current main solely to run the guard script. Source
+      # selected by the workflow_run is not checked out or executed until the
+      # guard establishes it is still this exact main commit.
+      - name: Checkout current main for automatic source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve and verify the newest proven main source
+        id: admitted_source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+
+          # Deploy the newest commit on main that carries a first-attempt,
+          # successful Release Eligibility proof, not the commit that happened
+          # to trigger this run. Concurrent runs then converge on one target
+          # instead of racing, and a revert can never be undone by a late run
+          # for the commit it reverted. This mirrors the proof lookup the
+          # manual deploy lane already performs.
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
+          runs_path="$(mktemp)"
+          trap 'rm -f "$runs_path"' EXIT
+          # --fail makes an HTTP error a non-zero exit, which set -e turns into
+          # a failed admission. There is deliberately no status capture and no
+          # error suppression: an unreadable proof listing must refuse to
+          # deploy, never fall through to a weaker rule.
+          curl --silent --show-error --fail --output "$runs_path" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api_base/repos/$GITHUB_REPOSITORY/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=success&per_page=50"
+
+          admitted_sha=''
+          while read -r candidate_sha candidate_attempt; do
+            [[ "$candidate_attempt" == "1" ]] || continue
+            [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+            git cat-file -e "${candidate_sha}^{commit}" 2>/dev/null || continue
+            if git merge-base --is-ancestor "$candidate_sha" "$main_sha"; then
+              admitted_sha="$candidate_sha"
+              break
+            fi
+          done < <(jq -r '.workflow_runs[] | "\(.head_sha) \(.run_attempt)"' "$runs_path")
+          if [[ -z "$admitted_sha" ]]; then
+            echo "::error title=No proven main source::No successful first-attempt Release Eligibility proof is reachable from current main."
+            exit 1
+          fi
+
+          if git merge-base --is-ancestor "$admitted_sha" "$main_sha"; then
+            sha_is_ancestor_of_main=true
+          else
+            sha_is_ancestor_of_main=false
+          fi
+          if git merge-base --is-ancestor "$RELEASE_SHA" "$admitted_sha"; then
+            trigger_is_ancestor_of_sha=true
+          else
+            trigger_is_ancestor_of_sha=false
+          fi
+          python3 .github/scripts/verify_auto_backend_release_admission.py \
+            --sha "$admitted_sha" \
+            --trigger-sha "$RELEASE_SHA" \
+            --main-sha "$main_sha" \
+            --run-attempt "$RELEASE_RUN_ATTEMPT" \
+            --sha-is-ancestor-of-main "$sha_is_ancestor_of_main" \
+            --trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"
+          printf 'admitted_sha=%s\n' "$admitted_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Require read-only Firestore credentials
+        env:
+          GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+        run: |
+          if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
+            echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the development environment before deploying."
+            exit 1
+          fi
+
+      - name: Checkout admitted Firestore source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+
+      - name: Google Auth for read-only Firestore inventory
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify read-only Firestore credentials target the development runtime project
+        env:
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          credential_project="$(gcloud config get-value project 2>/dev/null)"
+          if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
+            echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
+            exit 1
+          fi
+          if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but RUNTIME_GCP_PROJECT_ID is $RUNTIME_GCP_PROJECT_ID."
+            exit 1
+          fi
+
+      - name: Verify serving Firestore indexes
+        id: firestore_readiness
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only \
+            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Validate blocked Firestore schema proposal
+        id: validate_firestore_proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Preserve blocked Firestore schema proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        with:
+          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: firestore_readiness
     environment: development
     permissions:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
-      # To workaround "no space left on device" issue of GitHub-hosted runner
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+      - name: Checkout workflow dispatch surface for composite action
+        uses: actions/checkout@v7
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
+      - name: Deploy backend stack
+        uses: ./.github/actions/deploy-backend-stack
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Login to GCR
-        run: gcloud auth configure-docker
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
-
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./backend/Dockerfile
-          push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Deploy ${{ env.SERVICE }} to Cloud Run
-        id: deploy-backend
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
+          deploy_profile: auto-dev
+          admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          environment: development
+          deploy_targets: all
+          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          runtime_env: ${{ vars.ENV }}
+          region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=based-hardware
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-
-      - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
-        id: deploy-backend-sync
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-sync
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=based-hardware
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-
-      - name: Connect to GKE cluster
-        run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
-        run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
-            ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
-
-      - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
-        id: deploy-backend-integration
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-integration
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=based-hardware
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-
-      - name: Show Output
-        run: echo "Backend deployed to development environment"
-
+          candidate_tag: ${{ env.CANDIDATE_TAG }}

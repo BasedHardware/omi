@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/logger.dart';
@@ -27,9 +27,26 @@ class BleBridge implements BleFlutterApi {
   final Map<String, DeviceReadyCallback> _deviceReadyCallbacks = {};
   final Map<String, RssiUpdateCallback> _rssiCallbacks = {};
 
-  void Function(String state)? bluetoothStateChangedCallback;
+  final Set<void Function(String state)> _bluetoothStateListeners = {};
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
+  VoidCallback? pairingLostCallback;
+
+  final List<void Function(String fileName)> _batchRecordingFinalizedListeners = [];
+
+  void addBatchRecordingFinalizedListener(void Function(String fileName) cb) =>
+      _batchRecordingFinalizedListeners.add(cb);
+
+  void removeBatchRecordingFinalizedListener(void Function(String fileName) cb) =>
+      _batchRecordingFinalizedListeners.remove(cb);
+
+  /// Registers a listener for adapter-state changes without taking ownership of
+  /// the bridge's other BLE callbacks. Returns a disposer so short-lived UI and
+  /// service consumers cannot leave stale listeners behind.
+  VoidCallback addBluetoothStateListener(void Function(String state) listener) {
+    _bluetoothStateListeners.add(listener);
+    return () => _bluetoothStateListeners.remove(listener);
+  }
 
   void registerPeripheral({
     required String peripheralUuid,
@@ -60,7 +77,9 @@ class BleBridge implements BleFlutterApi {
 
   @override
   void onBluetoothStateChanged(String state) {
-    bluetoothStateChangedCallback?.call(state);
+    for (final listener in List.of(_bluetoothStateListeners)) {
+      listener(state);
+    }
   }
 
   @override
@@ -78,6 +97,7 @@ class BleBridge implements BleFlutterApi {
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
     _disconnectCallbacks[key]?.call(false, error);
+    if (error == 'pairing_lost') pairingLostCallback?.call();
   }
 
   @override
@@ -100,5 +120,15 @@ class BleBridge implements BleFlutterApi {
   void onStateRestored(List<String> peripheralUuids) {
     Logger.debug('BleBridge: State restored for ${peripheralUuids.length} peripherals');
     stateRestoredCallback?.call(peripheralUuids);
+  }
+
+  @override
+  void onBatchRecordingFinalized(String fileName) {
+    debugPrint(
+      'BleBridge: batch recording finalized: $fileName (${_batchRecordingFinalizedListeners.length} listeners)',
+    );
+    for (final cb in List.of(_batchRecordingFinalizedListeners)) {
+      cb(fileName);
+    }
   }
 }

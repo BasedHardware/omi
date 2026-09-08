@@ -1,0 +1,7 @@
+{
+  "version": "0.11.549",
+  "date": "2026-06-27",
+  "changes": [
+    "Improved chat scrolling across desktop and mobile so streamed replies follow only while you are at the live edge"
+  ]
+}

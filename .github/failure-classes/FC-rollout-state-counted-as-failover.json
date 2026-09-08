@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-rollout-state-counted-as-failover",
+  "violated_contract": "A selected serving state is not a failover outcome. Shadow, disabled, zero-percent, and out-of-bucket canary policy may intentionally select the last-known-good route without any provider failure; classifying that ordinary selection as fallback makes healthy rollout exposure indistinguishable from a recovered dependency fault and can drive a false elevated-fallback alert.",
+  "canonical_prevention": "Classify the initially selected route independently as active, canary, or LKG, and set actual fallback only after a bounded eligible failure followed by a successful different provider or route. Preserve a non-none failure reason and bounded from/to route evidence for that success, publish rollout exposure separately, and cover normal active/canary/LKG serving plus recovered and exhausted failover in behavioral tests.",
+  "canonical_prevention_artifact": [
+    "backend/llm_gateway/gateway/executor.py",
+    "backend/tests/unit/test_llm_gateway_executor.py",
+    "backend/tests/unit/test_llm_gateway_openai_compatible.py"
+  ],
+  "evidence_prs": [
+    8427,
+    9462
+  ],
+  "scope_hints": [
+    "backend/llm_gateway/**",
+    "backend/charts/monitoring/**"
+  ],
+  "status": "open"
+}

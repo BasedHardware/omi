@@ -39,7 +39,13 @@ class WalFileManager {
       return [];
     }
 
-    final jsonData = jsonDecode(content);
+    dynamic jsonData;
+    try {
+      jsonData = jsonDecode(content);
+    } on FormatException catch (e) {
+      Logger.debug('WAL file is corrupted ($e), trying backup');
+      return await _loadFromBackup();
+    }
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
       Logger.debug('Invalid WAL file format, returning empty list');
       return [];
@@ -95,7 +101,13 @@ class WalFileManager {
       return [];
     }
 
-    final jsonData = jsonDecode(content);
+    dynamic jsonData;
+    try {
+      jsonData = jsonDecode(content);
+    } on FormatException catch (e) {
+      Logger.debug('WAL backup file is also corrupted ($e), returning empty list');
+      return [];
+    }
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
       return [];
     }

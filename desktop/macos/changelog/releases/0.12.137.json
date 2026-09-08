@@ -1,0 +1,7 @@
+{
+  "version": "0.12.137",
+  "date": "2026-07-26",
+  "changes": [
+    "Added privacy-safe analytics for macOS integration connect/import outcomes (Calendar, Gmail, Apple Notes, Local Files, X, ChatGPT, Claude) across the Apps tab and onboarding — attempts, successes, reconnect-required, and classified failures by build — so the connect funnel is finally measurable on macOS; no screen content, cookies, tokens, account IDs, or raw errors are sent."
+  ]
+}

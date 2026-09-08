@@ -1,94 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getOptionalStripe } from '@/lib/stripe';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import {
+  AllSubscriptionSourcesFailedError,
+  MRR_STATUSES,
+  PIPELINE_STATUSES,
+  countNonUsdSubscriptions,
+  fetchOmiSubscriptions,
+  groupByProduct,
+  isAnnual,
+  OMI_PLAN_PRODUCTS,
+} from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
+
+function cacheKey(): string {
+  // v3: `trialing` can now be null, and `nonUsdSkipped` was added.
+  return `subscriptions:v3`;
+}
+
+export { cacheKey as subscriptionsCacheKey };
+
+export async function computeSubscriptions() {
+  const stripe = getOptionalStripe();
+
+  if (!stripe) {
+    return {
+      totalSubscriptions: 0,
+      monthly: 0,
+      annual: 0,
+      trialing: null,
+      nonUsdSkipped: 0,
+      byProduct: [],
+      unavailable: true,
+    };
+  }
+
+  const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+
+  const annual = subscriptions.filter(isAnnual).length;
+
+  // A trial is pipeline, not a paid subscription: counted, but never mixed into the paid totals.
+  // Null on failure, so a fetch error can never render as a real "0 trials".
+  let trialing: number | null = null;
+  let trialPartial = false;
+  try {
+    const trials = await fetchOmiSubscriptions(stripe, PIPELINE_STATUSES);
+    trialing = trials.subscriptions.length;
+    trialPartial = trials.partial;
+  } catch (error) {
+    console.error('Error fetching trialing subscriptions:', error);
+    trialPartial = true;
+  }
+
+  return {
+    totalSubscriptions: subscriptions.length,
+    monthly: subscriptions.length - annual,
+    annual,
+    trialing,
+    /** Subscriptions whose prices are non-USD, so they are excluded from every MRR total. */
+    nonUsdSkipped: countNonUsdSubscriptions(subscriptions),
+    byProduct: groupByProduct(subscriptions, OMI_PLAN_PRODUCTS),
+    partial: partial || trialPartial,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const stripe = getOptionalStripe();
-    const priceIdOne = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const priceIdTwo = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
+    const key = cacheKey();
 
-    if (!stripe || !priceIdOne || !priceIdTwo) {
-      return NextResponse.json({
-        totalSubscriptions: 0,
-        priceIdOne: { count: 0, priceId: priceIdOne || '' },
-        priceIdTwo: { count: 0, priceId: priceIdTwo || '' },
-        unavailable: true,
-      });
+    const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptions>>>(key);
+    if (cached) {
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
-    // Fetch all active subscriptions for both price IDs with pagination
-    const fetchAllSubscriptions = async (priceId: string) => {
-      let allSubscriptions: any[] = [];
-      let hasMore = true;
-      let startingAfter: string | undefined = undefined;
-
-      while (hasMore) {
-        const params: any = {
-          status: 'active',
-          price: priceId,
-          limit: 100, // Stripe's maximum per request
-        };
-
-        if (startingAfter) {
-          params.starting_after = startingAfter;
-        }
-
-        const subscriptions = await stripe.subscriptions.list(params);
-        allSubscriptions = allSubscriptions.concat(subscriptions.data);
-        
-        hasMore = subscriptions.has_more;
-        if (hasMore && subscriptions.data.length > 0) {
-          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
-        }
-      }
-
-      return allSubscriptions;
-    };
-
-    const results = await Promise.allSettled([
-      fetchAllSubscriptions(priceIdOne),
-      fetchAllSubscriptions(priceIdTwo),
-    ]);
-
-    const subscriptionsOne = results[0].status === 'fulfilled' ? results[0].value : [];
-    const subscriptionsTwo = results[1].status === 'fulfilled' ? results[1].value : [];
-
-    if (results[0].status === 'rejected') {
-      console.error('Error fetching monthly subscriptions:', results[0].reason);
-    }
-    if (results[1].status === 'rejected') {
-      console.error('Error fetching annual subscriptions:', results[1].reason);
-    }
-
-    // If ALL legs failed, return an error — don't serve fabricated zeros
-    if (results.every((r) => r.status === 'rejected')) {
-      return NextResponse.json(
-        { error: 'All subscription data sources failed' },
-        { status: 502 }
-      );
-    }
-
-    const partial = results.some((r) => r.status === 'rejected');
-    const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
-
-    return NextResponse.json({
-      totalSubscriptions,
-      partial,
-      priceIdOne: {
-        count: subscriptionsOne.length,
-        priceId: priceIdOne,
-      },
-      priceIdTwo: {
-        count: subscriptionsTwo.length,
-        priceId: priceIdTwo,
-      },
-    });
+    const payload = await computeSubscriptions();
+    await setPayload(key, payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
+    if (error instanceof AllSubscriptionSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error fetching subscription stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch subscription data' },

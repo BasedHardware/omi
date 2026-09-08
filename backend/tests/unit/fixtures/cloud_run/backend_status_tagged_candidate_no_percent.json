@@ -1,0 +1,17 @@
+{
+  "status": {
+    "latestCreatedRevisionName": "backend-candidate",
+    "traffic": [
+      {
+        "revisionName": "backend-candidate",
+        "tag": "candidate",
+        "url": "https://candidate---backend.example.test"
+      },
+      {
+        "percent": 100,
+        "revisionName": "backend-serving",
+        "url": "https://backend.example.test"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1078 @@
+import Foundation
+import OmiWAL
+
+// MARK: - Conversation Models (matching Flutter app)
+
+enum ConversationStatus: String, Codable {
+  case inProgress = "in_progress"
+  case processing = "processing"
+  case merging = "merging"
+  case completed = "completed"
+  case failed = "failed"
+}
+
+/// What the conversation row/header should communicate about a conversation's
+/// state. Computed from `status`, `isLocked`, and `structured.title` together
+/// so the UI can show a meaningful label instead of collapsing every empty-
+/// title case to "Untitled".
+enum ConversationDisplayState: Equatable {
+  /// Normal: LLM produced a title.
+  case titled(String)
+  /// Pipeline is still running. Title will arrive soon.
+  case processing
+  /// Stored with the raw transcript only; the backend enriches it the first
+  /// time it is opened (free-tier desktop capture). Nothing is running.
+  case awaitingFirstOpen
+  /// Conversation is locked (subscription gating). Title intentionally hidden.
+  case locked
+  /// Processing finished but the title slot is empty AND the transcript has
+  /// recoverable content — usually a silent LLM failure. Surface a reprocess
+  /// affordance.
+  case untitledRecoverable
+  /// Empty/very short capture — genuinely nothing to title. No CTA.
+  case untitledEmpty
+  /// Pipeline reported failure. Reprocess affordance offered.
+  case failed
+}
+
+enum ConversationSource: String, Codable {
+  case friend
+  case omi
+  case workflow
+  case openglass
+  case screenpipe
+  case sdcard
+  case fieldy
+  case bee
+  case xor
+  case frame
+  case friendCom = "friend_com"
+  case appleWatch = "apple_watch"
+  case phone
+  case desktop
+  case limitless
+  case plaud
+  case unknown
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let rawValue = try container.decode(String.self)
+    self = ConversationSource(rawValue: rawValue) ?? .unknown
+  }
+}
+
+struct ConversationMutationResponse: Decodable {
+  let status: String
+  let conversation: ServerConversation
+}
+
+/// Durable Cloud Tasks finalization projection returned by
+/// GET /v1/conversations/{id}/finalization.
+struct ConversationFinalizationStatusResponse: Decodable, Equatable {
+  let jobID: String
+  let status: String
+  let terminal: Bool
+  let retryable: Bool
+  let attemptCount: Int
+  let taskRetryCount: Int
+  let meetingTreatmentEligible: Bool?
+
+  enum CodingKeys: String, CodingKey {
+    case jobID = "job_id"
+    case status
+    case terminal
+    case retryable
+    case attemptCount = "attempt_count"
+    case taskRetryCount = "task_retry_count"
+    case meetingTreatmentEligible = "meeting_treatment_eligible"
+  }
+}
+
+enum TranscriptPresenceState: Equatable {
+  case omittedFromResponse
+  case lockedOrRedacted
+  case includedEmpty
+  case includedNonEmpty
+}
+
+/// Minimal playback metadata projected from the generated conversation DTO.
+/// The archive adapter resolves short-lived signed URLs separately, so these
+/// values deliberately contain no URL or provider-specific storage path.
+struct CaptureAudioFile: Codable, Equatable, Identifiable {
+  let id: String
+  let duration: TimeInterval
+
+  init(_ wire: OmiAPI.AudioFile) {
+    id = wire.id
+    duration = wire.duration
+  }
+}
+
+struct CaptureConversationAudioSpan: Codable, Equatable {
+  let fileID: String
+  let wallOffset: TimeInterval
+  let artifactOffset: TimeInterval
+  let length: TimeInterval
+
+  init(_ wire: OmiAPI.ConversationAudioSpan) {
+    fileID = wire.fileId
+    wallOffset = wire.wallOffset
+    artifactOffset = wire.artifactOffset
+    length = wire.len
+  }
+}
+
+struct CaptureConversationAudio: Codable, Equatable {
+  let duration: TimeInterval
+  let capturedDuration: TimeInterval
+  let spans: [CaptureConversationAudioSpan]
+
+  init(_ wire: OmiAPI.ConversationAudio) {
+    duration = wire.duration
+    capturedDuration = wire.capturedDuration
+    spans = (wire.spans ?? []).map(CaptureConversationAudioSpan.init)
+  }
+}
+
+struct ServerConversation: Codable, Identifiable, Equatable {
+  static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
+    lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
+      && lhs.startedAt == rhs.startedAt
+      && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
+      && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
+      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.source == rhs.source
+      && lhs.audioFiles == rhs.audioFiles
+      && lhs.conversationAudio == rhs.conversationAudio
+      && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+  }
+
+  let id: String
+  let createdAt: Date
+  /// Canonical Firestore document revision. Never derived from recording timestamps.
+  let updatedAt: Date?
+  let startedAt: Date?
+  let finishedAt: Date?
+
+  var structured: Structured
+  var transcriptSegments: [TranscriptSegment]
+  var transcriptSegmentsIncluded: Bool
+  let geolocation: Geolocation?
+  let photos: [ConversationPhoto]
+
+  let appsResults: [AppResponse]
+  let source: ConversationSource?
+  let language: String?
+  /// Capture playback metadata is server-owned and is intentionally not used
+  /// by the legacy conversations surface. The chat-first capture archive reads
+  /// it only after a detail fetch, then resolves signed URLs through its own
+  /// bounded adapter.
+  let audioFiles: [CaptureAudioFile]
+  let conversationAudio: CaptureConversationAudio?
+
+  let status: ConversationStatus
+  let discarded: Bool
+  let deleted: Bool
+  let isLocked: Bool
+  var starred: Bool
+  let folderId: String?
+  let inputDeviceName: String?
+  // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
+  // cleared once enriched on first open (get_conversation_by_id).
+  let deferred: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case createdAt = "created_at"
+    case updatedAt = "updated_at"
+    case startedAt = "started_at"
+    case finishedAt = "finished_at"
+    case structured
+    case transcriptSegments = "transcript_segments"
+    case geolocation
+    case photos
+    case appsResults = "apps_results"
+    case source
+    case language
+    case status
+    case discarded
+    case deleted
+    case isLocked = "is_locked"
+    case starred
+    case folderId = "folder_id"
+    case inputDeviceName = "input_device_name"
+    case deferred
+  }
+
+  init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Conversation (generated from app-client OpenAPI).
+    // The domain model adapts wire string-dates into Date via the APIClient
+    // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
+    // whether transcript_segments was present in the response.
+    let wire = try OmiAPI.Conversation(from: decoder)
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+
+    id = wire.id
+    createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
+    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
+    structured = Structured(wire.structured)
+    // container.contains distinguishes `"transcript_segments": null` (present,
+    // empty) from the key being absent (omitted). wire.transcriptSegments is
+    // nil for both, so we must check the container directly.
+    transcriptSegmentsIncluded = container.contains(.transcriptSegments)
+    transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
+    geolocation = wire.geolocation
+    photos = (wire.photos ?? []).map(ConversationPhoto.init)
+    appsResults = (wire.appsResults ?? []).map(AppResponse.init)
+    source = wire.source.map { ConversationSource(rawValue: $0.rawValue) ?? .unknown }
+    language = wire.language
+    audioFiles = (wire.audioFiles ?? []).map(CaptureAudioFile.init)
+    conversationAudio = wire.conversationAudio.map(CaptureConversationAudio.init)
+    status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
+    discarded = wire.discarded ?? false
+    deleted = false  // backend REST Conversation schema does not expose deleted
+    isLocked = wire.isLocked ?? false
+    starred = wire.starred ?? false
+    folderId = wire.folderId
+    inputDeviceName = wire.clientDeviceId
+    deferred = wire.deferred ?? false
+  }
+
+  // Date helpers shared with Event/Structured adapters.
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
+    if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: decoder.codingPath,
+        debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
+      ))
+  }
+
+  private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
+    guard let s else { return nil }
+    return try parseDate(s, decoder: decoder)
+  }
+
+  /// Memberwise initializer for creating from local storage
+  init(
+    id: String,
+    createdAt: Date,
+    updatedAt: Date? = nil,
+    startedAt: Date?,
+    finishedAt: Date?,
+    structured: Structured,
+    transcriptSegments: [TranscriptSegment],
+    transcriptSegmentsIncluded: Bool,
+    geolocation: Geolocation?,
+    photos: [ConversationPhoto],
+    appsResults: [AppResponse],
+    source: ConversationSource?,
+    language: String?,
+    audioFiles: [CaptureAudioFile] = [],
+    conversationAudio: CaptureConversationAudio? = nil,
+    status: ConversationStatus,
+    discarded: Bool,
+    deleted: Bool,
+    isLocked: Bool,
+    starred: Bool,
+    folderId: String?,
+    inputDeviceName: String?,
+    deferred: Bool = false
+  ) {
+    self.id = id
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+    self.startedAt = startedAt
+    self.finishedAt = finishedAt
+    self.structured = structured
+    self.transcriptSegments = transcriptSegments
+    self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
+    self.geolocation = geolocation
+    self.photos = photos
+    self.appsResults = appsResults
+    self.source = source
+    self.language = language
+    self.audioFiles = audioFiles
+    self.conversationAudio = conversationAudio
+    self.status = status
+    self.discarded = discarded
+    self.deleted = deleted
+    self.isLocked = isLocked
+    self.starred = starred
+    self.folderId = folderId
+    self.inputDeviceName = inputDeviceName
+    self.deferred = deferred
+  }
+
+  /// Returns the title from structured data, or a fallback.
+  ///
+  /// Prefer ``displayTitle`` in UI surfaces — it disambiguates between "no
+  /// title because still processing", "no title because locked", and "no
+  /// title because the LLM gave up" instead of collapsing all three to a
+  /// flat "Untitled Conversation" string. This getter stays for callers
+  /// that need a single plain string (exports, log lines, copy-to-clipboard).
+  var title: String {
+    structured.title.isEmpty ? "Untitled Conversation" : structured.title
+  }
+
+  /// What a row/header should actually render for this conversation's state.
+  ///
+  /// Four cases the UI used to collapse into the same "Untitled" string:
+  /// 1. processing / in-progress / merging → "Processing…" (no real title yet)
+  /// 2. locked (subscription gating) → "Locked"
+  /// 3. completed but empty title + non-trivial transcript → "Untitled" with
+  ///    a reprocess affordance — the LLM didn't produce a title, usually a
+  ///    transient processing failure that's recoverable.
+  /// 4. genuinely empty/short capture → "Untitled", no CTA (probably ambient
+  ///    noise; pushing reprocess would just burn tokens).
+  var displayState: ConversationDisplayState {
+    if isLocked {
+      return .locked
+    }
+    switch status {
+    case .inProgress, .processing, .merging:
+      // A deferred row wears `processing` on the wire only so the client
+      // re-fetches on open. Nothing is running for it, so it must not look
+      // like — or be timed like — a live pipeline.
+      return deferred ? .awaitingFirstOpen : .processing
+    case .failed:
+      return .failed
+    case .completed:
+      if !structured.title.isEmpty {
+        return .titled(structured.title)
+      }
+      // Heuristic: a "real" conversation has at least one transcript segment
+      // long enough to plausibly have content (≥ 5 words). Below that, it's
+      // probably ambient/accidental capture and we shouldn't push reprocess.
+      let hasRecoverableContent = transcriptSegments.contains { seg in
+        seg.text.split(whereSeparator: { $0.isWhitespace }).count >= 5
+      }
+      return hasRecoverableContent ? .untitledRecoverable : .untitledEmpty
+    }
+  }
+
+  /// Identity for a row that has no LLM title yet: the first substantive
+  /// transcript line, or the recording time when the transcript is not loaded.
+  /// Never the pipeline status — that belongs in the badge.
+  var provisionalTitle: String {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments)
+      ?? "Recording at \(Self.provisionalTimeFormatter.string(from: startedAt ?? createdAt))"
+  }
+
+  /// True when `provisionalTitle` quotes the transcript rather than the clock.
+  var hasTranscriptProvisionalTitle: Bool {
+    ConversationProcessingProgress.provisionalTitle(from: transcriptSegments) != nil
+  }
+
+  private static let provisionalTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+
+  /// The string a row/header should display in the title slot.
+  var displayTitle: String {
+    switch displayState {
+    case .titled(let title): return title
+    case .processing, .awaitingFirstOpen: return provisionalTitle
+    case .locked: return "Locked"
+    case .failed: return "Failed to process"
+    case .untitledRecoverable, .untitledEmpty: return "Untitled"
+    }
+  }
+
+  /// True when the conversation has content but no title and the user can
+  /// recover it by re-running the LLM processing step. Drives the "Reprocess"
+  /// affordance in the UI.
+  var canReprocess: Bool {
+    switch displayState {
+    case .untitledRecoverable, .failed: return true
+    default: return false
+    }
+  }
+
+  /// Returns the overview/summary from structured data
+  var overview: String {
+    structured.overview
+  }
+
+  /// Returns duration in seconds: the transcript span when the record carries
+  /// usable transcript segments, the wall window when it does not (including
+  /// records whose segments all fail validation).
+  ///
+  /// `started_at` is the live-socket streaming-session origin, not the moment
+  /// this conversation's speech began, so `finished_at - started_at` over-counts
+  /// by however long the socket had already been open — an 8s dictation scrap
+  /// read as 42m45s here while mobile showed 8s (#4056). Mirrors the backend
+  /// helper `utils/conversations/duration.py` and the Flutter
+  /// `ServerConversation.getDurationInSeconds`; the shared vectors live in
+  /// `contracts/parity/conversation_duration.json`.
+  ///
+  /// A list response that omits `transcript_segments` leaves nothing to measure,
+  /// so those rows still report the wall window — the same answer mobile gives.
+  var durationInSeconds: Int {
+    if let span = transcriptSpanSeconds {
+      // A finite segment end can still exceed Int.max (a malformed persisted
+      // segment), where Int(Double) would trap and crash the client. Clamp in
+      // Double space first: Double(Int.max) rounds up to 2^63, so converting
+      // that boundary back to Int traps — compare before converting.
+      let bounded = max(span, 0)
+      return bounded >= Double(Int.max) ? Int.max : Int(bounded)
+    }
+    guard let start = startedAt, let end = finishedAt else { return 0 }
+    return max(0, Int(end.timeIntervalSince(start)))
+  }
+
+  /// Largest valid segment `end`, or nil when no segment can answer. Segments
+  /// with blank text, non-finite bounds, or `end < start` are ignored.
+  private var transcriptSpanSeconds: Double? {
+    var span: Double?
+    for segment in transcriptSegments {
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      guard segment.start.isFinite, segment.end.isFinite, segment.end >= segment.start else { continue }
+      let end = max(0, segment.end)
+      span = span.map { Swift.max($0, end) } ?? end
+    }
+    return span
+  }
+
+  /// Formatted duration string (e.g., "5m 30s")
+  var formattedDuration: String {
+    let duration = durationInSeconds
+    let minutes = duration / 60
+    let seconds = duration % 60
+    if minutes > 0 {
+      return "\(minutes)m \(seconds)s"
+    }
+    return "\(seconds)s"
+  }
+
+  /// Full transcript as a single string
+  var transcript: String {
+    transcriptSegments.map { segment in
+      let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
+      return "\(speaker): \(segment.text)"
+    }.joined(separator: "\n\n")
+  }
+
+  var transcriptPresenceState: TranscriptPresenceState {
+    if isLocked {
+      return .lockedOrRedacted
+    }
+    if !transcriptSegmentsIncluded {
+      return .omittedFromResponse
+    }
+    if transcriptSegments.isEmpty {
+      return .includedEmpty
+    }
+    return .includedNonEmpty
+  }
+
+  var shouldFetchDetailForTranscript: Bool {
+    transcriptPresenceState == .omittedFromResponse
+  }
+}
+
+/// One headed block of the conversation's written summary.
+///
+/// The backend moved the substance of a summary out of `overview` and into these when the notes
+/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
+/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
+/// has carried them since; this domain model did not, so every desktop surface was rendering the
+/// compatibility paragraph and calling it the summary.
+struct SummarySection: Codable, Equatable, Identifiable {
+  var id: String { heading }
+  let heading: String
+  let bodyMarkdown: String
+  let sourceSegmentIDs: [String]
+
+  init(heading: String, bodyMarkdown: String, sourceSegmentIDs: [String] = []) {
+    self.heading = heading
+    self.bodyMarkdown = bodyMarkdown
+    self.sourceSegmentIDs = sourceSegmentIDs
+  }
+
+  init(_ wire: OmiAPI.Section) {
+    heading = wire.heading
+    bodyMarkdown = wire.bodyMarkdown
+    sourceSegmentIDs = wire.sourceSegmentIds ?? []
+  }
+}
+
+struct Structured: Codable, Equatable {
+  var title: String
+  let overview: String
+  let emoji: String
+  let category: String
+  let actionItems: [ActionItem]
+  let events: [Event]
+  /// The headed blocks the backend writes the real summary into. Empty for captures processed
+  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  let sections: [SummarySection]
+
+  init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
+    // The domain model adds tolerant defaults the wire DTO does not guarantee.
+    let wire = try OmiAPI.Structured(from: decoder)
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    // CategoryEnum is the backend's strict union; fall back to "other" when the
+    // backend returns a value outside it (decoded as ._unknown).
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
+  }
+
+  init(_ wire: OmiAPI.Structured) {
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
+    sections = (wire.sections ?? []).map(SummarySection.init)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let actionItemsWire = actionItems.map {
+      OmiAPI.ActionItem(
+        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: $0.captureOwner,
+        completed: $0.completed,
+        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
+        dueAt: nil, ownershipConfidence: nil, sourceSegmentIds: $0.sourceSegmentIDs,
+        targetTaskId: $0.targetTaskID, updatedAt: nil)
+    }
+    let eventsWire = events.map {
+      OmiAPI.Event(
+        created: $0.created,
+        description_: $0.description,
+        duration: $0.duration,
+        start: Event.encodeDateForWire($0.startsAt),
+        title: $0.title
+      )
+    }
+    let sectionsWire = sections.map {
+      OmiAPI.Section(
+        bodyMarkdown: $0.bodyMarkdown, heading: $0.heading, sourceSegmentIds: $0.sourceSegmentIDs)
+    }
+    let wire = OmiAPI.Structured(
+      actionItems: actionItemsWire,
+      category: OmiAPI.CategoryEnum(rawValue: category),
+      emoji: emoji,
+      events: eventsWire,
+      overview: overview,
+      sections: sectionsWire,
+      title: title
+    )
+    try wire.encode(to: encoder)
+  }
+
+  /// Memberwise initializer for creating from local storage
+  init(
+    title: String,
+    overview: String,
+    emoji: String,
+    category: String,
+    actionItems: [ActionItem],
+    events: [Event],
+    sections: [SummarySection] = []
+  ) {
+    self.title = title
+    self.overview = overview
+    self.emoji = emoji
+    self.category = category
+    self.actionItems = actionItems
+    self.events = events
+    self.sections = sections
+  }
+}
+
+struct ActionItem: Codable, Identifiable, Equatable {
+  var id: String { description }
+  let description: String
+  let completed: Bool
+  let deleted: Bool
+  /// Extraction ownership from the backend (`capture_owner`), e.g. "user" when
+  /// the item is the user's own commitment. Optional: legacy captures and
+  /// locally cached rows predate the field.
+  let captureOwner: String?
+  /// Canonical task linkage is optional on legacy captures. When present, the
+  /// canonical conversation detail uses this opaque ID for a typed deep link
+  /// rather than inferring a task from the description.
+  let targetTaskID: String?
+  let sourceSegmentIDs: [String]
+
+  init(
+    description: String,
+    completed: Bool,
+    deleted: Bool,
+    captureOwner: String? = nil,
+    targetTaskID: String? = nil,
+    sourceSegmentIDs: [String] = []
+  ) {
+    self.description = description
+    self.completed = completed
+    self.deleted = deleted
+    self.captureOwner = captureOwner
+    self.targetTaskID = targetTaskID
+    self.sourceSegmentIDs = sourceSegmentIDs
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
+  /// desktop-only field the backend REST schema does not expose; it defaults
+  /// to false on decode.
+  init(_ wire: OmiAPI.ActionItem) {
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+    self.captureOwner = wire.captureOwner
+    self.targetTaskID = wire.targetTaskId
+    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+  }
+
+  init(from decoder: Decoder) throws {
+    let wire = try OmiAPI.ActionItem(from: decoder)
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+    self.captureOwner = wire.captureOwner
+    self.targetTaskID = wire.targetTaskId
+    self.sourceSegmentIDs = wire.sourceSegmentIds ?? []
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let wire = OmiAPI.ActionItem(
+      candidateAction: nil,
+      captureConfidence: nil,
+      captureKind: nil,
+      captureOwner: captureOwner,
+      completed: completed,
+      completedAt: nil,
+      concreteDeliverable: nil,
+      conversationId: nil,
+      createdAt: nil,
+      description_: description,
+      dueAt: nil,
+      ownershipConfidence: nil,
+      sourceSegmentIds: sourceSegmentIDs,
+      targetTaskId: targetTaskID,
+      updatedAt: nil
+    )
+    try wire.encode(to: encoder)
+  }
+}
+
+struct Event: Codable, Identifiable, Equatable {
+  var id: String { title + startsAt.description }
+  let title: String
+  let startsAt: Date
+  let duration: Int
+  let description: String
+  let created: Bool
+
+  /// Adapter from the generated wire DTO (OmiAPI.Event). The backend `Event`
+  /// model exposes `start` (not `starts_at`); this adapter maps the field and
+  /// parses the ISO8601 string into a Date using the APIClient decoder's
+  /// strategy via JSONDecoder reuse.
+  init(_ wire: OmiAPI.Event) {
+    self.title = wire.title
+    self.startsAt = Self.parseDate(wire.start) ?? Date()
+    self.duration = wire.duration ?? 0
+    self.description = wire.description_ ?? ""
+    self.created = wire.created ?? false
+  }
+
+  init(from decoder: Decoder) throws {
+    // Decode via the generated wire shape, then adapt. `start` is the backend
+    // field name (generated); cached rows may still use legacy `starts_at`.
+    if let wire = try? OmiAPI.Event(from: decoder) {
+      self.title = wire.title
+      self.startsAt = Self.parseDate(wire.start) ?? Date()
+      self.duration = wire.duration ?? 0
+      self.description = wire.description_ ?? ""
+      self.created = wire.created ?? false
+      return
+    }
+
+    enum LegacyKeys: String, CodingKey {
+      case title, start
+      case startsAt = "starts_at"
+      case duration, description, created
+    }
+    let container = try decoder.container(keyedBy: LegacyKeys.self)
+    self.title = try container.decode(String.self, forKey: .title)
+    let startString =
+      try container.decodeIfPresent(String.self, forKey: .start)
+      ?? container.decodeIfPresent(String.self, forKey: .startsAt)
+    self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
+    self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
+    self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    self.created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let startString = Self.encodeDate(startsAt)
+    let wire = OmiAPI.Event(
+      created: created,
+      description_: description,
+      duration: duration,
+      start: startString,
+      title: title
+    )
+    try wire.encode(to: encoder)
+  }
+
+  // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String) -> Date? {
+    fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
+  }
+
+  private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {
+    if let date = parseDate(s) { return date }
+    let context = DecodingError.Context(
+      codingPath: decoder.codingPath,
+      debugDescription: "Event.start is not a valid ISO8601 date: \(s)"
+    )
+    throw DecodingError.dataCorrupted(context)
+  }
+
+  private static func encodeDate(_ date: Date) -> String {
+    fractionalFormatter.string(from: date)
+  }
+
+  fileprivate static func encodeDateForWire(_ date: Date) -> String {
+    encodeDate(date)
+  }
+}
+
+/// Schema authority: OmiAPI.Translation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO, so this is a thin alias.
+typealias TranscriptTranslation = OmiAPI.Translation
+
+struct TranscriptSegment: Codable, Identifiable {
+  let id: String
+  let backendId: String?
+  let text: String
+  let speaker: String?
+  let isUser: Bool
+  let personId: String?
+  let start: Double
+  let end: Double
+  let translations: [TranscriptTranslation]
+
+  var speakerId: Int {
+    guard let speaker = speaker else { return 0 }
+    let parts = speaker.split(separator: "_")
+    if parts.count > 1, let id = Int(parts[1]) {
+      return id
+    }
+    return 0
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, text, speaker
+    case isUser = "is_user"
+    case personId = "person_id"
+    case start, end, translations
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedId = try container.decodeIfPresent(String.self, forKey: .id)
+    id = decodedId ?? UUID().uuidString
+    backendId = decodedId
+    text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+    speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
+    isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
+    personId = try container.decodeIfPresent(String.self, forKey: .personId)
+    start = try container.decodeIfPresent(Double.self, forKey: .start) ?? 0
+    end = try container.decodeIfPresent(Double.self, forKey: .end) ?? 0
+    translations =
+      try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.TranscriptSegment). The
+  /// generated wire exposes `speaker_id` directly; the domain derives it from
+  /// `speaker` to preserve legacy behavior.
+  init(_ wire: OmiAPI.TranscriptSegment) {
+    let decodedId = wire.id
+    self.id = decodedId ?? UUID().uuidString
+    self.backendId = decodedId
+    self.text = wire.text
+    self.speaker = wire.speaker
+    self.isUser = wire.isUser
+    self.personId = wire.personId
+    self.start = wire.start
+    self.end = wire.end
+    self.translations = []  // wire translations map omitted; legacy field
+  }
+
+  /// Memberwise initializer for creating from local storage
+  init(
+    id: String,
+    backendId: String? = nil,
+    text: String,
+    speaker: String?,
+    isUser: Bool,
+    personId: String?,
+    start: Double,
+    end: Double,
+    translations: [TranscriptTranslation] = []
+  ) {
+    self.id = id
+    self.backendId = backendId
+    self.text = text
+    self.speaker = speaker
+    self.isUser = isUser
+    self.personId = personId
+    self.start = start
+    self.end = end
+    self.translations = translations
+  }
+
+  /// Formatted timestamp string (e.g., "00:01:30 - 00:01:45")
+  var timestampString: String {
+    let startTime = formatTime(start)
+    let endTime = formatTime(end)
+    return "\(startTime) - \(endTime)"
+  }
+
+  private func formatTime(_ seconds: Double) -> String {
+    let totalSeconds = Int(seconds)
+    let hours = totalSeconds / 3600
+    let minutes = (totalSeconds % 3600) / 60
+    let secs = totalSeconds % 60
+    return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+  }
+}
+
+/// Schema authority: OmiAPI.Geolocation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO; the prior adapter only passed
+/// the four exposed fields through with no transformation (no Date parsing,
+/// no defaults, no computed properties), so this is a thin alias.
+typealias Geolocation = OmiAPI.Geolocation
+
+struct ConversationPhoto: Codable, Identifiable {
+  let id: String
+  let base64: String
+  let contentType: String?
+  let storageId: String?
+  let description: String?
+  let createdAt: Date
+  let discarded: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id, base64
+    case contentType = "content_type"
+    case storageId = "storage_id"
+    case description
+    case createdAt = "created_at"
+    case discarded
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+    base64 = try container.decodeIfPresent(String.self, forKey: .base64) ?? ""
+    contentType = try container.decodeIfPresent(String.self, forKey: .contentType)
+    storageId = try container.decodeIfPresent(String.self, forKey: .storageId)
+    description = try container.decodeIfPresent(String.self, forKey: .description)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.ConversationPhoto). The wire
+  /// exposes `created_at` as a string; this adapter parses it via the shared
+  /// ISO8601 strategy.
+  init(_ wire: OmiAPI.ConversationPhoto) {
+    self.id = wire.id ?? UUID().uuidString
+    self.base64 = wire.base64
+    self.contentType = wire.contentType
+    self.storageId = wire.storageId
+    self.description = wire.description_
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    if let s = wire.createdAt, let d = f.date(from: s) ?? std.date(from: s) {
+      self.createdAt = d
+    } else {
+      self.createdAt = Date()
+    }
+    self.discarded = wire.discarded ?? false
+  }
+}
+
+struct AppResponse: Codable, Identifiable {
+  // `id` is stored, not computed: a nil `app_id` (legacy summary results still
+  // carry it as null) must keep one stable identity for its lifetime. A
+  // computed `appId ?? UUID().uuidString` minted a fresh id on every read, so
+  // SwiftUI's Identifiable ForEach tore down and recreated the row on every
+  // diff — losing per-row @State (expansion, hover) and flashing transitions.
+  let id: String
+  let appId: String?
+  let content: String
+
+  enum CodingKeys: String, CodingKey {
+    case appId = "app_id"
+    case content
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.AppResult).
+  init(_ wire: OmiAPI.AppResult) {
+    self.appId = wire.appId
+    self.id = wire.appId ?? UUID().uuidString
+    self.content = wire.content
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let decodedAppId = try container.decodeIfPresent(String.self, forKey: .appId)
+    appId = decodedAppId
+    id = decodedAppId ?? UUID().uuidString
+    content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+  }
+}
+
+struct ConversationSearchResult: Codable {
+  let items: [ServerConversation]
+  let currentPage: Int
+  let totalPages: Int
+
+  enum CodingKeys: String, CodingKey {
+    case items
+    case currentPage = "current_page"
+    case totalPages = "total_pages"
+  }
+}
+
+// MARK: - Merge Response
+
+/// Response from merge conversations API
+struct MergeConversationsResponse: Decodable {
+  let status: String
+  let message: String
+  let warning: String?
+  let conversationIds: [String]
+  let newConversationId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case status, message, warning
+    case conversationIds = "conversation_ids"
+    case newConversationId = "new_conversation_id"
+  }
+}
+
+// MARK: - Folder Models
+
+struct Folder: Codable, Identifiable {
+  let id: String
+  var name: String
+  var description: String?
+  var color: String
+  let createdAt: Date
+  let updatedAt: Date
+  var order: Int
+  let isDefault: Bool
+  let isSystem: Bool
+  let categoryMapping: String?
+  let conversationCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, description, color, order
+    case createdAt = "created_at"
+    case updatedAt = "updated_at"
+    case isDefault = "is_default"
+    case isSystem = "is_system"
+    case categoryMapping = "category_mapping"
+    case conversationCount = "conversation_count"
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    description = try container.decodeIfPresent(String.self, forKey: .description)
+    color = try container.decodeIfPresent(String.self, forKey: .color) ?? "#6B7280"
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
+    isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+    isSystem = try container.decodeIfPresent(Bool.self, forKey: .isSystem) ?? false
+    categoryMapping = try container.decodeIfPresent(String.self, forKey: .categoryMapping)
+    conversationCount = try container.decodeIfPresent(Int.self, forKey: .conversationCount) ?? 0
+  }
+}
+
+struct CreateFolderRequest: Encodable {
+  let name: String
+  let description: String?
+  let color: String?
+}
+
+struct UpdateFolderRequest: Encodable {
+  let name: String?
+  let description: String?
+  let color: String?
+  let order: Int?
+}
+
+struct MoveToFolderRequest: Encodable {
+  let folderId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case folderId = "folder_id"
+  }
+}
+
+/// A calendar-detected meeting participant the summary can be emailed to.
+struct ConversationShareRecipient: Codable, Equatable {
+  let name: String?
+  let email: String
+
+  /// Compact label for a "Send to …" control: first name when known, else the
+  /// email's local part.
+  var shortLabel: String {
+    if let name, !name.isEmpty {
+      return name.split(separator: " ").first.map(String.init) ?? name
+    }
+    return email.split(separator: "@").first.map(String.init) ?? email
+  }
+}
+
+struct ConversationShareRecipientsResponse: Codable {
+  let recipients: [ConversationShareRecipient]
+}
+
+struct ConversationShareEmailResponse: Codable {
+  let sentTo: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case sentTo = "sent_to"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "version": "0.12.196",
+  "date": "2026-08-21",
+  "changes": [
+    "Proactive insights can now answer a question you are writing — when your history holds the answer (a link, a name, a date), Omi delivers it instead of staying silent",
+    "Proactive insights now react to what you type: a question written mid-visit is evaluated within seconds instead of waiting for an app switch, and answers found in your memories are delivered on beta"
+  ]
+}

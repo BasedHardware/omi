@@ -6,7 +6,8 @@ import PackageDescription
 let package = Package(
     name: "omi-lib",
     platforms: [
-        .iOS(.v17)  // Set minimum version to iOS 17
+        .iOS(.v17),  // Set minimum version to iOS 17
+        .macOS(.v14)  // SwiftData parity with iOS 17; AudioKit needs macOS 11+
     ],
     products: [
         .library(

@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The chat no longer forces you back to the bottom while the assistant is thinking or writing — scroll up to read earlier messages and it stays put, then follows again once you return to the latest message."
+  ]
+}

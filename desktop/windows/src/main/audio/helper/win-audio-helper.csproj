@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <AssemblyName>win-audio-helper</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- NAudio.CoreAudioApi wraps WASAPI IMMDeviceEnumerator / IAudioEndpointVolume /
+         IAudioMeterInformation, the direct analogs of macOS's CoreAudio mute path. -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+</Project>

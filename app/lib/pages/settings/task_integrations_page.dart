@@ -11,11 +11,11 @@ import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/services/asana_service.dart';
-import 'package:omi/services/clickup_service.dart';
-import 'package:omi/services/google_tasks_service.dart';
-import 'package:omi/services/todoist_service.dart';
+import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
+import 'package:omi/services/integrations/clickup_service.dart';
+import 'package:omi/services/integrations/google_tasks_service.dart';
+import 'package:omi/services/integrations/todoist_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -80,22 +80,22 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
     }
   }
 
-  IconData get icon {
+  FaIconData get icon {
     switch (this) {
       case TaskIntegrationApp.appleReminders:
-        return Icons.checklist_rounded;
+        return FontAwesomeIcons.listCheck;
       case TaskIntegrationApp.googleTasks:
-        return Icons.task_alt;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.clickup:
-        return Icons.rocket_launch;
+        return FontAwesomeIcons.rocket;
       case TaskIntegrationApp.asana:
-        return Icons.analytics_outlined;
+        return FontAwesomeIcons.chartLine;
       case TaskIntegrationApp.trello:
-        return Icons.dashboard_outlined;
+        return FontAwesomeIcons.tableColumns;
       case TaskIntegrationApp.todoist:
-        return Icons.check_circle_outline;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.monday:
-        return Icons.calendar_today;
+        return FontAwesomeIcons.calendarDay;
     }
   }
 
@@ -239,6 +239,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.todoist) {
       final todoistService = TodoistService();
       if (!todoistService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await todoistService.authenticate();
@@ -248,7 +249,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
             // Provider will refresh when user returns to this page
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -275,6 +276,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.asana) {
       final asanaService = AsanaService();
       if (!asanaService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await asanaService.authenticate();
@@ -284,7 +286,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -309,6 +311,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.googleTasks) {
       final googleTasksService = GoogleTasksService();
       if (!googleTasksService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await googleTasksService.authenticate();
@@ -318,7 +321,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -343,6 +346,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     if (app == TaskIntegrationApp.clickup) {
       final clickupService = ClickUpService();
       if (!clickupService.isAuthenticated) {
+        final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
         if (shouldAuth == true) {
           final success = await clickupService.authenticate();
@@ -352,7 +356,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
               );
             }
-            await context.read<TaskIntegrationProvider>().setSelectedApp(app);
+            await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
@@ -504,10 +508,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                          color:
+                              isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
+                        child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                       ),
               ),
             ),

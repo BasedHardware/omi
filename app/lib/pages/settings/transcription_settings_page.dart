@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,9 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
+/// Top-level transcription source the user picks from the single dropdown.
+enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
+
 class TranscriptionSettingsPage extends StatefulWidget {
   const TranscriptionSettingsPage({super.key});
 
@@ -36,11 +40,14 @@ class TranscriptionSettingsPage extends StatefulWidget {
 
 class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
+  // "Omi Parakeet" is an Omi-hosted engine (not custom STT): _useCustomStt stays false and the
+  // backend is told via transcriptionModel='parakeet'. This flag distinguishes it from plain Omi.
+  bool _omiParakeet = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
-  Timer? _logRefreshTimer;
+  bool _sendRawAudioToOmi = true;
   String? _validationError;
 
   // On-device model download state
@@ -146,6 +153,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final activeConfig = SharedPreferencesUtil().customSttConfig;
     setState(() {
       _useCustomStt = activeConfig.isEnabled;
+      _omiParakeet = !_useCustomStt && SharedPreferencesUtil().transcriptionModel == 'parakeet';
       _selectedProvider = activeConfig.provider == SttProvider.omi ? SttProvider.openai : activeConfig.provider;
 
       // Load all provider configs from preferences
@@ -187,6 +195,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _hostController.text = config?.host ?? '127.0.0.1';
     _portController.text = (config?.port ?? 8080).toString();
     _urlController.text = config?.url ?? '';
+    _sendRawAudioToOmi = config?.sendRawAudioToOmi ?? true;
 
     // Auto-detect model for on-device whisper if not set
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
@@ -369,6 +378,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? url,
     String? host,
     int? port,
+    bool? sendRawAudioToOmi,
   }) {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
@@ -386,6 +396,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: current?.params,
       audioFieldName: current?.audioFieldName,
       schemaJson: current?.schemaJson,
+      sendRawAudioToOmi: sendRawAudioToOmi ?? current?.sendRawAudioToOmi ?? _sendRawAudioToOmi,
     );
   }
 
@@ -419,11 +430,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? audioFieldName;
 
     if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
-      url = requestJson['url'];
-      requestType = requestJson['request_type'];
-      headers = requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null;
-      params = requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null;
-      audioFieldName = requestJson['audio_field_name'];
+      url = requestJson['url']?.toString();
+      requestType = requestJson['request_type']?.toString();
+      headers = requestJson['headers'] is Map
+          ? (requestJson['headers'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+          : null;
+      params = requestJson['params'] is Map
+          ? (requestJson['params'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+          : null;
+      audioFieldName = requestJson['audio_field_name']?.toString();
     }
 
     // Use URL from text field for custom providers
@@ -449,6 +464,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: params,
       audioFieldName: audioFieldName,
       schemaJson: schemaJson,
+      sendRawAudioToOmi: _sendRawAudioToOmi,
     );
   }
 
@@ -524,6 +540,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final modelPath = _urlController.text;
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
+        if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -550,7 +567,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Build the active config (with correct provider based on _useCustomStt)
       final currentConfig = _buildCurrentConfig();
-      final activeConfig = _useCustomStt ? currentConfig : CustomSttConfig(provider: SttProvider.omi);
+      final activeConfig = _useCustomStt ? currentConfig : const CustomSttConfig(provider: SttProvider.omi);
+
+      // Omi-hosted engine choice (server-side): pick Parakeet vs the default via transcriptionModel.
+      // The backend reads this as stt_service and routes to the self-hosted Parakeet service.
+      final prevModel = SharedPreferencesUtil().transcriptionModel;
+      if (!_useCustomStt) {
+        SharedPreferencesUtil().transcriptionModel = _omiParakeet ? 'parakeet' : 'soniox';
+      }
+      final modelChanged = SharedPreferencesUtil().transcriptionModel != prevModel;
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
       final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
@@ -558,7 +583,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       await SharedPreferencesUtil().saveCustomSttConfig(activeConfig);
       Logger.debug(SharedPreferencesUtil().customSttConfig.provider.toString());
 
-      if (configChanged && mounted) {
+      if ((configChanged || modelChanged) && mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }
 
@@ -566,9 +591,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errorSaving(readableError(e))), backgroundColor: Colors.red.shade700),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -590,6 +617,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (config.params != null) 'params': config.params,
       if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
       if (config.schemaJson != null) 'schema': config.schemaJson,
+      'send_raw_audio_to_omi': config.sendRawAudioToOmi,
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
@@ -616,79 +644,83 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _importConfig() async {
     final controller = TextEditingController();
 
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(context.l10n.importConfiguration, style: const TextStyle(color: Colors.white, fontSize: 18)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(context.l10n.pasteJsonConfig, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-              const SizedBox(height: 12),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D0D0D),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade800),
-                ),
-                child: TextField(
-                  controller: controller,
-                  maxLines: null,
-                  expands: true,
-                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.transcriptionJsonPlaceholder,
-                    hintStyle: TextStyle(color: Colors.grey.shade700),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.all(12),
+    try {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: Text(context.l10n.importConfiguration, style: const TextStyle(color: Colors.white, fontSize: 18)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.l10n.pasteJsonConfig, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                const SizedBox(height: 12),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D0D0D),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade800),
                   ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      context.l10n.addApiKeyAfterImport,
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                  child: TextField(
+                    controller: controller,
+                    maxLines: null,
+                    expands: true,
+                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.transcriptionJsonPlaceholder,
+                      hintStyle: TextStyle(color: Colors.grey.shade700),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(12),
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        context.l10n.addApiKeyAfterImport,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+                if (clipboardData?.text != null) {
+                  controller.text = clipboardData!.text!;
+                }
+              },
+              child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: Text(context.l10n.import, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          TextButton(
-            onPressed: () async {
-              final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-              if (clipboardData?.text != null) {
-                controller.text = clipboardData!.text!;
-              }
-            },
-            child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(context.l10n.import, style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+      );
 
-    if (result != null && result.isNotEmpty) {
-      _parseAndApplyConfig(result);
+      if (result != null && result.isNotEmpty) {
+        _parseAndApplyConfig(result);
+      }
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -714,6 +746,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _urlController.text = config.url ?? '';
         _hostController.text = config.host ?? '127.0.0.1';
         _portController.text = (config.port ?? 8080).toString();
+        _sendRawAudioToOmi = config.sendRawAudioToOmi;
 
         // Update JSON configs
         if (config.requestType != null || config.headers != null || config.params != null) {
@@ -795,6 +828,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
+                    const SizedBox(height: 20),
+                    _buildRawAudioForwardingSetting(),
                     const SizedBox(height: 10),
                     _buildAdvancedSection(),
                     _buildLogsSection(),
@@ -965,7 +1000,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 children: [
                   const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
                   const SizedBox(width: 8),
-                  Text(context.l10n.highResourceUsage, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Expanded(
+                    child: Text(
+                      context.l10n.highResourceUsage,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -999,81 +1039,111 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (!proceed) return;
 
+    await _saveCurrentProviderConfig();
+    if (!mounted) return;
+
     setState(() {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
-      if (!isIOS) {
-        _checkLocalModel();
-      }
+      _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
       PlatformManager.instance.analytics.transcriptionSourceSelected(
         source: isIOS ? 'custom_on_device_ios' : 'custom_on_device',
       );
     });
   }
 
-  Widget _buildSourceSelector() {
-    // Determine current active tab
-    // 0: Omi (default)
-    // 1: On-Device
-    // 2: BYO Cloud
-    int currentTab = 0;
-    if (_useCustomStt) {
-      if (_selectedProvider == SttProvider.onDeviceWhisper) {
-        currentTab = 1;
-      } else {
-        currentTab = 2;
-      }
+  /// Current transcription source, derived from the persisted STT state.
+  TranscriptionMode get _currentMode {
+    if (!_useCustomStt) return _omiParakeet ? TranscriptionMode.omiParakeet : TranscriptionMode.omi;
+    if (_selectedProvider == SttProvider.onDeviceWhisper) return TranscriptionMode.onDevice;
+    return TranscriptionMode.cloudProvider;
+  }
+
+  String _modeLabel(TranscriptionMode mode) {
+    switch (mode) {
+      case TranscriptionMode.omi:
+        return context.l10n.transcriptionSourceOmi;
+      case TranscriptionMode.onDevice:
+        return context.l10n.onDevice;
+      case TranscriptionMode.cloudProvider:
+        return context.l10n.cloudProvider;
+      case TranscriptionMode.omiParakeet:
+        return SttProviderConfig.get(SttProvider.omiParakeet).displayName;
     }
+  }
+
+  Future<void> _selectMode(TranscriptionMode mode) async {
+    switch (mode) {
+      case TranscriptionMode.omi:
+        setState(() {
+          _useCustomStt = false;
+          _omiParakeet = false;
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
+        break;
+      case TranscriptionMode.onDevice:
+        await _switchToOnDevice();
+        break;
+      case TranscriptionMode.cloudProvider:
+        if (_selectedProvider == SttProvider.onDeviceWhisper) {
+          await _saveCurrentProviderConfig();
+          if (!mounted) return;
+        }
+        setState(() {
+          _useCustomStt = true;
+          _omiParakeet = false;
+          // Leaving on-device: fall back to a real BYO cloud provider.
+          if (_selectedProvider == SttProvider.onDeviceWhisper) {
+            _selectedProvider = SttProvider.openai;
+            _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
+          }
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
+        _validateAndSetError();
+        break;
+      case TranscriptionMode.omiParakeet:
+        // Omi-hosted Parakeet — server-routed (transcriptionModel='parakeet' on save), not custom STT.
+        setState(() {
+          _useCustomStt = false;
+          _omiParakeet = true;
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi_parakeet');
+        break;
+    }
+  }
+
+  Widget _buildSourceSelector() {
+    final mode = _currentMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 0,
-                title: context.l10n.transcriptionSourceOmi,
-                onTap: () {
-                  setState(() {
-                    _useCustomStt = false;
-                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
-                  });
-                },
-              ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade800),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<TranscriptionMode>(
+              value: mode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1A1A1A),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
+              items: TranscriptionMode.values
+                  .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
+                  .toList(),
+              onChanged: (m) async {
+                if (m != null && m != mode) await _selectMode(m);
+              },
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 1,
-                title: context.l10n.onDevice,
-                onTap: _switchToOnDevice,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 2,
-                title: context.l10n.cloudProvider,
-                onTap: () {
-                  setState(() {
-                    _useCustomStt = true;
-                    // Switch back to a cloud provider if currently valid onDevice
-                    if (_selectedProvider == SttProvider.onDeviceWhisper) {
-                      _selectedProvider = SttProvider.openai;
-                    }
-
-                    // Track source selection
-                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
-                  });
-                },
-              ),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 12),
-        if (currentTab == 0 && context.watch<UsageProvider>().showSubscriptionUI)
+        if (mode == TranscriptionMode.omi && context.watch<UsageProvider>().showSubscriptionUI)
           GestureDetector(
             onTap: () => Navigator.of(
               context,
@@ -1097,43 +1167,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
             ),
           )
-        else if (currentTab == 1)
+        else if (mode == TranscriptionMode.onDevice)
           Text(context.l10n.audioProcessedLocally, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))
-        else if (currentTab == 2)
+        else if (mode == TranscriptionMode.omiParakeet)
+          Text(
+            SttProviderConfig.get(SttProvider.omiParakeet).description,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          )
+        else if (mode == TranscriptionMode.cloudProvider)
           Text(context.l10n.payYourSttProvider, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
-    );
-  }
-
-  Widget _buildTabOption({required bool isSelected, required String title, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? Colors.white : Colors.grey.shade800, width: 1),
-        ),
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: isSelected ? Colors.black : Colors.grey.shade400,
-                  fontSize: 13, // Slightly smaller to fit 3 tabs
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -1141,6 +1184,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
 
     final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
+    final warningText = _sendRawAudioToOmi
+        ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
+        : context.l10n.transcriptionUnavailable;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1148,10 +1194,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason),
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
+            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ),
         ],
       ),
@@ -1159,9 +1202,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildProviderSection() {
-    // If using On-Device Whisper, hide the provider dropdown completely
-    // as the tab selection already determines the provider.
-    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+    // On-Device Whisper and Omi Parakeet are fixed providers chosen from the
+    // top dropdown — there's no sub-provider to pick, so hide this section.
+    if (_selectedProvider == SttProvider.onDeviceWhisper || _selectedProvider == SttProvider.omiParakeet) {
       return const SizedBox.shrink();
     }
 
@@ -1198,7 +1241,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                               margin: const EdgeInsets.only(left: 8),
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.2),
+                                color: Colors.green.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -1269,10 +1312,39 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       return _buildCustomPollingConfig();
     } else if (_selectedProvider == SttProvider.customLive) {
       return _buildCustomLiveConfig();
+    } else if (_selectedProvider == SttProvider.omiParakeet) {
+      // Omi-hosted — no API key needed, just language.
+      return _buildLanguageSelector();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
+    );
+  }
+
+  Widget _buildRawAudioForwardingSetting() {
+    return Material(
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade800),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _sendRawAudioToOmi,
+        onChanged: (value) {
+          setState(() {
+            _sendRawAudioToOmi = value;
+            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
+          });
+        },
+        secondary: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+        title: Text(context.l10n.sendRawAudioToOmi, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        subtitle: Text(
+          context.l10n.sendRawAudioToOmiDescription,
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+        ),
+      ),
     );
   }
 
@@ -1576,9 +1648,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withOpacity(0.2)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
@@ -1610,9 +1682,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.withOpacity(0.3)),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -1864,10 +1936,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (mounted) {
           setState(() {
             _isDownloadingModel = false;
-            _modelDownloadStatus = context.l10n.errorWithMessage(e.toString());
+            _modelDownloadStatus = context.l10n.errorWithMessage(readableError(e));
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.downloadErrorWithMessage(e.toString())), backgroundColor: Colors.red),
+            SnackBar(content: Text(context.l10n.downloadErrorWithMessage(readableError(e))), backgroundColor: Colors.red),
           );
         }
       }
@@ -1977,6 +2049,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               params: null,
               audioFieldName: null,
               schemaJson: current.schemaJson,
+              sendRawAudioToOmi: current.sendRawAudioToOmi,
             );
           }
           _regenerateRequestJson(_selectedProvider);
@@ -2035,7 +2108,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(context.l10n.modified, style: const TextStyle(color: Colors.white, fontSize: 10)),
@@ -2139,6 +2212,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 params: current.params,
                 audioFieldName: current.audioFieldName,
                 schemaJson: schemaJson,
+                sendRawAudioToOmi: current.sendRawAudioToOmi,
               );
             } catch (_) {}
           }
@@ -2444,7 +2518,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
                           margin: const EdgeInsets.only(left: 8),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.2),
+                            color: Colors.green.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -2486,7 +2560,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade900.withOpacity(0.3),
+                color: Colors.red.shade900.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.shade700),
               ),

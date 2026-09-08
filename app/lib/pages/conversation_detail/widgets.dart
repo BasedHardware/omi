@@ -34,6 +34,8 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'maps_util.dart';
 
 // Highlight search matches with current result highlighting
@@ -82,6 +84,25 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
   return spans;
 }
 
+/// Renders the structured summary's sections as headed markdown blocks so they go
+/// through the same markdown renderer (and styling) as the overview above them.
+String sectionsToMarkdown(List<Section> sections) {
+  final blocks = <String>[];
+  for (final section in sections) {
+    final heading = section.heading.trim();
+    final body = section.bodyMarkdown.trim();
+    if (heading.isEmpty && body.isEmpty) continue;
+    if (heading.isEmpty) {
+      blocks.add(body);
+    } else if (body.isEmpty) {
+      blocks.add('## $heading');
+    } else {
+      blocks.add('## $heading\n\n$body');
+    }
+  }
+  return blocks.join('\n\n');
+}
+
 class GetSummaryWidgets extends StatelessWidget {
   final String searchQuery;
   const GetSummaryWidgets({super.key, this.searchQuery = ''});
@@ -120,7 +141,48 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.isEmpty) return '';
+    if (attendees.length == 1) return _formatAttendeeName(attendees[0]);
+    if (attendees.length == 2) {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])}';
+    }
+    return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])} +${attendees.length - 2}';
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  void _showCalendarEventDetails(BuildContext context, CalendarEventLink calendarEvent) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CalendarEventDetailsSheet(
+        calendarEvent: calendarEvent,
+        onUnlink: () async {
+          await provider.unlinkCalendarEvent();
+        },
+      ),
+    );
+  }
+
   Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
+    final date = _getDateFormat(context, conversation.startedAt ?? conversation.createdAt);
+    final time = conversation.source == ConversationSource.sdcard
+        ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+        : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
+    final hasCalendarEvent = conversation.calendarEvent != null;
+
     return Consumer<FolderProvider>(
       builder: (context, folderProvider, _) {
         final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
@@ -129,21 +191,33 @@ class GetSummaryWidgets extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            // Date chip
+            // Combined date & time chip - uses Google Calendar logo when event is linked
             _buildChip(
-              label: _getDateFormat(context, conversation.startedAt ?? conversation.createdAt),
-              icon: Icons.calendar_today,
-            ),
-            // Time chip
-            _buildChip(
-              label: conversation.source == ConversationSource.sdcard
-                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-              icon: Icons.access_time,
+              label: '$date, $time',
+              icon: hasCalendarEvent ? null : Icons.calendar_today,
+              leadingWidget: hasCalendarEvent
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Image.asset(
+                        'assets/integration_app_logos/google-calendar.png',
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : null,
+              onTap: hasCalendarEvent ? () => _showCalendarEventDetails(context, conversation.calendarEvent!) : null,
             ),
             // Duration chip
             if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
               _buildChip(label: _getDuration(context, conversation), icon: Icons.timelapse),
+            // Attendees chip (only when calendar event is linked and has attendees)
+            if (hasCalendarEvent && conversation.calendarEvent!.attendees.isNotEmpty)
+              _buildChip(
+                label: _formatAttendeesLabel(conversation.calendarEvent!.attendees),
+                icon: Icons.people,
+                onTap: () => _showCalendarEventDetails(context, conversation.calendarEvent!),
+              ),
             // Folder chip
             _buildFolderChip(
               context: context,
@@ -187,6 +261,7 @@ class GetSummaryWidgets extends StatelessWidget {
         if (folderProvider.folders.isEmpty) {
           await folderProvider.loadFolders();
         }
+        if (!context.mounted) return;
         final newFolderId = await showMoveToFolderSheet(
           context,
           conversationId: conversationId,
@@ -208,7 +283,7 @@ class GetSummaryWidgets extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          color: folder != null ? folder.colorValue.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -397,7 +472,7 @@ class GetSummaryWidgets extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 2),
                   Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
@@ -411,14 +486,17 @@ class GetSummaryWidgets extends StatelessWidget {
     );
   }
 
-  Widget _buildChip({required String label, required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+  Widget _buildChip({required String label, IconData? icon, Widget? leadingWidget, VoidCallback? onTap}) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey.shade300),
+          if (leadingWidget != null)
+            leadingWidget
+          else if (icon != null)
+            Icon(icon, size: 14, color: Colors.grey.shade300),
           const SizedBox(width: 6),
           Text(
             label,
@@ -427,6 +505,11 @@ class GetSummaryWidgets extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: chip);
+    }
+    return chip;
   }
 
   @override
@@ -723,6 +806,7 @@ class AppResultDetailWidget extends StatefulWidget {
   final VoidCallback? onEditStarted;
   final VoidCallback? onEditCancelled;
   final bool Function()? canStartEditing;
+  final bool asSliver;
 
   const AppResultDetailWidget({
     super.key,
@@ -735,6 +819,7 @@ class AppResultDetailWidget extends StatefulWidget {
     this.onEditStarted,
     this.onEditCancelled,
     this.canStartEditing,
+    this.asSliver = false,
   });
 
   @override
@@ -790,9 +875,25 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     _exitEditing();
   }
 
+  /// Attribution label for the summary source. A first-party summary (notes v2
+  /// structured overview, `appId == null`) is Omi's own "Summary" — the same name
+  /// the bottom pill and desktop use; "Unknown App" is reserved for an app result
+  /// whose catalog lookup failed (SCA-359).
+  String _summarySourceLabel(BuildContext context) {
+    if (widget.app != null) return widget.app!.name.decodeString;
+    return widget.appResponse.appId == null ? context.l10n.summary : context.l10n.unknownApp;
+  }
+
   @override
   Widget build(BuildContext context) {
     final String content = widget.appResponse.content.trim().decodeString;
+    // Sections belong to Omi's own structured summary; an app summary replaces them.
+    final String sectionsContent =
+        widget.appResponse.appId == null ? sectionsToMarkdown(widget.conversation.structured.sections) : '';
+
+    if (widget.asSliver) {
+      return _buildSliver(context, content, sectionsContent);
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -802,7 +903,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
+            child: content.isEmpty && sectionsContent.isEmpty
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -838,8 +939,10 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                       ),
           ),
 
+          if (sectionsContent.isNotEmpty && !_isEditing) ConversationMarkdownWidget(content: sectionsContent),
+
           // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty && !_isEditing)
+          if ((content.isNotEmpty || sectionsContent.isNotEmpty) && !_isEditing)
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
@@ -906,7 +1009,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
+                                  _summarySourceLabel(context),
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -925,8 +1028,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                             ),
                           ),
                           const SizedBox(
-                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
                             width: 42,
+                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
                           ),
                         ],
                       ),
@@ -1010,31 +1113,28 @@ class GetAppsWidgets extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         final summarizedApp = provider.getSummarizedApp();
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: summarizedApp == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-          children: summarizedApp == null
-              ? [child!]
-              : [
-                  // Show the summarized app
-                  if (!provider.conversation.discarded) ...[
-                    AppResultDetailWidget(
-                      appResponse: summarizedApp,
-                      app: provider.findAppById(summarizedApp.appId),
-                      conversation: provider.conversation,
-                      searchQuery: searchQuery,
-                      currentResultIndex: currentResultIndex,
-                      canStartEditing: canStartEditing,
-                      onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
-                      onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
-                      onSaveSummary: onSaveSummary == null
-                          ? null
-                          : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                ],
+        if (summarizedApp == null) {
+          return SliverToBoxAdapter(child: child!);
+        }
+
+        return SliverMainAxisGroup(
+          slivers: [
+            if (!provider.conversation.discarded)
+              AppResultDetailWidget(
+                appResponse: summarizedApp,
+                app: provider.findAppById(summarizedApp.appId),
+                conversation: provider.conversation,
+                searchQuery: searchQuery,
+                currentResultIndex: currentResultIndex,
+                canStartEditing: canStartEditing,
+                onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
+                onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
+                onSaveSummary:
+                    onSaveSummary == null ? null : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
+                asSliver: true,
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+          ],
         );
       },
       child: ListView(
@@ -1141,37 +1241,15 @@ class GetGeolocationWidgets extends StatelessWidget {
                         height: 200,
                         child: Stack(
                           children: [
-                            // Map Image
-                            CachedNetworkImage(
-                              imageBuilder: (context, imageProvider) {
-                                return Container(
-                                  height: 200,
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                                  ),
-                                );
-                              },
-                              errorWidget: (context, url, error) {
-                                return Container(
-                                  height: 200,
-                                  color: const Color(0xFF2A2A2A),
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(Icons.location_off, size: 40, color: Colors.grey),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          context.l10n.couldNotLoadMap,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(color: Colors.grey),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                              imageUrl: MapsUtil.getMapImageUrl(geolocation.latitude!, geolocation.longitude!),
+                            // Map Image — served by the backend static-map
+                            // proxy through the shared preview widget; offline
+                            // or on failure it renders the pin-dot canvas.
+                            OmiMapPreview(
+                              key: const ValueKey('conversation_location_map'),
+                              pins: [
+                                OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!),
+                              ],
+                              backgroundColor: const Color(0xFF2A2A2A),
                             ),
                             // Gradient blur overlay from bottom
                             Positioned(
@@ -1219,8 +1297,153 @@ class GetGeolocationWidgets extends StatelessWidget {
   }
 }
 
+extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
+  Widget _buildSliver(BuildContext context, String content, String sectionsContent) {
+    if ((content.isEmpty && sectionsContent.isEmpty) || _isEditing) {
+      return SliverMainAxisGroup(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: content.isEmpty
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => const SummarizedAppsBottomSheet(),
+                              );
+                            },
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(color: Colors.grey),
+                                text: context.l10n.noSummaryForApp,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _buildEditor(context, content),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+        ],
+      );
+    }
+
+    return SliverMainAxisGroup(
+      slivers: [
+        if (content.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(
+              content: content,
+              searchQuery: widget.searchQuery,
+              currentResultIndex: widget.currentResultIndex,
+              onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+            ),
+          ),
+        if (sectionsContent.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 20),
+            sliver: ConversationMarkdownSliver(content: sectionsContent),
+          ),
+        SliverToBoxAdapter(child: _buildAppAttribution(context)),
+      ],
+    );
+  }
+
+  Widget _buildAppAttribution(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        if (widget.app != null) {
+          PlatformManager.instance.analytics.pageOpened('App Detail');
+          await routeToPage(context, AppDetailPage(app: widget.app!));
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12, left: 4),
+        child: Row(
+          children: [
+            widget.app != null
+                ? CachedNetworkImage(
+                    imageUrl: widget.app!.getImageUrl(),
+                    imageBuilder: (context, imageProvider) {
+                      return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
+                    },
+                    errorWidget: (context, url, error) {
+                      return const CircleAvatar(
+                        backgroundColor: Colors.white,
+                        radius: 12,
+                        child: Icon(Icons.error_outline_rounded, size: 12),
+                      );
+                    },
+                    progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                      backgroundColor: Colors.white,
+                      radius: 12,
+                      child: CircularProgressIndicator(
+                        value: progress.progress,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  )
+                : Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
+                      borderRadius: const BorderRadius.all(Radius.circular(12.0)),
+                    ),
+                    height: 24,
+                    width: 24,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
+                    ),
+                  ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _summarySourceLabel(context),
+                          maxLines: 1,
+                          style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
+                        ),
+                        if (widget.app != null)
+                          Text(
+                            widget.app!.description.decodeString,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 ///************************************************
 ///************ SETTINGS BOTTOM SHEET *************
+///************************************************
+
 ///************************************************
 
 class GetSheetTitle extends StatelessWidget {
@@ -1311,18 +1534,20 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                 return;
               } else {
                 webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
-                  showDialog(
-                    context: context,
-                    builder: (c) => getDialog(
-                      context,
-                      () => Navigator.pop(context),
-                      () => Navigator.pop(context),
-                      context.l10n.result,
-                      response,
-                      okButtonText: context.l10n.ok,
-                      singleButton: true,
-                    ),
-                  );
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (c) => getDialog(
+                        context,
+                        () => Navigator.pop(context),
+                        () => Navigator.pop(context),
+                        context.l10n.result,
+                        response,
+                        okButtonText: context.l10n.ok,
+                        singleButton: true,
+                      ),
+                    );
+                  }
                   changeLoadingAppIntegrationTest(false);
                 });
               }
@@ -1340,36 +1565,167 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
             },
           ),
         ),
-        // widget.memory.postprocessing?.status == MemoryPostProcessingStatus.completed
-        // widget.memory.postprocessing?.status != MemoryPostProcessingStatus.not_started
-        //     ? Card(
-        //         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-        //         child: ListTile(
-        //           title: const Text('Compare Transcripts Models'),
-        //           leading: const Icon(Icons.chat),
-        //           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-        //           onTap: () {
-        //             routeToPage(context, CompareTranscriptsPage(memory: widget.memory));
-        //           },
-        //         ),
-        //       )
-        //     : const SizedBox.shrink(),
       ],
     );
   }
 }
 
-_copyContent(BuildContext context, String content) {
-  Clipboard.setData(ClipboardData(text: content));
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)));
-  HapticFeedback.lightImpact();
-  Navigator.pop(context);
+class CalendarEventDetailsSheet extends StatefulWidget {
+  final CalendarEventLink calendarEvent;
+  final Future<void> Function()? onUnlink;
+
+  const CalendarEventDetailsSheet({super.key, required this.calendarEvent, this.onUnlink});
+
+  @override
+  State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
 }
 
-_getLoadingIndicator() {
-  return const SizedBox(
-    width: 24,
-    height: 24,
-    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-  );
+class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
+  bool _unlinking = false;
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  Future<void> _shareWithAttendees() async {
+    final emails = widget.calendarEvent.attendeeEmails;
+    if (emails.isEmpty) return;
+    final subject = Uri.encodeComponent('Notes: ${widget.calendarEvent.title}');
+    final uri = Uri.parse('mailto:${emails.join(',')}?subject=$subject');
+    await launchUrl(uri);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final start = widget.calendarEvent.startTime;
+    final end = widget.calendarEvent.endTime;
+    final timeStr = '${_fmt(start)} – ${_fmt(end)}';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.calendarEvent.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.access_time, size: 16, color: Colors.white54),
+              const SizedBox(width: 8),
+              Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            ],
+          ),
+          if (widget.calendarEvent.attendees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.people_outline, size: 16, color: Colors.white54),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.calendarEvent.attendees.join(', '),
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (widget.calendarEvent.htmlLink != null) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse(widget.calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
+              child: const Text(
+                'Open in Google Calendar',
+                style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFF2C2C2E)),
+          const SizedBox(height: 8),
+          // Share with attendees button
+          if (widget.calendarEvent.attendeeEmails.isNotEmpty)
+            _ActionRow(icon: Icons.share_outlined, label: 'Share with attendees', onTap: _shareWithAttendees),
+          // Unlink button
+          if (widget.onUnlink != null)
+            _ActionRow(
+              icon: Icons.link_off,
+              label: 'Unlink calendar event',
+              color: Colors.redAccent,
+              loading: _unlinking,
+              onTap: () async {
+                setState(() => _unlinking = true);
+                await widget.onUnlink!();
+                if (!context.mounted) return;
+                Navigator.pop(context);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+  final bool loading;
+
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.color = Colors.white,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: loading ? null : onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(
+          children: [
+            loading
+                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+                : Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: color, fontSize: 15)),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -1,0 +1,1067 @@
+"""Unit tests for the new MCP data endpoints/tools: action items, goals, chat,
+people, screen activity, and daily summaries.
+
+Tests both the REST handlers (routers/mcp.py) and the MCP tool dispatch
+(routers/mcp_sse.py) with mocked database calls, following the heavy-dep
+stubbing pattern in test_mcp_search_memories.py.
+"""
+
+from datetime import datetime, timezone
+import asyncio
+import json
+from unittest.mock import patch, MagicMock
+import os
+import sys
+from types import ModuleType, SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
+
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+class _AutoMockModule(ModuleType):
+    def __getattr__(self, name):
+        if name.startswith('__') and name.endswith('__'):
+            raise AttributeError(name)
+        mock = MagicMock()
+        setattr(self, name, mock)
+        return mock
+
+
+def _ensure_package_path(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+def _drop_stale_module(module_name, expected_file):
+    module = sys.modules.get(module_name)
+    if module is None:
+        return
+    module_file = getattr(module, '__file__', None)
+    if isinstance(module_file, str) and os.path.abspath(module_file) == expected_file:
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
+_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+_drop_stale_module(
+    'utils.retrieval.hybrid',
+    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+)
+_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+_drop_stale_module('models.conversation_enums', os.path.join(_BACKEND_DIR, 'models', 'conversation_enums.py'))
+_drop_stale_module('models.mcp_api_key', os.path.join(_BACKEND_DIR, 'models', 'mcp_api_key.py'))
+
+_stubs = [
+    'database._client',
+    'database.redis_db',
+    'database.conversations',
+    'database.memories',
+    'database.action_items',
+    'database.folders',
+    'database.users',
+    'database.user_usage',
+    'database.vector_db',
+    'database.chat',
+    'database.apps',
+    'database.goals',
+    'database.notifications',
+    'database.mem_db',
+    'database.mcp_api_key',
+    'database.mcp_oauth',
+    'database.daily_summaries',
+    'database.screen_activity',
+    'database.x_posts',
+    'database.fair_use',
+    'database.auth',
+    'database.dev_api_key',
+    'firebase_admin',
+    'firebase_admin.messaging',
+    'firebase_admin.auth',
+    'google.cloud.firestore',
+    'google.cloud.firestore_v1',
+    'google.cloud.firestore_v1.FieldFilter',
+    'google',
+    'google.cloud',
+    # mcp_sse imports FailedPrecondition from google.api_core.exceptions; the
+    # bare 'google' AutoMock is not a package unless __path__ is set below.
+    'google.api_core',
+    'google.api_core.exceptions',
+    'pinecone',
+    'typesense',
+    'opuslib',
+    'pydub',
+    'pusher',
+    'modal',
+    'utils.other.storage',
+    'utils.other.endpoints',
+    'utils.stt.pre_recorded',
+    'utils.stt.vad',
+    'utils.fair_use',
+    'utils.subscription',
+    'utils.conversations.process_conversation',
+    'utils.conversations.render',
+    'utils.notifications',
+    'utils.apps',
+    'utils.llm.memories',
+    'utils.llm.chat',
+    'utils.log_sanitizer',
+    'utils.executors',
+    'dependencies',
+]
+for mod_name in _stubs:
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+# Make stubbed google.* packages importable as packages (submodule imports).
+for _pkg_name in ('google', 'google.cloud', 'google.api_core'):
+    _pkg = sys.modules.get(_pkg_name)
+    if isinstance(_pkg, ModuleType) and not hasattr(_pkg, '__path__'):
+        _pkg.__path__ = []  # type: ignore[attr-defined]
+
+if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
+    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
+sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
+sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
+sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
+sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
+    side_effect=lambda dependency, _policy: dependency
+)
+sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.other.endpoints'].check_api_key_rate_limit = MagicMock()
+sys.modules['utils.apps'].update_personas_async = MagicMock()
+sys.modules['utils.executors'].db_executor = MagicMock()
+sys.modules['utils.executors'].postprocess_executor = MagicMock()
+sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
+sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+# AutoMockModule invents MagicMocks for missing attrs; those cannot be caught.
+# Reuse an existing Exception subclass if another test already installed one.
+_api_core_exc = sys.modules['google.api_core.exceptions']
+_existing_fp = getattr(_api_core_exc, 'FailedPrecondition', None)
+if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseException)):
+    _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
+
+from routers import mcp as rest  # noqa: E402
+from routers import mcp_sse as sse  # noqa: E402
+
+NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
+UID = "user-1"
+
+
+def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
+    route = next(
+        route
+        for route in rest.router.routes
+        if getattr(route, "path", None) == "/v1/mcp/memories" and "GET" in getattr(route, "methods", set())
+    )
+    dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
+    assert dependency_calls == [rest.get_mcp_memory_default_memory_read_context]
+    assert rest.get_uid_from_mcp_api_key not in dependency_calls
+
+    auth_context = SimpleNamespace(uid="auth-user")
+    authorization = SimpleNamespace(allowed=True)
+    memory_service = MagicMock()
+    memory_service.read.return_value = []
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
+        patch.object(rest, "MemoryService", return_value=memory_service),
+    ):
+        assert rest.get_memories(auth_context=auth_context) == []
+
+    authorize.assert_called_once_with(auth_context, db_client=rest.db)
+    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+
+
+async def _run_blocking_inline(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+class _JsonRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/json"}
+        self.body = body
+
+    async def json(self):
+        return self.body
+
+    async def is_disconnected(self):
+        return False
+
+
+class _FormRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        self.body = body
+
+    async def form(self):
+        return self.body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_json_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_JsonRequest(body)) == body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_form_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_FormRequest(body)) == body
+
+
+def test_sse_tools_list_filters_by_oauth_scopes():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})
+    names = {tool['name'] for tool in response['result']['tools']}
+
+    assert session_id is None
+    assert 'get_memories' in names
+    assert 'search_memories' in names
+    assert 'create_memory' not in names
+    assert 'get_conversations' not in names
+
+
+def test_oauth_authentication_carries_memory_identity_into_advertised_memory_tools():
+    oauth_token_context = {
+        'uid': UID,
+        'scopes': ['memories.read'],
+        'client_id': 'omi-chatgpt-prod',
+        'resource': sse.MCP_RESOURCE_URL,
+        'grant_id': 'oauth-grant-1',
+    }
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
+    grant_state = {
+        'grants': {
+            'mcp': {
+                'apps': {
+                    'omi-chatgpt-prod': {
+                        'keys': {
+                            'oauth-grant-1': {
+                                'enabled': True,
+                                'scopes': ['memories.read'],
+                                'default_read': True,
+                                'archive_read': False,
+                                'write': False,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snapshot = SimpleNamespace(exists=True, to_dict=lambda: grant_state)
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value.get.return_value = snapshot
+
+    with (
+        patch.object(sse.mcp_oauth_db, 'validate_access_token', return_value=oauth_token_context),
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+        patch.object(sse, '_enforce_mcp_cutover_access'),
+        patch.object(sse, 'db', fake_db),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        auth_context = sse.authenticate_mcp_request('Bearer omi_oat_chatgpt')
+        assert auth_context is not None
+        get_response, _ = sse.handle_mcp_message(
+            auth_context,
+            {'id': 1, 'method': 'tools/call', 'params': {'name': 'get_memories', 'arguments': {}}},
+        )
+        search_response, _ = sse.handle_mcp_message(
+            auth_context,
+            {
+                'id': 2,
+                'method': 'tools/call',
+                'params': {'name': 'search_memories', 'arguments': {'query': 'coffee'}},
+            },
+        )
+
+    assert auth_context.memory_context.app_id == 'omi-chatgpt-prod'
+    assert auth_context.memory_context.key_id == 'oauth-grant-1'
+    assert 'error' not in get_response
+    assert 'error' not in search_response
+
+
+def test_oauth_memory_tool_execution_honors_a_disabled_persisted_grant():
+    oauth_token_context = {
+        'uid': UID,
+        'scopes': ['memories.read'],
+        'client_id': 'omi-chatgpt-prod',
+        'resource': sse.MCP_RESOURCE_URL,
+        'grant_id': 'oauth-disabled-grant',
+    }
+    grant_state = {
+        'grants': {
+            'mcp': {
+                'apps': {
+                    'omi-chatgpt-prod': {
+                        'keys': {
+                            'oauth-disabled-grant': {
+                                'enabled': False,
+                                'scopes': ['memories.read'],
+                                'default_read': True,
+                                'archive_read': False,
+                                'write': False,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    snapshot = SimpleNamespace(exists=True, to_dict=lambda: grant_state)
+    fake_db = MagicMock()
+    fake_db.collection.return_value.document.return_value.get.return_value = snapshot
+    service = MagicMock()
+
+    with (
+        patch.object(sse.mcp_oauth_db, 'validate_access_token', return_value=oauth_token_context),
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+        patch.object(sse, '_enforce_mcp_cutover_access'),
+        patch.object(sse, 'db', fake_db),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        auth_context = sse.authenticate_mcp_request('Bearer omi_oat_disabled')
+        assert auth_context is not None
+        response, _ = sse.handle_mcp_message(
+            auth_context,
+            {'id': 1, 'method': 'tools/call', 'params': {'name': 'get_memories', 'arguments': {}}},
+        )
+
+    assert response['error']['code'] == -32009
+    service.read.assert_not_called()
+
+
+def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'initialize'})
+    instructions = response['result']['instructions']
+
+    assert session_id is None
+    assert response['result']['serverInfo']['name'] == 'omi-mcp-server'
+    for tool in (
+        'get_user_profile',
+        'search_memories',
+        'search_conversations',
+        'get_people',
+        'get_action_items',
+        'get_screen_activity',
+    ):
+        assert f'`{tool}`' in instructions
+    assert 'Use only tools exposed by `tools/list`' in instructions
+    assert instructions.index('`get_conversations(start_date, end_date)`') < instructions.index('`get_memories`')
+    assert 'Prefer one POST' in instructions
+    assert 'never fire parallel POSTs' in instructions
+    assert 'confirm important claims' in instructions
+    assert 'user clearly asked' in instructions
+
+
+def test_get_memories_advertises_and_executes_default_limit_20():
+    tool = next(tool for tool in sse.MCP_TOOLS if tool['name'] == 'get_memories')
+    assert tool['inputSchema']['properties']['limit']['default'] == 20
+
+    service = MagicMock()
+    service.read.return_value = []
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    assert result['limit'] == 20
+    assert result['scanned_count'] == 0
+
+
+def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
+    service = MagicMock()
+
+    def _read(_uid, *, limit, offset):
+        return [
+            SimpleNamespace(
+                model_dump=lambda mode, memory_id=offset + index: {
+                    'id': f'memory-{memory_id}',
+                    'content': 'Durable fact',
+                }
+            )
+            for index in range(limit)
+        ]
+
+    service.read.side_effect = _read
+    with (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse, 'MemoryService', return_value=service),
+    ):
+        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    assert result['scanned_count'] == 200
+    assert result['scan_truncated'] is True
+    assert service.read.call_count == 2
+
+
+def _fat_conversation():
+    return {
+        'id': 'conv-1',
+        'created_at': NOW,
+        'started_at': NOW,
+        'finished_at': NOW,
+        'language': 'en',
+        'structured': {
+            'title': 'Bar job discussion',
+            'overview': 'Discussed a job at a neighborhood bar.',
+            'category': 'work',
+            'emoji': '🍸',
+            'action_items': [{'description': 'Apply'}],
+            'events': [{'title': 'Interview'}],
+        },
+        'transcript_segments': [
+            {
+                'id': 'seg-1',
+                'text': 'bar jobs ' + ('details ' * 80),
+                'speaker_id': 1,
+                'start': 1.0,
+                'end': 3.0,
+                'evidence': ['large-private-evidence'],
+            },
+            {'id': 'seg-2', 'text': 'second segment', 'speaker_id': 2},
+        ],
+        'photos': [{'base64': 'large-private-photo'}],
+        'apps_results': [{'content': 'large-app-result'}],
+    }
+
+
+def test_conversation_list_and_search_return_cards_without_heavy_fields():
+    with patch.object(sse.conversations_db, 'get_mcp_conversation_cards', return_value=[_fat_conversation()]):
+        listed = sse.execute_tool(UID, 'get_conversations', {})['conversations'][0]
+
+    with (
+        patch.object(sse, 'resolve_mcp_conversation_search_ids', return_value=['conv-1']),
+        patch.object(sse.conversations_db, 'get_mcp_conversations_by_id', return_value=[_fat_conversation()]),
+    ):
+        searched = sse.execute_tool(
+            UID,
+            'search_conversations',
+            {'query': 'bar jobs', 'start_date': '2026-06-11', 'end_date': '2026-06-11'},
+        )['conversations'][0]
+
+    for item in (listed, searched):
+        assert set(item['structured']) == {'title', 'overview', 'category', 'emoji'}
+        assert 'transcript_segments' not in item
+        assert 'photos' not in item
+        assert 'action_items' not in item
+        assert 'action_items' not in item['structured']
+        assert 'events' not in item['structured']
+    assert searched['match_snippets']
+    assert len(searched['match_snippets'][0]['text']) <= 240
+
+
+def test_conversation_fetch_is_text_only_and_reports_truncation():
+    with patch.object(sse.conversations_db, 'get_mcp_conversations_by_id', return_value=[_fat_conversation()]):
+        result = sse.execute_tool(
+            UID,
+            'get_conversation_by_id',
+            {'conversation_id': 'conv-1', 'max_segments': 1, 'max_chars': 24},
+        )
+
+    conversation = result['conversation']
+    assert result['truncated'] is True
+    assert len(conversation['transcript_segments']) == 1
+    assert len(conversation['transcript_segments'][0]['text']) <= 24
+    assert set(conversation['structured']) == {'title', 'overview', 'category', 'emoji'}
+    assert 'evidence' not in conversation['transcript_segments'][0]
+    assert 'photos' not in conversation
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('tool_name', 'arguments'),
+    [
+        ('get_conversations', {'start_date': '2026-06-11', 'end_date': '2026-06-11'}),
+        ('search_conversations', {'query': 'bar jobs', 'start_date': '2026-06-11', 'end_date': '2026-06-11'}),
+    ],
+)
+async def test_conversation_index_failure_is_json_rpc_http_200(tool_name, arguments):
+    from google.api_core.exceptions import FailedPrecondition
+
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['conversations.read'])
+    request = _JsonRequest(
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': tool_name, 'arguments': arguments}}
+    )
+    failure = FailedPrecondition('query requires an index')
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse.conversations_db, 'get_mcp_conversation_cards', side_effect=failure),
+        patch.object(sse, 'resolve_mcp_conversation_search_ids', side_effect=failure),
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload['error']['code'] == -32009
+    assert 'index' in payload['error']['message'].lower()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_tool_exception_is_json_rpc_http_200_without_private_detail():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['conversations.read'])
+    request = _JsonRequest(
+        {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'get_conversations', 'arguments': {}},
+        }
+    )
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse, 'execute_tool', side_effect=RuntimeError('private failure detail')),
+        patch.object(sse.logger, 'exception') as log_exception,
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert payload['error'] == {'code': -32009, 'message': 'Tool temporarily unavailable. Retry shortly.'}
+    assert 'private failure detail' not in response.body.decode()
+    log_exception.assert_called_once_with('hosted MCP tool call failed tool=%s', 'get_conversations')
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_accepts_missing_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_ignores_stale_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+    ):
+        response = await sse.mcp_streamable_http(
+            request,
+            authorization='Bearer token',
+            mcp_session_id='session-from-another-instance',
+            accept=None,
+        )
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+def test_sse_get_returns_405_without_holding_a_stream():
+    # GET no longer serves a keepalive SSE stream (it exhausted Cloud Run
+    # concurrency slots; see tests/unit/test_mcp_sse_get_no_stream.py). The
+    # spec-mandated 405 must be immediate: no auth or rate-limit work either.
+    response = sse.mcp_sse_get()
+
+    assert response.status_code == 405
+    assert response.headers.get('allow') == 'POST, HEAD, DELETE'
+
+
+def test_sse_tool_security_schemes_match_runtime_scope_map():
+    for tool in sse.MCP_TOOLS:
+        advertised_scopes = tool['securitySchemes'][0]['scopes']
+        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+
+
+def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'create_memory', 'arguments': {}}}
+    )
+
+    assert response['error']['code'] == -32003
+    assert 'memories.write' in response['error']['data']['_meta']['mcp/www_authenticate']
+
+
+def test_authorize_redirect_builder_preserves_existing_query():
+    redirect_uri = sse._redirect_with_code(
+        'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
+    )
+    assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+
+
+def test_authorize_request_accepts_chatgpt_public_client():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.normalize_scopes', return_value=['memories.read']),
+    ):
+        validated_client, scopes = sse._validate_authorize_request(
+            'code',
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            sse.MCP_RESOURCE_URL,
+            'memories.read',
+            'a' * 64,
+            'S256',
+        )
+
+    assert validated_client == client
+    assert scopes == ['memories.read']
+
+
+def test_authorize_request_rejects_legacy_omi_client_id():
+    with patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=None):
+        with pytest.raises(ValueError, match='Unknown OAuth client'):
+            sse._validate_authorize_request(
+                'code',
+                'omi',
+                'https://chatgpt.com/connector_platform_oauth_redirect',
+                sse.MCP_RESOURCE_URL,
+                'memories.read',
+                'a' * 64,
+                'S256',
+            )
+
+
+def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+
+    async def inline_run_blocking(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    with (
+        patch.object(sse, '_validate_authorize_request', return_value=({}, ['memories.read'])),
+        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': 'other-user'}),
+        patch.object(sse, 'run_blocking', inline_run_blocking),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                sse.mcp_authorize_consent(
+                    response_type='code',
+                    client_id='omi-chatgpt-prod',
+                    redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
+                    resource=sse.MCP_RESOURCE_URL,
+                    firebase_id_token='token',
+                    state='state',
+                    scope='memories.read',
+                    code_challenge='a' * 64,
+                    code_challenge_method='S256',
+                )
+            )
+        assert exc.value.status_code == 403
+
+
+def test_legacy_api_key_helper_rejects_oauth_tokens():
+    # Keep this auth-shape test independent from the account-deletion Firestore
+    # fence; the OAuth token must be rejected before any account state matters.
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token,
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+    ):
+        validate_access_token.return_value = {
+            'uid': UID,
+            'scopes': ['memories.read'],
+            'client_id': 'omi',
+            'resource': sse.MCP_RESOURCE_URL,
+            'grant_id': 'grant-1',
+        }
+
+        assert sse.authenticate_api_key('Bearer omi_oat_test') is None
+
+
+def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):
+    return {
+        'id': item_id,
+        'description': desc,
+        'completed': completed,
+        'created_at': NOW,
+        'due_at': NOW,
+        'completed_at': None,
+        'conversation_id': 'conv-1',
+        'deleted': deleted,
+        'is_locked': locked,
+    }
+
+
+class TestActionItems:
+    @patch('routers.mcp.action_items_db')
+    def test_rest_returns_items_and_drops_deleted(self, mock_db):
+        mock_db.get_action_items.return_value = [_action_item('a1'), _action_item('a2', deleted=True)]
+        result = rest.get_action_items(uid=UID)
+        assert [i['id'] for i in result] == ['a1']
+        assert result[0]['description'] == 'Email Bob'
+
+    @patch('routers.mcp.action_items_db')
+    def test_rest_limit_clamped(self, mock_db):
+        mock_db.get_action_items.return_value = []
+        rest.get_action_items(limit=99999, uid=UID)
+        _, kwargs = mock_db.get_action_items.call_args
+        assert kwargs['limit'] == 500
+
+    @patch('routers.mcp_sse.action_items_db')
+    def test_tool_dispatch(self, mock_db):
+        mock_db.get_action_items.return_value = [_action_item('a1'), _action_item('a2', deleted=True)]
+        result = sse.execute_tool(UID, 'get_action_items', {'completed': False})
+        assert [i['id'] for i in result['action_items']] == ['a1']
+
+    @patch('routers.mcp_sse.action_items_db')
+    def test_tool_rejects_bad_date(self, mock_db):
+        with pytest.raises(sse.ToolExecutionError):
+            sse.execute_tool(UID, 'get_action_items', {'due_start_date': 'not-a-date'})
+
+    @patch('routers.mcp_sse.action_items_db')
+    def test_locked_description_truncated(self, mock_db):
+        long_desc = 'x' * 200
+        mock_db.get_action_items.return_value = [_action_item('a1', desc=long_desc, locked=True)]
+        result = sse.execute_tool(UID, 'get_action_items', {})
+        assert result['action_items'][0]['description'].endswith('...')
+        assert len(result['action_items'][0]['description']) == 73
+
+
+class TestGoals:
+    @patch('routers.mcp.goals_db')
+    def test_rest(self, mock_db):
+        mock_db.get_all_goals.return_value = [{'id': 'g1', 'title': 'Ship MCP', 'is_active': True}]
+        result = rest.get_goals(uid=UID)
+        assert result[0]['title'] == 'Ship MCP'
+        mock_db.get_all_goals.assert_called_once_with(UID, include_inactive=False)
+
+    @patch('routers.mcp_sse.goals_db')
+    def test_tool(self, mock_db):
+        mock_db.get_all_goals.return_value = [{'id': 'g1', 'title': 'Ship MCP'}]
+        result = sse.execute_tool(UID, 'get_goals', {'include_inactive': True})
+        assert result['goals'][0]['id'] == 'g1'
+        mock_db.get_all_goals.assert_called_once_with(UID, include_inactive=True)
+
+
+class TestChat:
+    @patch('routers.mcp.chat_db')
+    def test_rest_shapes_message(self, mock_db):
+        mock_db.get_messages.return_value = [
+            {'id': 'm1', 'text': 'hi', 'sender': 'human', 'type': 'text', 'created_at': NOW, 'files_id': []}
+        ]
+        result = rest.get_chat_messages(uid=UID)
+        assert result == [{'id': 'm1', 'text': 'hi', 'sender': 'human', 'type': 'text', 'created_at': NOW}]
+
+    @patch('routers.mcp_sse.chat_db')
+    def test_tool(self, mock_db):
+        mock_db.get_messages.return_value = [{'id': 'm1', 'text': 'hi', 'sender': 'ai', 'type': 'text'}]
+        result = sse.execute_tool(UID, 'get_chat_messages', {'limit': 10})
+        assert result['messages'][0]['sender'] == 'ai'
+
+
+class TestPeople:
+    def _person(self):
+        return {
+            'id': 'p1',
+            'name': 'Bob',
+            'created_at': NOW,
+            'speech_sample_transcripts': ['hello there', 'how are you'],
+            'speech_samples': ['gs://bucket/secret.wav'],
+            'speaker_embedding': [0.1, 0.2, 0.3],
+        }
+
+    @patch('routers.mcp.users_db')
+    def test_rest_drops_audio_and_embeddings(self, mock_db):
+        mock_db.get_people.return_value = [self._person()]
+        result = rest.get_people(uid=UID)
+        assert result[0]['name'] == 'Bob'
+        assert 'speech_samples' not in result[0]
+        assert 'speaker_embedding' not in result[0]
+        assert result[0]['speech_sample_transcripts'] == ['hello there', 'how are you']
+
+    @patch('routers.mcp_sse.users_db')
+    def test_tool(self, mock_db):
+        mock_db.get_people.return_value = [self._person()]
+        result = sse.execute_tool(UID, 'get_people', {})
+        assert result['people'][0]['id'] == 'p1'
+        assert 'speech_samples' not in result['people'][0]
+
+
+class TestScreenActivity:
+    def _row(self):
+        return {
+            'id': 's1',
+            'timestamp': '2026-06-11 10:00:00.000',
+            'appName': 'Cursor',
+            'windowTitle': 'mcp.py',
+            'ocrText': 'def foo',
+        }
+
+    @patch('routers.mcp.screen_activity_db')
+    def test_rest_rows(self, mock_db):
+        mock_db.get_screen_activity.return_value = [self._row()]
+        result = rest.get_screen_activity(uid=UID)
+        assert result == [
+            {
+                'id': 's1',
+                'timestamp': '2026-06-11 10:00:00.000',
+                'app_name': 'Cursor',
+                'window_title': 'mcp.py',
+                'ocr_text': 'def foo',
+            }
+        ]
+
+    @patch('routers.mcp.screen_activity_db')
+    def test_rest_summary_mode(self, mock_db):
+        mock_db.get_screen_activity_summary.return_value = {'apps': {'Cursor': {'count': 1}}, 'total_screenshots': 1}
+        result = rest.get_screen_activity(summary=True, uid=UID)
+        assert result['total_screenshots'] == 1
+        mock_db.get_screen_activity.assert_not_called()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows(self, mock_db):
+        mock_db.get_screen_activity.return_value = [self._row()]
+        result = sse.execute_tool(UID, 'get_screen_activity', {'limit': 5})
+        assert result['screen_activity'][0]['app_name'] == 'Cursor'
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary(self, mock_db):
+        mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
+        result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert result['total_screenshots'] == 0
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
+        # Regression for #9189: a missing Firestore index must surface as a typed,
+        # actionable ToolExecutionError, not an opaque 500.
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert exc_info.value.code == -32009
+        assert 'index' in exc_info.value.message.lower()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert exc_info.value.code == -32009
+
+
+class TestDailySummaries:
+    @patch('routers.mcp.daily_summaries_db')
+    def test_rest(self, mock_db):
+        mock_db.get_daily_summaries.return_value = [{'date': '2026-06-11', 'content': 'Worked on MCP'}]
+        result = rest.get_daily_summaries(uid=UID)
+        assert result[0]['date'] == '2026-06-11'
+
+    @patch('routers.mcp_sse.daily_summaries_db')
+    def test_tool(self, mock_db):
+        mock_db.get_daily_summaries.return_value = [{'date': '2026-06-11', 'content': 'x'}]
+        result = sse.execute_tool(UID, 'get_daily_summaries', {'limit': 5})
+        assert result['daily_summaries'][0]['date'] == '2026-06-11'
+
+
+class TestToolRegistry:
+    def test_new_tools_registered(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        for expected in [
+            'get_action_items',
+            'get_goals',
+            'get_chat_messages',
+            'get_people',
+            'get_screen_activity',
+            'get_daily_summaries',
+        ]:
+            assert expected in names, f"{expected} missing from MCP_TOOLS"
+
+    def test_every_tool_has_a_dispatch_branch(self):
+        # Each declared read-only data tool must dispatch (not fall through to "Unknown tool").
+        for name in ['get_action_items', 'get_goals', 'get_chat_messages', 'get_people', 'get_daily_summaries']:
+            with (
+                patch.object(sse, 'action_items_db'),
+                patch.object(sse, 'goals_db'),
+                patch.object(sse, 'chat_db'),
+                patch.object(sse, 'users_db'),
+                patch.object(sse, 'daily_summaries_db'),
+            ):
+                try:
+                    sse.execute_tool(UID, name, {})
+                except sse.ToolExecutionError as e:
+                    assert 'Unknown tool' not in e.message
+
+
+# --- denied memory reads are distinguishable from empty accounts (#10735) -----------------
+# A denied default-memory read returned an empty result set with a success status on every
+# MCP surface, so a client could not tell "this key is not authorized" from "you have no
+# memories". That is the failure mode most likely to make a user believe their data was
+# deleted, and support could not separate the two without a per-account Firestore trace.
+#
+# The issue named two sites (mcp_sse get_memories / search_memories). There are four: the
+# REST surface in routers/mcp.py has the identical shape.
+#
+# An explicit denial returns the shared authorization error payload. An allowed
+# empty account returns success through the same universal repository.
+
+_DENY_REASONS_REPORTED = [
+    'malformed_rollout_state',
+    'rollout_read_failed',
+    'missing_mcp_default_memory_grant',
+    'uid_mismatch',
+    'unsupported_consumer',
+    'unsupported_rollout_schema',
+    'memory_reads_disabled',
+]
+
+
+def _denied_result(reason, read_decision=None):
+    del read_decision
+    return SimpleNamespace(
+        allowed=False,
+        status_code=403,
+        observability={
+            'reason': reason,
+            'enabled': False,
+            'consumer': 'mcp',
+        },
+    )
+
+
+def _allowed_empty_result():
+    return SimpleNamespace(allowed=True, status_code=200, observability={'enabled': True})
+
+
+def _rest_universal_patches(result):
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
+    return (
+        patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
+        patch.object(rest, 'MemoryService', return_value=service),
+        patch.object(rest, 'logger'),
+    )
+
+
+def _sse_universal_patches(result):
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
+    return (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=result),
+        patch.object(sse, 'MemoryService', return_value=service),
+        patch.object(sse, 'logger'),
+    )
+
+
+def _run_rest_list(result):
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
+        return rest.get_memories(auth_context=SimpleNamespace(uid=UID))
+
+
+def _run_rest_search(result):
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
+        return rest.search_memories(query='espresso', auth_context=SimpleNamespace(uid=UID))
+
+
+def _sse_auth_context():
+    return SimpleNamespace(uid=UID, consumer='mcp', surface='mcp', app_id='app-1', key_id='key-1')
+
+
+def _run_sse_list(result):
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
+        return sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+
+def _run_sse_search(result):
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
+        return sse.execute_tool(UID, 'search_memories', {'query': 'espresso'}, auth_context=_sse_auth_context())
+
+
+_REST_SURFACES = [pytest.param(_run_rest_list, id='rest_list'), pytest.param(_run_rest_search, id='rest_search')]
+_SSE_SURFACES = [pytest.param(_run_sse_list, id='sse_list'), pytest.param(_run_sse_search, id='sse_search')]
+
+
+@pytest.mark.parametrize('reason', _DENY_REASONS_REPORTED)
+@pytest.mark.parametrize('run_surface', _REST_SURFACES)
+def test_rest_denied_memory_read_raises_with_reason_instead_of_empty_success(run_surface, reason):
+    with pytest.raises(rest.HTTPException) as raised:
+        run_surface(_denied_result(reason))
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail['reason'] == reason
+    assert raised.value.detail['enabled'] is False
+    assert raised.value.detail['consumer'] == 'mcp'
+
+
+@pytest.mark.parametrize('reason', _DENY_REASONS_REPORTED)
+@pytest.mark.parametrize('run_surface', _SSE_SURFACES)
+def test_sse_denied_memory_read_raises_with_reason_instead_of_empty_success(run_surface, reason):
+    with pytest.raises(sse.ToolExecutionError) as raised:
+        run_surface(_denied_result(reason))
+
+    assert raised.value.code == -32009
+    assert reason in raised.value.message
+
+
+@pytest.mark.parametrize('run_surface', _REST_SURFACES)
+def test_rest_allowed_empty_account_returns_empty_without_error(run_surface):
+    assert run_surface(_allowed_empty_result()) == []
+
+
+@pytest.mark.parametrize('run_surface', _SSE_SURFACES)
+def test_sse_allowed_empty_account_returns_empty_without_error(run_surface):
+    assert run_surface(_allowed_empty_result())["memories"] == []

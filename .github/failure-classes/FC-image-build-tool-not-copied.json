@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-image-build-tool-not-copied",
+  "violated_contract": "A multi-stage image stage may only invoke executables it provisions itself; a tool that exists in a donor stage is absent until this stage copies, installs, or links every entry name it invokes.",
+  "canonical_prevention": "Provision each entry name a stage invokes next to the COPY that brings its binary in, including sibling entries the upstream image publishes for the same binary, and keep an executing image build as the check that the stage is self-sufficient.",
+  "evidence_prs": [
+    11043
+  ],
+  "scope_hints": [
+    "backend/**/Dockerfile",
+    "backend/Dockerfile*"
+  ],
+  "status": "open"
+}

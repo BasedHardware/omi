@@ -1,0 +1,184 @@
+{
+  "name": "ms365",
+  "version": "0.1.0",
+  "display_name": "Microsoft 365",
+  "description": "Read and act on your Outlook mail, calendar, Teams chats and SharePoint/OneDrive files via OMI.",
+  "auth": {
+    "type": "oauth2",
+    "provider": "microsoft"
+  },
+  "tools": [
+    {
+      "name": "get_me",
+      "description": "Get the connected Microsoft user's profile (display name, mail, job title).",
+      "parameters": {"type": "object", "properties": {}}
+    },
+    {
+      "name": "list_recent_emails",
+      "description": "List the user's most recent Outlook emails. Use unread_only=true to focus on unread.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {"type": "integer", "default": 10},
+          "unread_only": {"type": "boolean", "default": false}
+        }
+      }
+    },
+    {
+      "name": "search_emails",
+      "description": "Search Outlook emails by free-text query.",
+      "parameters": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "default": 10}
+        }
+      }
+    },
+    {
+      "name": "read_email",
+      "description": "Read the full body of a specific email by id.",
+      "parameters": {
+        "type": "object",
+        "required": ["message_id"],
+        "properties": {"message_id": {"type": "string"}}
+      }
+    },
+    {
+      "name": "send_email",
+      "description": "Send a new Outlook email.",
+      "parameters": {
+        "type": "object",
+        "required": ["to", "subject", "body"],
+        "properties": {
+          "to": {"type": "array", "items": {"type": "string"}},
+          "subject": {"type": "string"},
+          "body": {"type": "string"},
+          "body_type": {"type": "string", "enum": ["Text", "HTML"], "default": "Text"},
+          "cc": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    {
+      "name": "list_upcoming_events",
+      "description": "List the user's upcoming calendar events for the next N days.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "days": {"type": "integer", "default": 1}
+        }
+      }
+    },
+    {
+      "name": "create_event",
+      "description": "Create a calendar event, optionally as a Teams online meeting.",
+      "parameters": {
+        "type": "object",
+        "required": ["subject", "start_iso", "end_iso"],
+        "properties": {
+          "subject": {"type": "string"},
+          "start_iso": {"type": "string", "description": "ISO 8601 local datetime"},
+          "end_iso": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "body": {"type": "string", "default": ""},
+          "online": {"type": "boolean", "default": true},
+          "timezone_str": {"type": "string", "default": "Europe/Vienna"}
+        }
+      }
+    },
+    {
+      "name": "find_free_slots",
+      "description": "Find common free time slots for a list of attendees.",
+      "parameters": {
+        "type": "object",
+        "required": ["duration_minutes", "attendees"],
+        "properties": {
+          "duration_minutes": {"type": "integer"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "within_days": {"type": "integer", "default": 5}
+        }
+      }
+    },
+    {
+      "name": "list_recent_chats",
+      "description": "List the user's recent Teams chats.",
+      "parameters": {
+        "type": "object",
+        "properties": {"limit": {"type": "integer", "default": 15}}
+      }
+    },
+    {
+      "name": "send_chat_message",
+      "description": "Send a Teams chat message to a specific chat id.",
+      "parameters": {
+        "type": "object",
+        "required": ["chat_id", "message"],
+        "properties": {
+          "chat_id": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "list_my_teams",
+      "description": "List the Teams (groups) the user is a member of.",
+      "parameters": {"type": "object", "properties": {}}
+    },
+    {
+      "name": "create_online_meeting",
+      "description": "Create a standalone Teams online meeting and return the join URL.",
+      "parameters": {
+        "type": "object",
+        "required": ["subject", "start_iso", "end_iso"],
+        "properties": {
+          "subject": {"type": "string"},
+          "start_iso": {"type": "string"},
+          "end_iso": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "list_recent_files",
+      "description": "List recently used files in OneDrive / SharePoint.",
+      "parameters": {
+        "type": "object",
+        "properties": {"limit": {"type": "integer", "default": 15}}
+      }
+    },
+    {
+      "name": "search_files",
+      "description": "Search files in OneDrive by name / content.",
+      "parameters": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "default": 15}
+        }
+      }
+    },
+    {
+      "name": "upload_text_file",
+      "description": "Upload a small text file (e.g. a transcript) to OneDrive at the given folder path.",
+      "parameters": {
+        "type": "object",
+        "required": ["folder_path", "filename", "content"],
+        "properties": {
+          "folder_path": {"type": "string", "description": "Folder relative to OneDrive root, e.g. 'Documents/OMI'"},
+          "filename": {"type": "string"},
+          "content": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "read_file_text",
+      "description": "Read the text content of a file in OneDrive by item id.",
+      "parameters": {
+        "type": "object",
+        "required": ["item_id"],
+        "properties": {"item_id": {"type": "string"}}
+      }
+    }
+  ]
+}

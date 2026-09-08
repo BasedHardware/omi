@@ -14,6 +14,7 @@ from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
     GatedDeepgramSocket,
+    GatedSTTSocket,
     VAD_GATE_KEEPALIVE_SEC,
     VADStreamingGate,
     is_gate_enabled,
@@ -24,6 +25,8 @@ _mock_is_speech = False
 _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
 import numpy as np
+
+from utils.metrics import OMI_VAD_GATE_AUDIO_SECONDS_TOTAL, OMI_VAD_GATE_SESSIONS_TOTAL
 
 
 def _mock_run_vad_window(window, state, context):
@@ -637,8 +640,8 @@ class TestGatedDeepgramSocket:
 
         mock_conn.finalize.assert_called()
 
-    def test_send_finalize_exception_swallowed(self):
-        """If finalize() throws during speech->silence in send(), it should be swallowed."""
+    def test_send_finalize_exception_rejects_the_chunk(self):
+        """A failed speech-boundary flush must surface to the live session."""
         mock_conn = MagicMock()
         mock_conn.finalize.side_effect = RuntimeError("connection closed")
         gate = self._make_gate()
@@ -650,12 +653,17 @@ class TestGatedDeepgramSocket:
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
-        # Silence past hangover — should not raise despite finalize error
+        # Silence past hangover — do not raise in the VAD layer, but reject the
+        # chunk so send_live_stt_audio terminates the client session.
         _set_vad_speech(False)
+        saw_rejected_chunk = False
         for i in range(30):
-            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+            saw_rejected_chunk = (
+                socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03) is False or saw_rejected_chunk
+            )
 
         mock_conn.finalize.assert_called()
+        assert saw_rejected_chunk is True
 
     def test_finish_shadow_mode_no_finalize(self):
         """finish() in shadow mode should NOT call finalize before finish."""
@@ -829,6 +837,19 @@ class TestDgDeadDetection:
         assert safe.is_connection_dead is True
         safe.finish()
 
+    def test_safe_socket_finalize_exception_sets_dead(self):
+        """A failed transcript flush is also a terminal provider failure."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError('connection reset')
+        safe = self._wrap(mock_conn)
+
+        with pytest.raises(RuntimeError, match='connection reset'):
+            safe.finalize()
+
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'finalize RuntimeError: connection reset'
+        safe.finish()
+
     def test_safe_socket_dead_stops_sending(self):
         """After SafeDeepgramSocket is dead, send() silently drops audio."""
         mock_conn = MagicMock()
@@ -929,6 +950,7 @@ class TestDgDeadDetection:
         assert mock_conn.send.call_count > 0
 
 
+@pytest.mark.slow
 class TestSafeSocketDelegation:
     """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
 
@@ -1057,7 +1079,7 @@ class TestActivateMode:
         assert gate._pre_roll_total_ms == 0.0
 
     def test_activate_syncs_mapper_cursor(self):
-        """activate() should advance DgWallMapper cursor to match shadow phase audio."""
+        """activate() should advance WallTimeMapper cursor to match shadow phase audio."""
         gate = self._make_gate(mode='shadow')
         t = 1000.0
 
@@ -1070,8 +1092,8 @@ class TestActivateMode:
 
         gate.activate()
 
-        # Mapper DG cursor should be 0.3s (not 0.0)
-        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(0.3, abs=0.01)
+        # Mapper provider cursor should be 0.3s (not 0.0)
+        assert gate.dg_wall_mapper._provider_cursor_sec == pytest.approx(0.3, abs=0.01)
 
     def test_shadow_active_remap_continuous(self):
         """After shadow→active, remapped timestamps should be continuous, not over-shifted."""
@@ -1182,6 +1204,41 @@ class TestCostMetrics:
         assert metrics['bytes_sent'] == len(chunk)
         assert metrics['bytes_skipped'] == 0
 
+    @pytest.mark.parametrize('mode', ['active', 'shadow'])
+    def test_prometheus_audio_and_session_counters_match_byte_accounting(self, mode):
+        """Prometheus seconds should match the gate's sent/skipped byte semantics."""
+        sent_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='sent', mode=mode)
+        skipped_counter = OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='skipped', mode=mode)
+        session_counter = OMI_VAD_GATE_SESSIONS_TOTAL.labels(mode=mode)
+        sent_before = sent_counter._value.get()
+        skipped_before = skipped_counter._value.get()
+        sessions_before = session_counter._value.get()
+
+        gate = self._make_gate(mode=mode)
+        assert session_counter._value.get() == sessions_before + 1
+
+        chunk = _make_pcm(30)
+        t = 1000.0
+        _set_vad_speech(False)
+        for i in range(20):
+            gate.process_audio(chunk, t + i * 0.03)
+        if mode == 'active':
+            assert skipped_counter._value.get() > skipped_before
+        else:
+            assert sent_counter._value.get() > sent_before
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(chunk, t + 0.60 + i * 0.03)
+
+        metrics = gate.get_metrics()
+        bytes_per_second = gate.sample_rate * gate.channels * 2
+        sent_seconds = sent_counter._value.get() - sent_before
+        skipped_seconds = skipped_counter._value.get() - skipped_before
+
+        assert sent_seconds == pytest.approx(metrics['bytes_sent'] / bytes_per_second)
+        assert skipped_seconds == pytest.approx(metrics['bytes_skipped'] / bytes_per_second)
+        assert sent_seconds + skipped_seconds == pytest.approx(metrics['bytes_received'] / bytes_per_second)
+
 
 class TestStructuredMetricsLog:
     def test_to_json_log_contains_derived_fields(self):
@@ -1275,10 +1332,24 @@ class TestOnnxStateAndConcurrency:
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
+            # Calibrate the bound on this machine: under heavy CPU contention even bare
+            # sleeping threads take multiples of sleep_sec, so a fixed bound reports
+            # serialization that the gate did not cause.
+            baseline_threads = [threading.Thread(target=time.sleep, args=(sleep_sec,)) for _ in range(num_callers)]
+            baseline_start = time.perf_counter()
+            for t in baseline_threads:
+                t.start()
+            for t in baseline_threads:
+                t.join(timeout=10)
+            baseline = time.perf_counter() - baseline_start
+
             # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
-            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
+            assert elapsed < max(
+                sleep_sec * 3, baseline * 1.5
+            ), f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
 
 
+@pytest.mark.slow
 class TestLongSessionStress:
     """Tests for long-session invariants (large counters, checkpoint churn)."""
 
@@ -1985,6 +2056,7 @@ class TestProcessAudioDgRemapWiring:
         assert received_segments[0]['end'] == 7.0
 
 
+@pytest.mark.slow
 class TestDG1011KeepaliveGap:
     """Verify DG 1011 protection via SafeDeepgramSocket auto-keepalive.
 
@@ -2063,3 +2135,129 @@ class TestDG1011KeepaliveGap:
             )
         finally:
             safe.finish()
+
+
+class TestGatedSTTSocketPassthroughMode:
+    """Verify passthrough_audio=True forwards raw audio regardless of VAD gate decision."""
+
+    SAMPLE_RATE = 16000
+    FRAME_SIZE = SAMPLE_RATE * 2
+
+    def _make_gate(self):
+        gate = MagicMock(spec=VADStreamingGate)
+        gate.uid = 'test-uid'
+        gate.session_id = 'test-session'
+        gate_output = MagicMock()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = False
+        gate.process_audio.return_value = gate_output
+        return gate, gate_output
+
+    def test_passthrough_sends_raw_audio_even_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+
+    def test_non_passthrough_does_not_send_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=False)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_not_called()
+
+    def test_passthrough_still_processes_vad_for_metrics(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        gate.process_audio.assert_called_once()
+
+    def test_passthrough_finalize_still_triggers(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = True
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+        mock_conn.finalize.assert_called_once()
+
+
+class TestMisalignedChunks:
+    """A chunk that ends mid-frame must not disable the gate (prod: 11 sessions/24h)."""
+
+    def _make_gate(self, channels=1):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=channels,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+
+    def test_odd_length_chunk_keeps_gate_active(self):
+        """np.frombuffer used to raise on a partial sample, failing the session open."""
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate = self._make_gate()
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        gated.send(_make_pcm(30) + b'\x00', wall_time=1.0)
+
+        assert gated.is_gated
+        assert gate.mode == 'active'
+
+    def test_split_frame_keeps_sample_alignment(self):
+        """A frame split across two chunks must reach VAD as the same samples."""
+        pcm = struct.pack('<1600h', *[(i % 2000) - 1000 for i in range(1600)])
+        windows_whole: list[np.ndarray] = []
+        windows_split: list[np.ndarray] = []
+
+        def _record(into):
+            def _run(window, state, context):
+                into.append(np.array(window))
+                return 0.1, state, context
+
+            return _run
+
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_whole)):
+            self._make_gate().process_audio(pcm, 1.0)
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_split)):
+            gate = self._make_gate()
+            gate.process_audio(pcm[:513], 1.0)
+            gate.process_audio(pcm[513:], 1.03)
+
+        assert len(windows_split) == len(windows_whole) > 0
+        for split, whole in zip(windows_split, windows_whole):
+            assert np.array_equal(split, whole)
+
+    def test_stereo_partial_frame_is_carried(self):
+        """Stereo frames are 4 bytes; a 2-byte tail must not reach audioop.tomono."""
+        gate = self._make_gate(channels=2)
+        pcm = _make_pcm(30, channels=2)
+
+        gate.process_audio(pcm[:-2], 1.0)
+        out = gate.process_audio(pcm[-2:], 1.03)
+
+        assert out is not None

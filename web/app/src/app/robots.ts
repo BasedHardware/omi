@@ -1,6 +1,13 @@
-import { MetadataRoute } from 'next';
+type Robots = {
+  rules: Array<{
+    userAgent: string;
+    allow: string;
+    disallow: string[];
+  }>;
+  sitemap: string;
+};
 
-export default function robots(): MetadataRoute.Robots {
+export default function robots(): Robots {
   return {
     rules: [
       {

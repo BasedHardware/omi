@@ -1,0 +1,54 @@
+name: Python CLI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdks/python-cli/**'
+      - '.github/workflows/python-cli-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sdks/python-cli/**'
+      - '.github/workflows/python-cli-ci.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: sdks/python-cli
+
+jobs:
+  tests:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux / Python 3.10
+            os: ubuntu-latest
+            python-version: '3.10'
+          - label: Linux / Python 3.12
+            os: ubuntu-latest
+            python-version: '3.12'
+          - label: Windows ACL / Python 3.12
+            os: windows-latest
+            python-version: '3.12'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: sdks/python-cli/pyproject.toml
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -q

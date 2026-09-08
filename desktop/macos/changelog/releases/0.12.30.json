@@ -1,0 +1,11 @@
+{
+  "version": "0.12.30",
+  "date": "2026-07-06",
+  "changes": [
+    "Chat now avoids reusing stale sign-in tokens and known-bad BYOK keys when starting the AI runtime",
+    "Added a \"Save Diagnostics…\" option to Report Issue that saves a redacted diagnostics report locally (works offline, nothing is uploaded), and the app log file is now created owner-only so it is no longer readable by other users on the machine",
+    "Improved realtime voice recovery diagnostics when managed Gemini or OpenAI token minting fails",
+    "Improved desktop recording recovery so failed cloud reconciliation can retry from saved local transcript segments with clearer diagnostics",
+    "Reordering tasks now stays correct in large lists (100+ items in a section no longer scramble order), and rapid re-drags no longer leave a row stuck dimmed"
+  ]
+}

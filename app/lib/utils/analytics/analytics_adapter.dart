@@ -23,6 +23,12 @@ abstract class AnalyticsAdapter {
   /// Capture a single event with optional properties.
   void track({required String eventName, Map<String, Object>? properties});
 
+  /// Attach the current Flutter interaction context to native SDK events.
+  ///
+  /// Native integrations such as iOS rage-click capture run outside Dart, so
+  /// they cannot otherwise identify the Flutter screen or control involved.
+  void setInteractionContext({String? screenName, required String target}) {}
+
   /// Resume capture after a previous `disable()`.
   void enable();
 

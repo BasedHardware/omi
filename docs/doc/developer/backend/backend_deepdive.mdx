@@ -4,6 +4,10 @@ icon: "magnifying-glass"
 description: "Welcome to the Omi backend! This document provides a comprehensive overview of Omi's architecture and code, guiding you through its key components, functionalities, and how it all works together to power a unique and intelligent AI assistant experience."
 ---
 
+<Warning>
+The Deepgram-specific sections in this historical architecture deep dive are retired. Serving transcription uses Parakeet and Modulate only; see [Transcription](/doc/developer/backend/transcription) for the current provider policy.
+</Warning>
+
 ## Understanding the Omi Ecosystem
 
 Omi is a multimodal AI assistant designed to understand and interact with users in a way that's both intelligent and human-centered. The backend plays a crucial role in this by:
@@ -285,7 +289,7 @@ This directory contains modules where the power of OpenAI's LLMs is harnessed fo
 
 **OpenAI Integration:**
 
-- The LLM modules leverage OpenAI's models (GPT-4o and others) for language understanding, generation, and reasoning.
+- The LLM modules use a provider-agnostic model system (see `utils/llm/model_config.py`) with models from OpenAI (`gpt-5.4`, `gpt-5.4-mini`, `gpt-4.1-mini`), Anthropic (`claude-sonnet-4-6`), and others, selected per task via QoS profiles (`premium`, `max`, `fair_use`).
 - `text-embedding-3-large` is used to generate vector embeddings for conversations and user queries.
 
 **Why this is Essential:**

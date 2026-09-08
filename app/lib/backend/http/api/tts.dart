@@ -21,7 +21,7 @@ class TtsUnavailableException implements Exception {
 /// Calls `POST /v2/tts/synthesize` and returns the raw MP3 bytes.
 ///
 /// Defaults mirror the desktop client and the Rust backend at
-/// `desktop/Backend-Rust/src/routes/tts.rs` so both platforms stay in sync.
+/// desktop backend route so both platforms stay in sync.
 Future<Uint8List?> synthesizeSpeech({
   required String text,
   String voiceId = 'BAMYoBHLZM7lJgJAmFz0', // Sloane
@@ -55,10 +55,7 @@ Future<Uint8List?> synthesizeSpeech({
   }
 
   if (response.statusCode == 429 || response.statusCode == 503) {
-    throw TtsUnavailableException(
-      response.statusCode,
-      retryAfter: response.headers['retry-after'],
-    );
+    throw TtsUnavailableException(response.statusCode, retryAfter: response.headers['retry-after']);
   }
 
   if (response.statusCode != 200) {

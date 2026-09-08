@@ -1,23 +1,86 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:meta/meta.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
+/// Error string the backend's stale guard sets when a job sits queued past
+/// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
+/// #7469 — if this string changes, update here and keep the structural check
+/// below ('failed' with totalSegments==0) as the durable signal.
+const _kBackendBusyErrorHint = 'background worker likely died';
+const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
+
+/// One batch is one server-side sync job, and a job must finish inside the
+/// backend's 600s stale guard (backend/database/sync_jobs.py).
+const _syncUploadBatchLimit = 5;
+
+enum SyncJobTerminalPolicy { wait, acknowledge, retry }
+
+/// The shared WAL acknowledgement boundary for async sync jobs.
+///
+/// Only the backend's truthful `completed` state permits local audio to become
+/// terminally synced. Partial and full failures deliberately take the retry
+/// path so the retained WAL remains recoverable.
+@visibleForTesting
+SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bool isTerminal}) {
+  if (!isTerminal) return SyncJobTerminalPolicy.wait;
+  return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
+}
+
+@visibleForTesting
+bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
+  if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
+  // Legacy stale-worker failures predate reason_code. New typed failures with
+  // totalSegments=0 carry a reason and must consume retry budget normally.
+  final reasonCode = status.reasonCode;
+  return status.status == 'failed' && status.totalSegments == 0 && (reasonCode == null || reasonCode.isEmpty);
+}
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) =>
+    wal.conversationId != null && nowSeconds - wal.timerStart <= _liveCaptureMaxAgeSeconds;
+
+/// The capture manifest is immutable per conversation, so claiming one for a
+/// partial batch strands the siblings that did not fit.
+@visibleForTesting
+bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int nowSeconds) =>
+    batch.isNotEmpty && isLiveCaptureWal(batch.first, nowSeconds) && pendingForConversation.length <= batch.length;
+
+String? _walLocationBatchKey(Wal wal) {
+  final geolocation = wal.geolocation;
+  if (geolocation == null) return null;
+  return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
+}
+
+List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
+  final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+  if (ordered.isEmpty) return const [];
+  final conversationId = ordered.first.conversationId;
+  final locationKey = _walLocationBatchKey(ordered.first);
+  return ordered
+      .where((wal) => wal.conversationId == conversationId && _walLocationBatchKey(wal) == locationKey)
+      .take(_syncUploadBatchLimit)
+      .toList();
+}
+
 class LocalWalSyncImpl implements LocalWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
 
   List<WalFrame> _frames = [];
   List<bool> _frameSynced = [];
@@ -31,6 +94,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   BleAudioCodec _codec = BleAudioCodec.opus;
   String? _deviceId;
   String? _deviceModel;
+  Geolocation? _sessionGeolocation;
+  int? _sessionGeolocationSetAt;
 
   bool _isCancelled = false;
 
@@ -45,7 +110,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   SyncLocalFilesResponse? _accumulatedResponse;
   SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
 
-  LocalWalSyncImpl(this.listener);
+  final SyncUploadGate? _uploadGateOverride;
+  SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
+
+  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -66,6 +134,15 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal) async {
+    // Native-storage recovery can surface old WALs while a new recording is
+    // active. Only inherit the current session's location for WALs that began
+    // at (or after) this session, never for historical recordings.
+    if (wal.geolocation == null &&
+        _sessionGeolocation != null &&
+        _sessionGeolocationSetAt != null &&
+        wal.timerStart >= _sessionGeolocationSetAt! - 60) {
+      wal.geolocation = _copyGeolocation(_sessionGeolocation);
+    }
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
       Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
@@ -150,6 +227,15 @@ class LocalWalSyncImpl implements LocalWalSync {
     _deviceModel = deviceModel;
   }
 
+  @override
+  void setSessionGeolocation(Geolocation? geolocation) {
+    _sessionGeolocation = _copyGeolocation(geolocation);
+    _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  }
+
+  Geolocation? _copyGeolocation(Geolocation? geolocation) =>
+      geolocation == null ? null : Geolocation.fromJson(geolocation.toJson());
+
   Future _chunk() async {
     if (_frames.isEmpty) {
       Logger.debug("Frames are empty");
@@ -213,6 +299,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
+          geolocation: _copyGeolocation(_sessionGeolocation),
         );
         _wals.add(wal);
       } else {
@@ -399,6 +486,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
+            geolocation: _copyGeolocation(_sessionGeolocation),
           ),
         );
     }
@@ -480,8 +568,22 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss).toList();
     for (final wal in pendingWals) {
+      await _deleteWal(wal);
+    }
+    await _saveWalsToFile();
+    listener.onWalUpdated();
+  }
+
+  /// Removes terminally unavailable recordings when the user explicitly
+  /// clears all local recordings. They are intentionally excluded from the
+  /// retryable Pending action.
+  @override
+  Future<void> deleteAllCorruptedWals() async {
+    final corruptedWals =
+        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
     await _saveWalsToFile();
@@ -505,18 +607,35 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) =>
+      _syncAll(progress: progress, liveCaptureOnly: false);
+
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
+      _syncAll(progress: progress, liveCaptureOnly: true);
+
+  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;
 
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
+    final initialNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var wals = _wals
+        .where(
+          (wal) =>
+              wal.status == WalStatus.miss &&
+              wal.storage == WalStorage.disk &&
+              (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)),
+        )
+        .toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
       DebugLogManager.logInfo('Local upload: no files to sync');
+      return null;
+    }
+
+    if (SyncRateLimiter.instance.isLimited) {
+      Logger.debug('Local upload: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
+      DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
       return null;
     }
 
@@ -531,38 +650,65 @@ class LocalWalSyncImpl implements LocalWalSync {
     int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
 
-    var steps = 3;
-    for (var i = wals.length - 1; i >= 0; i -= steps) {
+    final attemptedWalIds = <String>{};
+    // A conversation whose first batch uploaded unclaimed stays unclaimable for
+    // the rest of the drain: the manifest is immutable per conversation, so a
+    // later remainder must not claim one covering only part of it.
+    final unclaimableConversationIds = <String>{};
+    while (true) {
+      // Re-snapshot between batches so a newly captured WAL can preempt an
+      // hours-long historical drain without waiting for the original list.
+      final batchNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final candidates = _wals
+          .where(
+            (wal) =>
+                wal.status == WalStatus.miss && wal.storage == WalStorage.disk && !attemptedWalIds.contains(wal.id),
+          )
+          .toList();
+      final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
+      if (pending.isEmpty) break;
+      final batch = nextSyncUploadBatch(pending, batchNowSeconds);
+      if (batch.isEmpty) break;
+      attemptedWalIds.addAll(batch.map((wal) => wal.id));
+      final batchConversationId = batch.first.conversationId;
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+          canClaimLiveCapture(
+            batch,
+            candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
+            batchNowSeconds,
+          );
+      if (!claimLiveCapture && batchConversationId != null) {
+        unclaimableConversationIds.add(batchConversationId);
+      }
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {
-          'batchesCompleted': batchesCompleted,
+          'batchesUploaded': batchesCompleted,
           'batchesFailed': batchesFailed,
-          'walsRemaining': i + 1,
+          'walsRemaining': wals.where((w) => w.status == WalStatus.miss).length,
         });
-        // Clear isSyncing on all WALs that were marked for this batch
+        // Clear the transient syncing flag on WALs not yet uploaded. Do NOT
+        // touch status: any WAL already marked `uploaded` is safe on the
+        // server and the reconciler will finish it — reverting it here would
+        // cause a needless re-upload.
         for (final w in wals) {
-          w.isSyncing = false;
-          w.syncStartedAt = null;
-          w.syncEtaSeconds = null;
+          if (w.status != WalStatus.uploaded) {
+            w.isSyncing = false;
+            w.syncStartedAt = null;
+            w.syncEtaSeconds = null;
+          }
         }
         await _saveWalsToFile();
         listener.onWalUpdated();
         break;
       }
-      var right = i;
-      var left = right - steps + 1;
-      if (left < 0) {
-        left = 0;
-      }
-
       List<File> files = [];
-      for (var j = left; j <= right; j++) {
-        var wal = wals[j];
+      List<Wal> batchWals = [];
+      for (final wal in batch) {
         Logger.debug("sync id ${wal.id} ${wal.timerStart}");
         if (wal.filePath == null) {
           Logger.debug("file path is not found. wal id ${wal.id}");
-          wal.status = WalStatus.corrupted;
+          wal.markCorrupted();
           corruptedCount++;
           DebugLogManager.logWarning('WAL corrupted: file path missing', {'walId': wal.id});
           continue;
@@ -574,7 +720,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         try {
           if (fullPath == null) {
             Logger.debug("could not construct file path for wal id ${wal.id}");
-            wal.status = WalStatus.corrupted;
+            wal.markCorrupted();
             corruptedCount++;
             DebugLogManager.logWarning('WAL corrupted: cannot construct path', {'walId': wal.id});
             continue;
@@ -583,7 +729,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           File file = File(fullPath);
           if (!file.existsSync()) {
             Logger.debug("file $fullPath does not exist");
-            wal.status = WalStatus.corrupted;
+            wal.markCorrupted();
             corruptedCount++;
             DebugLogManager.logWarning('WAL corrupted: file not found on disk', {
               'walId': wal.id,
@@ -593,8 +739,9 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
           files.add(file);
           wal.isSyncing = true;
+          batchWals.add(wal);
         } catch (e) {
-          wal.status = WalStatus.corrupted;
+          wal.markCorrupted();
           corruptedCount++;
           Logger.debug(e.toString());
           DebugLogManager.logError(e, null, 'WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
@@ -616,73 +763,112 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       listener.onWalUpdated();
       try {
-        var partialRes = await syncLocalFilesV2(
+        // Upload only — return as soon as the server acknowledges. We do NOT
+        // wait for server-side processing here; the reconciler resolves the
+        // job_id later. Only WALs that actually became files (batchWals) are
+        // mutated — corrupted ones already short-circuited above.
+        final result = await _uploadGate.upload(
           files,
-          onPollProgress: (jobStatus) {
-            progress?.onWalSyncedProgress(
-              jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
-              phase: SyncPhase.processingOnServer,
-              currentFile: jobStatus.processedSegments,
-              totalFiles: jobStatus.totalSegments,
-            );
-          },
+          conversationId: batchWals.first.conversationId,
+          claimLiveCapture: claimLiveCapture,
+          geolocation: batchWals.first.geolocation,
         );
 
-        resp.newConversationIds.addAll(
-          partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-        );
-        resp.updatedConversationIds.addAll(
-          partialRes.updatedConversationIds.where(
-            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-          ),
-        );
-
-        if (partialRes.hasPartialFailure) {
-          Logger.debug(
-            'WAL batch partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+        if (result.completed != null) {
+          // 200 fast-path: server processed synchronously and returned a result.
+          final r = result.completed!;
+          resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+          resp.updatedConversationIds.addAll(
+            r.updatedConversationIds.where(
+              (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+            ),
           );
-          DebugLogManager.logWarning('Local upload batch partial failure', {
-            'failedSegments': partialRes.failedSegments,
-            'totalSegments': partialRes.totalSegments,
-            'errors': partialRes.errors.take(3).toList(),
-          });
+          for (final wal in batchWals) {
+            wal.status = WalStatus.synced;
+            wal.isSyncing = false;
+            wal.syncStartedAt = null;
+            wal.syncEtaSeconds = null;
+            listener.onWalSynced(wal);
+          }
+        } else {
+          // 202: audio safely received; processing in the background. Stamp the
+          // shared job_id and mark uploaded. The reconciler resolves this to
+          // synced / miss(retry) / corrupted out of the critical path. The
+          // local file is retained until confirmed synced.
+          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          for (final wal in batchWals) {
+            wal.status = WalStatus.uploaded;
+            wal.jobId = result.jobId;
+            wal.uploadedAt = now;
+            wal.isSyncing = false;
+            wal.syncStartedAt = null;
+            wal.syncEtaSeconds = null;
+          }
+          listener.onWalUpdated();
         }
 
         batchesCompleted++;
-
-        for (var j = left; j <= right; j++) {
-          if (j < wals.length) {
-            var wal = wals[j];
-            if (partialRes.hasPartialFailure) {
-              // Keep WALs retryable on partial failure so failed segments get
-              // another chance. Backend dedup prevents duplicate transcripts.
-              wals[j].isSyncing = false;
-              wals[j].syncStartedAt = null;
-              wals[j].syncEtaSeconds = null;
-            } else {
-              wals[j].status = WalStatus.synced;
-              wals[j].isSyncing = false;
-              wals[j].syncStartedAt = null;
-              wals[j].syncEtaSeconds = null;
-              listener.onWalSynced(wal);
-            }
-          }
+        // Count WALs no longer needing upload (uploaded or already synced).
+        filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+      } on SyncRateLimitedException {
+        // The cooldown is account-global, so every remaining batch would hit it too.
+        DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
         }
-        // Count actual unique synced WALs (batch ranges overlap, so don't accumulate files.length)
-        filesUploaded = wals.where((w) => w.status == WalStatus.synced).length;
-      } catch (e) {
-        print('Local WAL sync batch failed: $e, continuing with remaining files');
-        batchesFailed++;
-        DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
-          'batchIndex': (wals.length - 1 - i) ~/ steps,
-          'filesInBatch': files.length,
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
+      } on SyncOfflineQueueQuarantinedException {
+        // Cutover fence: leave WALs retryable and skip quietly until control allows drain.
+        DebugLogManager.logEvent('local_upload_cutover_quarantined', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
         });
-        for (var j = left; j <= right; j++) {
-          if (j < wals.length) {
-            wals[j].isSyncing = false;
-            wals[j].syncStartedAt = null;
-            wals[j].syncEtaSeconds = null;
-          }
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
+      } on SyncRecoveryWindowExceededException {
+        // Clear the in-flight flag on the whole batch first: the members the
+        // rejection does NOT prove too old stay `miss` and must not be left
+        // rendering as an upload that never finishes.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        final retired = _retireOutsideRecoveryWindow(batchWals);
+        DebugLogManager.logEvent('local_upload_outside_recovery_window', {
+          'batchWalIds': batchWals.map((w) => w.id).toList(),
+          'retiredWalIds': retired.map((w) => w.id).toList(),
+        });
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        continue;
+      } catch (e) {
+        print('Local WAL upload batch failed: $e, continuing with remaining files');
+        batchesFailed++;
+        if (!isTransientNetworkError(e)) {
+          resp.localUploadPermanentFailures++;
+          resp.localUploadPermanentError = e.toString();
+        }
+        DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
+          'batchIndex': batchesCompleted + batchesFailed,
+          'filesInBatch': files.length,
+          'transient': isTransientNetworkError(e),
+        });
+        // Upload failed: clear the transient flag, leave status `miss` so the
+        // batch is retried on the next sync.
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
         }
       }
 
@@ -691,26 +877,29 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     DebugLogManager.logEvent('local_upload_finished', {
-      'batchesCompleted': batchesCompleted,
+      'batchesUploaded': batchesCompleted,
       'batchesFailed': batchesFailed,
+      'permanentFailures': resp.localUploadPermanentFailures,
       'corrupted': corruptedCount,
       'newConversations': resp.newConversationIds.length,
       'updatedConversations': resp.updatedConversationIds.length,
     });
 
+    resp.localUploadFailures = batchesFailed;
     progress?.onWalSyncedProgress(1.0);
     return resp;
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     await _flush();
 
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    final matches = _wals.where((w) => w == wal).toList();
+    if (matches.isEmpty) {
+      DebugLogManager.logInfo('Single WAL upload skipped — WAL no longer tracked', {'walId': wal.id});
+      return null;
+    }
+    final walToSync = matches.first;
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -720,85 +909,124 @@ class LocalWalSyncImpl implements LocalWalSync {
       'codec': wal.codec.toString(),
     });
 
-    late File walFile;
+    File? walFile;
     if (wal.filePath == null) {
       Logger.debug("file path is not found. wal id ${wal.id}");
-      wal.status = WalStatus.corrupted;
+      wal.markCorrupted();
       DebugLogManager.logWarning('Single WAL corrupted: file path missing', {'walId': wal.id});
-    }
-    try {
-      final fullPath = await Wal.getFilePath(wal.filePath);
-      if (fullPath == null) {
-        Logger.debug("could not construct file path for wal id ${wal.id}");
-        wal.status = WalStatus.corrupted;
-        DebugLogManager.logWarning('Single WAL corrupted: cannot construct path', {'walId': wal.id});
-      } else {
-        File file = File(fullPath);
-        if (!file.existsSync()) {
-          Logger.debug("file $fullPath does not exist");
-          wal.status = WalStatus.corrupted;
-          DebugLogManager.logWarning('Single WAL corrupted: file not found', {'walId': wal.id});
+    } else {
+      try {
+        final fullPath = await Wal.getFilePath(wal.filePath);
+        if (fullPath == null) {
+          Logger.debug("could not construct file path for wal id ${wal.id}");
+          wal.markCorrupted();
+          DebugLogManager.logWarning('Single WAL corrupted: cannot construct path', {'walId': wal.id});
         } else {
-          walFile = file;
-          wal.isSyncing = true;
+          File file = File(fullPath);
+          if (!file.existsSync()) {
+            Logger.debug("file $fullPath does not exist");
+            wal.markCorrupted();
+            DebugLogManager.logWarning('Single WAL corrupted: file not found', {'walId': wal.id});
+          } else {
+            walFile = file;
+            wal.isSyncing = true;
+          }
         }
+      } catch (e) {
+        wal.markCorrupted();
+        print(e.toString());
+        DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {
+          'walId': wal.id,
+        });
       }
-    } catch (e) {
-      wal.status = WalStatus.corrupted;
-      print(e.toString());
-      DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
     listener.onWalUpdated();
+
+    // File unusable — nothing to upload (avoids a LateInit crash on walFile).
+    if (walFile == null) {
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    }
+
     try {
-      var partialRes = await syncLocalFilesV2(
+      // Upload only — no poll-to-terminal. Reconciler resolves the job later.
+      final claimLiveCapture = canClaimLiveCapture(
+        [walToSync],
+        _wals
+            .where(
+              (candidate) => candidate.status == WalStatus.miss && candidate.conversationId == walToSync.conversationId,
+            )
+            .toList(),
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      );
+      final result = await _uploadGate.upload(
         [walFile],
-        onPollProgress: (jobStatus) {
-          progress?.onWalSyncedProgress(
-            jobStatus.totalSegments > 0 ? jobStatus.processedSegments / jobStatus.totalSegments : 0.0,
-            phase: SyncPhase.processingOnServer,
-            currentFile: jobStatus.processedSegments,
-            totalFiles: jobStatus.totalSegments,
-          );
-        },
+        conversationId: walToSync.conversationId,
+        claimLiveCapture: claimLiveCapture,
+        geolocation: walToSync.geolocation,
       );
 
-      resp.newConversationIds.addAll(
-        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-      );
-      resp.updatedConversationIds.addAll(
-        partialRes.updatedConversationIds.where(
-          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-        ),
-      );
-
-      if (partialRes.hasPartialFailure) {
-        Logger.debug(
-          'Single WAL partial failure: ${partialRes.failedSegments}/${partialRes.totalSegments} segments failed',
+      if (result.completed != null) {
+        final r = result.completed!;
+        resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(
+          r.updatedConversationIds.where(
+            (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+          ),
         );
-        DebugLogManager.logWarning('Single WAL upload partial failure', {
-          'walId': wal.id,
-          'failedSegments': partialRes.failedSegments,
-          'totalSegments': partialRes.totalSegments,
-          'errors': partialRes.errors.take(3).toList(),
-        });
-      }
-
-      if (partialRes.hasPartialFailure) {
-        // Keep WAL retryable so failed segments get another chance
-        walToSync.isSyncing = false;
-        walToSync.syncStartedAt = null;
-        walToSync.syncEtaSeconds = null;
-      } else {
         walToSync.status = WalStatus.synced;
         walToSync.isSyncing = false;
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;
-        DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
+        DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {'walId': wal.id});
         listener.onWalSynced(wal);
+      } else {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        walToSync.status = WalStatus.uploaded;
+        walToSync.jobId = result.jobId;
+        walToSync.uploadedAt = now;
+        walToSync.isSyncing = false;
+        walToSync.syncStartedAt = null;
+        walToSync.syncEtaSeconds = null;
+        DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
+        listener.onWalUpdated();
       }
+    } on SyncRateLimitedException {
+      // Account-level rate limit — leave the WAL pending without consuming its
+      // retry budget. The global upload gate owns the cooldown.
+      DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    } on SyncOfflineQueueQuarantinedException {
+      DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
+    } on SyncRecoveryWindowExceededException {
+      // Terminal: older than the server's automatic-recovery window. A manual
+      // retry cannot succeed either, so stop presenting it as retryable work.
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      final retired = _retireOutsideRecoveryWindow([walToSync]);
+      DebugLogManager.logEvent('single_wal_outside_recovery_window', {
+        'walId': wal.id,
+        'retiredWalIds': retired.map((w) => w.id).toList(),
+      });
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
     } catch (e) {
-      Logger.debug('Single WAL sync failed: $e');
+      Logger.debug('Single WAL upload failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
@@ -810,6 +1038,186 @@ class LocalWalSyncImpl implements LocalWalSync {
     listener.onWalUpdated();
 
     progress?.onWalSyncedProgress(1.0);
+    return resp;
+  }
+
+  /// Retires the recordings a `backfill_lookback_exceeded` rejection proves the
+  /// server will never accept, and only those.
+  ///
+  /// The backend decides the lookback from the OLDEST capture in the upload
+  /// (`classify_sync_lane` measures `now - oldest_capture_at`), so a rejection
+  /// only proves that one recording is outside the window — a batch mixes ages,
+  /// and retiring all of it would strand recordings the server would still take.
+  /// Everything captured no later than the proven-too-old one is necessarily
+  /// outside the window as well, so the whole tail retires in one pass instead
+  /// of costing another doomed upload per recording. The rest of the batch stays
+  /// `miss` and re-forms into a batch without the poison on the next drain.
+  List<Wal> _retireOutsideRecoveryWindow(List<Wal> rejectedBatch) {
+    if (rejectedBatch.isEmpty) return const [];
+    final provenTooOld = rejectedBatch.map((w) => w.timerStart).reduce(min);
+    final retired = _wals
+        .where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk && w.timerStart <= provenTooOld)
+        .toList();
+    for (final wal in retired) {
+      wal.markOutsideRecoveryWindow();
+    }
+    return retired;
+  }
+
+  Future<bool> _localFileExists(Wal wal) async {
+    if (wal.filePath == null) return false;
+    final p = await Wal.getFilePath(wal.filePath);
+    if (p == null) return false;
+    return File(p).existsSync();
+  }
+
+  /// Resolve WALs sitting in [WalStatus.uploaded] by polling their server job
+  /// — out of the upload critical path. Returns the new/updated conversation
+  /// ids from jobs that reached a terminal state this pass so the caller can
+  /// surface them to the UI.
+  ///
+  /// Idempotent and safe to run repeatedly and concurrently with an upload:
+  /// it only touches `uploaded` WALs, and the upload loop only ever touches
+  /// `miss` WALs, so the two never contend for the same recording. WALs are
+  /// grouped by their shared `jobId` (batched upload → one job : N WALs).
+  Future<SyncLocalFilesResponse> reconcileUploadedWals() async {
+    final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    final byJob = <String, List<Wal>>{};
+    for (final w in _wals) {
+      if (w.status == WalStatus.uploaded && w.jobId != null && w.jobId!.isNotEmpty) {
+        byJob.putIfAbsent(w.jobId!, () => []).add(w);
+      }
+    }
+    if (byJob.isEmpty) return resp;
+
+    bool changed = false;
+    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    const maxConcurrent = 3;
+    final entries = byJob.entries.toList();
+
+    for (var i = 0; i < entries.length; i += maxConcurrent) {
+      final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
+
+      for (final (members, fetch) in fetched) {
+        final jobId = members.first.jobId;
+        final memberWalIds = members.map((w) => w.id).toList();
+        switch (fetch.outcome) {
+          case SyncJobFetchOutcome.transient:
+            // Network/5xx — leave as `uploaded`, retry on the next pass.
+            DebugLogManager.logEvent('reconcile_poll', {
+              'jobId': jobId,
+              'memberWalIds': memberWalIds,
+              'outcome': 'transient',
+            });
+            break;
+          case SyncJobFetchOutcome.notFound:
+            // Job expired or unknown. Recover from the retained local file.
+            for (final w in members) {
+              changed = true;
+              final hadJob = w.jobId;
+              w.jobId = null;
+              final fileExists = await _localFileExists(w);
+              if (fileExists) {
+                w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
+                w.retryCount += 1;
+                w.lastRetryAt = nowSecs;
+              } else {
+                w.markCorrupted(); // nothing left to recover
+              }
+              DebugLogManager.logEvent('reconcile_revert', {
+                'walId': w.id,
+                'jobId': hadJob,
+                'outcome': 'not_found',
+                'fileExists': fileExists,
+                'newStatus': w.status.name,
+                'retryCount': w.retryCount,
+              });
+            }
+            break;
+          case SyncJobFetchOutcome.ok:
+            final s = fetch.status!;
+            final terminalPolicy = syncJobTerminalPolicy(status: s.status, isTerminal: s.isTerminal);
+            if (terminalPolicy == SyncJobTerminalPolicy.wait) {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'non_terminal',
+                'serverStatus': s.status,
+                'processedSegments': s.processedSegments,
+                'totalSegments': s.totalSegments,
+              });
+              break; // still queued/processing — check later
+            }
+            if (s.result != null) {
+              resp.newConversationIds.addAll(
+                s.result!.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+              );
+              resp.updatedConversationIds.addAll(
+                s.result!.updatedConversationIds.where(
+                  (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+                ),
+              );
+            }
+            if (terminalPolicy == SyncJobTerminalPolicy.acknowledge) {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'completed',
+                'newConversations': s.result?.newConversationIds.length ?? 0,
+                'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
+              });
+              for (final w in members) {
+                changed = true;
+                w.status = WalStatus.synced;
+                w.jobId = null;
+                listener.onWalSynced(w);
+              }
+            } else {
+              // status='failed' with totalSegments==0 can only come from the
+              // backend stale guard (mark_job_completed only sets 'failed'
+              // when total>0). String hint is a fallback if the structural
+              // signal ever becomes ambiguous.
+              final capacityLimited =
+                  syncJobIsBackendBusy(s) || s.reasonCode == 'backfill_paced' || s.reasonCode == 'backfill_capacity';
+              if (capacityLimited) {
+                SyncRateLimiter.instance.markLimited(
+                  retryAfterSeconds: s.retryAfter ?? 600,
+                  reason: RateLimitReason.backendBusy,
+                );
+              }
+              for (final w in members) {
+                changed = true;
+                final hadJob = w.jobId;
+                w.status = WalStatus.miss;
+                w.jobId = null;
+                if (!capacityLimited) {
+                  w.retryCount += 1;
+                  w.lastRetryAt = nowSecs;
+                }
+                DebugLogManager.logEvent('reconcile_revert', {
+                  'walId': w.id,
+                  'jobId': hadJob,
+                  'outcome': s.status,
+                  'serverError': s.error,
+                  'failedSegments': s.failedSegments,
+                  'totalSegments': s.totalSegments,
+                  'retryCount': w.retryCount,
+                  'capacityLimited': capacityLimited,
+                  'retryCountBumped': !capacityLimited,
+                });
+              }
+            }
+            break;
+        }
+      }
+    }
+
+    if (changed) {
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+    }
     return resp;
   }
 }

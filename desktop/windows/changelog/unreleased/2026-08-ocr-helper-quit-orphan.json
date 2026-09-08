@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed the Linux screen-reading (OCR) helper occasionally leaving background processes running (including after quitting Omi), which could slow down your system over time."
+  ]
+}

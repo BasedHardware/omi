@@ -1,0 +1,124 @@
+version: 2
+name: ptt-lifecycle
+tier: 2
+description: Real push-to-talk start/release lifecycle through the automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Analytics/AnalyticsManager+Questions.swift
+  - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
+  - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
+  # Area ownership, not step-level execution: these files gate the PTT
+  # deferral-completion pathway (background runs spawned by voice turns). This
+  # flow drives only the too-short-turn lifecycle; the delta pathway itself is
+  # covered behaviorally in CompletionDeltaPolicyTests and its end-to-end flow
+  # is blocked on the delivery work tracked in
+  # https://github.com/BasedHardware/omi/issues/12732.
+  - desktop/macos/Desktop/Sources/Chat/CompletionDeltaPolicy.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTAttemptLifecycleRecorder.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTCaptureReadinessPolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NetworkReachability.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTLanguageIdentifier.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DeadlinedOperation.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationFormatter.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationPolisher.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/DictationTranscriber.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/TextInsertionSink.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeAudioTrim.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeWakeWordProbeSchedule.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+OwnerBoundaryTestSupport.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager+InputDeviceRouting.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+EventAdmission.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+StreamingJournal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceContextSingleFlight.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+TransportReplacement.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+VoiceOutput.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeScreenEvidence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+WarmRecovery.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionVoiceConfig.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubVoicePolicy.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoicePhraseAssets.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/UserInputPresence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession+TransportTermination.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionTypes.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
+  - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  - desktop/macos/Desktop/Sources/VADGateService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkMicButton.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Start PTT through the real shortcut lifecycle
+    bridge.action:
+      name: ptt_start
+    expect:
+      result.detail.listening: "true"
+
+  - id: S2
+    name: Assert typed turn is recording without anomalies
+    bridge.action:
+      name: ptt_turn_snapshot
+    expect:
+      result.detail.phase: recording
+      result.detail.stale_event_count: "0"
+      result.detail.invalid_transition_count: "0"
+
+  - id: S3
+    name: Release PTT through the real finalization lifecycle
+    bridge.action:
+      name: ptt_stop
+    expect:
+      result.detail.finalized: "true"
+
+  - id: S4
+    name: Assert empty capture terminated with the actionable too-short result
+    bridge.action:
+      name: ptt_turn_snapshot
+    expect:
+      result.detail.phase: terminal_too_short
+      result.detail.terminal_reason: too_short
+      result.detail.stale_event_count: "0"
+      result.detail.invalid_transition_count: "0"
+
+  - id: S5
+    name: Logs contain no bridge failures or invalid voice transitions
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "VoiceTurnCoordinator: invalid transition"

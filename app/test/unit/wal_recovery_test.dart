@@ -23,11 +23,7 @@ class _FakeListener implements IWalSyncListener {
 void main() {
   group('Wal model conversationId', () {
     test('conversationId is null by default', () {
-      final wal = Wal(
-        timerStart: 1000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-      );
+      final wal = Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60);
       expect(wal.conversationId, isNull);
       expect(wal.retryCount, 0);
       expect(wal.lastRetryAt, 0);
@@ -106,23 +102,26 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       sync.testWals = [
         Wal(
-            timerStart: now - 100,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 100,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
         Wal(
-            timerStart: now - 50,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 50,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
         Wal(
-            timerStart: now - 200,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.synced,
-            storage: WalStorage.disk),
+          timerStart: now - 200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.synced,
+          storage: WalStorage.disk,
+        ),
       ];
 
       await sync.stampConversationId(now - 150, 'conv-xyz');
@@ -165,25 +164,28 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       sync.testWals = [
         Wal(
-            timerStart: now - 100,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk,
-            conversationId: 'conv-1'),
+          timerStart: now - 100,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          conversationId: 'conv-1',
+        ),
         Wal(
-            timerStart: now - 50,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 50,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
         Wal(
-            timerStart: now - 30,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.synced,
-            storage: WalStorage.disk,
-            conversationId: 'conv-2'),
+          timerStart: now - 30,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.synced,
+          storage: WalStorage.disk,
+          conversationId: 'conv-2',
+        ),
       ];
 
       final orphaned = sync.getOrphanedWals();
@@ -195,13 +197,14 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       sync.testWals = [
         Wal(
-            timerStart: now - 100,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk,
-            conversationId: 'conv-1',
-            retryCount: 3),
+          timerStart: now - 100,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          conversationId: 'conv-1',
+          retryCount: 3,
+        ),
       ];
 
       final orphaned = sync.getOrphanedWals();
@@ -407,17 +410,19 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       sync.testWals = [
         Wal(
-            timerStart: now - 200,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
         Wal(
-            timerStart: now - 50,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 50,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
       ];
 
       // Session started at now - 100, so only wal at now - 50 qualifies
@@ -431,11 +436,12 @@ void main() {
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       sync.testWals = [
         Wal(
-            timerStart: now - 100,
-            codec: BleAudioCodec.opus,
-            seconds: 60,
-            status: WalStatus.miss,
-            storage: WalStorage.disk),
+          timerStart: now - 100,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+        ),
       ];
 
       await sync.stampConversationId(now - 100, 'conv-exact');
@@ -462,19 +468,23 @@ void main() {
 
       final listener = _FakeListener();
       final sync = LocalWalSyncImpl(listener);
-      sync.start();
+      try {
+        sync.start();
 
-      // walReady should complete once _initializeWals finishes
-      await sync.walReady;
-      // If we get here, the Completer completed successfully
-      expect(true, isTrue);
-
-      sync.stop();
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/path_provider'),
-        null,
-      );
-      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+        // walReady should complete once _initializeWals finishes
+        await sync.walReady;
+        // If we get here, the Completer completed successfully
+        expect(true, isTrue);
+      } finally {
+        // Must await stop before deleting tempDir — unawaited flush/save races
+        // the teardown and flakes under suite concurrency (CI).
+        await sync.stop();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      }
     });
   });
 }

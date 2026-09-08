@@ -6,10 +6,65 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+
+/// Grep-style transcript hit from conversation search (seek-to-moment).
+class TranscriptMatchSnippet {
+  final String text;
+  final String? segmentId;
+  final double? start;
+  final double? end;
+  final int? startMs;
+  final int? endMs;
+  final int? speakerId;
+
+  const TranscriptMatchSnippet({
+    required this.text,
+    this.segmentId,
+    this.start,
+    this.end,
+    this.startMs,
+    this.endMs,
+    this.speakerId,
+  });
+
+  factory TranscriptMatchSnippet.fromJson(Map<String, dynamic> json) {
+    return TranscriptMatchSnippet(
+      text: (json['text'] ?? '').toString(),
+      segmentId: json['segment_id']?.toString(),
+      start: (json['start'] as num?)?.toDouble(),
+      end: (json['end'] as num?)?.toDouble(),
+      startMs: (json['start_ms'] as num?)?.toInt(),
+      endMs: (json['end_ms'] as num?)?.toInt(),
+      speakerId: (json['speaker_id'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// Seek-to-moment args derived from search hit snippets (find-and-play).
+class SearchMomentSeek {
+  final double start;
+  final double end;
+
+  const SearchMomentSeek({required this.start, required this.end});
+}
+
+/// When search returned a timed transcript snippet, open the transcript tab at that moment.
+SearchMomentSeek? searchMomentSeekFromSnippets({
+  required List<TranscriptMatchSnippet> snippets,
+  required String searchQuery,
+}) {
+  if (searchQuery.trim().isEmpty || snippets.isEmpty) return null;
+  final snippet = snippets.firstWhereOrNull((candidate) => candidate.start != null);
+  if (snippet == null) return null;
+  final start = snippet.start!;
+  return SearchMomentSeek(start: start, end: snippet.end ?? start);
+}
 
 class CreateConversationResponse {
   final List<ServerMessage> messages;
@@ -18,11 +73,17 @@ class CreateConversationResponse {
   CreateConversationResponse({required this.messages, required this.conversation});
 
   factory CreateConversationResponse.fromJson(Map<String, dynamic> json) {
+    return CreateConversationResponse.fromGeneratedWireJson(json);
+  }
+
+  factory CreateConversationResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
     return CreateConversationResponse(
-      messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
+      messages: ((json['messages'] ?? []) as List<dynamic>)
+          .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+          .toList(),
       conversation: json['conversation'] != null
-          ? ServerConversation.fromJson(json['conversation'])
-          : (json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null),
+          ? ServerConversation.fromJson(json['conversation'] as Map<String, dynamic>)
+          : (json['memory'] != null ? ServerConversation.fromJson(json['memory'] as Map<String, dynamic>) : null),
     );
   }
 }
@@ -43,6 +104,7 @@ enum ConversationSource {
   phone,
   desktop,
   limitless,
+  rayban_meta,
 }
 
 class ConversationExternalData {
@@ -87,11 +149,9 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status:
-          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model:
-          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -120,6 +180,8 @@ class ConversationPhoto {
   String id;
   final String base64;
   String? description;
+  final String? contentType;
+  final String? storageId;
   final DateTime createdAt;
   bool discarded;
 
@@ -127,27 +189,143 @@ class ConversationPhoto {
     required this.id,
     required this.base64,
     this.description,
+    this.contentType,
+    this.storageId,
     required this.createdAt,
     this.discarded = false,
   });
 
   factory ConversationPhoto.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedConversationPhoto.fromJson(json);
+    return ConversationPhoto.fromGenerated(generated);
+  }
+
+  factory ConversationPhoto.fromGenerated(wire.GeneratedConversationPhoto generated) {
     return ConversationPhoto(
-      id: json['id'] ?? '',
-      base64: json['base64'] ?? '',
-      description: json['description'],
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : DateTime.now(),
-      discarded: json['discarded'] ?? false,
+      id: generated.id ?? '',
+      base64: generated.base64,
+      description: generated.description,
+      contentType: generated.contentType,
+      storageId: generated.storageId,
+      createdAt: generated.createdAt ?? DateTime.now(),
+      discarded: generated.discarded,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'base64': base64,
-    'description': description,
-    'created_at': createdAt.toUtc().toIso8601String(),
-    'discarded': discarded,
-  };
+  wire.GeneratedConversationPhoto toGenerated() {
+    return wire.GeneratedConversationPhoto(
+      id: id,
+      base64: base64,
+      description: description,
+      contentType: contentType,
+      createdAt: createdAt,
+      discarded: discarded,
+      storageId: storageId,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
+}
+
+/// Links a conversation to a Google Calendar event.
+class CalendarEventLink {
+  final String eventId;
+  final String title;
+  final List<String> attendees;
+  final List<String> attendeeEmails;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? htmlLink;
+
+  CalendarEventLink({
+    required this.eventId,
+    required this.title,
+    this.attendees = const [],
+    this.attendeeEmails = const [],
+    required this.startTime,
+    required this.endTime,
+    this.htmlLink,
+  });
+
+  factory CalendarEventLink.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedCalendarEventLink.fromJson(json);
+    return CalendarEventLink.fromGenerated(generated);
+  }
+
+  factory CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink generated) {
+    return CalendarEventLink(
+      eventId: generated.eventId,
+      title: generated.title,
+      attendees: generated.attendees,
+      attendeeEmails: generated.attendeeEmails,
+      startTime: generated.startTime,
+      endTime: generated.endTime,
+      htmlLink: generated.htmlLink,
+    );
+  }
+
+  wire.GeneratedCalendarEventLink toGenerated() {
+    return wire.GeneratedCalendarEventLink(
+      eventId: eventId,
+      title: title,
+      attendees: attendees,
+      attendeeEmails: attendeeEmails,
+      startTime: startTime,
+      endTime: endTime,
+      htmlLink: htmlLink,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
+}
+
+/// A booked calendar event that has no recorded conversation (SCA-381).
+///
+/// The Conversations list renders these as an honest "Not captured" group
+/// beside the audio rows; they are calendar rows, never conversations.
+class CalendarCaptureGap {
+  final String eventId;
+  final String title;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String status;
+  final String coverage;
+
+  CalendarCaptureGap({
+    required this.eventId,
+    required this.title,
+    required this.startTime,
+    required this.endTime,
+    this.status = 'confirmed',
+    this.coverage = 'not_captured',
+  });
+
+  factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
+    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
+  }
+
+  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
+    return CalendarCaptureGap(
+      eventId: generated.eventId,
+      title: generated.title,
+      startTime: generated.startTime,
+      endTime: generated.endTime,
+      status: generated.status,
+      coverage: generated.coverage,
+    );
+  }
+}
+
+/// Buckets capture gaps by the local day of their start, matching the
+/// conversation list's per-day grouping so a gap renders under its date header.
+Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
+  final byDay = <DateTime, List<CalendarCaptureGap>>{};
+  for (final gap in gaps) {
+    final local = gap.startTime.toLocal();
+    final day = DateTime(local.year, local.month, local.day);
+    (byDay[day] ??= <CalendarCaptureGap>[]).add(gap);
+  }
+  return byDay;
 }
 
 class AudioFile {
@@ -170,26 +348,66 @@ class AudioFile {
   });
 
   factory AudioFile.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedAudioFile.fromJson(json);
+    return AudioFile.fromGenerated(generated);
+  }
+
+  factory AudioFile.fromGenerated(wire.GeneratedAudioFile generated) {
     return AudioFile(
-      id: json['id'] ?? '',
-      uid: json['uid'] ?? '',
-      conversationId: json['conversation_id'] ?? '',
-      chunkTimestamps: (json['chunk_timestamps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? [],
-      provider: json['provider'] ?? 'gcp',
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
-      duration: (json['duration'] as num?)?.toDouble() ?? 0.0,
+      id: generated.id,
+      uid: generated.uid,
+      conversationId: generated.conversationId,
+      chunkTimestamps: generated.chunkTimestamps,
+      provider: generated.provider,
+      startedAt: generated.startedAt,
+      duration: generated.duration,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'uid': uid,
-    'conversation_id': conversationId,
-    'chunk_timestamps': chunkTimestamps,
-    'provider': provider,
-    'started_at': startedAt?.toUtc().toIso8601String(),
-    'duration': duration,
-  };
+  wire.GeneratedAudioFile toGenerated() {
+    return wire.GeneratedAudioFile(
+      id: id,
+      uid: uid,
+      conversationId: conversationId,
+      chunkTimestamps: chunkTimestamps,
+      provider: provider,
+      startedAt: startedAt,
+      duration: duration,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
+}
+
+TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegment generated) {
+  return TranscriptSegment.fromGenerated(generated);
+}
+
+/// Conversation-level dense playback artifact stamp: one MP3 per conversation
+/// (inter-part gaps collapsed) + the spans manifest for wall-clock mapping.
+class ConversationAudioInfo {
+  final double duration; // wall-clock seconds
+  final double capturedDuration; // seconds of actual audio
+  final List<ConversationAudioSpan> spans;
+
+  ConversationAudioInfo({required this.duration, required this.capturedDuration, this.spans = const []});
+
+  factory ConversationAudioInfo.fromGenerated(wire.GeneratedConversationAudio generated) {
+    return ConversationAudioInfo(
+      duration: generated.duration,
+      capturedDuration: generated.capturedDuration,
+      spans: generated.spans
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
+          .toList(),
+    );
+  }
 }
 
 class ServerConversation {
@@ -203,6 +421,7 @@ class ServerConversation {
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
+  final ConversationAudioInfo? conversationAudio;
 
   final List<AppResponse> appResults;
   final List<String> suggestedSummarizationApps;
@@ -211,6 +430,9 @@ class ServerConversation {
 
   final ConversationExternalData? externalIntegration;
 
+  /// Calendar event link - set when conversation overlaps with a Google Calendar event
+  final CalendarEventLink? calendarEvent;
+
   ConversationStatus status;
   bool discarded;
   final bool deleted;
@@ -218,6 +440,9 @@ class ServerConversation {
   bool starred;
   String? folderId;
   ConversationVisibility visibility;
+
+  /// Search-only transcript evidence for find-and-play.
+  final List<TranscriptMatchSnippet> matchSnippets;
 
   // local label
   bool isNew = false;
@@ -234,53 +459,97 @@ class ServerConversation {
     this.geolocation,
     this.photos = const [],
     this.audioFiles = const [],
+    this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
     this.source,
     this.language,
     this.externalIntegration,
+    this.calendarEvent,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.matchSnippets = const [],
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
-    return ServerConversation(
-      id: json['id'],
-      createdAt: DateTime.parse(json['created_at']).toLocal(),
-      structured: Structured.fromJson(json['structured']),
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
-      finishedAt: json['finished_at'] != null ? DateTime.parse(json['finished_at']).toLocal() : null,
-      transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
-      appResults: ((json['apps_results'] ?? []) as List<dynamic>)
-          .map((result) => AppResponse.fromJson(result))
-          .toList(),
-      suggestedSummarizationApps: ((json['suggested_summarization_apps'] ?? []) as List<dynamic>)
-          .map((appId) => appId.toString())
-          .toList(),
-      geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
-      photos: json['photos'] != null
-          ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
-          : [],
-      audioFiles: ((json['audio_files'] ?? []) as List<dynamic>).map((af) => AudioFile.fromJson(af)).toList(),
-      discarded: json['discarded'] ?? false,
-      source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
-      language: json['language'],
+    final normalized = Map<String, dynamic>.from(json);
+    final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
+    if (structured != null) {
+      normalized['structured'] = structured.toGenerated().toJson();
+    }
+    // Legacy caches (< toJson wire-format fix) wrote plugins_results entries as
+    // {'appId', 'content'}; the wire parser requires the plugin_id key.
+    final rawPluginResults = normalized['plugins_results'];
+    if (rawPluginResults is List) {
+      normalized['plugins_results'] = rawPluginResults.map((entry) {
+        if (entry is Map<String, dynamic> && !entry.containsKey('plugin_id')) {
+          return {...entry, 'plugin_id': entry['appId'] ?? entry['app_id']};
+        }
+        return entry;
+      }).toList();
+    }
+    final generated = wire.GeneratedConversation.fromJson(normalized);
+    final rawSnippets = json['match_snippets'];
+    final snippets = rawSnippets is List
+        ? rawSnippets
+            .whereType<Map>()
+            .map((e) => TranscriptMatchSnippet.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const <TranscriptMatchSnippet>[];
+    return ServerConversation.fromGenerated(
+      generated,
+      structured: structured,
+      geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
-      externalIntegration: json['external_data'] != null
-          ? ConversationExternalData.fromJson(json['external_data'])
-          : null,
-      status: json['status'] != null
-          ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
+      matchSnippets: snippets,
+    );
+  }
+
+  factory ServerConversation.fromGenerated(
+    wire.GeneratedConversation generated, {
+    Structured? structured,
+    Geolocation? geolocation,
+    bool deleted = false,
+    List<TranscriptMatchSnippet>? matchSnippets,
+  }) {
+    final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
+    return ServerConversation(
+      id: generated.id,
+      createdAt: generated.createdAt,
+      structured: structured ?? Structured.fromGenerated(generated.structured),
+      startedAt: generated.startedAt,
+      finishedAt: generated.finishedAt,
+      transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
+      appResults: generated.appsResults.isNotEmpty
+          ? generated.appsResults.map(AppResponse.fromGenerated).toList()
+          : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
+      suggestedSummarizationApps: generated.suggestedSummarizationApps,
+      geolocation:
+          geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
+      photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
+      audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
+      conversationAudio: generated.conversationAudio == null
+          ? null
+          : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
+      discarded: generated.discarded,
+      source:
+          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      language: generated.language,
+      deleted: deleted,
+      externalIntegration:
+          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
+      status: generated.status != null
+          ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
           : ConversationStatus.completed,
-      isLocked: json['is_locked'] ?? false,
-      starred: json['starred'] ?? false,
-      folderId: json['folder_id'],
-      visibility: ConversationVisibility.fromString(json['visibility']),
+      isLocked: generated.isLocked,
+      starred: generated.starred,
+      folderId: generated.folderId,
+      visibility: ConversationVisibility.fromString(generated.visibility),
+      matchSnippets: snippets,
     );
   }
 
@@ -292,7 +561,10 @@ class ServerConversation {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
-      'plugins_results': appResults.map((result) => result.toJson()).toList(),
+      'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
+      'plugins_results': appResults.map((result) {
+        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
+      }).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -301,12 +573,42 @@ class ServerConversation {
       'source': source?.toString(),
       'language': language,
       'external_data': externalIntegration?.toJson(),
+      'calendar_event': calendarEvent?.toJson(),
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
     };
+  }
+
+  wire.GeneratedConversation toGenerated() {
+    return wire.GeneratedConversation(
+      id: id,
+      createdAt: createdAt,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      structured: structured.toGenerated(),
+      transcriptSegments: transcriptSegments.map((segment) => segment.toGenerated()).toList(),
+      appsResults: appResults.map((result) => result.toGenerated()).toList(),
+      pluginsResults: appResults.map((result) {
+        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content);
+      }).toList(),
+      suggestedSummarizationApps: suggestedSummarizationApps,
+      geolocation: geolocation?.toGenerated(),
+      photos: photos.map((photo) => photo.toGenerated()).toList(),
+      audioFiles: audioFiles.map((audioFile) => audioFile.toGenerated()).toList(),
+      discarded: discarded,
+      source: source?.name,
+      language: language,
+      externalData: externalIntegration?.toJson(),
+      calendarEvent: calendarEvent?.toGenerated(),
+      status: status.name,
+      isLocked: isLocked,
+      starred: starred,
+      folderId: folderId,
+      visibility: visibility.value,
+    );
   }
 
   int unassignedSegmentsLength() {
@@ -333,6 +635,7 @@ class ServerConversation {
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
+    if (source == ConversationSource.rayban_meta) return 'Ray-Ban Meta';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     if (structured.category.isEmpty) return 'Other';
@@ -367,7 +670,9 @@ class ServerConversation {
   }
 
   int getDurationInSeconds() {
-    if (finishedAt != null && startedAt != null) {
+    // started_at is the streaming-session origin, not this conversation's start,
+    // so finishedAt - startedAt over-counts; prefer the transcript span (#4056).
+    if (transcriptSegments.isEmpty && finishedAt != null && startedAt != null) {
       return finishedAt!.difference(startedAt!).inSeconds;
     }
     return _getDurationInSecondsByTranscripts();
@@ -402,23 +707,42 @@ class SyncLocalFilesResponse {
   int totalSegments;
   List<String> errors;
 
+  /// Client-side batches that could not be uploaded. Unlike [failedSegments],
+  /// these failures leave WALs retryable locally and must re-arm foreground
+  /// recovery rather than presenting a completed sync.
+  int localUploadFailures;
+
+  /// Subset of [localUploadFailures] that are permanent server refusals
+  /// (HTTP 400/413, etc.). Soft-retry only applies when this stays zero.
+  int localUploadPermanentFailures;
+
+  /// Last permanent upload error message for SyncStatus.error surfacing.
+  String? localUploadPermanentError;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
+    this.localUploadFailures = 0,
+    this.localUploadPermanentFailures = 0,
+    this.localUploadPermanentError,
   });
 
   bool get hasPartialFailure => failedSegments > 0;
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
+    return SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse.fromJson(json));
+  }
+
+  factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
     return SyncLocalFilesResponse(
-      newConversationIds: ((json['new_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
-      updatedConversationIds: ((json['updated_memories'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
-      failedSegments: json['failed_segments'] ?? 0,
-      totalSegments: json['total_segments'] ?? 0,
-      errors: ((json['errors'] ?? []) as List<dynamic>).map((val) => val.toString()).toList(),
+      newConversationIds: generated.newMemories ?? [],
+      updatedConversationIds: generated.updatedMemories ?? [],
+      failedSegments: generated.failedSegments,
+      totalSegments: generated.totalSegments,
+      errors: generated.errors ?? [],
     );
   }
 }
@@ -439,12 +763,16 @@ class SyncJobStartResponse {
   });
 
   factory SyncJobStartResponse.fromJson(Map<String, dynamic> json) {
+    return SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse.fromJson(json));
+  }
+
+  factory SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse generated) {
     return SyncJobStartResponse(
-      jobId: json['job_id'] ?? '',
-      status: json['status'] ?? 'queued',
-      totalFiles: json['total_files'] ?? 0,
-      totalSegments: json['total_segments'] ?? 0,
-      pollAfterMs: json['poll_after_ms'] ?? 3000,
+      jobId: generated.jobId,
+      status: generated.status,
+      totalFiles: generated.totalFiles,
+      totalSegments: generated.totalSegments,
+      pollAfterMs: generated.pollAfterMs,
     );
   }
 }
@@ -458,6 +786,9 @@ class SyncJobStatusResponse {
   final int failedSegments;
   final SyncLocalFilesResponse? result;
   final String? error;
+  final String? lane;
+  final String? reasonCode;
+  final int? retryAfter;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -468,6 +799,9 @@ class SyncJobStatusResponse {
     this.failedSegments = 0,
     this.result,
     this.error,
+    this.lane,
+    this.reasonCode,
+    this.retryAfter,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
@@ -475,19 +809,32 @@ class SyncJobStatusResponse {
   bool get isPartialFailure => status == 'partial_failure';
 
   factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    SyncLocalFilesResponse? result;
-    if (json['result'] != null) {
-      result = SyncLocalFilesResponse.fromJson(json['result']);
-    }
+    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
     return SyncJobStatusResponse(
-      jobId: json['job_id'] ?? '',
-      status: json['status'] ?? 'unknown',
-      totalSegments: json['total_segments'] ?? 0,
-      processedSegments: json['processed_segments'] ?? 0,
-      successfulSegments: json['successful_segments'] ?? 0,
-      failedSegments: json['failed_segments'] ?? 0,
-      result: result,
-      error: json['error'],
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
+      lane: json['lane'] as String?,
+      reasonCode: json['reason_code'] as String?,
+      retryAfter: (json['retry_after'] as num?)?.toInt(),
+    );
+  }
+
+  factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
+    return SyncJobStatusResponse(
+      jobId: generated.jobId,
+      status: generated.status,
+      totalSegments: generated.totalSegments,
+      processedSegments: generated.processedSegments,
+      successfulSegments: generated.successfulSegments,
+      failedSegments: generated.failedSegments,
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      error: generated.error,
     );
   }
 }

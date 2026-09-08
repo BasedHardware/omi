@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "memory_rows": [
+    {
+      "id": "legacy-memory",
+      "uid": "contract-user",
+      "content": "Legacy text remains readable.",
+      "created_at": "2026-08-23T00:00:00Z",
+      "updated_at": "2026-08-23T00:00:00Z",
+      "layer": "long_term",
+      "kind": "fact",
+      "slot": "must_not_be_authoritative"
+    },
+    {
+      "id": "v1-memory",
+      "uid": "contract-user",
+      "content": "The user lives in New York.",
+      "created_at": "2026-08-23T00:00:00Z",
+      "updated_at": "2026-08-23T00:00:00Z",
+      "layer": "long_term",
+      "ledger_schema_version": "knowledge_ledger.v1",
+      "kind": "fact",
+      "subject_scope": "primary_user",
+      "slot": "home_city",
+      "intent_backed": true,
+      "curation_weight": 3,
+      "write_reason": "direct_user_statement",
+      "evidence": [
+        {
+          "evidence_id": "memory-evidence-1",
+          "independence_group": "conversation-1"
+        }
+      ]
+    },
+    {
+      "id": "future-memory",
+      "uid": "contract-user",
+      "content": "Future text remains readable but inert.",
+      "created_at": "2026-08-23T00:00:00Z",
+      "updated_at": "2026-08-23T00:00:00Z",
+      "layer": "long_term",
+      "ledger_schema_version": "knowledge_ledger.v2",
+      "kind": "fact",
+      "subject_scope": "primary_user",
+      "slot": "must_not_be_authoritative",
+      "intent_backed": true,
+      "future_ledger_field": {
+        "ignored_by_v1_clients": true
+      }
+    }
+  ],
+  "chat_records": {
+    "legacy": {
+      "id": "legacy-message",
+      "text": "Legacy answer remains available."
+    },
+    "v1": {
+      "id": "v1-message",
+      "text": "Answer remains authoritative.",
+      "evidence": {
+        "schema_version": 1,
+        "request_id": "request-1",
+        "references": [
+          {
+            "id": "conversation-summary-1",
+            "kind": "conversation_summary",
+            "state": "available",
+            "conversation_id": "conversation-1"
+          }
+        ]
+      }
+    },
+    "future": {
+      "id": "future-message",
+      "text": "Future answer remains available.",
+      "evidence": {
+        "schema_version": 2,
+        "request_id": "request-2",
+        "references": [
+          {
+            "id": "future-reference-1",
+            "kind": "future_kind",
+            "state": "future_state",
+            "future_reference_field": true
+          }
+        ],
+        "future_envelope_field": true
+      }
+    }
+  },
+  "expected": {
+    "memory_ids": [
+      "legacy-memory",
+      "v1-memory",
+      "future-memory"
+    ],
+    "authoritative_ledger_ids": [
+      "v1-memory"
+    ],
+    "readable_text_by_id": {
+      "legacy-memory": "Legacy text remains readable.",
+      "v1-memory": "The user lives in New York.",
+      "future-memory": "Future text remains readable but inert."
+    },
+    "readable_chat_text_by_id": {
+      "legacy-message": "Legacy answer remains available.",
+      "v1-message": "Answer remains authoritative.",
+      "future-message": "Future answer remains available."
+    },
+    "v1_evidence_kind": "conversation_summary",
+    "future_evidence_kind": "unknown",
+    "future_evidence_state": "unknown"
+  }
+}

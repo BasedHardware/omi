@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-promotion-gate-admits-on-recency-not-lineage",
+  "violated_contract": "A gate standing between an accepted deploy candidate and its traffic promotion may refuse only when promoting would regress the serving surface — the candidate does not descend from what is serving. It must not refuse merely because the branch advanced while the candidate was building. Recency is not a safety property once ordering is already guaranteed by a serialized, non-cancelling concurrency group; conflating the two makes admission depend on whether anyone else merged during the build, so sustained merge pressure discards every candidate after its build and acceptance are already paid for.",
+  "canonical_prevention": "Gate the traffic mutation on commit lineage between the candidate and the release SHA recorded on the revision currently serving 100% traffic, admitting descendants and unprovable lineage while refusing ancestors and divergent histories. Keep recency checks upstream of the build, where they can still prevent work rather than discard it.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check_desktop_backend_traffic_regression.py",
+    ".github/scripts/test_check_desktop_backend_traffic_regression.py"
+  ],
+  "evidence_prs": [11768],
+  "scope_hints": [
+    ".github/workflows/desktop_backend_auto_dev.yml",
+    ".github/scripts/check_desktop_backend_traffic_regression.py"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "generator": "desktop/macos/agent/scripts/generate-realtime-voice-phrases.mjs",
+  "generationMethod": "managed_realtime_session",
+  "sessionRoute": "/v2/realtime/session",
+  "format": {
+    "container": "WAV",
+    "encoding": "PCM_S16LE",
+    "sampleRateHz": 24000,
+    "channels": 1
+  },
+  "assets": [
+    {
+      "file": "gemini-charon-deeper-thinking-let-me-think-that-through.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "deeper-thinking",
+      "phrase": "Let me think that through.",
+      "transcription": "Let me think that through.",
+      "sha256": "2f3f071a028007694aa59ffb6247fbfb0f22299a6d17627af5063de32b98e914",
+      "bytes": 77806
+    },
+    {
+      "file": "gemini-charon-deeper-thinking-give-me-a-moment-to-think-that-through.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "deeper-thinking",
+      "phrase": "Give me a moment to think that through.",
+      "transcription": "Give me a moment to think that through.",
+      "sha256": "6404fb7d9f8aa2b87fa6393000fd65cdaecf6693fcb80bde263c649161931e66",
+      "bytes": 115246
+    },
+    {
+      "file": "gemini-charon-deeper-thinking-let-me-dig-into-that.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "deeper-thinking",
+      "phrase": "Let me dig into that.",
+      "transcription": "Let me dig into that.",
+      "sha256": "a679531f991f0afb0b6b8918580796f980b09627274666005cc44c2e44272639",
+      "bytes": 72526
+    },
+    {
+      "file": "gemini-charon-deeper-thinking-ill-take-a-closer-look.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "deeper-thinking",
+      "phrase": "I'll take a closer look.",
+      "transcription": "I'll take a closer look.",
+      "sha256": "ab5d097747fc184e288efebb3e8fc9486acdcd4f9e589d01c17e42ffccd7169a",
+      "bytes": 76846
+    },
+    {
+      "file": "gemini-charon-public-web-search-let-me-look-that-up.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "public-web-search",
+      "phrase": "Let me look that up.",
+      "transcription": "Let me look that up.",
+      "sha256": "41c7213e475012700b592f5ef7f60ff8dab3d74339347afa6a0763ba16c61cd9",
+      "bytes": 61486
+    },
+    {
+      "file": "gemini-charon-public-web-search-ill-check-the-latest-on-that.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "public-web-search",
+      "phrase": "I'll check the latest on that.",
+      "transcription": "I'll check the latest on that.",
+      "sha256": "f90b5a3e6beef9c45c2e3749e06444da5e67eb6d29a3e9547aaf9869c5a2e8c8",
+      "bytes": 78794
+    },
+    {
+      "file": "gemini-charon-public-web-search-let-me-verify-that.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "public-web-search",
+      "phrase": "Let me verify that.",
+      "transcription": "Let me verify that.",
+      "sha256": "8311b5fb3b575b497faead4dfaae3e63e69247fa1b9f652ef73aba0f8b5ae8dc",
+      "bytes": 68686
+    },
+    {
+      "file": "gemini-charon-public-web-search-checking-the-latest-now.wav",
+      "provider": "gemini",
+      "voiceName": "Charon",
+      "model": "models/gemini-3.1-flash-live-preview",
+      "kind": "public-web-search",
+      "phrase": "Checking the latest now.",
+      "transcription": "Checking the latest now.",
+      "sha256": "c463760c9bd2ecb5578516285d88890976fd4e6f892213cddea01a1cf1da1fa7",
+      "bytes": 75406
+    },
+    {
+      "file": "openai-cedar-deeper-thinking-let-me-think-that-through.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "deeper-thinking",
+      "phrase": "Let me think that through.",
+      "transcription": "Let me think that through.",
+      "sha256": "caf34e14e308deb64a8cc62df0ca5fece176f1821195f9b5e66fb1c59371cf7f",
+      "bytes": 69644
+    },
+    {
+      "file": "openai-cedar-deeper-thinking-give-me-a-moment-to-think-that-through.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "deeper-thinking",
+      "phrase": "Give me a moment to think that through.",
+      "transcription": "Give me a moment to think that through.",
+      "sha256": "940ffc8a10a30244554b8177097669c88c5fb9dfbb7c2c4252c669b887621e8f",
+      "bytes": 122444
+    },
+    {
+      "file": "openai-cedar-deeper-thinking-let-me-dig-into-that.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "deeper-thinking",
+      "phrase": "Let me dig into that.",
+      "transcription": "Let me dig into that.",
+      "sha256": "020922820b254796551686230da94785d7e74d988da4820172c96e05e51cd1c3",
+      "bytes": 98444
+    },
+    {
+      "file": "openai-cedar-deeper-thinking-ill-take-a-closer-look.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "deeper-thinking",
+      "phrase": "I'll take a closer look.",
+      "transcription": "I'll take a closer look.",
+      "sha256": "00ec08309cfc4f3183ad0e18cff3cc49f2270962d9ca5e067ce4bd37a51267c6",
+      "bytes": 86444
+    },
+    {
+      "file": "openai-cedar-public-web-search-let-me-look-that-up.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "public-web-search",
+      "phrase": "Let me look that up.",
+      "transcription": "Let me look that up.",
+      "sha256": "d7b542fb06038557f2e9fdd5af7fafa43fd3292ac8ef757474f5389d4731e4a2",
+      "bytes": 55244
+    },
+    {
+      "file": "openai-cedar-public-web-search-ill-check-the-latest-on-that.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "public-web-search",
+      "phrase": "I'll check the latest on that.",
+      "transcription": "I'll check the latest on that.",
+      "sha256": "8a3763dd17c730bcfbcb5cb4e99abaed8b147a7e638dbb6103a61f2db964d79c",
+      "bytes": 79244
+    },
+    {
+      "file": "openai-cedar-public-web-search-let-me-verify-that.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "public-web-search",
+      "phrase": "Let me verify that.",
+      "transcription": "Let me verify that.",
+      "sha256": "3b22258e2111c0ca449b574e3ad56cc3d003f6c7529ffcbd12405f43743ee9a9",
+      "bytes": 81644
+    },
+    {
+      "file": "openai-cedar-public-web-search-checking-the-latest-now.wav",
+      "provider": "openai",
+      "voiceName": "cedar",
+      "model": "gpt-realtime-2",
+      "kind": "public-web-search",
+      "phrase": "Checking the latest now.",
+      "transcription": "Checking the latest now.",
+      "sha256": "6bb6476f498f367ec67192a08260effe4b1e062e32d953dc7897a46f4c53b553",
+      "bytes": 88844
+    }
+  ]
+}

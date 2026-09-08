@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -198,12 +199,16 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
       if (await canLaunchUrl(url)) {
         await launchUrl(url);
 
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(context.l10n.unableToOpenWatchApp, duration: const Duration(seconds: 6));
+      if (mounted) {
+        AppSnackbar.showSnackbar(context.l10n.unableToOpenWatchApp, duration: const Duration(seconds: 6));
 
-      Navigator.of(context).pop();
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -217,19 +222,25 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
       final bool isReachable = await hostAPI.isWatchReachable();
 
       if (isReachable) {
-        AppSnackbar.showSnackbar(context.l10n.appleWatchConnectedSuccessfully, duration: const Duration(seconds: 2));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.appleWatchConnectedSuccessfully, duration: const Duration(seconds: 2));
 
-        // Close the bottom sheet and notify parent
-        Navigator.of(context).pop();
+          // Close the bottom sheet and notify parent
+          Navigator.of(context).pop();
+        }
         widget.onConnected?.call();
       } else {
-        AppSnackbar.showSnackbar(context.l10n.appleWatchNotReachable, duration: const Duration(seconds: 4));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.appleWatchNotReachable, duration: const Duration(seconds: 4));
+        }
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(
-        context.l10n.errorCheckingConnection(e.toString()),
-        duration: const Duration(seconds: 3),
-      );
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          context.l10n.errorCheckingConnection(readableError(e)),
+          duration: const Duration(seconds: 3),
+        );
+      }
     } finally {
       setState(() {
         _isChecking = false;

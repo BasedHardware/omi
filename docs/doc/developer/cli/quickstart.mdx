@@ -51,6 +51,12 @@ Choose 1 or 2 [1]: _
     Choose the scopes you want — `memories:read`, `memories:write`,
     `conversations:read`, etc. The CLI validates the `omi_dev_` prefix
     client-side so you fail fast on a typo.
+
+    Memory scopes are necessary but not sufficient for the Memory API: Omi also
+    applies a server-side account readiness gate. A `403` with code
+    `developer_memory_access_not_ready` means the key can still be valid and
+    correctly scoped. Do not rotate it; retry after the account is enabled or
+    contact Omi support if the state persists.
   </Tab>
   <Tab title="Headless / CI">
     ```bash

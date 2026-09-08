@@ -1,0 +1,251 @@
+import AppKit
+import OmiTheme
+import SwiftUI
+
+struct ExcludedAppRow: View {
+  let appName: String
+  let onRemove: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.md) {
+      AppIconView(appName: appName, size: 24)
+
+      Text(appName)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.primary)
+
+      Spacer()
+
+      Button("Remove \(appName)", systemImage: "xmark.circle.fill", action: onRemove)
+        .labelStyle(.iconOnly)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(isHovered ? Ink.errorRed : Ink.secondary)
+        .buttonStyle(.plain)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .background(
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(isHovered ? Ink.hairline : Color.clear)
+    )
+    .onHover { hovering in
+      isHovered = hovering
+    }
+  }
+}
+
+struct AppRuleEditorView: View {
+  let title: String
+  let placeholder: String
+  let addButtonTitle: String
+  let existingApps: Set<String>
+  let builtInApps: Set<String>
+  let onAdd: (String) -> Void
+
+  @State private var newAppName: String = ""
+  @State private var runningApps: [String] = []
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text(title)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(Ink.secondary)
+
+      HStack(spacing: OmiSpacing.sm) {
+        TextField(placeholder, text: $newAppName)
+          .settingsTextInputStyle()
+          .onSubmit { addApp() }
+
+        Button(addButtonTitle) { addApp() }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(newAppName.trimmingCharacters(in: .whitespaces).isEmpty)
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack {
+          Text("Currently Running Apps")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.secondary)
+          Spacer()
+          Button("Refresh running apps", systemImage: "arrow.clockwise", action: refreshRunningApps)
+            .labelStyle(.iconOnly)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .buttonStyle(.plain)
+        }
+
+        ScrollView(.horizontal) {
+          HStack(spacing: OmiSpacing.sm) {
+            ForEach(
+              runningApps.filter { !existingApps.contains($0) && !builtInApps.contains($0) },
+              id: \.self
+            ) { appName in
+              RunningAppChip(appName: appName) {
+                onAdd(appName)
+              }
+            }
+          }
+        }
+        .scrollIndicators(.hidden)
+      }
+      .padding(.top, OmiSpacing.xxs)
+    }
+    .onAppear { refreshRunningApps() }
+  }
+
+  func addApp() {
+    let trimmed = newAppName.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    onAdd(trimmed)
+    newAppName = ""
+  }
+
+  func refreshRunningApps() {
+    let apps = NSWorkspace.shared.runningApplications
+      .compactMap { $0.localizedName }
+      .filter { !$0.isEmpty }
+      .sorted()
+
+    var seen = Set<String>()
+    runningApps = apps.filter { seen.insert($0).inserted }
+  }
+}
+
+struct BrowserKeywordListView: View {
+  @Binding var keywords: [String]
+  let onAdd: (String) -> Void
+  let onRemove: (String) -> Void
+
+  @State private var newKeyword: String = ""
+  @State private var filterText: String = ""
+
+  var filteredKeywords: [String] {
+    if filterText.isEmpty {
+      return keywords
+    }
+    return keywords.filter { $0.localizedStandardContains(filterText) }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      // Filter field
+      HStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "line.3.horizontal.decrease")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        TextField("Filter keywords...", text: $filterText)
+          .textFieldStyle(.plain)
+          .scaledFont(size: OmiType.caption)
+        if !filterText.isEmpty {
+          Button("Clear keyword filter", systemImage: "xmark.circle.fill") {
+            filterText = ""
+          }
+          .labelStyle(.iconOnly)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .buttonStyle(.plain)
+        }
+      }
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xxs)
+      .background(Ink.rowFill)
+      .cornerRadius(SettingsGlassMetrics.pillRadius)
+
+      // Keyword chips in a wrapping flow layout
+      ScrollView {
+        FlowLayout(spacing: OmiSpacing.xs) {
+          ForEach(filteredKeywords, id: \.self) { keyword in
+            HStack(spacing: OmiSpacing.xxs) {
+              Text(keyword)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.primary)
+              Button("Remove \(keyword)", systemImage: "xmark") {
+                onRemove(keyword)
+              }
+              .labelStyle(.iconOnly)
+              .scaledFont(size: 8, weight: .bold)
+              .foregroundColor(Ink.secondary)
+              .buttonStyle(.plain)
+            }
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xxs)
+            .background(Ink.rowFill)
+            .cornerRadius(SettingsGlassMetrics.pillRadius)
+          }
+        }
+        .padding(.vertical, OmiSpacing.hairline)
+      }
+      .frame(maxHeight: 150)
+
+      // Add new keyword
+      HStack(spacing: OmiSpacing.sm) {
+        TextField("Add keyword...", text: $newKeyword)
+          .settingsTextInputStyle()
+          .onSubmit { addKeyword() }
+
+        Button("Add") { addKeyword() }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+          .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
+      }
+
+      Text("\(keywords.count) keywords")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    }
+  }
+
+  func addKeyword() {
+    let trimmed = newKeyword.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    onAdd(trimmed)
+    newKeyword = ""
+  }
+}
+
+// MARK: - Running App Chip
+
+struct RunningAppChip: View {
+  let appName: String
+  let onTap: () -> Void
+
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: onTap) {
+      HStack(spacing: OmiSpacing.xs) {
+        AppIconView(appName: appName, size: 16)
+
+        Text(appName)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+
+        Image(systemName: "plus.circle.fill")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(isHovered ? Ink.accent : Ink.secondary)
+      }
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.pillRadius, style: .continuous)
+          .fill(
+            isHovered ? Ink.hairline : Ink.rowFill)
+      )
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      isHovered = hovering
+    }
+  }
+}
+
+#if canImport(PreviewsMacros)
+  #Preview {
+    SettingsPage(
+      appState: AppState(),
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil)
+    )
+  }
+#endif

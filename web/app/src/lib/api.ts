@@ -1,26 +1,49 @@
-import { getIdToken } from "./firebase";
+import { getIdToken } from './firebase';
+import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
+  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
   CACHE_TTL,
-} from "./cache";
+} from './cache';
 import type {
   Conversation,
   ConversationSearchResponse,
+  ConversationScreenFrameSet,
   ConversationStatus,
   ActionItem,
   Memory,
   MemoryCategory,
   MemoryVisibility,
   KnowledgeGraph,
+  ScreenFrameSharingUpdateRequest,
   ServerMessage,
   MessageChunk,
   MessageChunkType,
   MessageFile,
   AudioFileUrlInfo,
-} from "@/types/conversation";
+} from '@/types/conversation';
+// Generated REST response envelopes (backend OpenAPI authority).
+import type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+  FairUseStatusResponse,
+} from './omiApi.generated';
+import {
+  normalizeKnowledgeLedgerMemories,
+  normalizeKnowledgeLedgerMemory,
+} from './knowledgeLedger';
+export type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+};
+import type { Goal, GoalHistoryEntry } from '@/types/goals';
+import type { ChatSession } from '@/types/chatSessions';
+import type { Scores } from '@/types/scores';
 import type {
   App,
   AppCategory,
@@ -34,53 +57,58 @@ import type {
   GenerateDescriptionResponse,
   NotificationScope,
   PaymentPlan,
-} from "@/types/apps";
+} from '@/types/apps';
 
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
-const API_BASE_URL = "/api/proxy";
+const API_BASE_URL = '/api/proxy';
 
 /**
  * Make an authenticated API request
  */
-async function fetchWithAuth<T>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  // FormData must set its own Content-Type so fetch can add the multipart
+  // boundary; forcing application/json here produces a body the server cannot
+  // parse.
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  new Headers(options.headers).forEach((value, name) => headers.set(name, value));
+  headers.set('X-App-Platform', 'web');
+  if (deviceIdHash) {
+    headers.set('X-Device-Id-Hash', deviceIdHash);
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-App-Platform": "web",
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "No error body");
+      const errorText = await response.text().catch(() => 'No error body');
       // Only log non-404 errors (404s are expected for optional endpoints)
       if (response.status !== 404) {
-        console.error("API error response:", response.status, errorText);
+        console.error('API error response:', response.status, errorText);
       }
 
       if (response.status === 401) {
-        throw new Error("Unauthorized - please sign in again");
+        throw new Error('Unauthorized - please sign in again');
       }
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
@@ -92,13 +120,10 @@ async function fetchWithAuth<T>(
 
     return response.json();
   } catch (fetchError) {
-    if (
-      fetchError instanceof TypeError &&
-      fetchError.message === "Failed to fetch"
-    ) {
-      console.error("Network error - possible CORS issue or API unavailable");
+    if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
+      console.error('Network error - possible CORS issue or API unavailable');
       throw new Error(
-        "Network error: Unable to reach the API. Please check your connection.",
+        'Network error: Unable to reach the API. Please check your connection.',
       );
     }
     throw fetchError;
@@ -124,7 +149,7 @@ export async function getConversations(
   const {
     limit = 50,
     offset = 0,
-    statuses = ["processing", "completed"],
+    statuses = ['processing', 'completed'],
     includeDiscarded = false,
     startDate,
     endDate,
@@ -135,19 +160,19 @@ export async function getConversations(
     limit: limit.toString(),
     offset: offset.toString(),
     include_discarded: includeDiscarded.toString(),
-    statuses: statuses.join(","),
+    statuses: statuses.join(','),
   });
 
   if (startDate) {
-    queryParams.set("start_date", startDate.toISOString());
+    queryParams.set('start_date', startDate.toISOString());
   }
 
   if (endDate) {
-    queryParams.set("end_date", endDate.toISOString());
+    queryParams.set('end_date', endDate.toISOString());
   }
 
   if (folderId) {
-    queryParams.set("folder_id", folderId);
+    queryParams.set('folder_id', folderId);
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -180,8 +205,8 @@ export async function searchConversations(
 ): Promise<ConversationSearchResponse> {
   const { query, page = 1, perPage = 10, includeDiscarded = false } = params;
 
-  return fetchWithAuth<ConversationSearchResponse>("/v1/conversations/search", {
-    method: "POST",
+  return fetchWithAuth<ConversationSearchResponse>('/v1/conversations/search', {
+    method: 'POST',
     body: JSON.stringify({
       query,
       page,
@@ -194,12 +219,9 @@ export async function searchConversations(
 /**
  * Toggle conversation starred status
  */
-export async function toggleStarred(
-  id: string,
-  starred: boolean,
-): Promise<void> {
+export async function toggleStarred(id: string, starred: boolean): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}/starred?starred=${starred}`, {
-    method: "PATCH",
+    method: 'PATCH',
   });
   invalidateCache(invalidationPatterns.conversations);
 }
@@ -209,9 +231,81 @@ export async function toggleStarred(
  */
 export async function deleteConversation(id: string): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
+}
+
+// =============================================================================
+// Meeting-note screenshots ("screen frames")
+// =============================================================================
+// Types come from the generated OpenAPI client (`@/types/conversation`
+// re-exports them). Route paths mirror the shared contract
+// (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
+
+/**
+ * Get the approved screenshot set (banner + strip) for a conversation.
+ * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
+ * balances against the frame set's signed URLs expiring after 60 minutes.
+ */
+export async function getConversationScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  return fetchWithCache<ConversationScreenFrameSet>(
+    cacheKeys.screenFrames(conversationId),
+    () =>
+      fetchWithAuth<ConversationScreenFrameSet>(
+        `/v1/conversations/${conversationId}/screenshots`,
+      ),
+    { ttl: CACHE_TTL.SHORT },
+  );
+}
+
+/**
+ * Delete a single screenshot. The server may promote another already-
+ * approved, already-persisted frame to banner (contract §8); the returned
+ * set is authoritative, so callers should replace their local state with it
+ * rather than trying to predict the promotion.
+ */
+export async function deleteScreenFrame(
+  conversationId: string,
+  frameId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots/${frameId}`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/** Delete every screenshot for a conversation (banner + strip). */
+export async function deleteAllScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/**
+ * Toggle whether this conversation's approved frames are visible on its
+ * public share link. Default for a new conversation is `enabled: true`.
+ */
+export async function patchScreenFrameSharing(
+  conversationId: string,
+  enabled: boolean,
+): Promise<ConversationScreenFrameSet> {
+  const body: ScreenFrameSharingUpdateRequest = { enabled };
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshot-sharing`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
 }
 
 /**
@@ -220,32 +314,17 @@ export async function deleteConversation(id: string): Promise<void> {
  * @param reprocess - Whether to reprocess the merged conversation (default: true)
  * @returns Response with status and merged conversation IDs
  */
-export interface MergeConversationsResponse {
-  status: string;
-  message: string;
-  warning?: string;
-  conversation_ids: string[];
-}
-
 export async function mergeConversations(
   conversationIds: string[],
   reprocess: boolean = true,
 ): Promise<MergeConversationsResponse> {
-  return fetchWithAuth<MergeConversationsResponse>("/v1/conversations/merge", {
-    method: "POST",
+  return fetchWithAuth<MergeConversationsResponse>('/v1/conversations/merge', {
+    method: 'POST',
     body: JSON.stringify({
       conversation_ids: conversationIds,
       reprocess,
     }),
   });
-}
-
-/**
- * Response from processing an in-progress conversation
- */
-export interface CreateConversationResponse {
-  conversation: Conversation;
-  messages: ServerMessage[];
 }
 
 /**
@@ -257,18 +336,42 @@ export interface CreateConversationResponse {
  */
 export async function processInProgressConversation(): Promise<CreateConversationResponse | null> {
   try {
+    const result = await fetchWithAuth<CreateConversationResponse>('/v1/conversations', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    // 404 means no in-progress conversation exists
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Finalize exactly one conversation by ID (desktop-style).
+ * Prefer this over processInProgressConversation when a socket owns a
+ * conversation_id — the Redis in_progress pointer is shared across device +
+ * web and must not steal a pendant session (#5388).
+ */
+export async function finalizeConversationById(
+  conversationId: string,
+): Promise<CreateConversationResponse | null> {
+  try {
     const result = await fetchWithAuth<CreateConversationResponse>(
-      "/v1/conversations",
+      `/v1/conversations/${encodeURIComponent(conversationId)}/finalize`,
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({}),
       },
     );
     invalidateCache(invalidationPatterns.conversations);
     return result;
   } catch (error) {
-    // 404 means no in-progress conversation exists
-    if (error instanceof Error && error.message.includes("404")) {
+    if (error instanceof Error && error.message.includes('404')) {
       return null;
     }
     throw error;
@@ -288,11 +391,6 @@ export interface GetActionItemsParams {
   completed?: boolean;
 }
 
-interface ActionItemsResponse {
-  action_items: ActionItem[];
-  has_more: boolean;
-}
-
 export async function getActionItems(
   params: GetActionItemsParams = {},
 ): Promise<{ items: ActionItem[]; hasMore: boolean }> {
@@ -304,7 +402,7 @@ export async function getActionItems(
   });
 
   if (completed !== undefined) {
-    queryParams.set("completed", completed.toString());
+    queryParams.set('completed', completed.toString());
   }
 
   const response = await fetchWithAuth<ActionItemsResponse>(
@@ -328,8 +426,9 @@ export interface CreateActionItemParams {
 export async function createActionItem(
   params: CreateActionItemParams,
 ): Promise<ActionItem> {
-  return fetchWithAuth<ActionItem>("/v1/action-items", {
-    method: "POST",
+  return fetchWithAuth<ActionItem>('/v1/action-items', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify(params),
   });
 }
@@ -341,12 +440,9 @@ export async function toggleActionItemCompleted(
   id: string,
   completed: boolean,
 ): Promise<void> {
-  await fetchWithAuth(
-    `/v1/action-items/${id}/completed?completed=${completed}`,
-    {
-      method: "PATCH",
-    },
-  );
+  await fetchWithAuth(`/v1/action-items/${id}/completed?completed=${completed}`, {
+    method: 'PATCH',
+  });
 }
 
 /**
@@ -357,7 +453,7 @@ export async function updateActionItemDueDate(
   due_at: string | null,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body: JSON.stringify({ due_at }),
   });
 }
@@ -370,7 +466,7 @@ export async function updateActionItemDescription(
   description: string,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body: JSON.stringify({ description }),
   });
 }
@@ -380,7 +476,7 @@ export async function updateActionItemDescription(
  */
 export async function deleteActionItem(id: string): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.actionItems);
 }
@@ -398,21 +494,25 @@ export interface GetMemoriesParams {
   categories?: MemoryCategory[];
 }
 
-export async function getMemories(
-  params: GetMemoriesParams = {},
-): Promise<Memory[]> {
-  const { limit = 100, offset = 0, categories } = params;
+/**
+ * Read memories.
+ *
+ * Category selection is deliberately not a parameter: `/v3/memories` accepts
+ * limit, offset, cursor, and device scope only. Sending `categories` looked
+ * like a filter but FastAPI drops the unknown query param, so the server
+ * returned everything. Categories are applied client-side — see
+ * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
+ */
+export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
+  const { limit = 100, offset = 0 } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
 
-  if (categories && categories.length > 0) {
-    queryParams.set("categories", categories.join(","));
-  }
-
-  return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
+  const raw = await fetchWithAuth<unknown>(`/v3/memories?${queryParams}`);
+  return normalizeKnowledgeLedgerMemories(raw);
 }
 
 /**
@@ -424,17 +524,17 @@ export interface CreateMemoryParams {
   category?: MemoryCategory;
 }
 
-export async function createMemory(
-  params: CreateMemoryParams,
-): Promise<Memory> {
-  const memory = await fetchWithAuth<Memory>("/v3/memories", {
-    method: "POST",
+export async function createMemory(params: CreateMemoryParams): Promise<Memory> {
+  const raw = await fetchWithAuth<unknown>('/v3/memories', {
+    method: 'POST',
     body: JSON.stringify({
       content: params.content,
-      visibility: params.visibility || "public",
-      category: params.category || "manual",
+      visibility: params.visibility || 'public',
+      category: params.category || 'manual',
     }),
   });
+  const memory = normalizeKnowledgeLedgerMemory(raw);
+  if (!memory) throw new Error('Malformed memory response');
   invalidateCache(invalidationPatterns.memories);
   return memory;
 }
@@ -442,13 +542,10 @@ export async function createMemory(
 /**
  * Update memory content
  */
-export async function updateMemoryContent(
-  id: string,
-  content: string,
-): Promise<void> {
+export async function updateMemoryContent(id: string, content: string): Promise<void> {
   const encodedValue = encodeURIComponent(content);
   await fetchWithAuth(`/v3/memories/${id}?value=${encodedValue}`, {
-    method: "PATCH",
+    method: 'PATCH',
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -461,7 +558,7 @@ export async function updateMemoryVisibility(
   visibility: MemoryVisibility,
 ): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/visibility?value=${visibility}`, {
-    method: "PATCH",
+    method: 'PATCH',
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -471,7 +568,19 @@ export async function updateMemoryVisibility(
  */
 export async function deleteMemory(id: string): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}`, {
-    method: "DELETE",
+    method: 'DELETE',
+  });
+  invalidateCache(invalidationPatterns.memories);
+}
+
+/**
+ * Delete multiple memories in a single batch request (up to 100 per call).
+ * Replaces N concurrent DELETE /v3/memories/{id} calls that triggered 429 rate limits.
+ */
+export async function deleteMemoriesBatch(ids: string[]): Promise<void> {
+  await fetchWithAuth(`/v3/memories/batch`, {
+    method: 'DELETE',
+    body: JSON.stringify({ memory_ids: ids }),
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -481,7 +590,7 @@ export async function deleteMemory(id: string): Promise<void> {
  */
 export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -493,16 +602,235 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
  * Get knowledge graph data
  */
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
-  return fetchWithAuth<KnowledgeGraph>("/v1/knowledge-graph");
+  return fetchWithAuth<KnowledgeGraph>('/v1/knowledge-graph');
+}
+
+// ============================================================================
+// Chat sessions API
+// ============================================================================
+
+interface ChatSessionWire {
+  id: string;
+  title?: string | null;
+  preview?: string | null;
+  created_at: string;
+  updated_at: string;
+  app_id?: string | null;
+  message_count?: number | null;
+  starred?: boolean | null;
+}
+
+function toChatSession(wire: ChatSessionWire): ChatSession {
+  return {
+    id: wire.id,
+    title: wire.title ?? undefined,
+    preview: wire.preview ?? undefined,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+    appId: wire.app_id ?? undefined,
+    messageCount: wire.message_count ?? 0,
+    starred: Boolean(wire.starred),
+  };
+}
+
+export async function getChatSessions(appId?: string): Promise<ChatSession[]> {
+  const query = appId ? `?app_id=${encodeURIComponent(appId)}` : '';
+  const sessions = await fetchWithAuth<ChatSessionWire[]>(`/v2/chat-sessions${query}`);
+  return Array.isArray(sessions) ? sessions.map(toChatSession) : [];
+}
+
+export async function createChatSession(
+  params: { title?: string; app_id?: string } = {},
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>('/v2/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  );
+}
+
+export async function updateChatSession(
+  id: string,
+  updates: { title?: string; starred?: boolean },
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>(`/v2/chat-sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+  );
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  await fetchWithAuth(`/v2/chat-sessions/${id}`, { method: 'DELETE' });
+}
+
+export interface RealtimeSessionToken {
+  provider: 'gemini';
+  token: string;
+  expires_at?: string;
+}
+
+export interface RealtimeUsageReport {
+  input_text_tokens: number;
+  input_audio_tokens: number;
+  input_cached_tokens: number;
+  output_text_tokens: number;
+  output_audio_tokens: number;
+}
+
+interface SavedRealtimeMessage {
+  id: string;
+  created_at: string;
+  session_id?: string | null;
+}
+
+export async function createGeminiLiveSession(): Promise<RealtimeSessionToken> {
+  return fetchWithAuth<RealtimeSessionToken>('/v2/realtime/session', {
+    method: 'POST',
+    body: JSON.stringify({ provider: 'gemini' }),
+  });
+}
+
+export async function saveRealtimeMessage(params: {
+  text: string;
+  sender: 'human' | 'ai';
+  clientMessageId: string;
+  appId?: string;
+  sessionId?: string | null;
+}): Promise<SavedRealtimeMessage> {
+  return fetchWithAuth<SavedRealtimeMessage>('/v2/desktop/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      text: params.text,
+      sender: params.sender,
+      app_id: params.appId,
+      session_id: params.sessionId,
+      client_message_id: params.clientMessageId,
+      message_source: 'realtime_voice',
+    }),
+  });
+}
+
+export async function reportGeminiLiveUsage(usage: RealtimeUsageReport): Promise<void> {
+  await fetchWithAuth('/v2/realtime/usage', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-live-preview',
+      ...usage,
+    }),
+  });
+}
+
+// ============================================================================
+// Goals & Scores API
+// ============================================================================
+
+/**
+ * Get all goals.
+ *
+ * Uses `/v1/goals/all` rather than `/v1/goals/canonical/list` so the page works
+ * for every signed-in user; the canonical route is gated on task-system
+ * enrollment and 403s for everyone else.
+ */
+export async function getGoals(includeEnded = false): Promise<Goal[]> {
+  const goals = await fetchWithAuth<Goal[]>(
+    `/v1/goals/all?include_ended=${includeEnded}`,
+  );
+  return Array.isArray(goals) ? goals : [];
 }
 
 /**
- * Trigger knowledge graph rebuild
+ * Create body, matching what the desktop apps send
+ * (`desktop/windows/src/renderer/src/pages/Goals.tsx` saveNew): title, a
+ * required positive target, and unit only when the user gave one.
+ *
+ * `target_value` is required — the backend 422s without it — so a title-only
+ * goal defaults to 1, which completes on a single tick.
  */
-export async function rebuildKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth("/v1/knowledge-graph/rebuild", {
-    method: "POST",
+export interface CreateGoalParams {
+  title: string;
+  target_value: number;
+  unit?: string;
+}
+
+export async function createGoal(params: CreateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>('/v1/goals', {
+    method: 'POST',
+    body: JSON.stringify(params),
   });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+/**
+ * Update only a goal's progress value.
+ *
+ * The backend takes `current_value` as a query parameter on this route, not in
+ * the body.
+ */
+export async function updateGoalProgress(
+  id: string,
+  currentValue: number,
+): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(
+    `/v1/goals/${id}/progress?current_value=${encodeURIComponent(currentValue)}`,
+    { method: 'PATCH' },
+  );
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export interface UpdateGoalParams {
+  title?: string;
+  target_value?: number;
+  current_value?: number;
+  unit?: string | null;
+}
+
+export async function updateGoal(id: string, updates: UpdateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(`/v1/goals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  await fetchWithAuth(`/v1/goals/${id}`, { method: 'DELETE' });
+  invalidateCache(invalidationPatterns.goals);
+}
+
+/**
+ * Recorded progress values for a goal, newest window first.
+ *
+ * Uses `/v1/goals/{id}/history`, not `/v1/goals/{id}/detail`. The detail
+ * projection and the progress-events feed both sit behind
+ * `require_canonical_task_user`, which 404s for anyone not enrolled in the
+ * canonical task system — most web users.
+ */
+export async function getGoalHistory(id: string, days = 30): Promise<GoalHistoryEntry[]> {
+  const history = await fetchWithAuth<GoalHistoryEntry[]>(
+    `/v1/goals/${id}/history?days=${days}`,
+  );
+  return Array.isArray(history) ? history : [];
+}
+
+/** AI-generated advice for a goal. Rate limited server-side. */
+export async function getGoalAdvice(id: string): Promise<string> {
+  const response = await fetchWithAuth<{ advice: string }>(`/v1/goals/${id}/advice`);
+  return response.advice;
+}
+
+// ============================================================================
+
+/** Daily, weekly, and overall task-completion scores. */
+export async function getScores(date?: string): Promise<Scores> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return fetchWithAuth<Scores>(`/v1/scores${query}`);
 }
 
 // ============================================================================
@@ -523,10 +851,10 @@ function decodeBase64Utf8(base64: string): string {
       bytes[i] = binaryString.charCodeAt(i);
     }
     // Decode as UTF-8
-    const decoder = new TextDecoder("utf-8");
+    const decoder = new TextDecoder('utf-8');
     return decoder.decode(bytes);
   } catch (e) {
-    console.error("Failed to decode base64 UTF-8:", e);
+    console.error('Failed to decode base64 UTF-8:', e);
     // Fallback to simple atob
     return atob(base64);
   }
@@ -536,51 +864,51 @@ function decodeBase64Utf8(base64: string): string {
  * Parse a streaming response line into a MessageChunk
  */
 export function parseStreamLine(line: string): MessageChunk | null {
-  if (!line || line.trim() === "") return null;
+  if (!line || line.trim() === '') return null;
 
-  if (line.startsWith("think: ")) {
+  if (line.startsWith('think: ')) {
     return {
-      type: "think" as MessageChunkType,
-      text: line.slice(7).replace(/__CRLF__/g, "\n"),
+      type: 'think' as MessageChunkType,
+      text: line.slice(7).replace(/__CRLF__/g, '\n'),
     };
   }
-  if (line.startsWith("data: ")) {
+  if (line.startsWith('data: ')) {
     return {
-      type: "data" as MessageChunkType,
-      text: line.slice(6).replace(/__CRLF__/g, "\n"),
+      type: 'data' as MessageChunkType,
+      text: line.slice(6).replace(/__CRLF__/g, '\n'),
     };
   }
-  if (line.startsWith("done: ")) {
+  if (line.startsWith('done: ')) {
     try {
       const decoded = decodeBase64Utf8(line.slice(6));
       const message = JSON.parse(decoded) as ServerMessage;
       return {
-        type: "done" as MessageChunkType,
+        type: 'done' as MessageChunkType,
         text: decoded,
         message,
       };
     } catch (e) {
-      console.error("Failed to parse done chunk:", e);
+      console.error('Failed to parse done chunk:', e);
       return null;
     }
   }
-  if (line.startsWith("message: ")) {
+  if (line.startsWith('message: ')) {
     try {
       const decoded = decodeBase64Utf8(line.slice(9));
       const message = JSON.parse(decoded) as ServerMessage;
       return {
-        type: "message" as MessageChunkType,
+        type: 'message' as MessageChunkType,
         text: decoded,
         message,
       };
     } catch (e) {
-      console.error("Failed to parse message chunk:", e);
+      console.error('Failed to parse message chunk:', e);
       return null;
     }
   }
-  if (line.startsWith("error: ")) {
+  if (line.startsWith('error: ')) {
     return {
-      type: "error" as MessageChunkType,
+      type: 'error' as MessageChunkType,
       text: line.slice(7),
     };
   }
@@ -591,13 +919,21 @@ export function parseStreamLine(line: string): MessageChunk | null {
 /**
  * Get message history
  */
-export async function getMessages(appId?: string): Promise<ServerMessage[]> {
+export async function getMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<ServerMessage[]> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set("app_id", appId);
+    queryParams.set('app_id', appId);
+  }
+  // Omitted entirely for the default shared thread; naming a session targets
+  // that one specific thread.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
-  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
   return fetchWithAuth<ServerMessage[]>(endpoint);
 }
 
@@ -609,12 +945,16 @@ export async function sendMessageStream(
   onChunk: (chunk: MessageChunk) => void,
   options?: {
     appId?: string;
+    /** Target one specific thread; omit for the default shared thread. */
+    chatSessionId?: string | null;
     fileIds?: string[];
     context?: {
       type: string;
       id?: string;
       title?: string;
       summary?: string;
+      start_date?: string;
+      end_date?: string;
     } | null;
   },
 ): Promise<void> {
@@ -623,48 +963,61 @@ export async function sendMessageStream(
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const queryParams = new URLSearchParams();
   if (options?.appId) {
-    queryParams.set("app_id", options.appId);
+    queryParams.set('app_id', options.appId);
+  }
+  // Without this the reply is persisted to the default shared thread while the
+  // UI shows it under the selected one.
+  if (options?.chatSessionId) {
+    queryParams.set('chat_session_id', options.chatSessionId);
   }
 
-  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "X-App-Platform": "web",
+      'Content-Type': 'application/json',
+      'X-App-Platform': 'web',
     },
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
-      context: options?.context || null,
+      context: options?.context
+        ? {
+            type: options.context.type === 'general' ? 'recap' : options.context.type,
+            id: options.context.id,
+            title: options.context.title,
+            start_date: options.context.start_date,
+            end_date: options.context.end_date,
+          }
+        : null,
     }),
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Send message error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Send message error:', response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }
 
   if (!response.body) {
-    throw new Error("No response body");
+    throw new Error('No response body');
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  let buffer = '';
 
   try {
     while (true) {
@@ -675,8 +1028,8 @@ export async function sendMessageStream(
       buffer += decoder.decode(value, { stream: true });
 
       // Process complete lines
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line in buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
       for (const line of lines) {
         const chunk = parseStreamLine(line);
@@ -701,15 +1054,22 @@ export async function sendMessageStream(
 /**
  * Clear message history
  */
-export async function clearMessages(appId?: string): Promise<void> {
+export async function clearMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<void> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set("app_id", appId);
+    queryParams.set('app_id', appId);
+  }
+  // Clearing must delete the thread the reader is looking at, not the shared one.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
-  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
   await fetchWithAuth(endpoint, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
@@ -725,29 +1085,29 @@ export async function uploadChatFiles(
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set("app_id", appId);
+    queryParams.set('app_id', appId);
   }
 
-  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ''}`;
 
   const formData = new FormData();
   for (const file of files) {
     // Append with explicit filename to ensure proper handling
-    formData.append("files", file, file.name);
+    formData.append('files', file, file.name);
   }
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -755,8 +1115,8 @@ export async function uploadChatFiles(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Upload files error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Upload files error:', response.status, errorText);
     throw new Error(`Failed to upload files: ${response.status}`);
   }
 
@@ -766,42 +1126,57 @@ export async function uploadChatFiles(
 /**
  * Transcribe voice message to text
  */
+function getAudioFileExtension(mimeType: string): string {
+  const normalizedMimeType = mimeType.split(';', 1)[0].toLowerCase();
+  if (normalizedMimeType === 'audio/webm' || normalizedMimeType === 'video/webm')
+    return 'webm';
+  if (normalizedMimeType === 'audio/mp4' || normalizedMimeType === 'video/mp4')
+    return 'mp4';
+  return 'wav';
+}
+
 export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
 
   const formData = new FormData();
-  // API expects field name 'files' (matching mobile app)
-  formData.append("files", audioBlob, "audio.wav");
+  // The backend uses the filename extension when it uploads audio for STT.
+  formData.append('files', audioBlob, `audio.${getAudioFileExtension(audioBlob.type)}`);
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'web',
+  };
+  if (deviceIdHash) {
+    headers['X-Device-Id-Hash'] = deviceIdHash;
+  }
 
   const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    method: 'POST',
+    headers,
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Transcribe error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Transcribe error:', response.status, errorText);
     throw new Error(`Failed to transcribe audio: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.transcript || "";
+  return data.transcript || '';
 }
 
 // ============================================================================
@@ -809,7 +1184,7 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
 // ============================================================================
 
 // Re-export App type for backward compatibility
-export type { App } from "@/types/apps";
+export type { App } from '@/types/apps';
 
 /**
  * Get apps grouped by capability (for explore page)
@@ -829,7 +1204,7 @@ export async function getAppsGrouped(
   });
 
   if (capability) {
-    queryParams.set("capability", capability);
+    queryParams.set('capability', capability);
   }
 
   return fetchWithAuth<AppsGroupedResponse>(`/v2/apps?${queryParams}`);
@@ -843,16 +1218,15 @@ export async function searchApps(
 ): Promise<AppsSearchResponse> {
   const queryParams = new URLSearchParams();
 
-  if (params.q) queryParams.set("q", params.q);
-  if (params.category) queryParams.set("category", params.category);
-  if (params.capability) queryParams.set("capability", params.capability);
-  if (params.rating !== undefined)
-    queryParams.set("rating", params.rating.toString());
-  if (params.sort) queryParams.set("sort", params.sort);
-  if (params.my_apps) queryParams.set("my_apps", "true");
-  if (params.installed_apps) queryParams.set("installed_apps", "true");
-  queryParams.set("offset", (params.offset || 0).toString());
-  queryParams.set("limit", (params.limit || 20).toString());
+  if (params.q) queryParams.set('q', params.q);
+  if (params.category) queryParams.set('category', params.category);
+  if (params.capability) queryParams.set('capability', params.capability);
+  if (params.rating !== undefined) queryParams.set('rating', params.rating.toString());
+  if (params.sort) queryParams.set('sort', params.sort);
+  if (params.my_apps) queryParams.set('my_apps', 'true');
+  if (params.installed_apps) queryParams.set('installed_apps', 'true');
+  queryParams.set('offset', (params.offset || 0).toString());
+  queryParams.set('limit', (params.limit || 20).toString());
 
   return fetchWithAuth<AppsSearchResponse>(`/v2/apps/search?${queryParams}`);
 }
@@ -861,7 +1235,7 @@ export async function searchApps(
  * Get popular apps
  */
 export async function getPopularApps(): Promise<App[]> {
-  return fetchWithAuth<App[]>("/v1/apps/popular");
+  return fetchWithAuth<App[]>('/v1/apps/popular');
 }
 
 /**
@@ -875,14 +1249,14 @@ export async function getApp(appId: string): Promise<App> {
  * Get app categories
  */
 export async function getAppCategories(): Promise<AppCategory[]> {
-  return fetchWithAuth<AppCategory[]>("/v1/app-categories");
+  return fetchWithAuth<AppCategory[]>('/v1/app-categories');
 }
 
 /**
  * Get app capabilities
  */
 export async function getAppCapabilities(): Promise<AppCapability[]> {
-  return fetchWithAuth<AppCapability[]>("/v1/app-capabilities");
+  return fetchWithAuth<AppCapability[]>('/v1/app-capabilities');
 }
 
 /**
@@ -890,7 +1264,7 @@ export async function getAppCapabilities(): Promise<AppCapability[]> {
  */
 export async function enableApp(appId: string): Promise<{ status: string }> {
   return fetchWithAuth<{ status: string }>(`/v1/apps/enable?app_id=${appId}`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -899,7 +1273,7 @@ export async function enableApp(appId: string): Promise<{ status: string }> {
  */
 export async function disableApp(appId: string): Promise<{ status: string }> {
   return fetchWithAuth<{ status: string }>(`/v1/apps/disable?app_id=${appId}`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -916,9 +1290,7 @@ export async function getInstalledApps(): Promise<AppsSearchResponse> {
 export async function getChatApps(): Promise<App[]> {
   const response = await searchApps({ installed_apps: true, limit: 100 });
   return response.data.filter(
-    (app) =>
-      app.capabilities?.includes("chat") ||
-      app.capabilities?.includes("persona"),
+    (app) => app.capabilities?.includes('chat') || app.capabilities?.includes('persona'),
   );
 }
 
@@ -943,24 +1315,24 @@ export async function createApp(
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const url = `${API_BASE_URL}/v1/apps`;
 
   const formData = new FormData();
-  formData.append("app_data", JSON.stringify(data));
+  formData.append('app_data', JSON.stringify(data));
   if (imageFile) {
-    formData.append("file", imageFile, imageFile.name);
+    formData.append('file', imageFile, imageFile.name);
   }
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -968,8 +1340,8 @@ export async function createApp(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Create app error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Create app error:', response.status, errorText);
     throw new Error(`Failed to create app: ${response.status}`);
   }
 
@@ -989,12 +1361,12 @@ export async function updateApp(
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const url = `${API_BASE_URL}/v1/apps/${appId}`;
@@ -1003,13 +1375,13 @@ export async function updateApp(
   const dataWithId = { ...data, id: appId };
 
   const formData = new FormData();
-  formData.append("app_data", JSON.stringify(dataWithId));
+  formData.append('app_data', JSON.stringify(dataWithId));
   if (imageFile) {
-    formData.append("file", imageFile, imageFile.name);
+    formData.append('file', imageFile, imageFile.name);
   }
 
   const response = await fetch(url, {
-    method: "PATCH",
+    method: 'PATCH',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -1017,9 +1389,41 @@ export async function updateApp(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Update app error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Update app error:', response.status, errorText);
     throw new Error(`Failed to update app: ${response.status}`);
+  }
+}
+
+/**
+ * Re-enable an app that the backend auto-disabled after webhook failures.
+ *
+ * Sends `disabled: false` explicitly — the backend re-enable branch reads an
+ * unset-exclusive payload, so omitting the field is a no-op rather than a
+ * failure. The endpoint re-checks every configured URL and rejects the request
+ * with a specific reason, so that detail is surfaced instead of the status code.
+ */
+export async function reEnableApp(appId: string): Promise<void> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const formData = new FormData();
+  formData.append('app_data', JSON.stringify({ id: appId, disabled: false }));
+
+  const response = await fetch(`${API_BASE_URL}/v1/apps/${appId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body) => body?.detail)
+      .catch(() => null);
+    throw new Error(detail || `Failed to re-enable app: ${response.status}`);
   }
 }
 
@@ -1028,36 +1432,34 @@ export async function updateApp(
  */
 export async function deleteApp(appId: string): Promise<void> {
   await fetchWithAuth(`/v1/apps/${appId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
 /**
  * Upload app thumbnail
  */
-export async function uploadAppThumbnail(
-  file: File,
-): Promise<ThumbnailUploadResponse> {
+export async function uploadAppThumbnail(file: File): Promise<ThumbnailUploadResponse> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error("Failed to get auth token:", tokenError);
-    throw new Error("Failed to get authentication token");
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
   }
 
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
 
   const url = `${API_BASE_URL}/v1/app/thumbnails`;
 
   const formData = new FormData();
-  formData.append("file", file, file.name);
+  formData.append('file', file, file.name);
 
   const response = await fetch(url, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -1065,8 +1467,8 @@ export async function uploadAppThumbnail(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "No error body");
-    console.error("Upload thumbnail error:", response.status, errorText);
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Upload thumbnail error:', response.status, errorText);
     throw new Error(`Failed to upload thumbnail: ${response.status}`);
   }
 
@@ -1081,9 +1483,9 @@ export async function generateAppDescription(
   currentDescription: string,
 ): Promise<string> {
   const response = await fetchWithAuth<GenerateDescriptionResponse>(
-    "/v1/app/generate-description",
+    '/v1/app/generate-description',
     {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ name, description: currentDescription }),
     },
   );
@@ -1102,18 +1504,18 @@ export async function generateAppDescriptionAndEmoji(
     const response = await fetchWithAuth<{
       description: string;
       emoji: string;
-    }>("/v1/app/generate-description-emoji", {
-      method: "POST",
+    }>('/v1/app/generate-description-emoji', {
+      method: 'POST',
       body: JSON.stringify({ name, prompt }),
     });
     return {
-      description: response.description || "",
-      emoji: response.emoji || "✨",
+      description: response.description || '',
+      emoji: response.emoji || '✨',
     };
   } catch {
     // Fallback: generate description only and use default emoji
     const description = await generateAppDescription(name, prompt);
-    return { description, emoji: "✨" };
+    return { description, emoji: '✨' };
   }
 }
 
@@ -1131,8 +1533,8 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
       {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-App-Platform": "web",
+          'Content-Type': 'application/json',
+          'X-App-Platform': 'web',
         },
       },
     );
@@ -1156,8 +1558,8 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
     const response = await fetch(`${API_BASE_URL}/v1/app/plans`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-App-Platform": "web",
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
     });
 
@@ -1185,15 +1587,14 @@ import type {
   UserSubscription,
   UserSubscriptionResponse,
   Person,
-} from "@/types/user";
+} from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 
 /**
  * Get user's primary language
  */
 export async function getUserLanguage(): Promise<string> {
-  const response = await fetchWithAuth<{ language: string }>(
-    "/v1/users/language",
-  );
+  const response = await fetchWithAuth<{ language: string }>('/v1/users/language');
   return response.language;
 }
 
@@ -1201,8 +1602,8 @@ export async function getUserLanguage(): Promise<string> {
  * Set user's primary language
  */
 export async function setUserLanguage(language: string): Promise<void> {
-  await fetchWithAuth("/v1/users/language", {
-    method: "PATCH",
+  await fetchWithAuth('/v1/users/language', {
+    method: 'PATCH',
     body: JSON.stringify({ language }),
   });
 }
@@ -1211,9 +1612,7 @@ export async function setUserLanguage(language: string): Promise<void> {
  * Get daily summary settings
  */
 export async function getDailySummarySettings(): Promise<DailySummarySettings> {
-  return fetchWithAuth<DailySummarySettings>(
-    "/v1/users/daily-summary-settings",
-  );
+  return fetchWithAuth<DailySummarySettings>('/v1/users/daily-summary-settings');
 }
 
 /**
@@ -1222,8 +1621,8 @@ export async function getDailySummarySettings(): Promise<DailySummarySettings> {
 export async function updateDailySummarySettings(
   settings: DailySummarySettings,
 ): Promise<void> {
-  await fetchWithAuth("/v1/users/daily-summary-settings", {
-    method: "PATCH",
+  await fetchWithAuth('/v1/users/daily-summary-settings', {
+    method: 'PATCH',
     body: JSON.stringify(settings),
   });
 }
@@ -1232,7 +1631,7 @@ export async function updateDailySummarySettings(
 // Daily Summaries (Recaps) API
 // ============================================================================
 
-import type { DailySummary } from "@/types/recap";
+import type { DailySummary } from '@/types/recap';
 
 export interface GetDailySummariesParams {
   limit?: number;
@@ -1250,9 +1649,7 @@ export async function getDailySummaries(
     limit: limit.toString(),
     offset: offset.toString(),
   });
-  return fetchWithAuth<DailySummary[]>(
-    `/v1/users/daily-summaries?${queryParams}`,
-  );
+  return fetchWithAuth<DailySummary[]>(`/v1/users/daily-summaries?${queryParams}`);
 }
 
 /**
@@ -1267,18 +1664,16 @@ export async function getDailySummary(id: string): Promise<DailySummary> {
  */
 export async function deleteDailySummary(id: string): Promise<void> {
   await fetchWithAuth(`/v1/users/daily-summaries/${id}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
 /**
  * Generate a test daily summary for a specific date
  */
-export async function generateTestDailySummary(
-  date: string,
-): Promise<DailySummary> {
-  return fetchWithAuth<DailySummary>("/v1/users/daily-summary-settings/test", {
-    method: "POST",
+export async function generateTestDailySummary(date: string): Promise<DailySummary> {
+  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
+    method: 'POST',
     body: JSON.stringify({ date }),
   });
 }
@@ -1287,36 +1682,26 @@ export async function generateTestDailySummary(
  * Get transcription preferences
  */
 export async function getTranscriptionPreferences(): Promise<TranscriptionPreferences> {
-  return fetchWithAuth<TranscriptionPreferences>(
-    "/v1/users/transcription-preferences",
-  );
+  return fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
 }
 
 // Webhook type enum matching backend API
 type WebhookType =
-  | "memory_created"
-  | "realtime_transcript"
-  | "audio_bytes"
-  | "day_summary";
+  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
 
 /**
  * Get developer webhook URL
  */
-export async function getDeveloperWebhook(
-  type: WebhookType,
-): Promise<WebhookSettings> {
+export async function getDeveloperWebhook(type: WebhookType): Promise<WebhookSettings> {
   return fetchWithAuth<WebhookSettings>(`/v1/users/developer/webhook/${type}`);
 }
 
 /**
  * Set developer webhook URL
  */
-export async function setDeveloperWebhook(
-  type: WebhookType,
-  url: string,
-): Promise<void> {
+export async function setDeveloperWebhook(type: WebhookType, url: string): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify({ url }),
   });
 }
@@ -1326,18 +1711,16 @@ export async function setDeveloperWebhook(
  */
 export async function enableDeveloperWebhook(type: WebhookType): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/enable`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
 /**
  * Disable developer webhook
  */
-export async function disableDeveloperWebhook(
-  type: WebhookType,
-): Promise<void> {
+export async function disableDeveloperWebhook(type: WebhookType): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/disable`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -1345,18 +1728,14 @@ export async function disableDeveloperWebhook(
  * Get all webhook statuses
  */
 export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
-  return fetchWithAuth<DeveloperWebhooks>(
-    "/v1/users/developer/webhooks/status",
-  );
+  return fetchWithAuth<DeveloperWebhooks>('/v1/users/developer/webhooks/status');
 }
 
 /**
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>(
-    "/v1/users/store-recording-permission",
-  );
+  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
 }
 
 /**
@@ -1364,7 +1743,7 @@ export async function getRecordingPermission(): Promise<RecordingPermission> {
  */
 export async function setRecordingPermission(enabled: boolean): Promise<void> {
   await fetchWithAuth(`/v1/users/store-recording-permission?value=${enabled}`, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -1372,7 +1751,7 @@ export async function setRecordingPermission(enabled: boolean): Promise<void> {
  * Get user usage stats for a specific period
  */
 export async function getUserUsage(
-  period: "today" | "monthly" | "yearly" | "all_time" = "monthly",
+  period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly',
 ): Promise<UserUsage | null> {
   try {
     const response = await fetchWithAuth<UserUsageResponse>(
@@ -1381,23 +1760,19 @@ export async function getUserUsage(
 
     // Extract the relevant period's stats
     let stats: UsageStats | undefined;
-    if (period === "all_time") {
+    if (period === 'all_time') {
       stats = response.all_time;
-    } else if (period === "yearly") {
+    } else if (period === 'yearly') {
       stats = response.yearly;
-    } else if (period === "monthly") {
+    } else if (period === 'monthly') {
       stats = response.monthly;
-    } else if (period === "today") {
+    } else if (period === 'today') {
       stats = response.today;
     }
 
     // Fallback to any available stats
     if (!stats) {
-      stats =
-        response.all_time ||
-        response.monthly ||
-        response.yearly ||
-        response.today;
+      stats = response.all_time || response.monthly || response.yearly || response.today;
     }
 
     // Return data if we have stats OR history - some periods might have history without aggregate stats
@@ -1412,7 +1787,7 @@ export async function getUserUsage(
     }
     return null;
   } catch (error) {
-    console.error("getUserUsage error:", error);
+    console.error('getUserUsage error:', error);
     return null;
   }
 }
@@ -1422,10 +1797,10 @@ export async function getUserUsage(
  */
 export async function getAllUsageData(): Promise<AllUsageData> {
   const [today, monthly, yearly, all_time] = await Promise.all([
-    getUserUsage("today"),
-    getUserUsage("monthly"),
-    getUserUsage("yearly"),
-    getUserUsage("all_time"),
+    getUserUsage('today'),
+    getUserUsage('monthly'),
+    getUserUsage('yearly'),
+    getUserUsage('all_time'),
   ]);
   return { today, monthly, yearly, all_time };
 }
@@ -1436,21 +1811,26 @@ export async function getAllUsageData(): Promise<AllUsageData> {
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
     const response = await fetchWithAuth<UserSubscriptionResponse>(
-      "/v1/users/me/subscription",
+      '/v1/users/me/subscription',
     );
 
+    const plan = decodePlan(response.subscription?.plan);
     const result: UserSubscription = {
-      plan: response.subscription?.plan || "basic",
-      status: response.subscription?.status || "active",
-      is_unlimited: response.subscription?.plan === "unlimited",
+      plan: plan.raw ?? '',
+      plan_identity: plan,
+      status: response.subscription?.status || 'active',
+      // Unknown plans are deliberately excluded. A future wire value must not
+      // inherit paid capability merely because it is non-empty.
+      is_unlimited: planGrantsPaidCapability(plan),
       current_period_end: response.subscription?.current_period_end,
+      stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
       features: response.subscription?.features || [],
     };
     return result;
   } catch (error) {
-    console.error("getUserSubscription error:", error);
+    console.error('getUserSubscription error:', error);
     return null;
   }
 }
@@ -1461,11 +1841,11 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
 export async function getAvailablePlans(): Promise<AvailablePlansResponse | null> {
   try {
     const response = await fetchWithAuth<AvailablePlansResponse>(
-      "/v1/payments/available-plans",
+      '/v1/payments/available-plans',
     );
     return response;
   } catch (error) {
-    console.error("getAvailablePlans error:", error);
+    console.error('getAvailablePlans error:', error);
     return null;
   }
 }
@@ -1478,15 +1858,15 @@ export async function createCheckoutSession(
 ): Promise<CheckoutSessionResponse | null> {
   try {
     const response = await fetchWithAuth<CheckoutSessionResponse>(
-      "/v1/payments/checkout-session",
+      '/v1/payments/checkout-session',
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({ price_id: priceId }),
       },
     );
     return response;
   } catch (error) {
-    console.error("createCheckoutSession error:", error);
+    console.error('createCheckoutSession error:', error);
     return null;
   }
 }
@@ -1499,15 +1879,15 @@ export async function upgradeSubscription(
 ): Promise<UpgradeSubscriptionResponse | null> {
   try {
     const response = await fetchWithAuth<UpgradeSubscriptionResponse>(
-      "/v1/payments/upgrade-subscription",
+      '/v1/payments/upgrade-subscription',
       {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({ price_id: priceId }),
       },
     );
     return response;
   } catch (error) {
-    console.error("upgradeSubscription error:", error);
+    console.error('upgradeSubscription error:', error);
     return null;
   }
 }
@@ -1518,14 +1898,14 @@ export async function upgradeSubscription(
 export async function cancelSubscription(): Promise<CancelSubscriptionResponse | null> {
   try {
     const response = await fetchWithAuth<CancelSubscriptionResponse>(
-      "/v1/payments/subscription",
+      '/v1/payments/subscription',
       {
-        method: "DELETE",
+        method: 'DELETE',
       },
     );
     return response;
   } catch (error) {
-    console.error("cancelSubscription error:", error);
+    console.error('cancelSubscription error:', error);
     return null;
   }
 }
@@ -1536,14 +1916,14 @@ export async function cancelSubscription(): Promise<CancelSubscriptionResponse |
 export async function getCustomerPortal(): Promise<CustomerPortalResponse | null> {
   try {
     const response = await fetchWithAuth<CustomerPortalResponse>(
-      "/v1/payments/customer-portal",
+      '/v1/payments/customer-portal',
       {
-        method: "POST",
+        method: 'POST',
       },
     );
     return response;
   } catch (error) {
-    console.error("getCustomerPortal error:", error);
+    console.error('getCustomerPortal error:', error);
     return null;
   }
 }
@@ -1552,15 +1932,15 @@ export async function getCustomerPortal(): Promise<CustomerPortalResponse | null
  * Get all people for speaker identification
  */
 export async function getPeople(): Promise<Person[]> {
-  return fetchWithAuth<Person[]>("/v1/users/people");
+  return fetchWithAuth<Person[]>('/v1/users/people');
 }
 
 /**
  * Create a new person
  */
 export async function createPerson(name: string): Promise<Person> {
-  return fetchWithAuth<Person>("/v1/users/people", {
-    method: "POST",
+  return fetchWithAuth<Person>('/v1/users/people', {
+    method: 'POST',
     body: JSON.stringify({ name }),
   });
 }
@@ -1568,12 +1948,9 @@ export async function createPerson(name: string): Promise<Person> {
 /**
  * Update person name
  */
-export async function updatePersonName(
-  personId: string,
-  name: string,
-): Promise<void> {
+export async function updatePersonName(personId: string, name: string): Promise<void> {
   await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: "PATCH",
+    method: 'PATCH',
     body: JSON.stringify({ name }),
   });
 }
@@ -1583,7 +1960,7 @@ export async function updatePersonName(
  */
 export async function deletePerson(personId: string): Promise<void> {
   await fetchWithAuth(`/v1/users/people/${personId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
@@ -1601,36 +1978,76 @@ export async function assignBulkTranscriptSegments(
 ): Promise<void> {
   const { isUser, personId } = options;
 
-  let assignType: "is_user" | "person_id";
+  let assignType: 'is_user' | 'person_id';
   let value: string | null;
 
   if (isUser) {
-    assignType = "is_user";
-    value = "true";
+    assignType = 'is_user';
+    value = 'true';
   } else {
-    assignType = "person_id";
+    assignType = 'person_id';
     value = personId ?? null;
   }
 
-  await fetchWithAuth(
-    `/v1/conversations/${conversationId}/segments/assign-bulk`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({
-        segment_ids: segmentIds,
-        assign_type: assignType,
-        value,
-      }),
-    },
-  );
+  await fetchWithAuth(`/v1/conversations/${conversationId}/segments/assign-bulk`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      segment_ids: segmentIds,
+      assign_type: assignType,
+      value,
+    }),
+  });
+}
+
+/**
+ * Error thrown when editing a transcript segment requires a paid plan
+ * (backend returns HTTP 402 for `/segments/text` on gated accounts).
+ */
+export class SegmentEditPlanRequiredError extends Error {
+  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+    super(message);
+    this.name = 'SegmentEditPlanRequiredError';
+  }
+}
+
+/**
+ * Update the text of a single transcript segment.
+ *
+ * Mirrors the backend `PATCH /v1/conversations/{id}/segments/text`
+ * (`UpdateSegmentTextRequest`), which identifies the segment by its `id` and
+ * rewrites just that segment's text. The response is a bare `{status}`, so
+ * callers must optimistically patch their local `transcript_segments`.
+ *
+ * @param conversationId - The conversation ID
+ * @param segmentId - The `id` of the segment to edit (non-empty)
+ * @param text - New segment text (1–10000 chars, enforced by the backend)
+ * @throws SegmentEditPlanRequiredError when the account is plan-gated (402)
+ */
+export async function updateSegmentText(
+  conversationId: string,
+  segmentId: string,
+  text: string,
+): Promise<void> {
+  try {
+    await fetchWithAuth(`/v1/conversations/${conversationId}/segments/text`, {
+      method: 'PATCH',
+      body: JSON.stringify({ segment_id: segmentId, text }),
+    });
+  } catch (error) {
+    // fetchWithAuth surfaces the status in the thrown message (`API error: 402 ...`).
+    if (error instanceof Error && error.message.includes('402')) {
+      throw new SegmentEditPlanRequiredError();
+    }
+    throw error;
+  }
 }
 
 /**
  * Delete account permanently
  */
 export async function deleteAccount(): Promise<void> {
-  await fetchWithAuth("/v1/users/delete-account", {
-    method: "DELETE",
+  await fetchWithAuth('/v1/users/delete-account', {
+    method: 'DELETE',
   });
 }
 
@@ -1638,15 +2055,15 @@ export async function deleteAccount(): Promise<void> {
  * Get training data opt-in status
  */
 export async function getTrainingDataOptIn(): Promise<{ opted_in: boolean }> {
-  return fetchWithAuth<{ opted_in: boolean }>("/v1/users/training-data-opt-in");
+  return fetchWithAuth<{ opted_in: boolean }>('/v1/users/training-data-opt-in');
 }
 
 /**
  * Set training data opt-in
  */
 export async function setTrainingDataOptIn(optIn: boolean): Promise<void> {
-  await fetchWithAuth("/v1/users/training-data-opt-in", {
-    method: "POST",
+  await fetchWithAuth('/v1/users/training-data-opt-in', {
+    method: 'POST',
     body: JSON.stringify({ opted_in: optIn }),
   });
 }
@@ -1665,14 +2082,14 @@ import type {
   UpgradeSubscriptionResponse,
   CancelSubscriptionResponse,
   CustomerPortalResponse,
-} from "@/types/user";
+} from '@/types/user';
 
 /**
  * Get user's developer API keys
  */
 export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
   try {
-    return await fetchWithAuth<DeveloperApiKey[]>("/v1/dev/keys");
+    return await fetchWithAuth<DeveloperApiKey[]>('/v1/dev/keys');
   } catch {
     return [];
   }
@@ -1689,8 +2106,8 @@ export async function createDeveloperApiKey(
   if (scopes && scopes.length > 0) {
     body.scopes = scopes;
   }
-  return fetchWithAuth<DeveloperApiKey>("/v1/dev/keys", {
-    method: "POST",
+  return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
+    method: 'POST',
     body: JSON.stringify(body),
   });
 }
@@ -1700,7 +2117,7 @@ export async function createDeveloperApiKey(
  */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
@@ -1713,7 +2130,7 @@ export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
  */
 export async function getMcpApiKeys(): Promise<McpApiKey[]> {
   try {
-    return await fetchWithAuth<McpApiKey[]>("/v1/mcp/keys");
+    return await fetchWithAuth<McpApiKey[]>('/v1/mcp/keys');
   } catch {
     return [];
   }
@@ -1723,8 +2140,8 @@ export async function getMcpApiKeys(): Promise<McpApiKey[]> {
  * Create a new MCP API key
  */
 export async function createMcpApiKey(name: string): Promise<McpApiKey> {
-  return fetchWithAuth<McpApiKey>("/v1/mcp/keys", {
-    method: "POST",
+  return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
+    method: 'POST',
     body: JSON.stringify({ name }),
   });
 }
@@ -1734,7 +2151,7 @@ export async function createMcpApiKey(name: string): Promise<McpApiKey> {
  */
 export async function deleteMcpApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/mcp/keys/${keyId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
@@ -1748,7 +2165,7 @@ export async function deleteMcpApiKey(keyId: string): Promise<void> {
 export async function exportAllData(): Promise<Blob> {
   const token = await getIdToken();
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
   const response = await fetch(`${API_BASE_URL}/v1/users/export`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -1763,8 +2180,8 @@ export async function exportAllData(): Promise<Blob> {
  * Delete the knowledge graph
  */
 export async function deleteKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth("/v1/knowledge-graph", {
-    method: "DELETE",
+  await fetchWithAuth('/v1/knowledge-graph', {
+    method: 'DELETE',
   });
 }
 
@@ -1778,7 +2195,7 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 export async function getCustomVocabulary(): Promise<string[]> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
-      "/v1/users/transcription-preferences",
+      '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
@@ -1790,8 +2207,8 @@ export async function getCustomVocabulary(): Promise<string[]> {
  * Update custom vocabulary words via transcription preferences
  */
 export async function updateCustomVocabulary(words: string[]): Promise<void> {
-  await fetchWithAuth("/v1/users/transcription-preferences", {
-    method: "PATCH",
+  await fetchWithAuth('/v1/users/transcription-preferences', {
+    method: 'PATCH',
     body: JSON.stringify({ vocabulary: words }),
   });
 }
@@ -1810,56 +2227,53 @@ const INTEGRATION_DEFINITIONS: Array<{
   coming_soon?: boolean;
 }> = [
   {
-    id: "google_calendar",
-    appKey: "google_calendar",
-    name: "Google Calendar",
-    description: "Sync with your calendar",
-    logo: "/integrations/google-calendar.png",
+    id: 'google_calendar',
+    appKey: 'google_calendar',
+    name: 'Google Calendar',
+    description: 'Sync with your calendar',
+    logo: '/integrations/google-calendar.png',
   },
   {
-    id: "whoop",
-    appKey: "whoop",
-    name: "Whoop",
-    description: "Health & fitness tracking",
-    logo: "/integrations/whoop.png",
+    id: 'whoop',
+    appKey: 'whoop',
+    name: 'Whoop',
+    description: 'Health & fitness tracking',
+    logo: '/integrations/whoop.png',
   },
   {
-    id: "notion",
-    appKey: "notion",
-    name: "Notion",
-    description: "Sync notes to Notion",
-    logo: "/integrations/notion-logo.png",
+    id: 'notion',
+    appKey: 'notion',
+    name: 'Notion',
+    description: 'Sync notes to Notion',
+    logo: '/integrations/notion-logo.png',
   },
   {
-    id: "github",
-    appKey: "github",
-    name: "GitHub",
-    description: "Create issues and notes",
-    logo: "/integrations/github-logo.png",
+    id: 'github',
+    appKey: 'github',
+    name: 'GitHub',
+    description: 'Create issues and notes',
+    logo: '/integrations/github-logo.png',
   },
   {
-    id: "twitter",
-    appKey: "twitter",
-    name: "X (Twitter)",
-    description: "Share to Twitter",
-    logo: "/integrations/x-logo.avif",
+    id: 'twitter',
+    appKey: 'twitter',
+    name: 'X (Twitter)',
+    description: 'Share to Twitter',
+    logo: '/integrations/x-logo.avif',
   },
   {
-    id: "gmail",
-    appKey: "gmail",
-    name: "Gmail",
-    description: "Email integrations",
-    logo: "/integrations/gmail-logo.jpeg",
-    coming_soon: true,
+    id: 'gmail',
+    appKey: 'gmail',
+    name: 'Gmail',
+    description: 'Email integrations',
+    logo: '/integrations/gmail-logo.jpeg',
   },
 ];
 
 /**
  * Get individual integration connection status (like mobile app)
  */
-async function getIntegrationStatus(
-  appKey: string,
-): Promise<{ connected: boolean }> {
+async function getIntegrationStatus(appKey: string): Promise<{ connected: boolean }> {
   try {
     const response = await fetchWithAuth<{
       connected: boolean;
@@ -1912,11 +2326,9 @@ export async function getIntegrationOAuthUrl(
 /**
  * Disconnect an integration
  */
-export async function disconnectIntegration(
-  integrationId: string,
-): Promise<void> {
+export async function disconnectIntegration(integrationId: string): Promise<void> {
   await fetchWithAuth(`/v1/integrations/${integrationId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
 }
 
@@ -1936,12 +2348,12 @@ export async function reprocessConversation(
 ): Promise<Conversation> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set("app_id", appId);
+    queryParams.set('app_id', appId);
   }
 
-  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
   return fetchWithAuth<Conversation>(endpoint, {
-    method: "POST",
+    method: 'POST',
   });
 }
 
@@ -1957,7 +2369,7 @@ export async function updateConversationTitle(
   await fetchWithAuth(
     `/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`,
     {
-      method: "PATCH",
+      method: 'PATCH',
     },
   );
 }
@@ -1975,7 +2387,7 @@ export async function testConversationPrompt(
   const response = await fetchWithAuth<{ summary: string }>(
     `/v1/conversations/${conversationId}/test-prompt`,
     {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({ prompt }),
     },
   );
@@ -1995,7 +2407,7 @@ export async function testConversationPrompt(
 export function getAudioStreamUrl(
   conversationId: string,
   audioFileId: string,
-  format: string = "wav",
+  format: string = 'wav',
 ): string {
   return `${API_BASE_URL}/v1/sync/audio/${conversationId}/${audioFileId}?format=${format}`;
 }
@@ -2016,11 +2428,38 @@ export async function getConversationAudioUrls(
     );
     return response.audio_files || [];
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+    if (error instanceof Error && error.name === 'AbortError') {
       return []; // Silently return empty for aborted requests
     }
-    console.error("Error fetching audio URLs:", error);
+    console.error('Error fetching audio URLs:', error);
     return [];
+  }
+}
+
+/**
+ * Get signed URLs plus the server's poll hint (poll_after_ms) while
+ * playback artifacts are still being built.
+ * @param conversationId - The conversation ID
+ */
+export async function getConversationAudioUrlsWithPoll(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<{ files: AudioFileUrlInfo[]; pollAfterMs: number | null }> {
+  try {
+    const response = await fetchWithAuth<{
+      audio_files: AudioFileUrlInfo[];
+      poll_after_ms?: number | null;
+    }>(`/v1/sync/audio/${conversationId}/urls`, { signal });
+    return {
+      files: response.audio_files || [],
+      pollAfterMs: response.poll_after_ms ?? null,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { files: [], pollAfterMs: null };
+    }
+    console.error('Error fetching audio URLs:', error);
+    return { files: [], pollAfterMs: null };
   }
 }
 
@@ -2035,14 +2474,14 @@ export async function precacheConversationAudio(
 ): Promise<void> {
   try {
     await fetchWithAuth(`/v1/sync/audio/${conversationId}/precache`, {
-      method: "POST",
+      method: 'POST',
       signal,
     });
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
+    if (error instanceof Error && error.name === 'AbortError') {
       return; // Silently return for aborted requests
     }
-    console.error("Error pre-caching audio:", error);
+    console.error('Error pre-caching audio:', error);
   }
 }
 
@@ -2053,7 +2492,7 @@ export async function precacheConversationAudio(
 export async function getAudioAuthHeaders(): Promise<Record<string, string>> {
   const token = await getIdToken();
   if (!token) {
-    throw new Error("Not authenticated");
+    throw new Error('Not authenticated');
   }
   return {
     Authorization: `Bearer ${token}`,
@@ -2076,9 +2515,7 @@ export async function fetchAudioBlob(
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch audio: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
   }
 
   const blob = await response.blob();
@@ -2094,7 +2531,7 @@ import type {
   CreateFolderRequest,
   UpdateFolderRequest,
   BulkMoveConversationsRequest,
-} from "@/types/folder";
+} from '@/types/folder';
 
 /**
  * Map backend folder to frontend format (icon -> emoji)
@@ -2111,7 +2548,7 @@ function mapFolderResponse(folder: Folder): Folder {
  */
 export async function getFolders(): Promise<Folder[]> {
   try {
-    const folders = await fetchWithAuth<Folder[]>("/v1/folders");
+    const folders = await fetchWithAuth<Folder[]>('/v1/folders');
     return folders.map(mapFolderResponse);
   } catch {
     return [];
@@ -2122,8 +2559,8 @@ export async function getFolders(): Promise<Folder[]> {
  * Create a new folder
  */
 export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
-  const folder = await fetchWithAuth<Folder>("/v1/folders", {
-    method: "POST",
+  const folder = await fetchWithAuth<Folder>('/v1/folders', {
+    method: 'POST',
     body: JSON.stringify(data),
   });
   invalidateCache(invalidationPatterns.folders);
@@ -2138,7 +2575,7 @@ export async function updateFolder(
   data: UpdateFolderRequest,
 ): Promise<Folder> {
   const folder = await fetchWithAuth<Folder>(`/v1/folders/${folderId}`, {
-    method: "PATCH",
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
   invalidateCache(invalidationPatterns.folders);
@@ -2151,7 +2588,7 @@ export async function updateFolder(
  */
 export async function deleteFolder(folderId: string): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}`, {
-    method: "DELETE",
+    method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.folders);
   invalidateCache(invalidationPatterns.conversations); // Conversations move back to "All"
@@ -2167,7 +2604,7 @@ export async function bulkMoveConversationsToFolder(
   conversationIds: string[],
 ): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}/conversations/bulk-move`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify({ conversation_ids: conversationIds }),
   });
 }
@@ -2176,32 +2613,6 @@ export async function bulkMoveConversationsToFolder(
 // FCM Token Registration API
 // ============================================================================
 
-const WEB_DEVICE_ID_KEY = "omi-web-device-id";
-
-/**
- * Get or generate a unique device ID for this browser
- * This is used to identify the device when registering FCM tokens
- */
-function getWebDeviceIdHash(): string {
-  if (typeof window === "undefined") return "server";
-
-  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
-  if (!deviceId) {
-    // Generate a unique ID for this browser
-    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
-  }
-
-  // Create a simple hash of the device ID
-  let hash = 0;
-  for (let i = 0; i < deviceId.length; i++) {
-    const char = deviceId.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString(16);
-}
-
 /**
  * Register FCM token for push notifications
  * This is the same endpoint used by the mobile app
@@ -2209,13 +2620,14 @@ function getWebDeviceIdHash(): string {
  */
 export async function registerFCMToken(fcmToken: string): Promise<void> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const deviceIdHash = getWebDeviceIdHash();
+  const deviceIdHash = await getWebDeviceIdHash();
+  if (!deviceIdHash) return;
 
-  await fetchWithAuth("/v1/users/fcm-token", {
-    method: "POST",
+  await fetchWithAuth('/v1/users/fcm-token', {
+    method: 'POST',
     headers: {
-      "X-App-Platform": "web",
-      "X-Device-Id-Hash": deviceIdHash,
+      'X-App-Platform': 'web',
+      'X-Device-Id-Hash': deviceIdHash,
     },
     body: JSON.stringify({
       fcm_token: fcmToken,
@@ -2230,13 +2642,14 @@ export async function registerFCMToken(fcmToken: string): Promise<void> {
  */
 export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   try {
-    const deviceIdHash = getWebDeviceIdHash();
+    const deviceIdHash = await getWebDeviceIdHash();
+    if (!deviceIdHash) return;
 
-    await fetchWithAuth("/v1/users/fcm-token", {
-      method: "DELETE",
+    await fetchWithAuth('/v1/users/fcm-token', {
+      method: 'DELETE',
       headers: {
-        "X-App-Platform": "web",
-        "X-Device-Id-Hash": deviceIdHash,
+        'X-App-Platform': 'web',
+        'X-Device-Id-Hash': deviceIdHash,
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
@@ -2244,7 +2657,7 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
     });
   } catch (error) {
     // Silently fail on logout - token cleanup is best-effort
-    console.warn("Failed to unregister FCM token:", error);
+    console.warn('Failed to unregister FCM token:', error);
   }
 }
 
@@ -2252,37 +2665,20 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
 // Fair Use Status
 // ============================================================================
 
-export interface FairUseStatus {
-  stage: "none" | "warning" | "throttle" | "restrict";
-  case_ref: string;
-  speech_hours_today: number;
-  speech_hours_3day: number;
-  speech_hours_weekly: number;
-  limits: {
-    daily_hours: number;
-    three_day_hours: number;
-    weekly_hours: number;
-  };
-  usage_pct: {
-    daily: number;
-    three_day: number;
-    weekly: number;
-  };
-  message: string;
-  dg_budget?: {
-    daily_limit_ms: number;
-    used_ms: number;
-    remaining_ms: number;
-    exhausted: boolean;
-    resets_at: string;
-  };
-}
+/**
+ * Client-narrowed view of the generated `FairUseStatusResponse` (backend
+ * OpenAPI authority for `/v1/fair-use/status`). The backend types `stage` as a
+ * plain string; this adapter narrows it to the union the UI renders.
+ */
+export type FairUseStatus = Omit<FairUseStatusResponse, 'stage'> & {
+  stage: 'none' | 'warning' | 'throttle' | 'restrict';
+};
 
 export async function getFairUseStatus(): Promise<FairUseStatus | null> {
   try {
-    return await fetchWithAuth<FairUseStatus>("/v1/fair-use/status");
+    return await fetchWithAuth<FairUseStatus>('/v1/fair-use/status');
   } catch (error) {
-    console.error("getFairUseStatus error:", error);
+    console.error('getFairUseStatus error:', error);
     return null;
   }
 }

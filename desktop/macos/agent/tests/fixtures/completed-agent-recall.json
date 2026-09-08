@@ -1,0 +1,7 @@
+{
+  "ownerId": "owner-completed-agent-recall",
+  "runId": "run-completed-agent-recall-9432",
+  "pillId": "94320000-0000-4000-8000-000000000001",
+  "prompt": "Prepare the release checklist",
+  "finalText": "COMPLETED-AGENT-9432: The release checklist is saved at /tmp/omi-release-checklist.md"
+}

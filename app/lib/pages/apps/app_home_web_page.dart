@@ -103,7 +103,7 @@ class _AppHomeWebPageState extends State<AppHomeWebPage> with SingleTickerProvid
                     height: 48,
                     alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.7)),
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.7)),
                     child: Column(
                       mainAxisSize: MainAxisSize.max,
                       children: [

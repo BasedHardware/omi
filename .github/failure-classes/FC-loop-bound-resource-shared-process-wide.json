@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-loop-bound-resource-shared-process-wide",
+  "violated_contract": "A resource bound to one event loop (connection pool, semaphore, queue) must be owned by that loop and never reused from another.",
+  "canonical_prevention": "Hand out loop-bound resources through one per-loop registry that keys on the running loop and drops a finished loop's entry, instead of a module-level singleton.",
+  "evidence_prs": [
+    6377
+  ],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

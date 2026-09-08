@@ -1,5 +1,6 @@
 {
     "@@locale": "ur",
+    "sessionExpiredSignInAgain": "سیشن کی میعاد ختم ہو گئی — دوبارہ سائن ان کریں۔",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -417,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "میری ایپلیکیشنز",
+    "myApps": "میری بنائی ہوئی",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -554,6 +555,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "آفلائن ہم وقت",
+    "autoSync": "خودکار مطابقت",
+    "autoSyncDescription": "جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -963,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "آپ کا منصوبہ {date} پر تجدید ہو گا۔",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "مفت منصوبہ",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1151,17 +1144,6 @@
     },
     "insightsUsedThisMonth": "اس ماہ {used} کے {limit} اندرونی خیالات حاصل کیے گئے",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "اس ماہ {used} کے {limit} یادیں بنائی گئیں",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1491,7 +1473,7 @@
     "exportConfiguration": "ترتیب برآمد کریں",
     "bringYourOwn": "اپنا لے کر آئیں",
     "payYourSttProvider": "Omi کو آزادانہ استعمال کریں۔ آپ صرف اپنے STT فراہم کنندہ کو براہ راست ادا کریں۔",
-    "freeMinutesMonth": "ہر ماہ 1,200 منٹ مفت شامل ہیں۔ آن لائن کریں ",
+    "freeMinutesMonth": "ہر ماہ 300 منٹ مفت شامل ہیں۔ آن لائن کریں ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان درکار ہے",
     "validPortRequired": "درست پورٹ درکار ہے",
@@ -1580,7 +1562,7 @@
     "designingApp": "ایپ ڈیزائن کیا جا رہا ہے",
     "generatingIconStep": "آئیکن تیار کیا جا رہا ہے",
     "finalTouches": "حتمی نکات",
-    "processing": "کارکردگی میں...",
+    "processing": "پروسیسنگ",
     "features": "خصوصیات",
     "creatingYourApp": "آپ کی ایپ بن رہی ہے...",
     "generatingIcon": "آئیکن تیار ہو رہا ہے...",
@@ -1706,22 +1688,6 @@
     "lovingOmi": "Omi سے محبت ہے؟",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں App Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "ہمیں مزید لوگوں تک پہنچنے میں مدد کریں Google Play Store میں ریویو چھوڑ کر۔ آپ کی رائے ہمارے لیے بہت اہم ہے!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store پر ریٹنگ دیں",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play پر ریٹنگ دیں",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "شاید بعد میں",
     "@maybeLater": {
@@ -5401,33 +5367,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi سنک کی ترتیبات",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "اپنے فون کے ہاٹ اسپاٹ کی شناخت درج کریں",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi سنک آپ کے فون کو ہاٹ اسپاٹ کے طور پر استعمال کرتا ہے۔ ترتیبات میں اپنے ہاٹ اسپاٹ کا نام اور پاس ورڈ تلاش کریں > ذاتی ہاٹ اسپاٹ۔",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "ہاٹ اسپاٹ کا نام (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "مثلاً iPhone کا ہاٹ اسپاٹ",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "پاس ورڈ",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "ہاٹ اسپاٹ پاس ورڈ درج کریں",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "شناخت محفوظ کریں",
     "@saveCredentials": {
@@ -5436,18 +5378,6 @@
     "clearCredentials": "شناخت صاف کریں",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "براہ کرم ہاٹ اسپاٹ کا نام درج کریں",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi کی شناخت محفوظ کی گئی",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi کی شناخت صاف کی گئی",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} کے لیے خلاصہ تیار کیا گیا",
     "@summaryGeneratedForDate": {
@@ -5550,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 پریمیم منٹ + آن ڈیوائس پر لامحدود",
+    "basicPlanDescription": "300 پریمیم منٹ + آن ڈیوائس پر لامحدود",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7010,10 +6940,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "تیز رفتار منتقلی",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "ہم آہنگ کیا جا رہا ہے",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6956,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "منتقلی کا طریقہ",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "تیز",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "فون",
     "@phone": {
@@ -7067,33 +6981,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "ڈیوائس پر WiFi فعال کرنے میں ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "آپ کے ڈیوائس میں تیز رفتار منتقلی کی سہولت نہیں ہے۔ اس کی بجائے Bluetooth استعمال کریں۔",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "براہ کرم اپنے فون کا ہاٹ سپاٹ فعال کریں اور دوبارہ کوشش کریں۔",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "منتقلی شروع کرنے میں ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "ڈیوائس نے جواب نہیں دیا۔ براہ کرم دوبارہ کوشش کریں۔",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "غلط WiFi بروز اہل۔ اپنی ہاٹ سپاٹ سیٹنگز کی جانچ کریں۔",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "WiFi کنکشن ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD کارڈ پروسیسنگ",
     "@sdCardProcessing": {
@@ -7111,10 +7001,6 @@
     "process": "پروسیس کریں",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi ہم آہنگی ناکام",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "پروسیسنگ ناکام",
     "@processingFailed": {
@@ -7369,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ماہانہ 1,200 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔",
+    "premiumMinutesInfo": "ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7480,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ماہانہ 1,200 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ",
+    "premiumMinutesMonth": "ماہانہ 300 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8151,10 +8037,6 @@
             }
         }
     },
-    "wifiSync": "WiFi ہم آہنگی",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} کلپ بورڈ میں کاپی کیا گیا",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8047,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "کنکشن ناکام",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} سے متصل ہو رہے ہیں",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} کا WiFi فعال کریں",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8184,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Fast Transfer پر سوئچ کیا گیا",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ٹرانسفر مکمل! اب آپ یہ ریکارڈنگ چلا سکتے ہیں۔",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8201,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Fast Transfer فعال کیا گیا",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth ہم آہنگی فعال کی گئی",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Fast Transfer فعال کریں",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Fast Transfer WiFi استعمال کرتے ہوئے تقریباً 5 گنا تیز رفتار ہے۔ ٹرانسفر کے دوران آپ کا فون عارضی طور پر آپ کے Omi ڈیوائس کے WiFi نیٹ ورک سے منسلک ہوگا۔",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "ٹرانسفر کے دوران انٹرنیٹ رسائی موقوف ہے",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "آپ کے Omi ڈیوائس سے آپ کے فون تک ریکارڈنگز کو منتقل کرنے کا طریقہ منتخب کریں۔",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi کے ذریعے ~150 KB/s",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5 گنا تیز رفتار",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "آپ کے Omi ڈیوائس کے ساتھ براہ راست WiFi کنکشن بناتا ہے۔ ٹرانسفر کے دوران آپ کا فون عارضی طور پر آپ کے معمول کے WiFi سے منقطع ہوتا ہے۔",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,11 +8229,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "آپ کا ڈیوائس بیٹری میں کم ہو رہا ہے۔ دوبارہ چارج کرنے کا وقت! 🔋",
+    "lowBatteryAlertBody": "آپ کی بیٹری {level}٪ پر ہے۔ دوبارہ چارج کرنے کا وقت! 🔋",
     "batteryFullyChargedTitle": "Omi مکمل طور پر چارج ہو گیا",
     "batteryFullyChargedBody": "آپ کا Omi ڈیوائس مکمل طور پر چارج ہو گئی ہے۔ اسے ان پلگ کر سکتے ہیں!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "آپ کا Omi ڈیوائس منقطع ہو گیا",
     "@deviceDisconnectedNotificationTitle": {
@@ -9350,14 +9187,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "مقام کی اجازت ضروری ہے",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Fast Transfer کو WiFi کنکشن کی تصدیق کے لیے مقام کی اجازت ضروری ہے۔ براہ کرم جاری رکھنے کے لیے مقام کی اجازت دیں۔",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "ٹرانسکرپٹ برآمد",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9596,14 +9425,6 @@
     },
     "noDailyRecapsYet": "ابھی کوئی روزانہ خلاصہ نہیں",
     "dailyRecapsDescription": "آپ کے روزانہ خلاصے یہاں ظاہر ہوں گے جب تیار ہو جائیں",
-    "chooseTransferMethod": "ٹرانسفر کا طریقہ منتخب کریں",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi کے ذریعے ~150 KB/s",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "بڑے وقت کا فاصلہ دیکھا گیا ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9621,10 +9442,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ڈیوائس WiFi ہم آہنگی کو سپورٹ نہیں کرتا، Bluetooth پر سوئچ کیا جا رہا ہے",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health اس ڈیوائس پر دستیاب نہیں ہے",
     "downloadAudio": "آڈیو ڈاؤن لوڈ کریں",
@@ -9695,6 +9512,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "سب دیکھیں",
+    "expand": "پھیلائیں",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10154,7 +9972,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "آپ کے فون میں محفوظ طریقے سے بیک اپ ہو گیا",
+    "safelyBackedUp": "تیار کی گئی بات چیتیں",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10677,7 +10495,7 @@
     "upgradePlan": "پلان اپ گریڈ کریں",
     "billingMonthly": "ماہانہ",
     "billingYearly": "سالانہ",
-    "savePercent": "~17% بچائیں",
+    "savePercent": "~{percent}% بچائیں",
     "popular": "مقبول",
     "currentPlan": "موجودہ",
     "neoSubtitle": "ماہانہ {count} سوالات",
@@ -10727,5 +10545,282 @@
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
     "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
     "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
-    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔",
+    "deleteRecap": "خلاصہ حذف کریں",
+    "deleteRecapConfirmTitle": "یہ خلاصہ حذف کریں؟",
+    "deleteRecapConfirmBody": "یہ خلاصہ مستقل طور پر حذف کر دیا جائے گا۔ اس دن کی اصل گفتگوئیں متاثر نہیں ہوں گی۔",
+    "deleteRecapAction": "حذف",
+    "recapDeletedSnackbar": "خلاصہ حذف ہو گیا",
+    "recapDeleteFailed": "خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔",
+    "syncStatusBackedUp": "بیک اپ ہو گیا",
+    "syncStatusBackingUp": "ہم آہنگ کیا جا رہا ہے…",
+    "syncStatusWaiting": "سنک ہونے کا منتظر",
+    "syncStatusRetrying": "پروسیس نہیں ہو سکا — دوبارہ کوشش",
+    "syncStatusFailed": "ناکام — Retry دبائیں",
+    "syncStatusTooOld": "ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا",
+    "syncStatusFileUnavailable": "فائل دستیاب نہیں",
+    "syncStatusUploaded": "اپ لوڈ ہو گیا · Omi پر پروسیسنگ جاری",
+    "noRecordingsYet": "ابھی تک کوئی ریکارڈنگ نہیں",
+    "syncInProgress": "سینک جاری ہے",
+    "deleteWhileProcessingTitle": "ابھی پروسیسنگ جاری ہے",
+    "deleteWhileProcessingMessage": "یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن Omi ابھی گفتگو بنا رہا ہے۔ اگر آپ اسے ابھی حذف کریں اور پروسیسنگ ناکام ہو جائے تو اسے بحال نہیں کیا جا سکے گا۔ پھر بھی حذف کریں؟",
+    "syncCardAllBackedUp": "تمام ریکارڈنگز سنک ہو گئیں",
+    "syncCardReadyCount": "{count, plural, one{1 ریکارڈنگ سنک کے لیے تیار} other{{count} ریکارڈنگز سنک کے لیے تیار}}",
+    "syncCardProcessing": "Omi پر پروسیس ہو رہا ہے…",
+    "syncCardWaitingInternet": "انٹرنیٹ کا انتظار",
+    "syncCardNeedsAttention": "{count, plural, one{1 ریکارڈنگ پر توجہ درکار ہے} other{{count} ریکارڈنگز پر توجہ درکار ہے}}",
+    "syncFlowIntro": "ریکارڈنگز آپ کی ڈیوائس سے اس فون پر منتقل ہو کر مقامی طور پر محفوظ ہوتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔",
+    "syncStepUpload": "سنک",
+    "syncStepUploadDesc": "آپ کی ریکارڈنگ Omi کے سرور پر بھیجی جاتی ہے",
+    "syncStepProcess": "نقل",
+    "syncStepProcessDesc": "Omi آڈیو کو بات چیت میں بدل دیتا ہے",
+    "syncStepBackedUp": "بات چیت تیار",
+    "syncStepBackedUpDesc": "اسے بات چیتیں میں تلاش کریں",
+    "syncFailureFootnote": "اگر پروسیسنگ ناکام ہو، تو اگلی سنک پر ریکارڈنگ خودکار طور پر دوبارہ آزمائی جائے گی۔",
+    "syncStatusConversationCreated": "گفتگو بن گئی",
+    "syncCardUploadingTitle": "Omi پر اپ لوڈ ہو رہا ہے",
+    "syncCardDownloadingTitle": "آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے",
+    "syncCardProgressOf": "{total} میں سے {current}",
+    "syncStatusOnDevice": "آپ کی ڈیوائس پر",
+    "syncStatusDownloadingFromDevice": "آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے",
+    "newestFirst": "پہلے نئی ترین",
+    "noSyncedRecordingsYet": "ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں",
+    "morePaymentMethodsComingSoon": "مزید ادائیگی کے طریقے جلد آرہے ہیں",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "یہ پس منظر میں جاری رہتا ہے — آپ اس اسکرین سے باہر جا سکتے ہیں۔",
+    "syncCardRateLimited": "منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی",
+    "syncCardBackendBusy": "Omi کے سرورز مصروف ہیں — گنجائش بحال ہوتے ہی آپ کی ریکارڈنگز سنک ہو جائیں گی",
+    "unableToDetermineFirmwareVersion": "موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا",
+    "promoCode": "پرومو کوڈ",
+    "enterPromoCode": "پرومو کوڈ درج کریں",
+    "invalidPromotionCode": "غلط پرومو کوڈ۔",
+    "backgroundModeTitle": "بیک گراؤنڈ موڈ",
+    "backgroundModeDescription": "ایپ مکمل طور پر بند ہونے پر بھی اپنے Omi کی ریکارڈنگ جاری رکھیں۔",
+    "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔",
+    "regenerateRecap": "خلاصہ دوبارہ بنائیں",
+    "recapRegeneratedSnackbar": "خلاصہ دوبارہ بن گیا",
+    "recapRegenerateFailed": "خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔",
+    "recapRegenerateCooldown": "دوبارہ بنانے سے پہلے براہ کرم چند سیکنڈ انتظار کریں۔",
+    "recapRegenerateNoConversations": "اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔",
+    "syncCustomSttWarningTitle": "سنک Omi کی ٹرانسکرپشن استعمال کرتا ہے",
+    "syncCustomSttWarningMessage": "آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔",
+    "transcribeLaterTitle": "بعد میں ٹرانسکرائب کریں",
+    "transcribeLaterDescription": "ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔",
+    "transcribeLaterNote": "فون کے مائیکروفون، Omi اور Limitless ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔",
+    "transcribeLaterStorageFull": "آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔",
+    "unmute": "آواز چالو کریں",
+    "newRecording": "نئی ریکارڈنگ",
+    "transcribeLaterPaused": "روکا گیا — آڈیو ریکارڈ نہیں ہو رہی",
+    "recordingMode": "ریکارڈنگ موڈ",
+    "captureModeLater": "بعد میں",
+    "captureModeLiveDescription": "بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔",
+    "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔",
+    "backgroundModeUnavailable": "پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔",
+    "memoryThisDevice": "یہ ڈیوائس",
+    "memoryThisIphone": "یہ iPhone",
+    "memoryThisPhone": "یہ فون",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Omi کیسے استعمال کریں",
+    "deviceOnboardingTranscriptionTitle": "اپنے Omi سے بولیں",
+    "deviceOnboardingTranscriptionSubtitle": "چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں",
+    "deviceOnboardingGoodJob": "شاباش!",
+    "deviceOnboardingStartSpeaking": "بولنا شروع کریں...",
+    "deviceOnboardingAskQuestionTitle": "Omi سے سوال پوچھیں",
+    "deviceOnboardingAskQuestionSubtitle": "بٹن ایک بار دبائیں، اپنا سوال بولیں، اور مکمل ہونے پر دوبارہ دبائیں",
+    "deviceOnboardingProcessingQuestion": "آپ کے سوال پر کارروائی ہو رہی ہے...",
+    "deviceOnboardingListening": "سن رہا ہوں...",
+    "deviceOnboardingTurnOffTitle": "بند کریں",
+    "deviceOnboardingTurnOnTitle": "آن کریں",
+    "deviceOnboardingTurnOffSubtitle": "بٹن کو 3 سیکنڈ تک دبائے رکھیں",
+    "deviceOnboardingTurnOnSubtitle": "دوبارہ آن کرنے کے لیے بٹن دبائیں",
+    "deviceOnboardingHoldButtonHint": "بٹن کو مضبوطی سے دبائے رکھیں جب تک روشنی بند نہ ہو جائے",
+    "deviceOnboardingStatusConnected": "منسلک",
+    "deviceOnboardingStatusConnectedDone": "منسلک ہو گیا!",
+    "deviceOnboardingStatusDisconnected": "منقطع",
+    "deviceOnboardingStatusTurningOff": "بند ہو رہا ہے...",
+    "deviceOnboardingDoubleTapTitle": "ڈبل ٹیپ حسبِ ضرورت ترتیب دیں",
+    "deviceOnboardingEndConversation": "گفتگو ختم کریں",
+    "deviceOnboardingEndConversationDesc": "موجودہ گفتگو محفوظ کر کے ختم کریں",
+    "deviceOnboardingMuteUnmute": "میوٹ / ان میوٹ",
+    "deviceOnboardingMuteUnmuteDesc": "مائیکروفون آن یا آف کریں",
+    "deviceOnboardingStarConversation": "جاری گفتگو کو سٹار کریں",
+    "deviceOnboardingStarConversationDesc": "گفتگو کو اہم کے طور پر نشان زد کریں",
+    "deviceOnboardingSingleTapHint": "یہ سنگل ٹیپ تھا — جلدی سے دو بار ٹیپ کرنے کی کوشش کریں!",
+    "deviceOnboardingTryDoubleTap": "ابھی آزمائیں! اپنے Omi کو ڈبل ٹیپ کریں",
+    "deviceOnboardingContinue": "جاری رکھیں",
+    "deviceOnboardingFinish": "مکمل کریں",
+    "deviceOnboardingIntroTitle": "اپنے Omi کو جانیں",
+    "deviceOnboardingIntroSubtitle": "آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔",
+    "deviceOnboardingIntroDuration": "تقریباً 1 منٹ",
+    "jumpToLatestMessage": "تازہ ترین پیغام پر جائیں",
+    "latest": "تازہ ترین",
+    "flashFirmware": "فرم ویئر فلیش کریں",
+    "pendantRecordingTitle": "پینڈنٹ پر ریکارڈنگ جاری ہے",
+    "pendantRecordingNote": "آپ کا پینڈنٹ خود بخود ریکارڈ کر رہا ہے۔ ایپ کھلی ہونے کے دوران ریکارڈنگز آپ کے فون سے سنک ہوتی ہیں۔",
+    "pendantSyncingRecordings": "آپ کے پینڈنٹ سے ریکارڈنگز سنک ہو رہی ہیں…",
+    "pendantMinutesStored": "~{minutes} منٹ محفوظ",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔",
+    "connectRayBanMeta": "Ray-Ban Meta جوڑیں",
+    "raybanMetaSetupDescription": "گفتگو اور بصری سیاق و سباق کے لیے اپنی Ray-Ban Meta عینک کو اپنے Omi کیپچر ڈیوائس کے طور پر استعمال کریں۔ Omi آپ کی عینک کو منسلک کرنے کے لیے Meta AI ایپ کھولے گا۔",
+    "raybanMetaOpenMetaAI": "Meta AI کے ذریعے جڑیں",
+    "raybanMetaWaitingForMetaAI": "Meta AI ایپ میں کنکشن مکمل کریں، پھر یہاں واپس آئیں۔",
+    "raybanMetaCheckAgain": "دوبارہ چیک کریں",
+    "raybanMetaAllowCamera": "عینک پر کیمرے کی اجازت دیں",
+    "raybanMetaCameraExplanation": "Omi آپ کی گفتگو میں تصاویر شامل کرنے کے لیے آپ کی عینک کا کیمرہ استعمال کرتا ہے۔ آپ اسے چھوڑ کر صرف آڈیو استعمال کر سکتے ہیں۔",
+    "raybanMetaSkipForNow": "ابھی کے لیے چھوڑ دیں",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta صرف آڈیو موڈ",
+    "raybanMetaAudioOnlyExplanation": "Omi کا یہ ورژن Bluetooth کے ذریعے آپ کی عینک کا مائیکروفون استعمال کر سکتا ہے۔ تصویر کیپچر کے لیے Omi کا Meta ڈیولپر بلڈ درکار ہے۔",
+    "raybanMetaMusicPauseNote": "جب عینک کا مائیکروفون استعمال میں ہو تو آپ کے فون پر موسیقی رک جاتی ہے۔",
+    "raybanMetaContinue": "جاری رکھیں",
+    "raybanMetaCapturePhoto": "تصویر لیں",
+    "raybanMetaPhotoRequested": "تصویر کی درخواست کی گئی — یہ آپ کی گفتگو میں ظاہر ہوگی۔",
+    "raybanMetaMicrophoneReady": "مائیکروفون تیار ہے",
+    "raybanMetaImageCaptureReady": "تصویر کیپچر تیار ہے",
+    "raybanMetaImageCaptureUnavailable": "صرف آڈیو موڈ میں دستیاب نہیں",
+    "raybanMetaCamera": "کیمرہ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta سے جڑنے میں خرابی: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "آلے کا اسٹوریج",
+    "deviceStoragePercentFull": "{percent}% بھرا",
+    "deviceStorageUsedOfTotal": "{total} میں سے {used} استعمال شدہ",
+    "deviceStorageFree": "{free} خالی",
+    "deviceStorageNearlyFull": "آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔",
+    "phoneMicOfflineFallbackMessage": "کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔",
+    "dataEncryptedBanner": "آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔",
+    "rayBanMetaMicPickerTitle": "اپنا Ray-Ban Meta مائیکروفون منتخب کریں",
+    "rayBanMetaMicPickerDescription": "اپنے چشمے کا Bluetooth مائیکروفون منتخب کریں۔ Omi کے استعمال کے دوران موسیقی رک جاتی ہے۔",
+    "rayBanMetaMicPickerEmpty": "کوئی Bluetooth مائیکروفون نہیں ملا۔ iPhone کی ترتیبات میں چشمہ منسلک کریں، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerLoadError": "Bluetooth مائیکروفون لوڈ نہیں ہو سکے۔ چیک کریں کہ Bluetooth آن ہے، پھر دوبارہ کوشش کریں۔",
+    "rayBanMetaMicPickerConnectError": "اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔",
+    "cloudTranscription": "کلاؤڈ ٹرانسکرپشن",
+    "copyMessage": "پیغام کاپی کریں",
+    "deleteOnDeviceModel": "ماڈل حذف کریں",
+    "deleteOnDeviceModelConfirm": "کیا آپ واقعی یہ ماڈل حذف کرنا چاہتے ہیں؟",
+    "downgradeAnyway": "پھر بھی ڈاؤن گریڈ کریں",
+    "downgradeLimitBattery": "7 گنا زیادہ بیٹری کی کھپت",
+    "downgradeLimitDelay": "5-7 سیکنڈ کی تاخیر",
+    "downgradeLimitQuality": "30% کم ٹرانسکرپشن معیار",
+    "downgradeLimitSpeakers": "بولنے والوں کی شناخت ممکن نہیں",
+    "downgradeLimitationsHeading": "آپ کو یہ حدود درپیش ہوں گی:",
+    "downgradeToFreemiumTitle": "مفت منصوبے پر ڈاؤن گریڈ کریں؟",
+    "errorLoadingAudio": "آڈیو لوڈ کرنے میں خرابی",
+    "failedToLinkCalendarEvent": "کیلنڈر ایونٹ منسلک کرنے میں ناکامی",
+    "googleCalendarConnectPrompt": "بات چیتوں کو کیلنڈر ایونٹس سے منسلک کرنے کے لیے اپنا Google کیلنڈر منسلک کریں۔",
+    "googleCalendarNotConnected": "Google کیلنڈر منسلک نہیں ہے",
+    "linkedToEvent": "\"{title}\" سے منسلک کر دیا گیا",
+    "onDeviceModelDeleted": "ماڈل حذف ہو گیا",
+    "onDeviceModelDownloadFailed": "ماڈل ڈاؤن لوڈ ناکام",
+    "onDeviceModelDownloadFailedDesc": "Whisper ماڈل ڈاؤن لوڈ کرنے میں ناکامی۔ براہ کرم دوبارہ کوشش کریں۔",
+    "onDeviceModelDownloadSuccess": "ماڈل ڈاؤن لوڈ ہو گیا",
+    "onDeviceModelDownloadSuccessDesc": "Whisper ماڈل کامیابی سے ڈاؤن لوڈ ہو گیا",
+    "onDeviceModelDownloaded": "ڈاؤن لوڈ شدہ",
+    "onDeviceModelSize": "ماڈل کا سائز",
+    "onDeviceTranscription": "ڈیوائس پر ٹرانسکرپشن",
+    "onDeviceTranscriptionDesc": "ٹرانسکرپشن آپ کی ڈیوائس پر مقامی طور پر ہوتی ہے",
+    "searchSettings": "ترتیبات تلاش کریں…",
+    "speechToTextProvider": "آواز سے متن کا فراہم کنندہ",
+    "speechToTextProviderDesc": "ٹرانسکرپشن کے لیے استعمال ہونے والی سروس منتخب کریں",
+    "sttFilterAuto": "خودکار",
+    "sttModelAccuracy": "درستگی",
+    "sttModelFaster": "تیز تر",
+    "sttModelHigher": "زیادہ",
+    "sttModelLower": "کم",
+    "sttModelSlower": "سست تر",
+    "sttModelSpeed": "رفتار",
+    "sttNone": "کوئی نہیں",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "آپ کی رائے کا شکریہ!",
+    "transcriptionLanguage": "ٹرانسکرپشن کی زبان",
+    "transcriptionLanguageDesc": "تقریر کی ٹرانسکرپشن کے لیے زبان منتخب کریں",
+    "whisperModel": "Whisper ماڈل",
+    "whisperModelDesc": "ڈیوائس پر ٹرانسکرپشن کے لیے ماڈل منتخب کریں",
+    "whisperModelSizeBase": "بنیادی",
+    "whisperModelSizeLarge": "بڑا",
+    "whisperModelSizeMedium": "درمیانہ",
+    "whisperModelSizeSmall": "چھوٹا",
+    "whisperModelSizeTiny": "بہت چھوٹا",
+    "planSheetChooseYourPlan": "لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔",
+    "availableOnMacMobileWeb": "Mac، موبائل اور ویب پر دستیاب",
+    "popularBadge": "مقبول",
+    "worksOnDesktop": "ڈیسک ٹاپ پر کام کرتا ہے",
+    "noDesktopAccess": "ڈیسک ٹاپ پر کام نہیں کرتا",
+    "annualBillingSummary": "{months} ماہ / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 ماہ مفت} other{{count} ماہ مفت}}",
+    "freemiumLimitsIntro": "Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:",
+    "downgradeLimitDelayNotRealTime": "5-7 سیکنڈ کی تاخیر (ریئل ٹائم نہیں)",
+    "downgradeToFreemiumAction": "مفت ورژن پر جائیں",
+    "getFreeUnlimitedAccess": "مفت لامحدود رسائی حاصل کریں",
+    "shareDataForTraining": "تربیت کے لیے ڈیٹا شیئر کریں",
+    "yourRequestUnderReview": "آپ کی درخواست زیرِ غور ہے",
+    "pinAsBaseline": "بنیاد کے طور پر پن کریں",
+    "unpinAsBaseline": "بنیاد سے ان پن کریں",
+    "baselineMemory": "بنیادی یادداشت",
+    "alwaysInContext": "ہمیشہ سیاق میں",
+    "accountCutoverUpdateRequiredTitle": "التحديث مطلوب",
+    "accountCutoverUpdateRequiredMessage": "ثبّت أحدث تطبيق Omi للمتابعة بعد ترحيل الحساب.",
+    "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
+    "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
+    "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
+    "accountCutoverOpenStore": "فتح المتجر",
+    "chatScopeAbout": "{title} کے بارے میں",
+    "askAboutThisConversation": "اس کے بارے میں پوچھیں",
+    "sendRawAudioToOmi": "خام آڈیو Omi کو بھیجیں",
+    "sendRawAudioToOmiDescription": "خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔",
+    "findDevice": "تلاش کریں",
+    "diagnosticsShareFailed": "تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔",
+    "appDisabledTitle": "یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔",
+    "appDisabledWebhookFailures": "اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔",
+    "appDisabledGeneric": "اسے Omi نے غیر فعال کیا تھا۔",
+    "appDisabledOwnerHint": "پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔",
+    "appReEnable": "دوبارہ فعال کریں",
+    "appReEnableFailedTitle": "دوبارہ فعال نہیں ہو سکا",
+    "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
+    "appDisabledLastError": "آخری خرابی: {error}",
+    "prerecordedTranscript": "پہلے سے ریکارڈ شدہ",
+    "pendantRecordingSyncBlocked": "Pendant ابھی بھی ریکارڈ کر رہا ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
+    "pendantFullSyncBlocked": "Pendant کی اسٹوریج بھر گئی ہے اور یہ ابھی بھی ریکارڈنگ موڈ میں ہے، اس لیے محفوظ شدہ آڈیو منتقل نہیں کی جا سکتی۔ ریکارڈنگ روکنے کے لیے Pendant کا بٹن دبائیں، پھر دوبارہ مطابقت پذیری کریں۔",
+    "conversationsNotCapturedCount": "ریکارڈ نہیں ہوا ({count})",
+    "transcriptionNoAudio": "ٹرانسکرپشن آڈیو وصول نہیں کر رہی",
+    "chatBlockTask": "کام",
+    "chatBlockGoal": "ہدف",
+    "chatBlockConversation": "گفتگو",
+    "chatBlockMemory": "یاد",
+    "chatBlockQuestion": "سوال",
+    "chatBlockOpenInGoals": "اہداف میں کھولیں",
+    "chatBlockOpenConversation": "گفتگو کھولیں",
+    "chatBlockOpenInMemories": "یادوں میں کھولیں",
+    "chatBlockUnavailable": "اب دستیاب نہیں",
+    "chatBlockRecommendedNextSteps": "تجویز کردہ اگلے اقدامات",
+    "couldNotLoadMemories": "یادیں لوڈ نہیں ہو سکیں",
+    "couldNotLoadKnowledgeGraph": "نالج گراف لوڈ نہیں ہو سکا",
+    "speechProfileOwnerTitle": "{name} کی صوتی پروفائل",
+    "play": "چلائیں",
+    "redo": "دوبارہ ریکارڈ کریں",
+    "answerWithYourVoice": "اپنی آواز میں جواب دیں:",
+    "speechProfileTopicLocation": "آپ کہاں رہتے ہیں؟",
+    "speechProfileTopicWork": "آپ کیا کام کرتے ہیں؟",
+    "speechProfileTopicGoal": "آپ کا طویل مدتی مقصد کیا ہے؟",
+    "speechToTextUnavailableDesc": "اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "memoryHistoryPartial": "یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔",
+    "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں"
 }

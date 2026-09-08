@@ -28,6 +28,9 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
+    <!-- while-in-use is enough for conversation GPS: capture runs in the
+         visible activity, and the periodic refresh uses FOREGROUND_SERVICE_LOCATION.
+         Do not add ACCESS_BACKGROUND_LOCATION (Play Store prominent-disclosure). -->
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -35,7 +38,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="remove" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
 
@@ -74,6 +78,7 @@
     <!-- Add android:stopWithTask option only when necessary. -->
     <application
         android:name=".MyApp"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:requestLegacyExternalStorage="true"
@@ -88,6 +93,13 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="microphone"
             tools:node="merge" />
+
+        <receiver
+            android:name="com.pravera.flutter_foreground_task.service.RebootReceiver"
+            tools:node="remove" />
+        <receiver
+            android:name="id.flutter.flutter_background_service.BootReceiver"
+            tools:node="remove" />
 
         <service
             android:name=".NotificationOnKillService"
@@ -159,13 +171,16 @@
                 <data
                     android:host="h.omi.me"
                     android:scheme="https"
-                    android:pathPattern="/tasks/.*" />
+                    android:path="/wrapped" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="omi" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:pathPattern="/tasks/.*" />
             </intent-filter>
         </activity>
 
@@ -179,7 +194,7 @@
 
         <!-- Native BLE Companion Service — receives OS-level device presence events -->
         <service
-            android:name="com.friend.ios.BleCompanionService"
+            android:name="com.friend.ios.ble.BleCompanionService"
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
@@ -189,8 +204,16 @@
 
         <!-- Native BLE Foreground Service — persistent BLE connection -->
         <service
-            android:name="com.friend.ios.OmiBleForegroundService"
+            android:name="com.friend.ios.ble.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false"
+            android:exported="false" />
+
+        <!-- Native phone-mic foreground service — keeps mic capture alive in background -->
+        <service
+            android:name="com.friend.ios.phonemic.PhoneMicForegroundService"
+            android:foregroundServiceType="microphone"
+            android:stopWithTask="false"
             android:exported="false" />
 
     </application>

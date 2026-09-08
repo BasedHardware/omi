@@ -1,0 +1,67 @@
+version: 2
+name: chat-first-capability-isolation
+tier: manual
+description: "Manual local/offline capability-off assertion: the one shell still mounts and its content blocks still render, non-actionable. Run it once for each isolated fixture case in the two-launch matrix below."
+app: non-prod
+# A harness invocation owns one automation port, hence one named app. It cannot
+# switch apps mid-run; prepare, launch, and run this *single-case* assertion
+# separately for every row below (each command pair has a distinct named bundle
+# and port):
+#
+#   make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=disabled_control
+#   OMI_AUTOMATION_PORT=47852 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-disabled-control DESKTOP_USER=omi-local-emulator-chat-first-disabled-v1
+#   python3 desktop/macos/scripts/omi-harness run desktop/macos/e2e/flows/chat-first-capability-isolation.yaml --lane bridge --port 47852 --bundle-id com.omi.omi-chat-first-e2e-disabled-control
+#
+#   make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=unreachable_control
+#   OMI_AUTOMATION_PORT=47853 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-unreachable-control DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
+#   python3 desktop/macos/scripts/omi-harness run desktop/macos/e2e/flows/chat-first-capability-isolation.yaml --lane bridge --port 47853 --bundle-id com.omi.omi-chat-first-e2e-unreachable-control
+#
+# The fixture is server-owned and authenticates to Firebase Auth emulator
+# itself; none of these steps set a desktop capability or fabricate agent state.
+#
+# The no-leak contract is deliberately not simulated here. It is owned by the
+# behavioral seams that can inspect it without adding a client-side override:
+# - desktop/macos/agent/tests/chat-first-capability-projection.test.ts proves
+#   dynamic tools are absent/un-authorizable and tools/list bytes equal legacy.
+# - backend/tests/unit/test_chat_first_blocks.py proves block validation does
+#   no entity work while disabled.
+# - backend/tests/unit/test_chat_first_proactive_router.py and
+#   backend/tests/unit/test_chat_first_proactive_engine.py prove disabled
+#   materialization and proactive work do no feature-store/provider/metric work.
+covers:
+  # Each case below drives this root's real sampled-control failure/disabled path.
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatFirstCapabilityProjection.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  # S1 traverses the exact-route visibility wait on a capability-off bundle: the
+  # shell mounts identically, so the wait must succeed on the same shellVariant.
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ChatFirst.swift
+preconditions:
+  - automation_bridge_ready
+  - provider_mode_offline
+  - seeded_memory_scenario_happy_path
+  - one_fixture_case_prepared_by_the_real_make_helper
+  - its_fresh_named_non_production_bundle_launched_on_the_matching_port
+
+steps:
+  # Capability-off is no longer a different shell. It is the same shell with the
+  # kernel features dormant: cards still render, task check-off still works
+  # (it binds TasksStore, not the projection), links still navigate, and only the
+  # question card's options go dim. The old assertion here — `shellVariant: legacy`
+  # — described a shell that no longer exists.
+  - id: S1
+    name: Navigate the prepared capability-off bundle to the one chat surface
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.shellVariant: chat_first
+
+  - id: S2
+    name: Assert the sampled server capability stayed off while the one shell stayed mounted and usable
+    state.expect:
+      state.shellVariant: chat_first
+      state.visibleChatFirstRoute: chat

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/payments/models/payment_method_config.dart';
 import 'package:omi/utils/logger.dart';
@@ -15,7 +16,9 @@ Future<Map<String, dynamic>?> getStripeAccountLink(String? country) async {
     if (response == null || response.statusCode != 200) {
       return null;
     }
-    return jsonDecode(response.body);
+    return wire.GeneratedStripeConnectAccountResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
   } catch (e) {
     Logger.error(e);
     return null;
@@ -28,7 +31,9 @@ Future<bool> isStripeOnboardingComplete() async {
     if (response == null || response.statusCode != 200) {
       return false;
     }
-    return jsonDecode(response.body)['onboarding_complete'];
+    return wire.GeneratedStripeOnboardingStatusResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).onboardingComplete;
   } catch (e) {
     Logger.error(e);
     return false;
@@ -46,6 +51,7 @@ Future<bool> savePayPalDetails(String email, String link) async {
     if (response == null || response.statusCode != 200) {
       return false;
     }
+    wire.GeneratedPaymentMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } catch (e) {
     Logger.error(e);
@@ -64,7 +70,9 @@ Future<Map<String, dynamic>?> fetchPaymentMethodsStatus() async {
     if (response == null || response.statusCode != 200) {
       return null;
     }
-    return jsonDecode(response.body);
+    return wire.GeneratedPaymentMethodStatusResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).toJson();
   } catch (e) {
     Logger.error(e);
     return null;
@@ -82,7 +90,10 @@ Future<PayPalDetails?> fetchPayPalDetails() async {
     if (response == null || response.statusCode != 200) {
       return null;
     }
-    return PayPalDetails.fromJson(jsonDecode(response.body));
+    final generated = wire.GeneratedPayPalPaymentDetailsResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return PayPalDetails(email: generated.email, link: generated.paypalmeUrl);
   } catch (e) {
     Logger.error(e);
     return null;
@@ -100,6 +111,7 @@ Future<bool> setDefaultPaymentMethod(String method) async {
     if (response == null || response.statusCode != 200) {
       return false;
     }
+    wire.GeneratedPaymentMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return true;
   } catch (e) {
     Logger.error(e);
@@ -118,7 +130,11 @@ Future<List?> getStripeSupportedCountries() async {
     if (response == null || response.statusCode != 200) {
       return null;
     }
-    return jsonDecode(response.body);
+    final countries = jsonDecode(response.body) as List<dynamic>;
+    return countries
+        .map((country) => wire.GeneratedStripeSupportedCountryResponse.fromJson(country as Map<String, dynamic>))
+        .map((country) => country.toJson())
+        .toList();
   } catch (e) {
     Logger.error(e);
     return null;

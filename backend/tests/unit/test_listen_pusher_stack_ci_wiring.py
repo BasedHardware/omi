@@ -1,0 +1,180 @@
+"""Static wiring contracts for the backend hermetic CI gate."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Unbounded `apt-get` against the hosted-runner Azure mirror can stall with no
+# output until the job ceiling. The hermetic gauntlets must keep Acquire
+# retries/timeouts on both update and install, plus a step-level timeout.
+_BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+
+
+def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    package = json.loads((_REPO_ROOT / 'package.json').read_text(encoding='utf-8'))
+    contracts = json.loads((_REPO_ROOT / 'backend' / 'testing' / 'workflow_contracts.json').read_text(encoding='utf-8'))
+
+    assert '  listen-pusher-stack-gauntlet:' in workflow
+    job = workflow.split('  listen-pusher-stack-gauntlet:\n', 1)[1].split('\n  sync-cloud-tasks-stack-gauntlet:\n', 1)[
+        0
+    ]
+
+    assert 'timeout-minutes: 20' in job
+    assert 'uses: actions/setup-python@v6' in job
+    assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
+    assert 'uv venv .venv' in job
+    assert 'uv pip sync pylock.toml --python .venv/bin/python' in job
+    assert 'uses: actions/setup-node@v7' in job
+    assert "node-version: '22'" in job
+    assert 'cache-dependency-path: package-lock.json' in job
+    assert 'npm ci --ignore-scripts --prefer-offline --no-audit --fund=false' in job
+    assert 'for attempt in 1 2 3' in job
+    assert 'uses: actions/setup-java@v5' in job
+    assert "java-version: '21'" in job
+    assert f'{_BOUNDED_APT_GET} update' in job
+    assert f'{_BOUNDED_APT_GET} install --yes redis-server' in job
+    assert 'timeout-minutes: 5' in job
+    assert 'npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"' in job
+    assert 'name: Show listen gauntlet process diagnostics on failure' in job
+    assert 'if: failure()' in job
+    assert "find \"$state_dir\" -type f \\( -name '*.log' -o -name '*.jsonl' \\) -print -exec tail -n 160 {} \\;" in job
+
+    assert package['scripts']['test:listen-pusher-stack:emulator'] == 'backend/testing/listen_pusher_stack/run.sh'
+    listen_contract = next(
+        contract for contract in contracts['workflows'] if contract['id'] == 'listen_pusher_pipeline'
+    )
+    assert 'backend/testing/listen_pusher_stack/**' in listen_contract['sources']
+    assert 'tests/unit/test_listen_pusher_stack_ci_wiring.py' in listen_contract['tests']
+
+    # Static wiring tripwire only: the emulator stack proves behavior. This
+    # keeps #10000's REST admission/restart scenario in the blocking command.
+    runner = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'run.py').read_text(encoding='utf-8')
+    task_seam = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'cloud_tasks.py').read_text(
+        encoding='utf-8'
+    )
+    listener_entrypoint = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'listener_app.py').read_text(
+        encoding='utf-8'
+    )
+    finalizer_leaves = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'finalizer_leaves.py').read_text(
+        encoding='utf-8'
+    )
+    assert '_rest_finalization_survives_listener_restart' in runner
+    assert "state_dir / 'cloud-rest-restart'" in runner
+    assert '_stale_processing_orphan_reconciled' in runner
+    assert "state_dir / 'cloud-stale-orphan'" in runner
+    assert '_memory_fence_blocks_durable_finalization' in runner
+    assert "state_dir / 'cloud-memory-fence'" in runner
+    assert 'finalization_worker_memory_enabled=None' in runner
+    assert 'finalizer.process_conversation =' not in finalizer_leaves
+    assert 'finalizer.extract_memories =' not in finalizer_leaves
+    assert 'processing._extract_memories_canonical = _offline_extract_memories_canonical' in finalizer_leaves
+    assert '_stale_processing_orphan_reconciled_inline' in runner
+    assert "state_dir / 'inline-stale-orphan'" in runner
+    assert "'task_already_exists'" in task_seam
+    assert 'OMI_STACK_FINALIZATION_RACE_PARTIES' in listener_entrypoint
+    assert 'OMI_STACK_RECORDING_LIFECYCLE_FAULT' in listener_entrypoint
+    assert '_recording_lifecycle_fault_enforce' in runner
+    assert '_recording_lifecycle_fault_compatibility' in runner
+    assert "state_dir / f'lifecycle-fault-{mode.replace(\"_\", \"-\")}'" in runner
+    assert "('enforce', 'stack-lifecycle-enforce'" in runner
+    assert "('shadow', 'stack-lifecycle-shadow'" in runner
+    assert "('dual_write', 'stack-lifecycle-dual-write'" in runner
+    assert 'last {min(len(lines), 120)} line(s) from {child.log_path}' in runner
+    # #10468 r4: the emulator concurrency tests are chained after the gauntlet
+    # in the same Firestore emulator session, not left as a skipped pytest.
+    run_sh = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'run.sh').read_text(encoding='utf-8')
+    assert 'test_stale_processing_emulator_concurrency.py' in run_sh
+    # #10468 r5: CI's --state-dir (and any other runner argument) must route to
+    # the listen-pusher runner only, never leak into the pytest command after &&.
+    command_lines = [line for line in run_sh.splitlines() if line.lstrip().startswith('runner_command=')]
+    assert len(command_lines) == 1, 'run.sh must define a single runner_command'
+    command_line = command_lines[0]
+    runner_side = command_line.split('&&')[0]
+    pytest_side = command_line.split('&&', 1)[1]
+    assert '${runner_args}' in runner_side, 'runner_args must land on the runner side of &&'
+    assert 'runner_args' not in pytest_side, 'runner_args must not leak into the pytest command'
+
+
+def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    trigger = workflow.split('jobs:', 1)[0]
+
+    assert "  pull_request:\n    branches: main\n" in trigger
+    assert "  merge_group:\n    types: [checks_requested]\n" in trigger
+    assert 'paths:' not in trigger
+
+    assert '  scope:\n' in workflow
+    scope = workflow.split('  scope:\n', 1)[1].split('\n  hermetic-e2e:\n', 1)[0]
+    # The PR base is resolved live against the checkout (origin/<base-ref>) rather
+    # than the event-payload base.sha, which can be stale for a queued run
+    # (FC-stale-event-payload-diff-base, #10785).
+    assert 'github.event.pull_request.base.sha' not in scope
+    assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
+    assert 'github.event.merge_group.base_sha' in scope
+    assert 'timeout-minutes: 10' in scope
+    assert 'fetch-depth: 0' in scope
+    assert 'filter: blob:none' in scope
+    assert 'git diff --name-only "$base_sha"...HEAD' in scope
+    assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+
+    # #10945: fail closed on unresolvable scope base or a failed (partial-clone)
+    # history fetch. The scope job must FAIL rather than silently emit
+    # applies=false, which would skip the hermetic backend gate entirely.
+    run_block = scope.split('run: |', 1)[1]
+    assert 'set -euo pipefail' in run_block
+    assert 'if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then' in run_block
+    assert 'Cannot resolve hermetic backend scope base' in run_block
+    assert 'exit 1' in run_block
+    assert 'a failed diff must never yield empty -> applies=false' in run_block
+    # applies=false must be reachable only AFTER a successful diff, never as a fallback.
+    diff_index = run_block.index('changed_files="$(git diff')
+    applies_false_index = run_block.index('echo "applies=false" >> "$GITHUB_OUTPUT"')
+    assert diff_index < applies_false_index
+    # The two exit-1 guards precede the diff; a failed scope never reaches applies=false.
+
+    for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
+        job = workflow.split(f'  {job_name}:\n', 1)[1]
+        assert 'needs: scope' in job
+        assert "if: needs.scope.outputs.applies == 'true'" in job
+
+    gate = workflow.split('  merge-gate:\n', 1)[1]
+    assert 'name: Backend Hermetic Merge Gate' in gate
+    # `!cancelled()` (not `always()`): a run cancelled by cancel-in-progress
+    # must leave the gate neutral instead of executing against `cancelled`
+    # upstream results and minting a red check with no code cause.
+    assert 'if: ${{ !cancelled() }}' in gate
+    assert 'if: ${{ always() }}' not in gate
+    assert 'needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet]' in gate
+    assert "true) required_result='success'" in gate
+    assert "false) required_result='skipped'" in gate
+    for result_name in (
+        'SCOPE_RESULT',
+        'SCOPE_APPLIES',
+        'HERMETIC_E2E_RESULT',
+        'LISTEN_PUSHER_RESULT',
+        'SYNC_CLOUD_TASKS_RESULT',
+    ):
+        assert result_name in gate
+
+
+def test_hermetic_e2e_tokenizer_warmup_is_cached_and_bounded() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+    job = workflow.split('  hermetic-e2e:\n', 1)[1].split('\n  listen-pusher-stack-gauntlet:\n', 1)[0]
+
+    assert 'uses: actions/cache@v6' in job
+    assert 'path: ${{ runner.temp }}/tiktoken-cache' in job
+    assert "key: tiktoken-${{ runner.os }}-${{ hashFiles('backend/pylock.toml') }}" in job
+    assert job.count('TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache') == 2
+    assert 'python backend/scripts/prewarm_tiktoken_cache.py' in job
+
+
+def test_hermetic_gauntlet_redis_apt_installs_are_bounded() -> None:
+    workflow = (_REPO_ROOT / '.github' / 'workflows' / 'backend-hermetic-e2e.yml').read_text(encoding='utf-8')
+
+    assert workflow.count(f'{_BOUNDED_APT_GET} update') == 3
+    assert workflow.count(f'{_BOUNDED_APT_GET} install --yes redis-server') == 3
+    assert 'sudo apt-get install --yes redis-server' not in workflow

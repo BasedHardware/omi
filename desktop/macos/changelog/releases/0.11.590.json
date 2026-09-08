@@ -1,0 +1,9 @@
+{
+  "version": "0.11.590",
+  "date": "2026-07-02",
+  "changes": [
+    "Made ChatGPT and Claude connector setup more reliable: Omi opens the right page and shows a movable on-screen card with one-click copy buttons for each setup value, and ChatGPT setup now uses the correct OAuth client (no secret needed)",
+    "Routes onboarding imports through the memory import evidence pipeline",
+    "Fixed ChatGPT and Claude cloud connector setup to use public OAuth clients without requiring an MCP key as a client secret"
+  ]
+}

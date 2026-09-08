@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed the AI chat/assistant crashing on startup in packaged builds with module-not-found errors (confirmed on Linux; the same packaging step is shared by Windows and macOS) — several of its bundled dependencies (jiti, glob, minimatch, chalk, hosted-git-info, ignore, semver) were silently getting swapped for an incompatible older version during packaging."
+  ]
+}

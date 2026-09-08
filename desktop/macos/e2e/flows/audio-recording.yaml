@@ -1,0 +1,102 @@
+version: 2
+name: audio-recording
+tier: manual
+description: Audio recording flow — verify Bluetooth or microphone source state, Start Recording, transcription state, and stop recording
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
+  - desktop/Desktop/Sources/AudioMixer.swift
+  - desktop/Desktop/Sources/AppState.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MeetingGatePause.swift
+  - desktop/macos/Desktop/Sources/AppState/AppServicesCoordinator.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  - desktop/macos/Desktop/Sources/AudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/BleTransport.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/BLEPhysicalDriver.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Transports/DeviceTransport.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/BluetoothManager.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/DeviceType.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/BluetoothConnectionLease.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceAudioStreamController.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceCommandQueue.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceOperationBroker.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Session/DeviceSessionCoordinator.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/DeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/DeviceConnectionFactory.swift
+  - desktop/macos/Desktop/Sources/Audio/AudioCodecDecoder.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/BeeDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FieldyDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FrameDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/FriendPendantConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/OmiDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/PlaudDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/Connections/LimitlessDeviceConnection.swift
+  - desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift
+  - desktop/macos/Desktop/Sources/SystemAudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioLevelWaveformView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/AudioSourceSelector.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    do: "Open Brain, choose Conversations, and verify the conversation list loads. When Listening is set to Always, open the More menu and verify Start recording is available."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard
+
+  - id: S2
+    name: Verify Start Recording button
+    do: "Open the Conversations More menu and check that 'Start recording' with a microphone icon is available. If the app is already recording, verify the live recording state instead."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2B
+    name: Verify Bluetooth audio source state
+    do: "If an Omi-compatible Bluetooth device is paired, verify its connected state is reflected before recording and that it remains the selected device audio source. If no device is available, verify the app stays usable with the microphone source and does not show a stale connected-device state."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Click Start Recording
+    do: "Choose 'Start recording' from the Conversations More menu. If microphone permission is NOT granted, the app should show a permission request dialog or navigate to permission settings. If permission IS granted, the app should begin audio capture and show the live recording state."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4
+    name: Verify recording or permission state
+    do: "After clicking Start Recording, check the resulting state. If recording started: verify recording indicator is visible, note any waveform or timer display. If permission was requested: verify the permission dialog or settings page is shown with microphone grant options."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S4B
+    name: Verify silent microphone recovery outcome
+    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and Omi remains usable without a repeated hardware alert. If microphone permission is not granted, verify 'Omi Needs Microphone Access' is presented with an OK action while the window remains responsive; repeat with the main shell hidden and confirm Omi reveals its main window before presenting that permission alert."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S5
+    name: Check sidebar permission indicators
+    do: "Scroll the sidebar to check for any permission indicators (Grant/Fix badges). These appear below the navigation items when permissions need attention. Note which permissions are flagged."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S6
+    name: Navigate to Settings for microphone
+    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to navigate to Settings. Look for Privacy or Permissions section. Press it to view microphone permission status and available actions (Grant Access, Reset & Restart, Open Terminal, Open System Settings)."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S7
+    name: Return to Dashboard
+    do: "Return to Brain → Conversations. When Listening is set to Always, verify Start recording remains available in the More menu."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-degraded-fallback-consumes-protected-budget",
+  "violated_contract": "A quota or degradation fallback must not route work onto the scarce, budgeted resource the quota exists to protect. The demotion destination is part of the quota's contract: a limit that dumps its overflow onto the protected budget converts a per-user ceiling into unmetered consumption of the shared reservation.",
+  "canonical_prevention": "Name the fallback destination as an explicit constant next to the protected resource's pin, with a behavioral test asserting the two can never be equal, so re-pointing either one fails the guard instead of silently landing degraded traffic on the protected budget.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_desktop_proxy.py"
+  ],
+  "evidence_prs": [
+    10686
+  ],
+  "scope_hints": [
+    "backend/routers/desktop_proxy.py"
+  ],
+  "status": "open"
+}

@@ -8,6 +8,7 @@ Verifies:
 """
 
 import os
+import re
 import sys
 import time
 import types
@@ -111,6 +112,7 @@ class TestMentorFrequencyCache:
         cached = cache.get("mentor_frequency:user_disabled")
         assert cached == 0
 
+    @pytest.mark.integration
     def test_cache_ttl_expiry(self):
         """Cache should expire and re-fetch after TTL."""
         cache = self.cache
@@ -614,11 +616,17 @@ class TestWebhookInvalidationCoverage:
     """
 
     PAYMENT_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'payment.py')
-    TRANSCRIBE_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+    LISTEN_RUNTIME_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', 'runtime.py')
 
     def _read_source(self, path):
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
+
+    @staticmethod
+    def _find_invalidation_call(block):
+        direct_call = r'\bset_credits_invalidation_signal\s*\(\s*uid\b'
+        run_blocking_call = r'\brun_blocking\s*\([^\n]*\bset_credits_invalidation_signal\b[^\n]*\buid\b'
+        return re.search(direct_call, block) or re.search(run_blocking_call, block)
 
     def test_payment_imports_invalidation_signal(self):
         """payment.py must import set_credits_invalidation_signal."""
@@ -629,55 +637,69 @@ class TestWebhookInvalidationCoverage:
         """checkout.session.completed path must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         # The invalidation call should appear after _update_subscription_from_session
-        idx_update = source.find('_update_subscription_from_session(uid, session)')
-        idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update)
+        checkout_idx = source.find("event['type'] == 'checkout.session.completed'")
+        assert checkout_idx != -1, "checkout.session.completed handler not found"
+        next_event_idx = source.find("customer.subscription.updated", checkout_idx)
+        assert next_event_idx > checkout_idx, "customer.subscription handler not found"
+        block = source[checkout_idx:next_event_idx]
+        idx_update = block.find('_update_subscription_from_session')
+        assert idx_update != -1, "_update_subscription_from_session call not found"
+        signal_match = self._find_invalidation_call(block)
         assert (
-            idx_signal > idx_update
+            signal_match and signal_match.start() > idx_update
         ), "set_credits_invalidation_signal must be called after _update_subscription_from_session"
 
     def test_subscription_webhook_calls_invalidation(self):
         """customer.subscription.updated/deleted/created must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         # Find the subscription update webhook section
-        idx_update_sub = source.find("users_db.update_user_subscription(uid, new_subscription.dict())")
-        assert idx_update_sub > 0, "update_user_subscription call not found"
+        sub_idx = source.find("'customer.subscription.updated'")
+        assert sub_idx > 0, "customer.subscription handler not found"
+        next_event_idx = source.find("'subscription_schedule.completed'", sub_idx)
+        assert next_event_idx > sub_idx, "subscription_schedule handler not found"
+        block = source[sub_idx:next_event_idx]
+        idx_update_sub = block.find("users_db.update_user_subscription")
+        assert idx_update_sub != -1, "update_user_subscription call not found"
         # Signal should appear near the update call
-        idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update_sub)
+        signal_match = self._find_invalidation_call(block)
         assert (
-            idx_signal > idx_update_sub
+            signal_match and signal_match.start() > idx_update_sub
         ), "set_credits_invalidation_signal must be called after update_user_subscription"
 
     def test_schedule_completed_calls_invalidation(self):
         """subscription_schedule.completed must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
-        idx_scheduled = source.find("Scheduled upgrade completed for user")
-        assert idx_scheduled > 0
-        # Find the invalidation call before the log line (it's called right after update)
-        section = source[idx_scheduled - 200 : idx_scheduled]
-        assert 'set_credits_invalidation_signal(uid)' in section
+        schedule_idx = source.find("'subscription_schedule.completed'")
+        assert schedule_idx > 0, "subscription_schedule handler not found"
+        canceled_idx = source.find("elif schedule_obj.get('status') == 'canceled'", schedule_idx)
+        assert canceled_idx > schedule_idx, "subscription_schedule canceled branch not found"
+        section = source[schedule_idx:canceled_idx]
+        assert self._find_invalidation_call(section)
 
     def test_schedule_canceled_calls_invalidation(self):
         """subscription_schedule.canceled must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         idx_canceled = source.find("Subscription schedule canceled for user")
         assert idx_canceled > 0
-        section = source[idx_canceled - 200 : idx_canceled]
-        assert 'set_credits_invalidation_signal(uid)' in section
+        branch_idx = source.rfind("elif schedule_obj.get('status') == 'canceled'", 0, idx_canceled)
+        assert branch_idx > 0, "subscription_schedule canceled branch not found"
+        section = source[branch_idx:idx_canceled]
+        assert self._find_invalidation_call(section)
 
-    def test_transcribe_imports_invalidation_check(self):
-        """transcribe.py must import check_credits_invalidation."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+    def test_listen_runtime_imports_invalidation_check(self):
+        """The listen runtime must import check_credits_invalidation."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
         assert 'check_credits_invalidation' in source
 
-    def test_transcribe_calls_invalidation_check(self):
-        """transcribe.py must check invalidation signal in the refresh logic."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
-        assert 'credits_invalidated = check_credits_invalidation(uid)' in source
-        assert 'or credits_invalidated' in source
+    def test_listen_runtime_calls_invalidation_check(self):
+        """The listen runtime must check the invalidation signal in refresh logic."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
+        assert 'invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)' in source
+        assert 'or invalidated' in source
 
-    def test_transcribe_uses_get_not_getdel(self):
-        """transcribe.py must use check_credits_invalidation (GET), not GETDEL."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+    def test_listen_runtime_uses_get_not_getdel(self):
+        """The listen runtime must use check_credits_invalidation (GET), not GETDEL."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
         assert 'check_credits_invalidation' in source
         # Must NOT use the old consumed-on-read pattern
         assert 'check_and_clear_credits_invalidation' not in source
@@ -889,6 +911,7 @@ def _redis_available():
         return False
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not _redis_available(), reason="Local Redis not available")
 class TestRedisPubSubIntegration:
     """Integration tests using real local Redis to prove cross-pod pub/sub delivery."""

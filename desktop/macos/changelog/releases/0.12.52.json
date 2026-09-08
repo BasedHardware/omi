@@ -1,0 +1,7 @@
+{
+  "version": "0.12.52",
+  "date": "2026-07-08",
+  "changes": [
+    "Ask Omi can see your screen again when you ask about it — screenshot sharing in chat was accidentally dead since June 29; a new \"Screen Sharing in Chat\" toggle in Settings → Floating Bar (on by default) controls it"
+  ]
+}

@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/pages/payments/paypal_setup_page.dart';
 import 'package:omi/pages/payments/stripe_connect_setup.dart';
 import 'package:omi/pages/payments/widgets/payment_method_card.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -41,7 +40,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF35343B), width: 1),
+        border: Border.all(color: const Color(0xFF35343B), width: 1),
       ),
       child: Row(
         children: [
@@ -87,23 +86,24 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     const SizedBox(height: 18),
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
-                        final activeMethod = provider.activeMethod;
+                        // PayPal is no longer offered; only treat Stripe as a valid active method.
+                        final activeMethod =
+                            provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
                         final hasActiveMethod = activeMethod != null;
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                            if (hasActiveMethod) ...[
-                              _buildActiveMethodCard(activeMethod, provider),
-                              const SizedBox(height: 24),
-                            ],
+                            if (hasActiveMethod) ...[_buildActiveMethodCard(provider), const SizedBox(height: 24)],
                             Text(
                               context.l10n.availablePaymentMethods,
                               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 16),
                             ..._buildOtherMethodCards(provider, activeMethod),
+                            const SizedBox(height: 12),
+                            _buildComingSoonCard(),
                           ],
                         );
                       },
@@ -118,28 +118,47 @@ class _PaymentsPageState extends State<PaymentsPage> {
     );
   }
 
-  Widget _buildActiveMethodCard(PaymentMethodType method, PaymentMethodProvider provider) {
-    final config = method == PaymentMethodType.stripe
-        ? PaymentMethodConfig.stripe(
-            title: context.l10n.paymentMethodStripe,
-            subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
-            onManageTap: () {
-              PlatformManager.instance.analytics.paymentMethodSelected(methodName: 'Stripe');
-              routeToPage(context, const StripeConnectSetup());
-            },
-            isActive: true,
-            isConnected: true,
-          )
-        : PaymentMethodConfig.paypal(
-            title: context.l10n.paymentMethodPayPal,
-            subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
-            onManageTap: () {
-              PlatformManager.instance.analytics.paymentMethodSelected(methodName: 'PayPal');
-              routeToPage(context, const PaypalSetupPage());
-            },
-            isActive: true,
-            isConnected: true,
-          );
+  Widget _buildComingSoonCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF14141A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.schedule_outlined, color: Colors.white.withValues(alpha: 0.45), size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              context.l10n.morePaymentMethodsComingSoon,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w400),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveMethodCard(PaymentMethodProvider provider) {
+    final config = PaymentMethodConfig.stripe(
+      title: context.l10n.paymentMethodStripe,
+      subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
+      onManageTap: () {
+        PlatformManager.instance.analytics.paymentMethodSelected(methodName: 'Stripe');
+        routeToPage(context, const StripeConnectSetup());
+      },
+      isActive: true,
+      isConnected: true,
+    );
 
     return PaymentMethodCard(
       icon: config.icon,
@@ -173,24 +192,6 @@ class _PaymentsPageState extends State<PaymentsPage> {
           ),
           true,
         ),
-      if (provider.isPayPalConnected && activeMethod != PaymentMethodType.paypal)
-        (
-          PaymentMethodConfig.paypal(
-            title: context.l10n.paymentMethodPayPal,
-            subtitle: _getPaymentSubtitle(isActive: false, isConnected: true),
-            onManageTap: () {
-              PlatformManager.instance.analytics.track('Manage PayPal');
-              routeToPage(context, const PaypalSetupPage());
-            },
-            onSetActiveTap: () {
-              provider.setActiveMethod(PaymentMethodType.paypal);
-              PlatformManager.instance.analytics.track('Set PayPal as active');
-            },
-            isConnected: true,
-            isActive: false,
-          ),
-          false,
-        ),
       if (!provider.isStripeConnected)
         (
           PaymentMethodConfig.stripe(
@@ -203,19 +204,6 @@ class _PaymentsPageState extends State<PaymentsPage> {
             isConnected: false,
           ),
           true,
-        ),
-      if (!provider.isPayPalConnected)
-        (
-          PaymentMethodConfig.paypal(
-            title: context.l10n.paymentMethodPayPal,
-            subtitle: _getPaymentSubtitle(isActive: false, isConnected: false),
-            onManageTap: () {
-              PlatformManager.instance.analytics.track('Manage PayPal');
-              routeToPage(context, const PaypalSetupPage());
-            },
-            isConnected: false,
-          ),
-          false,
         ),
     ];
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
@@ -6,7 +8,8 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
-    this.captureLifecycleEvents = true,
+    // SDK default is `true`; we track lifecycle ourselves at meaningful boundaries.
+    this.captureLifecycleEvents = false,
     this.debug = false,
   });
 
@@ -16,6 +19,7 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   final bool debug;
 
   bool _initialized = false;
+  Timer? _targetExpiry;
 
   @override
   bool get isInitialized => _initialized;
@@ -54,6 +58,24 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   }
 
   @override
+  void setInteractionContext({String? screenName, required String target}) {
+    if (!_initialized) return;
+
+    // Native iOS rage-click capture runs before Flutter receives the current
+    // pointer. Registering every pointer's context means a qualifying third
+    // tap inherits the matching context recorded by the first two taps.
+    if (screenName != null && screenName.isNotEmpty) {
+      unawaited(Posthog().register(r'$screen_name', screenName));
+      unawaited(Posthog().register('screen', screenName));
+    }
+    unawaited(Posthog().register('target', target));
+    _targetExpiry?.cancel();
+    _targetExpiry = Timer(const Duration(seconds: 2), () {
+      if (_initialized) unawaited(Posthog().unregister('target'));
+    });
+  }
+
+  @override
   void enable() {
     if (!_initialized) return;
     Posthog().enable();
@@ -68,6 +90,8 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   @override
   void reset() {
     if (!_initialized) return;
+    _targetExpiry?.cancel();
+    _targetExpiry = null;
     Posthog().reset();
   }
 }

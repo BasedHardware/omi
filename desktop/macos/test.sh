@@ -1,0 +1,91 @@
+#!/bin/bash
+# Desktop test runner — runs both Python backend and Swift app tests.
+# Usage: cd desktop && bash test.sh
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo "=== Desktop Launcher Script Tests ==="
+cd "$SCRIPT_DIR"
+# Discovery, not a hardcoded list — a hardcoded list already orphaned one test
+# (test-prepare-desktop-bundle-native-deps.sh ran nowhere). Every tests/test-*.sh
+# runs, mirroring swift-test-suites.sh's auto-discovery of Swift suites.
+#
+# A few discovered scripts need something this loop cannot supply — a running
+# app's automation token, an installed named bundle path. Each declares that in
+# its own header with `# discovery-skip: <reason>`, so it opts out where it lives
+# and this runner derives the set. #11747: the CI step in
+# .github/workflows/desktop-swift-ci.yml hand-listed those two scripts and this
+# runner listed nothing, so `set -e` aborted here and the Python and Swift
+# sections below never ran. scripts/check-launcher-test-skips.py holds both loops
+# to the marked set.
+#
+# The section aggregates rather than aborting: a failure here is recorded and
+# the run continues, so one red launcher script no longer costs the whole Python
+# and Swift stages. #11747 fixed the membership that made that reachable without
+# a real failure, but any genuinely failing script reproduced the same blackout
+# — an operator saw one error and no signal at all from the suites below. The
+# aggregate is reported and exits non-zero at the very end, mirroring
+# backend/test.sh's per-file collection.
+failed_launcher_checks=()
+for t in tests/test-*.sh; do
+  echo "== $t"
+  skip_reason="$(sed -n '1,10s/^# discovery-skip: *//p' "$t" | head -1)"
+  if [[ -n "$skip_reason" ]]; then
+    echo "  skip: $skip_reason"
+    continue
+  fi
+  if ! bash "$t"; then
+    echo "  FAIL: $t"
+    failed_launcher_checks+=("$t")
+  fi
+done
+if ! python3 scripts/check-e2e-flow-coverage.py --strict; then
+  echo "  FAIL: scripts/check-e2e-flow-coverage.py --strict"
+  failed_launcher_checks+=("scripts/check-e2e-flow-coverage.py --strict")
+fi
+echo ""
+
+echo "=== Python Desktop Backend Tests ==="
+cd "$SCRIPT_DIR/../../backend"
+PYTHON_BIN="${PYTHON:-.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Python backend dependencies are not synced. Run: (cd backend && ./scripts/sync-python-deps.sh)" >&2
+  exit 1
+fi
+"$PYTHON_BIN" -m pytest -q \
+  tests/unit/test_desktop_agent_vm.py \
+  tests/unit/test_desktop_chat.py \
+  tests/unit/test_desktop_core.py \
+  tests/unit/test_desktop_proxy.py \
+  tests/unit/test_desktop_realtime.py \
+  tests/unit/test_desktop_screen_crisp.py \
+  tests/unit/test_desktop_tts_updates.py
+echo ""
+
+echo "=== Swift App Tests (parallel per-suite process isolation) ==="
+cd "$SCRIPT_DIR"
+# Each XCTest suite runs in its own `swift test --filter` process.
+#
+# Why: many suites share process-global singletons (RewindDatabase.shared,
+# MemoryStorage.shared, AuthState.shared, StagedTaskStorage.shared), a real
+# on-disk SQLite, and UserDefaults. In a single combined `swift test` run that
+# state leaks across suites and hard-crashes a co-scheduled memory/storage suite.
+# The crash is a scheduling-dependent moving target, so no fixed --skip set makes
+# the combined run deterministic. Every suite passes in isolation, so we isolate
+# each — mirroring the backend's per-file pytest isolation.
+# Tracking: https://github.com/BasedHardware/omi/issues/9029
+# (durable fix is singleton dependency injection; see the same issue).
+#
+# Method-level skips are ratcheted in scripts/swift-test-skips.json so new
+# known-red tests require an explicit issue, reason, and skip-count change.
+"$SCRIPT_DIR/scripts/swift-test-suites.sh"
+echo ""
+
+if (( ${#failed_launcher_checks[@]} > 0 )); then
+  echo "FAIL: desktop launcher script checks failed:" >&2
+  printf '  %s\n' "${failed_launcher_checks[@]}" >&2
+  exit 1
+fi
+
+echo "All desktop tests passed."

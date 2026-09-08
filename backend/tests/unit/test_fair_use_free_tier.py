@@ -6,59 +6,46 @@ abuse-detected users: none → warning → throttle → restrict.
 """
 
 import asyncio
-import sys
-import types
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import utils.fair_use as fair_use_mod
+
 # ---------------------------------------------------------------------------
-# Stub heavy dependencies before importing the module under test
+# Fake dependency modules (bound into fair_use_mod via an autouse fixture, NOT
+# installed into sys.modules). utils.fair_use imports cleanly thanks to the
+# conftest redis/tiktoken stubs and lazy getters in the production code.
 # ---------------------------------------------------------------------------
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
 
-_redis_mod = types.ModuleType('database.redis_db')
-_mock_redis = MagicMock()
-_redis_mod.r = _mock_redis
-sys.modules.setdefault('database.redis_db', _redis_mod)
-
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-
-# Stub database.fair_use
-_fair_use_db = types.ModuleType('database.fair_use')
+_fair_use_db = ModuleType('database.fair_use')
 _fair_use_db.get_fair_use_state = MagicMock(return_value={'stage': 'none'})
 _fair_use_db.update_fair_use_state = MagicMock()
 _fair_use_db.create_fair_use_event = MagicMock(return_value='evt-123')
 _fair_use_db.get_fair_use_events = MagicMock(return_value=[{'case_ref': 'FU-TEST01'}])
 _fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d': 0, 'violation_count_30d': 0})
-sys.modules.setdefault('database.fair_use', _fair_use_db)
 
-# Stub database.users
 _users_db = MagicMock()
-sys.modules.setdefault('database.users', _users_db)
 
-# Stub notifications
-_notifications_mod = types.ModuleType('utils.notifications')
-_notifications_mod.send_notification = MagicMock()
-sys.modules.setdefault('utils.notifications', _notifications_mod)
+_mock_redis = MagicMock()
 
-# Stub LLM classifier
-_classifier_mod = types.ModuleType('utils.llm.fair_use_classifier')
-_classifier_mod.classify_user_purpose = MagicMock()
-sys.modules.setdefault('utils.llm', types.ModuleType('utils.llm'))
-sys.modules.setdefault('utils.llm.fair_use_classifier', _classifier_mod)
 
-# Stub subscription
-_subscription_mod = types.ModuleType('utils.subscription')
-_subscription_mod.has_transcription_credits = MagicMock(return_value=True)
-_subscription_mod.is_paid_plan = MagicMock(return_value=False)
-sys.modules.setdefault('utils.subscription', _subscription_mod)
+@pytest.fixture(autouse=True)
+def _bind_fair_use_fakes(monkeypatch):
+    """Bind fake db/redis/notification deps into fair_use_mod for the duration
+    of each test. Auto-restored at teardown by monkeypatch.
 
-# Now import the module under test
-import utils.fair_use as fair_use_mod
+    ``_send_notification`` is the lazy-loaded global in fair_use_mod; seeding it
+    with a MagicMock short-circuits ``_get_send_notification()`` so the real
+    ``utils.notifications`` chain (firebase_admin + network) is never imported
+    during escalation.
+    """
+    monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'users_db', _users_db)
+    monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
+    monkeypatch.setattr(fair_use_mod, '_send_notification', MagicMock())
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -432,6 +419,7 @@ class TestSyncDgBudgetGate:
 
     def test_sync_budget_exhausted_response_structure(self):
         from starlette.responses import JSONResponse
+
         import json
 
         response = JSONResponse(

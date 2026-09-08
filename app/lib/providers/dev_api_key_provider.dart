@@ -42,7 +42,9 @@ class DevApiKeyProvider with ChangeNotifier {
     try {
       newKey = await DevApi.createDevApiKey(name, scopes: scopes);
       // Add the new key to the top of the list, as the API returns keys sorted by creation date.
-      _keys.insert(0, newKey);
+      // DevApiKeyCreated and DevApiKey are now sibling wire types (no inheritance),
+      // so convert explicitly. The round-trip drops the one-off plaintext `key`.
+      _keys.insert(0, DevApiKey.fromJson(newKey.toJson()));
     } catch (e) {
       _error = e.toString();
     } finally {

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-environment-gate-bound-before-validation",
+  "violated_contract": "A workflow_dispatch job's approval gate comes from the GitHub environment it binds to, not from any in-job validation step that runs afterward. Interpolating a raw, under-constrained dispatch input directly into a job's `environment:` key lets a near-miss string (e.g. `production` instead of `prod`) bind an unprotected, incidentally-named environment and skip required-reviewer approval entirely -- the later validation step only stops the deploy, it never restores the gate that was already bypassed.",
+  "canonical_prevention": "Constrain every environment-selecting workflow_dispatch input to `type: choice` with that workflow's exact valid option set (GitHub validates choice inputs on dispatch, including via the API), and never interpolate the raw input into a job's `environment:` key -- map it through a total conditional expression (`input == known-value && known-value || fallback`) so only known, protected environments can ever bind, regardless of a future input change, an API caller, or a re-added free-text field.",
+  "evidence_prs": [11850],
+  "scope_hints": [
+    ".github/workflows/gcp_*.yml",
+    ".github/workflows/sync_ledger_fence_cutover.yml"
+  ],
+  "status": "open"
+}

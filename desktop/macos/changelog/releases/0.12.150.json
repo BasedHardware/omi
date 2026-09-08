@@ -1,0 +1,7 @@
+{
+  "version": "0.12.150",
+  "date": "2026-08-08",
+  "changes": [
+    "Added a fail-closed account migration maintenance and force-upgrade gate on the desktop home shell"
+  ]
+}

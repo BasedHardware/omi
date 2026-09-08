@@ -28,6 +28,7 @@ ARG NEXT_PUBLIC_FIREBASE_APP_ID
 ARG NEXT_PUBLIC_FIREBASE_VAPID_KEY
 ARG NEXT_PUBLIC_PLUGINS_APP_ID
 ARG NEXT_PUBLIC_OMI_API_URL
+ENV OMI_REQUIRED_PUBLIC_BUILD_INPUTS="NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID NEXT_PUBLIC_FIREBASE_APP_ID NEXT_PUBLIC_FIREBASE_VAPID_KEY NEXT_PUBLIC_PLUGINS_APP_ID NEXT_PUBLIC_OMI_API_URL"
 # Server-side secrets are injected at runtime via Cloud Run Secret Manager
 # — no need to pass them as build-args
 
@@ -38,6 +39,11 @@ COPY . .
 # Learn more here: https://nextjs.org/telemetry
 # Uncomment the following line in case you want to disable telemetry during the build.
 # ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do \
+      value="$(printenv "$name" || true)"; \
+      test -n "$value" || { echo "required public build input is empty: $name" >&2; exit 1; }; \
+    done
 
 RUN \
   if [ -f yarn.lock ]; then yarn build; \
@@ -82,4 +88,4 @@ ENV HOSTNAME "0.0.0.0"
 # Assuming you have a server.js file for the standalone output
 # If your package.json defines a different start script used by standalone output, adjust this command.
 # Check your .next/standalone/package.json 'scripts' section if unsure.
-CMD ["node", "server.js"] 
+CMD ["node", "server.js"]

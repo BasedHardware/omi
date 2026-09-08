@@ -4,7 +4,7 @@ This module is intentionally lightweight (no heavy imports) so that unit tests
 can import SafeDeepgramSocket without pulling in GCP/storage dependencies.
 
 Architecture: SafeDeepgramSocket is the SOLE keepalive owner for a DG connection.
-No other layer (GatedDeepgramSocket, transcribe.py) should call keep_alive() directly.
+No other layer (GatedSTTSocket, transcribe.py) should call keep_alive() directly.
 A background daemon thread sends keepalive when idle > keepalive_interval_sec.
 """
 
@@ -12,7 +12,9 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
+
+from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ class KeepaliveConfig:
             raise ValueError(f'check_period_sec must be > 0, got {self.check_period_sec}')
 
 
-class SafeDeepgramSocket:
+class SafeDeepgramSocket(STTSocket):
     """Wraps a raw Deepgram LiveConnection with auto-keepalive and dead-connection detection.
 
     Auto-keepalive: A background daemon thread sends keepalive when the connection
@@ -45,22 +47,21 @@ class SafeDeepgramSocket:
     Thread starts eagerly in constructor — the main DG socket can be idle from
     creation (e.g. during speech profile phase) and needs protection immediately.
 
-    Dead detection: Monitors send() and keep_alive() return values. When either
-    returns False or raises, marks connection as permanently dead (one-way latch).
+    Dead detection: Monitors send(), keep_alive(), and finalize() failures. When
+    any provider operation returns False or raises, it marks the connection as
+    permanently dead (one-way latch).
 
-    This is the SOLE keepalive owner — GatedDeepgramSocket and orchestrator code
+    This is the SOLE keepalive owner — GatedSTTSocket and orchestrator code
     must NOT call keep_alive() directly.
     """
 
-    _is_safe_dg_socket = True  # Marker for duck-type checks (avoids circular import)
-
     def __init__(
         self,
-        dg_connection,
+        dg_connection: Any,  # Deepgram SDK LiveClient (untyped)
         cfg: Optional[KeepaliveConfig] = None,
         clock: Callable[[], float] = time.monotonic,
     ):
-        self._conn = dg_connection
+        self._conn: Any = dg_connection  # Deepgram SDK LiveClient (untyped)
         self._cfg = cfg or KeepaliveConfig()
         self._clock = clock
         self._dg_dead = False
@@ -116,11 +117,11 @@ class SafeDeepgramSocket:
         """Number of keepalives successfully sent by the background thread."""
         return self._keepalive_count
 
-    def send(self, data: bytes) -> None:
-        """Send audio to DG, marking connection dead if send fails."""
+    def send(self, data: bytes) -> bool:
+        """Send audio to DG and report whether the provider accepted it."""
         with self._lock:
             if self._dg_dead or self._closed:
-                return
+                return False
             try:
                 ret = self._conn.send(data)
                 if ret is False:
@@ -128,31 +129,45 @@ class SafeDeepgramSocket:
                         self._death_reason = 'send returned False'
                     logger.warning('DG send returned False, connection dead')
                     self._dg_dead = True
+                    return False
                 else:
                     self._last_activity = self._clock()
+                    return True
             except Exception as e:
                 if self._death_reason is None:
                     self._death_reason = f'send {type(e).__name__}: {e}'
                 logger.warning('DG send exception, connection dead: %s: %s', type(e).__name__, e)
                 self._dg_dead = True
+                return False
 
     def set_close_reason(self, reason: str) -> None:
         """Record a close reason from external source (e.g., DG on_close/on_error callback).
 
-        Only stores the first reason — subsequent calls are no-ops since the first
-        close event is the root cause.
+        Close and error callbacks are terminal provider events: latch the socket
+        dead before any subsequent audio send can be accepted. Only stores the
+        first reason — subsequent calls are no-ops since the first close event
+        is the root cause.
         """
         with self._lock:
             if self._death_reason is None:
                 self._death_reason = reason
+            self._dg_dead = True
+            self._stop_event.set()
 
     def finalize(self) -> None:
         """Flush pending transcript."""
         with self._lock:
             if self._closed:
                 return
-            self._conn.finalize()
-            self._last_activity = self._clock()
+            try:
+                self._conn.finalize()
+                self._last_activity = self._clock()
+            except Exception as e:
+                if self._death_reason is None:
+                    self._death_reason = f'finalize {type(e).__name__}: {e}'
+                logger.warning('DG finalize exception, connection dead: %s: %s', type(e).__name__, e)
+                self._dg_dead = True
+                raise
 
     def finish(self) -> None:
         """Stop keepalive thread and close DG connection. Idempotent."""

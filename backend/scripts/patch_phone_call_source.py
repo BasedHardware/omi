@@ -7,25 +7,26 @@ Scans all conversations for the specified user and patches source field.
 """
 
 import argparse
+from typing import Any, List
 
 import firebase_admin
 from firebase_admin import firestore
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description='Patch phone_call source to phone in Firestore')
     parser.add_argument('--uid', required=True, help='User UID to patch')
     parser.add_argument('--dry-run', action='store_true', help='Print affected doc IDs without modifying')
     args = parser.parse_args()
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app()
+    if not firebase_admin._apps:  # type: ignore[reportPrivateUsage]  # firebase_admin internals
+        firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
-    db = firestore.client()
+    db: Any = firestore.client()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
-    conversations_ref = db.collection('users').document(args.uid).collection('conversations')
-    query = conversations_ref.where('source', '==', 'phone_call')
-    docs = list(query.stream())
+    conversations_ref: Any = db.collection('users').document(args.uid).collection('conversations')
+    query: Any = conversations_ref.where('source', '==', 'phone_call')
+    docs: List[Any] = list(query.stream())
 
     print(f'Found {len(docs)} conversations with source=phone_call')
 

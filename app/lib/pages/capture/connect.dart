@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
@@ -14,6 +15,13 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
+
+final _omiStoreUrl = Uri.parse('https://www.omi.me/?_ref=omi_connect_device');
+
+Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
+  PlatformManager.instance.analytics.getOmiDeviceClicked();
+  await (launcher ?? (url) => launchUrl(url, mode: LaunchMode.externalApplication))(_omiStoreUrl);
+}
 
 class ConnectDevicePage extends StatefulWidget {
   const ConnectDevicePage({super.key});
@@ -54,8 +62,9 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             child: Container(
               width: 36,
               height: 36,
+              alignment: Alignment.center,
               decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-              child: const Icon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
+              child: const FaIcon(FontAwesomeIcons.chevronLeft, size: 16, color: Colors.white70),
             ),
           ),
         ),
@@ -73,7 +82,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
               decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
-                icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                 onPressed: () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
                 },
@@ -120,20 +129,31 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
           if (onboardingProvider.isConnected) return const SizedBox.shrink();
           return Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16, top: 12),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _showConnectionGuide,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.info_outline, color: Colors.grey.shade400, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    context.l10n.connectionGuide,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  key: const Key('get_omi_device_button'),
+                  onPressed: openOmiStore,
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  child: Text(context.l10n.getOmiDevice),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _showConnectionGuide,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.grey.shade400, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        context.l10n.connectionGuide,
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w400),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },

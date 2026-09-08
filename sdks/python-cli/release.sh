@@ -46,19 +46,15 @@ if ! python -m pip show build &> /dev/null; then
 fi
 
 CURRENT_VERSION=$(python -c "
-import sys
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])
+import omi_cli
+print(omi_cli.__version__)
 ")
 echo "📋 Current version: ${CURRENT_VERSION}"
 
 echo "🔍 Checking if version exists on PyPI..."
 if pip index versions omi-cli 2>/dev/null | grep -q "${CURRENT_VERSION}"; then
     echo "❌ Error: Version ${CURRENT_VERSION} already exists on PyPI."
-    echo "💡 Bump the version in pyproject.toml first."
+    echo "💡 Bump omi_cli.__version__ first."
     exit 1
 fi
 

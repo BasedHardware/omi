@@ -39,6 +39,8 @@ class PureSocketMessage {
   String? raw;
 }
 
+typedef SocketHeadersProvider = Future<Map<String, String>> Function();
+
 class PureSocket implements IPureSocket {
   WebSocketChannel? _channel;
   WebSocketChannel get channel {
@@ -55,9 +57,15 @@ class PureSocket implements IPureSocket {
   IPureSocketListener? _listener;
 
   String url;
+  final SocketHeadersProvider _headersProvider;
+  final Map<String, String> _extraHeaders;
 
-  PureSocket(this.url);
+  PureSocket(this.url, {SocketHeadersProvider? headersProvider, Map<String, String> extraHeaders = const {}})
+      : _headersProvider =
+            headersProvider ?? (() => buildHeaders(requireAuthCheck: true, url: url, forWebSocket: true)),
+        _extraHeaders = Map.unmodifiable(extraHeaders);
 
+  @override
   void setListener(IPureSocketListener listener) {
     _listener = listener;
   }
@@ -68,8 +76,15 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
-    Logger.debug("request wss ${url}");
-    final headers = await buildHeaders(requireAuthCheck: true);
+    Logger.debug("request wss $url");
+    final Map<String, String> headers;
+    try {
+      headers = {...await _headersProvider(), ..._extraHeaders};
+    } on AuthTokenUnavailableException catch (e) {
+      Logger.debug('[Socket] Connect blocked before send: ${e.result.runtimeType}');
+      _status = PureSocketStatus.notConnected;
+      return false;
+    }
 
     _channel = IOWebSocketChannel.connect(
       url,
@@ -170,8 +185,14 @@ class PureSocket implements IPureSocket {
         return 'going_away_os_or_background';
       case 1006:
         return 'abnormal_closure';
+      case 1008:
+        return 'policy_violation_or_auth_error';
       case 1011:
         return 'server_error';
+      case 4001:
+        return 'auth_token_refresh_required';
+      case 4004:
+        return 'auth_relogin_required';
       default:
         return 'unknown';
     }

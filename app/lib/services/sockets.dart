@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -21,15 +20,22 @@ abstract class ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   });
 
+  /// [customSttConfig] switches the session to on-device transcription
+  /// (see TranscriptSocketServiceFactory.createSpeechProfileOnDevice); null
+  /// uses the backend's streaming STT.
   Future<TranscriptSegmentSocketService?> speechProfile({
     required BleAudioCodec codec,
     required int sampleRate,
     required String language,
     bool force = false,
     String? source,
+    bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   });
 }
 
@@ -57,7 +63,9 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     await _mutex.acquire();
     try {
@@ -68,7 +76,9 @@ class SocketServicePool extends ISocketService {
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
           _socket?.state == SocketServiceState.connected &&
-          _socket?.sttConfigId == sttConfigId) {
+          _socket?.sttConfigId == sttConfigId &&
+          _socket?.geolocation?.time == geolocation?.time &&
+          _socket?.clientConversationId == clientConversationId) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -87,6 +97,8 @@ class SocketServicePool extends ISocketService {
           language,
           customSttConfig,
           source: source,
+          geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       } else {
         _socket = TranscriptSocketServiceFactory.createDefault(
@@ -95,6 +107,8 @@ class SocketServicePool extends ISocketService {
           language,
           source: source,
           sttConfigId: sttConfigId,
+          geolocation: geolocation,
+          clientConversationId: clientConversationId,
         );
       }
 
@@ -116,7 +130,9 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     Logger.debug(
       "socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}",
@@ -127,7 +143,9 @@ class SocketServicePool extends ISocketService {
       language: language,
       force: force,
       source: source,
+      clientConversationId: clientConversationId,
       customSttConfig: customSttConfig,
+      geolocation: geolocation,
     );
   }
 
@@ -138,21 +156,35 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    bool speechProfileRedo = false,
+    CustomSttConfig? customSttConfig,
   }) async {
-    Logger.debug("socket speech profile > $codec $sampleRate $force source: $source");
+    Logger.debug(
+      "socket speech profile > $codec $sampleRate $force source: $source localStt: ${customSttConfig?.provider.name}",
+    );
 
     await _mutex.acquire();
     try {
       // Use separate socket for speech profile to avoid conflicts with conversation socket
       await _speechProfileSocket?.stop();
 
-      _speechProfileSocket = SpeechProfileTranscriptSegmentSocketService.create(
-        sampleRate,
-        codec,
-        language,
-        source: source,
-        onboardingMode: true,
-      );
+      _speechProfileSocket = customSttConfig != null
+          ? TranscriptSocketServiceFactory.createSpeechProfileOnDevice(
+              sampleRate,
+              codec,
+              language,
+              customSttConfig,
+              source: source,
+              speechProfileRedo: speechProfileRedo,
+            )
+          : SpeechProfileTranscriptSegmentSocketService.create(
+              sampleRate,
+              codec,
+              language,
+              source: source,
+              onboardingMode: true,
+              speechProfileRedo: speechProfileRedo,
+            );
 
       await _speechProfileSocket?.start();
       if (_speechProfileSocket?.state != SocketServiceState.connected) {

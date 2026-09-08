@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-platform-identity-across-signing-identities",
+  "violated_contract": "Two builds that can exist on the same machine must not claim the same platform identity when they are signed by different certificates. macOS stores a code requirement — which pins the signing certificate — alongside every TCC permission grant, so a locally signed developer build and a notarized Developer ID release sharing one CFBundleIdentifier write mutually unsatisfiable records: the dev build's designated requirement is `identifier \"com.omi.context-for-claude\" and certificate leaf = H\"bb925114…\"`, the release's is `identifier \"com.omi.context-for-claude\" and anchor apple generic … certificate leaf[subject.OU] = \"9536L8KLMP\"`. Whichever build is granted first owns the record and the other is refused forever, with tccd logging `Failed to match existing code requirement for subject <id>` on every request while System Settings still draws the switch ON — because the allowed flag and the stored requirement are separate fields. No amount of re-granting repairs it; only `tccutil reset` does. The same collision applies to every other namespace keyed by identity rather than by certificate: the Keychain service, whose item ACL is bound to the creating signature, and the `mcpServers` key and skill directory, where a dev build silently repoints the user's production Claude connector at a binary in a build directory. Requiring merely a *stable* local certificate does not help: stable is not identical, so it makes grants stick between developer builds and guarantees the poisoned handoff to the release build.",
+  "canonical_prevention": "Derive the platform identity from the signing identity at build time, in one place both the build and uninstall paths read, and give any build not signed for release its own identifier, bundle name and registration key so the two own disjoint platform records by construction. Keep the shipped Info.plist template holding the production identifier and write the developer identity into the built copy only — moving CFBundleExecutable, CFBundleName and CFBundleDisplayName with CFBundleIdentifier, since the executable name is load-bearing for launch and the bundle name is what macOS shows in permission prompts. In the running app, resolve identity-derived values from Bundle.main rather than from a literal, accepting only the app's own identifier family so a test runner's bundle id is never adopted. Guard the release side against the inverse: assert the authority chain of the signature the bundle actually carries, because a check on the certificate's *name* is satisfied by a self-signed certificate that merely calls itself 'Developer ID Application:'.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/scripts/build-identity.sh",
+    "desktop/context-for-claude/scripts/test-build-identity.sh"
+  ],
+  "evidence_prs": [
+    11641
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/scripts/build.sh",
+    "desktop/context-for-claude/scripts/build-identity.sh",
+    "desktop/context-for-claude/scripts/package-dmg.sh",
+    "desktop/context-for-claude/Sources/ContextCore/Paths.swift"
+  ],
+  "status": "open"
+}

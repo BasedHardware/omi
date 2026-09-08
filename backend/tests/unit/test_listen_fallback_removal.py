@@ -18,7 +18,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Constants (mirrored from transcribe.py)
 # ---------------------------------------------------------------------------

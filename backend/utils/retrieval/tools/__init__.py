@@ -50,8 +50,28 @@ from .screen_activity_tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
 )
+from .frame_request_tools import frame_request_runtime_config, look_at_frame_tool
 from .preference_tools import (
     save_user_preference_tool,
+)
+from .web_tools import (
+    fetch_url_tool,
+)
+from .graph_tools import (
+    traverse_knowledge_graph_tool,
+)
+from .entity_timeline_tools import (
+    get_entity_timeline_tool,
+)
+from .knowledge_ledger_tools import (
+    read_playbook,
+    search_knowledge,
+    search_historical_facts,
+)
+from .knowledge_ledger_write_tools import (
+    close_fact_tool,
+    create_standing_trigger,
+    save_playbook,
 )
 
 __all__ = [
@@ -78,5 +98,16 @@ __all__ = [
     'create_chart_tool',
     'get_screen_activity_tool',
     'search_screen_activity_tool',
+    'look_at_frame_tool',
+    'frame_request_runtime_config',
     'save_user_preference_tool',
+    'fetch_url_tool',
+    'traverse_knowledge_graph_tool',
+    'get_entity_timeline_tool',
+    'search_knowledge',
+    'read_playbook',
+    'search_historical_facts',
+    'save_playbook',
+    'create_standing_trigger',
+    'close_fact_tool',
 ]

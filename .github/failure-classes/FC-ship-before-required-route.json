@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-ship-before-required-route",
+  "violated_contract": "A client that hard-depends on a backend route and fails closed when that route is absent must not ship to users until the route is live in the environment the client calls.",
+  "canonical_prevention": "Gate the client release lane on a production probe of the required route (status, response shape, and trust boundary) before minting an immutable release tag; keep the deploy-before-ship note next to the client dependency.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/probe_windows_update_feed.py",
+    ".github/scripts/test_probe_windows_update_feed.py",
+    ".github/workflows/desktop_windows_release.yml"
+  ],
+  "evidence_prs": [10610],
+  "scope_hints": [
+    ".github/workflows/desktop_windows_release.yml",
+    ".github/scripts/probe_windows_update_feed.py",
+    "desktop/windows/src/main/updater.ts",
+    "desktop/windows/src/main/windowsUpdateFeed.ts",
+    "backend/routers/updates.py"
+  ],
+  "status": "open"
+}

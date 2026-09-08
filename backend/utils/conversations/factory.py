@@ -1,9 +1,9 @@
-from typing import List, Mapping, Sequence, Union
+from typing import Any, List, Mapping, Sequence, Union
 
 from models.conversation import Conversation
 
 
-def deserialize_conversation(data: Union[Conversation, Mapping]) -> Conversation:
+def deserialize_conversation(data: Union[Conversation, Mapping[str, Any]]) -> Conversation:
     """Convert a raw dict (e.g. from Firestore) into a Conversation object.
 
     If already a Conversation instance, returns it unchanged.
@@ -15,6 +15,6 @@ def deserialize_conversation(data: Union[Conversation, Mapping]) -> Conversation
     return Conversation(**data)
 
 
-def deserialize_conversations(items: Sequence[Union[Conversation, Mapping]]) -> List[Conversation]:
+def deserialize_conversations(items: Sequence[Union[Conversation, Mapping[str, Any]]]) -> List[Conversation]:
     """Batch-deserialize a sequence of dicts or Conversation objects."""
     return [deserialize_conversation(item) for item in items]

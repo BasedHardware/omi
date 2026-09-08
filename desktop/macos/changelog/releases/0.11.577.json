@@ -1,0 +1,7 @@
+{
+  "version": "0.11.577",
+  "date": "2026-06-30",
+  "changes": [
+    "Improved desktop sign-in reliability and added stage-level auth diagnostics for Apple and Google sign-in"
+  ]
+}

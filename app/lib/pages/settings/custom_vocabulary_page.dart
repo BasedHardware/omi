@@ -181,7 +181,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade700.withOpacity(0.5),
+                              color: Colors.grey.shade700.withValues(alpha: 0.5),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -214,7 +214,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
     _vocabularyController.clear();
 
     final success = await userProvider.addVocabularyWords(words);
-    if (success && context.mounted) {
+    if (success && mounted) {
       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
     }
   }

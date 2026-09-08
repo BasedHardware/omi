@@ -52,9 +52,7 @@ class TestAsyncVisionStreamPattern:
         callback = AsyncStreamingCallback()
         chunks = ["Hello", " world", "!"]
 
-        # Track when chunks arrive
         received = []
-        received_times = []
 
         async def _produce():
             return await _fake_vision_stream(chunks, callback)
@@ -62,12 +60,13 @@ class TestAsyncVisionStreamPattern:
         task = asyncio.create_task(_produce())
 
         # Drain queue concurrently (mirrors graph.py pattern)
-        loop = asyncio.get_event_loop()
         while True:
             chunk = await callback.queue.get()
             if chunk:
                 received.append(chunk)
-                received_times.append(loop.time())
+                # Intermediate chunks must be observable before the producer completes.
+                if len(received) < len(chunks):
+                    assert not task.done()
             else:
                 break
 
@@ -75,9 +74,6 @@ class TestAsyncVisionStreamPattern:
 
         assert answer == "Hello world!"
         assert received == ["data: Hello", "data:  world", "data: !"]
-        assert len(received_times) == 3
-        # Chunks should arrive at different times (progressive, not burst)
-        assert received_times[-1] - received_times[0] >= 0.02
 
     @pytest.mark.asyncio
     async def test_empty_stream_terminates(self):

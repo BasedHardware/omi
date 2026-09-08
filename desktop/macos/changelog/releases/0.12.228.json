@@ -1,0 +1,9 @@
+{
+  "version": "0.12.228",
+  "date": "2026-08-27",
+  "changes": [
+    "Fixed the notch island disappearing after you hover over it — it stays put now instead of needing a Push-to-Talk press to bring it back",
+    "Rating and in-app prompt history is now tracked per account, so switching accounts on one Mac never hides or repeats prompts incorrectly.",
+    "Omi can now ask short in-app questions (stars, NPS, quick choices) configured by the team - no update needed, one prompt at a time, never twice."
+  ]
+}

@@ -1,0 +1,590 @@
+[
+  {
+    "uid": "omi-firestore-notfound-dod-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - NOT_FOUND read volume day-over-day step",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 90000,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg_over_time(avg(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})[1h:1m]) > 2.0 * avg_over_time(avg(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})[1h:1m] offset 24h)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") is running more than 2x its volume from the same hour yesterday, sustained for 2h.",
+      "threshold": "avg_over_time(avg(...)[1h:1m]) > 2x the same expression offset 24h, sustained 2h",
+      "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. The day-over-day comparison survives organic growth and diurnal swing, so a sustained step here is a regression rather than load.",
+      "scope": "Firestore document reads across the based-hardware production project, type=\"NOT_FOUND\" only.",
+      "verification": "Compare avg_over_time(avg(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})[1h:1m]) against the same expression with `offset 24h`. The 2x factor is measured, not guessed: across 2026-08-18..25 excluding the incident window, normal day-over-day ratios peaked at 1.94x for a single hour, while the 2026-08-23 step held 2.4-3.4x for 24h straight. A 1.5x threshold would have false-positived on 2026-08-20 and 2026-08-21. The stackdriver exporter publishes this DELTA metric as a GAUGE whose value is the per-60s-window count, so rate() is meaningless on it -- read volume must be recovered with avg_over_time(...)/60 instead. avg() (not sum()) aggregates across exporter replicas, which all report the same Cloud Monitoring series.",
+      "safe_next_action": "This alert flags read volume, not cause. The Cloud Monitoring series carries module=\"__unknown__\", so attribution needs either extending omi_firestore_read_operations_total call-site coverage or enabling a short window of Firestore DATA_READ audit logging to find the caller before making any code change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-notfound-dod-step",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-notfound-ceiling",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - NOT_FOUND read volume above absolute ceiling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg_over_time(avg(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})[6h:5m]) / 60 > 750",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has averaged more than 750 reads/sec over a rolling 6h window. Measured separation over 2026-08-18..25: the highest pre-incident 6h mean was 668/sec and the lowest post-incident 6h mean was 899/sec, so this threshold sits in a clean gap with ~12% margin on each side.",
+      "threshold": "avg_over_time(avg(...)[6h:5m]) / 60 > 750 reads/sec, sustained 30m",
+      "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. At the 2026-08-23 incident rate of ~950/sec this class of read alone costs roughly $740/month. This is the backstop for a leak already running at a steady elevated rate, which the day-over-day step detector cannot see because both sides of its comparison are equally elevated.",
+      "scope": "Firestore document reads across the based-hardware production project, type=\"NOT_FOUND\" only.",
+      "verification": "Run avg_over_time(avg(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})[6h:5m]) / 60 in the linked query. Healthy 6h means run 347-668/sec; the 2026-08-23 leak holds 899-1049/sec. A 6h window is used deliberately: hourly values are extremely spiky (single healthy hours reach 1124/sec), so any shorter window false-positives. The stackdriver exporter publishes this DELTA metric as a GAUGE whose value is the per-60s-window count, so rate() is meaningless on it -- read volume must be recovered with avg_over_time(...)/60 instead. avg() (not sum()) aggregates across exporter replicas, which all report the same Cloud Monitoring series.",
+      "safe_next_action": "This alert flags read volume, not cause. The Cloud Monitoring series carries module=\"__unknown__\", so attribution needs either extending omi_firestore_read_operations_total call-site coverage or enabling a short window of Firestore DATA_READ audit logging to find the caller before making any code change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-notfound-ceiling",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-metric-absent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - read-volume metric stopped being collected",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The Firestore read-volume series (stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has been absent from Prometheus for 30m, so both Firestore cost alerts are blind.",
+      "threshold": "absent(...) for 30m",
+      "user_impact": "No direct user impact. This is a watchdog for the cost alerts themselves. Both Firestore cost rules are written as `expr > threshold`, which returns an empty vector when not firing; with noDataState=OK, a metric that stops arriving is indistinguishable from a healthy one. This rule is what makes that difference visible.",
+      "scope": "The stackdriver-exporter series for firestore.googleapis.com/document/read_count in prod Prometheus.",
+      "verification": "Query stackdriver_firestore_instance_firestore_googleapis_com_document_read_count in the linked datasource. Expect 3 series (type=LOOKUP|NOT_FOUND|QUERY). Zero series means the exporter is not publishing.",
+      "safe_next_action": "This has a known cause with a known fix. Check the exporter pod for scrape errors: at monitoring.descriptor-cache-ttl=0s the exporter re-runs ListMetricDescriptors every scrape and Cloud Monitoring answers with 503 cpu-protection, which drops all series. Also check that stackdriver.metrics.interval still exceeds the ~2.4min Firestore ingestion lag -- a window shorter than the lag is always empty and yields no series at all. Both settings live in backend/charts/monitoring/prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml and are applied manually per that chart README; no workflow deploys them."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-metric-absent",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-read-spend-daily",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - projected read spend per day above ceiling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 21600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "avg_over_time(sum(avg by (type) (stackdriver_firestore_instance_firestore_googleapis_com_document_read_count))[6h:5m]) / 60 * 86400 / 100000 * 0.03 > 500",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "3h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Projected Firestore document-read spend has exceeded $500/day on a 6h rolling mean. Measured baseline on 2026-08-25 was $344-368/day (~14,200 reads/sec), so this is ~40% headroom.",
+      "threshold": "avg_over_time(...)[6h:5m] / 60 * 86400 / 100000 * $0.03 > $500/day, sustained 3h",
+      "user_impact": "No direct user impact; this is the money rule. Unlike the NOT_FOUND rules it is shape-agnostic -- it catches a regression in LOOKUP, QUERY, or NOT_FOUND reads, from application code OR from a Firebase Extension, which the app-side probe cannot see. On 2026-08-25 QUERY reads were ~13,000/sec against NOT_FOUND ~920/sec, so a NOT_FOUND-only alert watches ~7% of the bill.",
+      "scope": "All firestore.googleapis.com/document/read_count types across based-hardware production.",
+      "verification": "Run the expression in the linked datasource. The $0.03/100k rate is an ASSUMPTION, not a verified Omi contract price -- re-derive from the billing export before quoting the dollar figure. The ratio and the trend are the durable signal.",
+      "safe_next_action": "Break down by family with sum by (family) (rate(omi_firestore_documents_per_operation_sum[1h])). On 2026-08-25 action_items_list alone was 5,079 reads/sec, ~36% of all Firestore read spend. See omi-knowledge-base/projects/gcp-cost-efficiency/candidates/C006-action-items-list-polling.md. Thresholds are measured, not guessed, and each expression was proven to return a series at a lowered threshold and nothing at its real one before shipping -- see FC-alert-never-provably-fired. stackdriver_* series are DELTA published as GAUGES (per-60s counts), so rate() on them is meaningless; omi_* _total series are real counters and rate() is correct."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-read-spend-daily",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-family-read-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - a read family doubled day-over-day",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 90000,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 2 * sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h] offset 24h))) and (sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "1h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "An instrumented Firestore read family is reading more than 2x the documents per second it read at the same time yesterday, and is above 100 docs/sec in absolute terms.",
+      "threshold": "per-family rate > 2x the same rate offset 24h, AND > 100 docs/sec, sustained 1h",
+      "user_impact": "No direct user impact; cost signal. This is the rule that names WHICH read path regressed -- the platform metric cannot, because all 31 firestore.googleapis.com descriptors lack any collection dimension. The 100 docs/sec floor stops small families from flapping; the 2x factor matches the measured day-over-day envelope (normal peaks reached 1.94x over 2026-08-18..25).",
+      "scope": "Families instrumented via omi_firestore_read_operations_total / omi_firestore_documents_per_operation. Coverage is partial by design; a path with no family label is invisible here.",
+      "verification": "sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) against the same expression offset 24h. Baseline 2026-08-25: action_items_list 5,079/sec, listen_monthly_usage 89/sec, chat_quota_monthly_usage 13/sec.",
+      "safe_next_action": "Identify the family, then find its callers. Note that \"bounded\" in FirestoreReadMode means a bound was applied, NOT that a cache exists -- action_items_list is bounded at limit=500 and still reads ~5,000 docs/sec because every client poll re-reads the list. Thresholds are measured, not guessed, and each expression was proven to return a series at a lowered threshold and nothing at its real one before shipping -- see FC-alert-never-provably-fired. stackdriver_* series are DELTA published as GAUGES (per-60s counts), so rate() on them is meaningless; omi_* _total series are real counters and rate() is correct."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-family-read-step",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-metric-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - read-volume metric is stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(timestamp(stackdriver_firestore_instance_firestore_googleapis_com_document_read_count{type=\"NOT_FOUND\"})) > 900",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-08-25T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "The Firestore read-volume series is still present but has not been updated in over 15 minutes, so the cost alerts are running on frozen data.",
+      "threshold": "time() - max(timestamp(...)) > 900s, sustained 30m",
+      "user_impact": "No direct user impact; this is a watchdog for the cost alerts. It is the companion to omi-firestore-metric-absent: absent() catches a series that vanished, this catches a series that is present but wedged. Every other cost rule here is written as `expr > threshold`, which returns empty when not firing, and with noDataState=OK a frozen or missing metric is indistinguishable from a healthy one.",
+      "scope": "The stackdriver-exporter series for firestore.googleapis.com/document/read_count in prod Prometheus.",
+      "verification": "time() - max(timestamp(...)) -- healthy is under ~240s given the exporter scrape interval plus the ~2.4min Cloud Monitoring sample lag. Measured 134-143s on 2026-08-25.",
+      "safe_next_action": "Check the exporter pod for scrape errors and 503 cpu-protection throttling, and confirm stackdriver.metrics.interval still exceeds the Firestore ingestion lag. Both settings live in backend/charts/monitoring/prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml and are applied MANUALLY per that chart README -- no workflow deploys them. Thresholds are measured, not guessed, and each expression was proven to return a series at a lowered threshold and nothing at its real one before shipping -- see FC-alert-never-provably-fired. stackdriver_* series are DELTA published as GAUGES (per-60s counts), so rate() on them is meaningless; omi_* _total series are real counters and rate() is correct."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-metric-stale",
+      "component": "firestore",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  }
+]

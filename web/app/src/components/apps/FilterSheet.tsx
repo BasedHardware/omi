@@ -57,28 +57,28 @@ export function FilterSheet({
   };
 
   const toggleCategory = (categoryId: string) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       category: prev.category === categoryId ? undefined : categoryId,
     }));
   };
 
   const toggleCapability = (capabilityId: string) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       capability: prev.capability === capabilityId ? undefined : capabilityId,
     }));
   };
 
   const toggleRating = (rating: number) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       rating: prev.rating === rating ? undefined : rating,
     }));
   };
 
   const toggleSort = (sort: SortOption) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       sort: prev.sort === sort ? undefined : sort,
     }));
@@ -108,7 +108,7 @@ export function FilterSheet({
               'w-full sm:w-[400px] max-w-full',
               'bg-bg-secondary border-l border-bg-tertiary',
               'flex flex-col',
-              'shadow-2xl'
+              'shadow-2xl',
             )}
           >
             {/* Header */}
@@ -127,7 +127,7 @@ export function FilterSheet({
               {/* Categories */}
               <FilterSection title="Category">
                 <div className="flex flex-wrap gap-2">
-                  {categories.map(category => (
+                  {categories.map((category) => (
                     <FilterChip
                       key={category.id}
                       label={category.title}
@@ -141,7 +141,7 @@ export function FilterSheet({
               {/* Capabilities */}
               <FilterSection title="Capability">
                 <div className="flex flex-wrap gap-2">
-                  {capabilities.map(capability => (
+                  {capabilities.map((capability) => (
                     <FilterChip
                       key={capability.id}
                       label={capability.title}
@@ -155,7 +155,7 @@ export function FilterSheet({
               {/* Rating */}
               <FilterSection title="Minimum Rating">
                 <div className="flex flex-wrap gap-2">
-                  {RATING_OPTIONS.map(option => (
+                  {RATING_OPTIONS.map((option) => (
                     <FilterChip
                       key={option.value}
                       label={option.label}
@@ -170,7 +170,7 @@ export function FilterSheet({
               {/* Sort */}
               <FilterSection title="Sort By">
                 <div className="flex flex-wrap gap-2">
-                  {SORT_OPTIONS.map(option => (
+                  {SORT_OPTIONS.map((option) => (
                     <FilterChip
                       key={option.value}
                       label={option.label}
@@ -190,7 +190,7 @@ export function FilterSheet({
                   'flex-1 px-4 py-2.5 rounded-xl',
                   'border border-bg-quaternary',
                   'text-text-secondary hover:bg-bg-tertiary',
-                  'transition-colors'
+                  'transition-colors',
                 )}
               >
                 Reset
@@ -199,9 +199,9 @@ export function FilterSheet({
                 onClick={handleApply}
                 className={cn(
                   'flex-1 px-4 py-2.5 rounded-xl',
-                  'bg-purple-primary text-white',
-                  'hover:bg-purple-secondary',
-                  'transition-colors'
+                  'bg-white text-black',
+                  'hover:bg-white/90',
+                  'transition-colors',
                 )}
               >
                 Apply Filters
@@ -214,7 +214,13 @@ export function FilterSheet({
   );
 }
 
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+function FilterSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <h3 className="text-sm font-medium text-text-secondary mb-3">{title}</h3>
@@ -239,8 +245,8 @@ function FilterChip({ label, icon, selected, onClick }: FilterChipProps) {
         'flex items-center gap-1.5',
         'transition-colors',
         selected
-          ? 'bg-purple-primary text-white'
-          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
+          ? 'bg-white text-black'
+          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
       )}
     >
       {icon}

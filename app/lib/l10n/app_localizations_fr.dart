@@ -9,6 +9,9 @@ class AppLocalizationsFr extends AppLocalizations {
   AppLocalizationsFr([String locale = 'fr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'La session a expiré — reconnectez-vous.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -321,7 +324,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get searchApps => 'Rechercher des applications...';
 
   @override
-  String get myApps => 'Mes applications';
+  String get myApps => 'Créé par moi';
 
   @override
   String get installedApps => 'Applications installées';
@@ -429,6 +432,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get offlineSync => 'Synchronisation hors ligne';
+
+  @override
+  String get autoSync => 'Synchronisation automatique';
+
+  @override
+  String get autoSyncDescription =>
+      'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
 
   @override
   String get deviceSettings => 'Paramètres de l\'appareil';
@@ -741,11 +751,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Votre forfait sera renouvelé le $date.';
-  }
-
-  @override
   String get basicPlan => 'Forfait gratuit';
 
   @override
@@ -965,11 +970,6 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '$used sur $limit aperçus obtenus ce mois-ci';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used sur $limit mémoires créées ce mois-ci';
   }
 
   @override
@@ -1475,7 +1475,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get payYourSttProvider => 'Utilisez Omi librement. Vous ne payez que votre fournisseur STT directement.';
 
   @override
-  String get freeMinutesMonth => '1 200 minutes gratuites/mois incluses. Illimité avec ';
+  String get freeMinutesMonth => '300 minutes gratuites/mois incluses. Illimité avec ';
 
   @override
   String get omiUnlimited => 'Omi Illimité';
@@ -1654,7 +1654,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get finalTouches => 'Touches finales';
 
   @override
-  String get processing => 'Traitement...';
+  String get processing => 'Traitement';
 
   @override
   String get features => 'Fonctionnalités';
@@ -1799,20 +1799,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get lovingOmi => 'Vous aimez Omi ?';
 
   @override
-  String get leaveReviewIos =>
-      'Aidez-nous à atteindre plus de personnes en laissant un avis sur l\'App Store. Votre retour compte énormément pour nous !';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Aidez-nous à atteindre plus de personnes en laissant un avis sur le Google Play Store. Votre retour compte énormément pour nous !';
-
-  @override
-  String get rateOnAppStore => 'Noter sur l\'App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Noter sur Google Play';
-
-  @override
   String get maybeLater => 'Peut-être plus tard';
 
   @override
@@ -1886,9 +1872,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get openSettings => 'Ouvrir les paramètres';
-
-  @override
-  String get wantDifferentName => 'Voulez-vous utiliser un autre nom ?';
 
   @override
   String get whatsYourName => 'Comment vous appelez-vous ?';
@@ -2074,6 +2057,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryDeleted => 'Mémoire supprimée.';
 
   @override
+  String get memoryHistoryPartial =>
+      'Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.';
+
+  @override
   String get undo => 'Annuler';
 
   @override
@@ -2153,6 +2140,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Modifier le souvenir';
+
+  @override
+  String get pinAsBaseline => 'Épingler comme référence';
+
+  @override
+  String get unpinAsBaseline => 'Détacher de la référence';
+
+  @override
+  String get baselineMemory => 'Mémoire de référence';
+
+  @override
+  String get alwaysInContext => 'Toujours dans le contexte';
 
   @override
   String get memoryContentHint => 'J\'aime manger des glaces...';
@@ -4674,41 +4673,13 @@ class AppLocalizationsFr extends AppLocalizations {
       'Merci d\'être un utilisateur précieux d\'Omi. Si vous avez des questions ou des préoccupations, n\'hésitez pas à nous contacter à team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Paramètres de synchronisation WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Entrez les identifiants du point d\'accès de votre téléphone';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'La synchronisation WiFi utilise votre téléphone comme point d\'accès. Trouvez le nom et le mot de passe dans Réglages > Partage de connexion.';
-
-  @override
-  String get hotspotNameSsid => 'Nom du point d\'accès (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'ex. Point d\'accès iPhone';
-
-  @override
   String get password => 'Mot de passe';
-
-  @override
-  String get enterHotspotPassword => 'Entrez le mot de passe du point d\'accès';
 
   @override
   String get saveCredentials => 'Enregistrer les identifiants';
 
   @override
   String get clearCredentials => 'Effacer les identifiants';
-
-  @override
-  String get pleaseEnterHotspotName => 'Veuillez entrer un nom de point d\'accès';
-
-  @override
-  String get wifiCredentialsSaved => 'Identifiants WiFi enregistrés';
-
-  @override
-  String get wifiCredentialsCleared => 'Identifiants WiFi effacés';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4777,7 +4748,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Aucun accès aux données spécifique configuré.';
 
   @override
-  String get basicPlanDescription => '1 200 minutes premium + illimité sur l\'appareil';
+  String get basicPlanDescription => '300 minutes premium + illimité sur l\'appareil';
 
   @override
   String get minutes => 'minutes';
@@ -5863,9 +5834,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Transfert rapide';
-
-  @override
   String get syncingStatus => 'Synchronisation';
 
   @override
@@ -5875,15 +5843,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Méthode de transfert';
-
-  @override
-  String get fast => 'Rapide';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Téléphone';
@@ -5904,26 +5863,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get processedFilesDeleted => 'Fichiers traités supprimés';
 
   @override
-  String get wifiEnableFailed => 'Échec de l\'activation du WiFi sur l\'appareil. Veuillez réessayer.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'Votre appareil ne prend pas en charge le transfert rapide. Utilisez le Bluetooth à la place.';
-
-  @override
-  String get enableHotspotMessage => 'Veuillez activer le point d\'accès de votre téléphone et réessayer.';
-
-  @override
-  String get transferStartFailed => 'Échec du démarrage du transfert. Veuillez réessayer.';
-
-  @override
   String get deviceNotResponding => 'L\'appareil n\'a pas répondu. Veuillez réessayer.';
-
-  @override
-  String get invalidWifiCredentials => 'Identifiants WiFi invalides. Vérifiez les paramètres de votre point d\'accès.';
-
-  @override
-  String get wifiConnectionFailed => 'La connexion WiFi a échoué. Veuillez réessayer.';
 
   @override
   String get sdCardProcessing => 'Traitement de la carte SD';
@@ -5935,9 +5875,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get process => 'Traiter';
-
-  @override
-  String get wifiSyncFailed => 'Échec de la synchronisation WiFi';
 
   @override
   String get processingFailed => 'Échec du traitement';
@@ -6111,7 +6048,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
+      '300 minutes premium/mois. L\'onglet Sur l\'appareil offre une transcription gratuite illimitée.';
 
   @override
   String get viewUsage => 'Voir lutilisation';
@@ -6194,7 +6131,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 minutes premium/mois. Longlet Sur appareil offre une transcription gratuite illimitée. ';
+      '300 minutes premium/mois. Longlet Sur appareil offre une transcription gratuite illimitée. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6718,24 +6655,13 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Synchronisation WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item copié dans le presse-papiers';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Échec de la connexion';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Connexion à $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Activer le WiFi de $deviceName';
   }
 
   @override
@@ -6832,9 +6758,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statusUnprocessed => 'Non traité';
 
   @override
-  String get switchedToFastTransfer => 'Passé au transfert rapide';
-
-  @override
   String get transferCompleteMessage => 'Transfert terminé ! Vous pouvez maintenant lire cet enregistrement.';
 
   @override
@@ -6846,34 +6769,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transferCancelled => 'Transfert annulé';
 
   @override
-  String get fastTransferEnabled => 'Transfert rapide activé';
-
-  @override
   String get bluetoothSyncEnabled => 'Synchronisation Bluetooth activée';
-
-  @override
-  String get enableFastTransfer => 'Activer le transfert rapide';
-
-  @override
-  String get fastTransferDescription =>
-      'Le transfert rapide utilise le WiFi pour des vitesses ~5x plus rapides. Votre téléphone se connectera temporairement au réseau WiFi de votre appareil Omi pendant le transfert.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'L\'accès Internet est suspendu pendant le transfert';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Choisissez comment les enregistrements sont transférés de votre appareil Omi vers votre téléphone.';
-
-  @override
-  String get wifiSpeed => '~150 Ko/s via WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X PLUS RAPIDE';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Crée une connexion WiFi directe à votre appareil Omi. Votre téléphone se déconnecte temporairement de votre WiFi habituel pendant le transfert.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6895,7 +6791,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alerte de batterie faible';
 
   @override
-  String get lowBatteryAlertBody => 'La batterie de votre appareil est faible. Il est temps de recharger ! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Votre batterie est à $level %. Il est temps de recharger ! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi est complètement chargé';
@@ -7583,13 +7481,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Échec de la transcription audio';
 
   @override
-  String get locationPermissionRequired => 'Autorisation de localisation requise';
-
-  @override
-  String get locationPermissionContent =>
-      'Le transfert rapide nécessite l\'autorisation de localisation pour vérifier la connexion WiFi. Veuillez accorder l\'autorisation de localisation pour continuer.';
-
-  @override
   String get pdfTranscriptExport => 'Export de transcription';
 
   @override
@@ -7734,12 +7625,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dailyRecapsDescription => 'Vos récapitulatifs quotidiens apparaîtront ici une fois générés';
 
   @override
-  String get chooseTransferMethod => 'Choisir la méthode de transfert';
-
-  @override
-  String get fastTransferSpeed => '~150 Ko/s via WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Grand écart de temps détecté ($gap)';
   }
@@ -7748,10 +7633,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Grands écarts de temps détectés ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'L\'appareil ne prend pas en charge la synchronisation WiFi, passage au Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health n\'est pas disponible sur cet appareil';
@@ -7950,6 +7831,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get viewAll => 'Tout afficher';
+
+  @override
+  String get expand => 'Développer';
 
   @override
   String get addTask => 'Ajouter une tâche';
@@ -8522,7 +8406,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get manageStorage => 'Gérer le stockage';
 
   @override
-  String get safelyBackedUp => 'Sauvegardé sur votre téléphone';
+  String get safelyBackedUp => 'Conversations créées';
 
   @override
   String get notYetSynced => 'Pas encore synchronisé avec votre téléphone';
@@ -9180,7 +9064,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get billingYearly => 'Annuel';
 
   @override
-  String get savePercent => 'Économisez ~17%';
+  String savePercent(int percent) {
+    return 'Économisez ~$percent%';
+  }
 
   @override
   String get popular => 'Populaire';
@@ -9329,4 +9215,855 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Impossible de supprimer les tâches. Veuillez réessayer.';
+
+  @override
+  String get deleteRecap => 'Supprimer le résumé';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Supprimer ce résumé ?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ce résumé sera définitivement supprimé. Les conversations originales de ce jour ne sont pas affectées.';
+
+  @override
+  String get deleteRecapAction => 'Supprimer';
+
+  @override
+  String get recapDeletedSnackbar => 'Résumé supprimé';
+
+  @override
+  String get recapDeleteFailed => 'Impossible de supprimer le résumé. Réessayez plus tard.';
+
+  @override
+  String get syncStatusBackedUp => 'Sauvegardé';
+
+  @override
+  String get syncStatusBackingUp => 'Synchronisation…';
+
+  @override
+  String get syncStatusWaiting => 'En attente de synchronisation';
+
+  @override
+  String get syncStatusRetrying => 'Échec du traitement — nouvelle tentative';
+
+  @override
+  String get syncStatusFailed => 'Échec — appuyez sur Réessayer';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fichier indisponible';
+
+  @override
+  String get noRecordingsYet => 'Aucun enregistrement pour l\'instant';
+
+  @override
+  String get syncInProgress => 'Synchronisation en cours';
+
+  @override
+  String get syncStatusUploaded => 'Envoyé · traitement sur Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Traitement en cours';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tous les enregistrements synchronisés';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements prêts à synchroniser',
+      one: '1 enregistrement prêt à synchroniser',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Traitement sur Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'En attente d\'Internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements à vérifier',
+      one: '1 enregistrement à vérifier',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Les enregistrements sont transférés de votre appareil vers ce téléphone et stockés localement, puis envoyés sur le serveur d\'Omi, où ils sont transcrits et transformés en conversations.';
+
+  @override
+  String get syncStepUpload => 'Synchroniser';
+
+  @override
+  String get syncStepUploadDesc => 'Votre enregistrement est envoyé au serveur d\'Omi';
+
+  @override
+  String get syncStepProcess => 'Transcription';
+
+  @override
+  String get syncStepProcessDesc => 'Omi transforme l\'audio en conversation';
+
+  @override
+  String get syncStepBackedUp => 'Conversation prête';
+
+  @override
+  String get syncStepBackedUpDesc => 'Retrouvez-la dans Conversations';
+
+  @override
+  String get syncFailureFootnote =>
+      'En cas d\'échec du traitement, l\'enregistrement est réessayé automatiquement lors de la prochaine synchronisation.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversation créée';
+
+  @override
+  String get syncCardUploadingTitle => 'Envoi vers Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Téléchargement depuis votre appareil';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current sur $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Sur votre appareil';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Téléchargement depuis votre appareil';
+
+  @override
+  String get newestFirst => 'Plus récents d\'abord';
+
+  @override
+  String get noSyncedRecordingsYet => 'Aucun enregistrement synchronisé pour l\'instant';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'D\'autres moyens de paiement bientôt disponibles';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Cela continue en arrière-plan — vous pouvez quitter cet écran.';
+
+  @override
+  String get syncCardRateLimited => 'Limite d\'utilisation atteinte — la synchronisation reprendra automatiquement';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Impossible de déterminer la version actuelle du firmware';
+
+  @override
+  String get promoCode => 'Code promo';
+
+  @override
+  String get enterPromoCode => 'Entrez le code promo';
+
+  @override
+  String get invalidPromotionCode => 'Code promo invalide.';
+
+  @override
+  String get backgroundModeTitle => 'Mode arrière-plan';
+
+  @override
+  String get backgroundModeDescription =>
+      'Gardez votre Omi en enregistrement même lorsque l\'application est entièrement fermée.';
+
+  @override
+  String get backgroundModeNote =>
+      'Fonctionne uniquement avec les appareils Omi pour l\'instant, et s\'améliore en continu.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'Le mode arrière-plan n’est pas disponible, car aucun appareil compatible n’est connecté. Connectez un appareil Omi, OpenGlass ou Friend Pendant pour utiliser cette fonctionnalité.';
+
+  @override
+  String get regenerateRecap => 'Régénérer le récapitulatif';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Récapitulatif régénéré';
+
+  @override
+  String get recapRegenerateFailed => 'Impossible de régénérer le récapitulatif. Réessayez plus tard.';
+
+  @override
+  String get recapRegenerateCooldown => 'Veuillez patienter quelques secondes avant de régénérer.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Aucune conversation à résumer pour cette journée.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La synchronisation utilise la transcription d\'Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d\'Omi et ils comptent dans la limite de transcription de votre forfait.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcrire plus tard';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Enregistrez l\'audio maintenant et transcrivez-le à la demande plutôt qu\'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Compatible avec le microphone du téléphone ainsi que les appareils Omi et Limitless. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'L\'espace de stockage de votre téléphone est presque plein : l\'enregistrement est donc en pause. Libérez de l\'espace ou importez vos enregistrements pour qu\'il reprenne automatiquement.';
+
+  @override
+  String get recordingMode => 'Mode d\'enregistrement';
+
+  @override
+  String get captureModeLater => 'Plus tard';
+
+  @override
+  String get captureModeLiveDescription => 'Transcrivez en temps réel pendant que vous parlez.';
+
+  @override
+  String get captureModeLaterDescription => 'Enregistrez l\'audio maintenant et transcrivez quand vous voulez.';
+
+  @override
+  String get unmute => 'Réactiver le son';
+
+  @override
+  String get newRecording => 'Nouvel enregistrement';
+
+  @override
+  String get transcribeLaterPaused => 'En pause — aucun audio n\'est enregistré';
+
+  @override
+  String get memoryThisDevice => 'Cet appareil';
+
+  @override
+  String get memoryThisIphone => 'Cet iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ce téléphone';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Comment utiliser Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parlez à votre Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Dites quelques mots et regardez-les apparaître en temps réel';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bravo !';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Commencez à parler...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Posez une question à Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Appuyez une fois sur le bouton, posez votre question, puis appuyez à nouveau une fois terminé';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Traitement de votre question...';
+
+  @override
+  String get deviceOnboardingListening => 'Écoute...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Éteindre';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Allumer';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Maintenez le bouton enfoncé pendant 3 secondes';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Appuyez sur le bouton pour le rallumer';
+
+  @override
+  String get deviceOnboardingHoldButtonHint =>
+      'Maintenez le bouton enfoncé fermement jusqu\'à ce que le voyant s\'éteigne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connecté';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connecté !';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Déconnecté';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Extinction...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personnaliser le double appui';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Terminer la conversation';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Enregistrer et terminer la conversation en cours';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Couper / Réactiver le son';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Activer ou couper le microphone';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Marquer la conversation en cours';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marquer la conversation comme importante';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'C\'était un seul appui — essayez d\'appuyer deux fois rapidement !';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Essayez maintenant ! Faites un double appui sur votre Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continuer';
+
+  @override
+  String get deviceOnboardingFinish => 'Terminer';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Faites connaissance avec votre Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tour rapide et pratique de tout ce que votre Omi peut faire.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Environ 1 minute';
+
+  @override
+  String get jumpToLatestMessage => 'Aller au dernier message';
+
+  @override
+  String get latest => 'Récent';
+
+  @override
+  String get flashFirmware => 'Flasher le firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Enregistrement sur le pendentif';
+
+  @override
+  String get pendantRecordingNote =>
+      'Votre pendentif enregistre de manière autonome. Les enregistrements se synchronisent avec votre téléphone lorsque l\'application est ouverte.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronisation des enregistrements depuis votre pendentif…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stockées';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Le stockage du pendentif est presque plein — gardez l\'application ouverte pour synchroniser.';
+
+  @override
+  String get connectRayBanMeta => 'Connecter les Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Utilisez vos lunettes Ray-Ban Meta comme appareil de capture Omi pour vos conversations et le contexte visuel. Omi ouvrira l\'application Meta AI pour associer vos lunettes.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Se connecter via Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Terminez la connexion dans l\'application Meta AI, puis revenez ici.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Vérifier à nouveau';
+
+  @override
+  String get raybanMetaAllowCamera => 'Autoriser la caméra des lunettes';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi utilise la caméra de vos lunettes pour ajouter des photos à vos conversations. Vous pouvez ignorer cette étape et utiliser uniquement l\'audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Ignorer pour l\'instant';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mode audio uniquement des Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Cette version d\'Omi peut utiliser le microphone de vos lunettes via Bluetooth. La capture de photos nécessite la version développeur Meta d\'Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'La musique sur votre téléphone se met en pause pendant l\'utilisation du microphone des lunettes.';
+
+  @override
+  String get raybanMetaContinue => 'Continuer';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Prendre une photo';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Photo demandée — elle apparaîtra dans votre conversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Microphone prêt';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Capture d\'image prête';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Indisponible en mode audio uniquement';
+
+  @override
+  String get raybanMetaCamera => 'Caméra';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Erreur de connexion aux Ray-Ban Meta : $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Stockage de l\'appareil';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent % plein';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used sur $total utilisés';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free libre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Appareil presque plein — synchronisez pour libérer de l\'espace.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Tes données sont protégées par défaut par un chiffrement fort, et tu gardes le contrôle sur leur stockage et leur utilisation.';
+
+  @override
+  String get sttModelAccuracy => 'Précision';
+
+  @override
+  String get whisperModelSizeBase => 'Base';
+
+  @override
+  String get cloudTranscription => 'Transcription cloud';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Supprimer le modèle';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Voulez-vous vraiment supprimer ce modèle ?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Téléchargé';
+
+  @override
+  String get sttModelFaster => 'Plus rapide';
+
+  @override
+  String get sttFilterAuto => 'Automatique';
+
+  @override
+  String get sttModelHigher => 'Supérieure';
+
+  @override
+  String get whisperModelSizeLarge => 'Grand';
+
+  @override
+  String get sttModelLower => 'Inférieure';
+
+  @override
+  String get whisperModelSizeMedium => 'Moyen';
+
+  @override
+  String get onDeviceModelDeleted => 'Modèle supprimé';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Échec du téléchargement du modèle';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Échec du téléchargement du modèle Whisper. Veuillez réessayer.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modèle téléchargé';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Modèle Whisper téléchargé avec succès';
+
+  @override
+  String get onDeviceModelSize => 'Taille du modèle';
+
+  @override
+  String get sttNone => 'Aucun';
+
+  @override
+  String get onDeviceTranscription => 'Transcription sur appareil';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'La transcription est traitée localement sur votre appareil';
+
+  @override
+  String get sttModelSlower => 'Plus lent';
+
+  @override
+  String get whisperModelSizeSmall => 'Petit';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Fournisseur de reconnaissance vocale';
+
+  @override
+  String get speechToTextProviderDesc => 'Sélectionnez le service utilisé pour la transcription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Vitesse';
+
+  @override
+  String get whisperModelSizeTiny => 'Minuscule';
+
+  @override
+  String get transcriptionLanguage => 'Langue de transcription';
+
+  @override
+  String get transcriptionLanguageDesc => 'Sélectionnez la langue pour la transcription vocale';
+
+  @override
+  String get whisperModel => 'Modèle Whisper';
+
+  @override
+  String get whisperModelDesc => 'Sélectionnez le modèle pour la transcription sur appareil';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Passer au forfait gratuit ?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Vous rencontrerez ces limitations :';
+
+  @override
+  String get downgradeLimitBattery => 'Consommation de batterie 7 fois plus élevée';
+
+  @override
+  String get downgradeLimitQuality => 'Qualité de transcription réduite de 30 %';
+
+  @override
+  String get downgradeLimitDelay => 'Délai de 5 à 7 secondes';
+
+  @override
+  String get downgradeLimitSpeakers => 'Impossible d\'identifier les locuteurs';
+
+  @override
+  String get downgradeAnyway => 'Rétrograder quand même';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Agenda non connecté';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Connectez votre Google Agenda pour lier vos conversations à des événements d\'agenda.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Lié à « $title »';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Échec de la liaison de l\'événement d\'agenda';
+
+  @override
+  String get thanksForYourFeedback => 'Merci pour votre retour !';
+
+  @override
+  String get copyMessage => 'Copier le message';
+
+  @override
+  String get searchSettings => 'Rechercher dans les paramètres…';
+
+  @override
+  String get errorLoadingAudio => 'Erreur lors du chargement de l\'audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Choisissez le micro de vos Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Sélectionnez le micro Bluetooth de vos lunettes. La musique se met en pause pendant son utilisation par Omi.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Aucun micro Bluetooth trouvé. Connectez vos lunettes dans les réglages de l\'iPhone, puis réessayez.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Impossible de charger les micros Bluetooth. Vérifiez que le Bluetooth est activé, puis réessayez.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Impossible de se connecter à ce micro. Vérifiez qu\'il est connecté dans les réglages de l\'iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Trop ancien pour être synchronisé — Omi ne peut pas l\'accepter';
+
+  @override
+  String get planSheetChooseYourPlan => 'Choisissez votre formule pour débloquer Omi en illimité.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Disponible sur Mac, mobile et web';
+
+  @override
+  String get popularBadge => 'POPULAIRE';
+
+  @override
+  String get worksOnDesktop => 'Fonctionne sur ordinateur';
+
+  @override
+  String get noDesktopAccess => 'Ne fonctionne pas sur ordinateur';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mois / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mois offerts',
+      one: '1 mois offert',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi est gratuit, mais la version gratuite a des limites qui affectent votre expérience :';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Délai de 5 à 7 secondes (pas en temps réel)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Passer à la version gratuite';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Obtenez un accès illimité gratuit';
+
+  @override
+  String get shareDataForTraining => 'Partager des données pour l\'entraînement';
+
+  @override
+  String get yourRequestUnderReview => 'Votre demande est en cours d\'examen';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Mise à jour requise';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installez la dernière application Omi pour continuer après la migration du compte.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migration en cours';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Votre compte est en cours de migration. Les fonctionnalités produit sont en pause jusqu\'à la fin de la migration.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Votre compte est en maintenance après un retour arrière de migration. Certaines données plus récentes peuvent être isolées.';
+
+  @override
+  String get accountCutoverOpenStore => 'Ouvrir le store';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'À propos de : $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Demander à ce sujet';
+
+  @override
+  String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Désactivez cette option pour empêcher l\'envoi de l\'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.';
+
+  @override
+  String get findDevice => 'Localiser';
+
+  @override
+  String get diagnosticsShareFailed => 'Impossible de partager le diagnostic. Veuillez réessayer.';
+
+  @override
+  String get appDisabledTitle => 'Cette app est désactivée et ne peut pas être installée.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'Son endpoint a échoué pendant 72 heures d\'affilée, les envois ont donc été arrêtés.';
+
+  @override
+  String get appDisabledGeneric => 'Elle a été désactivée par Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'Corrigez d\'abord l\'endpoint : la réactivation revérifie chaque URL configurée.';
+
+  @override
+  String get appReEnable => 'Réactiver';
+
+  @override
+  String get appReEnableFailedTitle => 'Réactivation impossible';
+
+  @override
+  String get appReEnableFailedBody => 'Cette app n\'a pas pu être réactivée. Veuillez réessayer.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Désactivée le $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Dernière erreur : $error.';
+  }
+
+  @override
+  String get prerecordedTranscript => 'Préenregistré';
+
+  @override
+  String get pendantRecordingSyncBlocked =>
+      'Votre Pendant est encore en train d\'enregistrer, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String get pendantFullSyncBlocked =>
+      'Le stockage de votre Pendant est plein et il est encore en mode enregistrement, son audio stocké ne peut donc pas être transféré. Appuyez sur le bouton du Pendant pour arrêter l\'enregistrement, puis synchronisez à nouveau.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Non capturé ($count)';
+  }
+
+  @override
+  String speechProfileOwnerTitle(String name) {
+    return 'Profil vocal de $name';
+  }
+
+  @override
+  String get play => 'Lire';
+
+  @override
+  String get redo => 'Réenregistrer';
+
+  @override
+  String get answerWithYourVoice => 'Répondez à voix haute :';
+
+  @override
+  String get speechProfileTopicLocation => 'Où habitez-vous ?';
+
+  @override
+  String get speechProfileTopicWork => 'Que faites-vous dans la vie ?';
+
+  @override
+  String get speechProfileTopicGoal => 'Quel est votre objectif à long terme ?';
+
+  @override
+  String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
+
+  @override
+  String get tapPlusToStartRecording => 'Appuyez sur + pour commencer l’enregistrement';
+
+  @override
+  String get chatBlockTask => 'Tâche';
+
+  @override
+  String get chatBlockGoal => 'Objectif';
+
+  @override
+  String get chatBlockConversation => 'Conversation';
+
+  @override
+  String get chatBlockMemory => 'Souvenir';
+
+  @override
+  String get chatBlockQuestion => 'Question';
+
+  @override
+  String get chatBlockOpenInGoals => 'Ouvrir dans Objectifs';
+
+  @override
+  String get chatBlockOpenConversation => 'Ouvrir la conversation';
+
+  @override
+  String get chatBlockOpenInMemories => 'Ouvrir dans Souvenirs';
+
+  @override
+  String get chatBlockUnavailable => 'N’est plus disponible';
+
+  @override
+  String get chatBlockRecommendedNextSteps => 'Prochaines étapes recommandées';
+
+  @override
+  String get couldNotLoadMemories => 'Impossible de charger les souvenirs';
+
+  @override
+  String get couldNotLoadKnowledgeGraph => 'Impossible de charger le graphe de connaissances';
+
+  @override
+  String get speechToTextUnavailableDesc =>
+      'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 }

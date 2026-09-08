@@ -1,27 +1,55 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict
-from datetime import datetime, timezone, timedelta
-from collections import Counter, defaultdict
-import matplotlib.pyplot as plt
-from tabulate import tabulate
+from typing import Any, Dict, List, cast
 
 from database._client import get_users_uid, db
-from database.chat import get_messages
 
 
 import json
 
 
-def get_user_messages_with_bot_name():
-    user_messages_with_bot_name = {}
+def get_plugin_data_by_persona_name() -> None:
+    """Map persona plugins_data docs keyed by username (unique handle).
+
+    Display `name` is not unique; last-write-wins on name silently dropped
+    documents. Output lives under backend/scripts/data/ which is gitignored so
+    an accidental `git add -A` cannot commit owner emails / prompts.
+    """
+    from pathlib import Path
+
+    plugin_data_by_username: Dict[str, Dict[str, Any]] = {}
+    plugins_ref = db.collection("plugins_data").stream()
+    for doc in plugins_ref:
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        capabilities = data.get("capabilities") or []
+        if isinstance(capabilities, list) and "persona" not in capabilities:
+            continue
+        username = data.get("username")
+        if not username:
+            continue
+        plugin_data_by_username.setdefault(str(username), data)
+
+    out_dir = Path(__file__).resolve().parent / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "plugin_data_by_persona_name.json", "w") as f:
+        json.dump(plugin_data_by_username, f, default=str)
+
+
+def get_user_messages_with_bot_name() -> List[str]:
+    user_messages_with_bot_name: Dict[str, List[Dict[str, Any]]] = {}
     uids = get_users_uid()[:20]
     users_ref = db.collection("users")
     print(len(uids))
 
-    def process_user(uid):
+    def process_user(uid: str) -> None:
         messages_ref = users_ref.document(uid).collection("messages")
         messages = messages_ref.stream()
-        filtered_messages = [message.to_dict() for message in messages if 'botName' in message.to_dict()]
+        filtered_messages: List[Dict[str, Any]] = []
+        for message in messages:
+            raw: object = message.to_dict()
+            data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+            if 'botName' in data:
+                filtered_messages.append(data)
         print(uid, "has personas messages", len(filtered_messages))
         if filtered_messages:
             user_messages_with_bot_name[uid] = filtered_messages
@@ -29,7 +57,11 @@ def get_user_messages_with_bot_name():
     with ThreadPoolExecutor() as executor:
         executor.map(process_user, uids)
 
-    with open("user_messages_with_bot_name.json", "w") as f:
+    from pathlib import Path
+
+    out_dir = Path(__file__).resolve().parent / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with open(out_dir / "user_messages_with_bot_name.json", "w") as f:
         json.dump(user_messages_with_bot_name, f, default=str)
 
     return uids
@@ -37,9 +69,9 @@ def get_user_messages_with_bot_name():
 
 if __name__ == "__main__":
     get_user_messages_with_bot_name()
-    # TODO: map all plugin_data by persona_name so that we can map, local json
+    get_plugin_data_by_persona_name()
     # TODO: questions
-    # -- % of people who provided their x vs someone else’s, and most popular questions
+    # -- % of people who provided their x vs someone else's, and most popular questions
     # -- If someone else, who were the top 3 most popular questions and to whom
     # - how many users have personas messages?
     # - how many conversations are just automatic messages? (no user messages)

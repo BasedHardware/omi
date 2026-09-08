@@ -1,0 +1,7 @@
+{
+  "version": "0.12.260",
+  "date": "2026-09-02",
+  "changes": [
+    "Onboarding door 3 hint asks the question directly instead of telling Omi to check screen history, which is not searchable yet that early in onboarding"
+  ]
+}

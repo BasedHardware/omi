@@ -9,29 +9,26 @@ Run with:
 """
 
 import os
-import sys
 import time
-import types
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Pre-import stubs for heavy deps that aren't available locally
-# ---------------------------------------------------------------------------
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
+# Set env vars BEFORE importing fair_use — module-level constants read them at first import.
+os.environ['FAIR_USE_ENABLED'] = 'true'
+os.environ['FAIR_USE_DAILY_SPEECH_MS'] = '10000'  # 10 seconds
+os.environ['FAIR_USE_3DAY_SPEECH_MS'] = '20000'  # 20 seconds
+os.environ['FAIR_USE_WEEKLY_SPEECH_MS'] = '30000'  # 30 seconds
+os.environ['FAIR_USE_CHECK_INTERVAL_SECONDS'] = '5'
 
-# Firestore stubs
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
+# Now import fair_use — it reads real Redis
+import utils.fair_use as fair_use
+
+TEST_UID = f'live_test_user_{int(time.time())}'
+
 
 # Stub database.fair_use with in-memory state
-_fair_use_state = {}
-
-
 class InMemoryFairUseDB:
     """In-memory Firestore replacement for fair_use state."""
 
@@ -75,31 +72,6 @@ class InMemoryFairUseDB:
 
 
 _mem_db = InMemoryFairUseDB()
-_fair_use_mod = types.ModuleType('database.fair_use')
-_fair_use_mod.get_fair_use_state = _mem_db.get_fair_use_state
-_fair_use_mod.update_fair_use_state = _mem_db.update_fair_use_state
-_fair_use_mod.create_fair_use_event = _mem_db.create_fair_use_event
-_fair_use_mod.get_fair_use_events = _mem_db.get_fair_use_events
-_fair_use_mod.get_violation_counts = _mem_db.get_violation_counts
-_fair_use_mod.resolve_fair_use_event = _mem_db.resolve_fair_use_event
-_fair_use_mod.reset_fair_use_state = _mem_db.reset_fair_use_state
-_fair_use_mod.get_flagged_users = _mem_db.get_flagged_users
-sys.modules['database.fair_use'] = _fair_use_mod
-
-sys.modules.setdefault('database.users', MagicMock())
-sys.modules.setdefault('utils.notifications', MagicMock())
-
-# Set env vars BEFORE importing fair_use
-os.environ['FAIR_USE_ENABLED'] = 'true'
-os.environ['FAIR_USE_DAILY_SPEECH_MS'] = '10000'  # 10 seconds
-os.environ['FAIR_USE_3DAY_SPEECH_MS'] = '20000'  # 20 seconds
-os.environ['FAIR_USE_WEEKLY_SPEECH_MS'] = '30000'  # 30 seconds
-os.environ['FAIR_USE_CHECK_INTERVAL_SECONDS'] = '5'
-
-# Now import fair_use — it reads real Redis
-import utils.fair_use as fair_use
-
-TEST_UID = f'live_test_user_{int(time.time())}'
 
 
 def _cleanup_redis(uid):
@@ -117,8 +89,9 @@ def _cleanup_redis(uid):
 
 
 @pytest.fixture(autouse=True)
-def clean_redis():
-    """Clean up Redis before and after each test."""
+def clean_redis(monkeypatch):
+    """Clean up Redis before and after each test, and inject the in-memory fair_use DB."""
+    monkeypatch.setattr(fair_use, 'fair_use_db', _mem_db)
     _cleanup_redis(TEST_UID)
     _mem_db.states.clear()
     _mem_db.events.clear()

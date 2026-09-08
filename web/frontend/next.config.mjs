@@ -1,15 +1,17 @@
 import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   staticPageGenerationTimeout: 60 * 20,
   // Bypass 2MB fetch cache limit by using file system cache directly
   cacheHandler: fileURLToPath(import.meta.resolve('./cache-handler.cjs')),
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Pin the file-tracing root to this app dir. Next 15+ otherwise infers the
+  // workspace root from sibling lockfiles (monorepo) and nests the standalone
+  // output under that path, which breaks the Dockerfile's
+  // `COPY .../web/frontend/.next/standalone ./` + `CMD ["node","server.js"]`.
+  outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
   typescript: {
     ignoreBuildErrors: true,
   },

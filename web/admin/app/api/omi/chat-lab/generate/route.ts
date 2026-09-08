@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth";
+import { ADMIN_LLM_LANES, invokeAdminLlmGateway } from "@/lib/llm-gateway";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 interface Evaluation {
   question: string;
@@ -22,16 +23,17 @@ export async function POST(request: NextRequest) {
       evaluations: Evaluation[];
     };
 
-    if (!current_prompt || !Array.isArray(evaluations) || evaluations.length === 0) {
+    if (
+      !current_prompt ||
+      !Array.isArray(evaluations) ||
+      evaluations.length === 0
+    ) {
       return NextResponse.json(
-        { error: 'current_prompt and non-empty evaluations array are required' },
-        { status: 400 }
+        {
+          error: "current_prompt and non-empty evaluations array are required",
+        },
+        { status: 400 },
       );
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured' }, { status: 500 });
     }
 
     const evalsFormatted = evaluations
@@ -41,10 +43,10 @@ export async function POST(request: NextRequest) {
 Question: ${e.question}
 Response: ${e.response}
 AI Score: ${e.ai_score}/5
-${e.human_score != null ? `Human Score: ${e.human_score}/5` : 'Human Score: not provided'}
-${e.human_comment ? `Human Comment: ${e.human_comment}` : ''}`
+${e.human_score != null ? `Human Score: ${e.human_score}/5` : "Human Score: not provided"}
+${e.human_comment ? `Human Comment: ${e.human_comment}` : ""}`,
       )
-      .join('\n\n');
+      .join("\n\n");
 
     const metaPrompt = `You are a prompt engineer specializing in conversational AI assistants. Your task is to improve a system prompt based on evaluation results.
 
@@ -71,52 +73,37 @@ Respond ONLY with valid JSON in this exact format:
   "notes": "<brief explanation of what you changed and why>"
 }`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: metaPrompt }],
-      }),
+    const resultText = await invokeAdminLlmGateway({
+      lane: ADMIN_LLM_LANES.chatLab,
+      feature: "admin_chat_lab",
+      messages: [{ role: "user", content: metaPrompt }],
     });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Claude API error ${response.status}: ${errorBody}`);
-    }
-
-    const data = await response.json();
-    const textBlock = data.content?.find((block: { type: string }) => block.type === 'text');
-    const resultText = textBlock?.text || '';
 
     try {
       // Try to extract JSON from the response (handle markdown code blocks)
       const jsonMatch = resultText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in response');
+        throw new Error("No JSON found in response");
       }
       const parsed = JSON.parse(jsonMatch[0]);
       return NextResponse.json({
-        prompt_text: parsed.prompt_text || '',
-        floating_prefix: parsed.floating_prefix || '',
-        notes: parsed.notes || '',
+        prompt_text: parsed.prompt_text || "",
+        floating_prefix: parsed.floating_prefix || "",
+        notes: parsed.notes || "",
       });
     } catch {
       // Return raw text if JSON parsing fails
       return NextResponse.json({
         prompt_text: resultText,
-        floating_prefix: '',
-        notes: 'Warning: Could not parse structured response from Claude. Raw text returned as prompt_text.',
+        floating_prefix: "",
+        notes:
+          "Warning: Could not parse structured response. Raw text returned as prompt_text.",
       });
     }
   } catch (error) {
-    console.error('[Chat Lab] Error generating prompt:', error);
-    const message = error instanceof Error ? error.message : 'Internal Server Error';
+    console.error("[Chat Lab] Error generating prompt:", error);
+    const message =
+      error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

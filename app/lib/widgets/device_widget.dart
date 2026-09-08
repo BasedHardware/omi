@@ -62,10 +62,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                         Assets.images.blob.path,
                         height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
                         width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
-                        cacheHeight: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
-                            .round(),
-                        cacheWidth: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
-                            .round(),
+                        cacheHeight:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
+                        cacheWidth:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
                       ),
                     ),
                   )
@@ -104,8 +104,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
               height: imageHeight * 0.06,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.blue.withOpacity(0.8),
-                boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.5), blurRadius: 8, spreadRadius: 2)],
+                color: Colors.blue.withValues(alpha: 0.8),
+                boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 2)],
               ),
             ),
           ),

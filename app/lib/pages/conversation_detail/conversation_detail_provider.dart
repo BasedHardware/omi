@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
@@ -7,7 +5,10 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart'
+    hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/conversations.dart' as conv_api
+    show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -54,7 +55,16 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   ServerConversation? _cachedConversation;
-  ServerConversation get conversation {
+
+  /// Non-throwing variant of [conversation]. Build paths must use this so a
+  /// transient miss (conversation deleted under us, day-group emptied) returns
+  /// null instead of throwing from inside a Consumer's builder.
+  ///
+  /// Once a conversation is selected this only ever resolves to that same id.
+  /// Substituting another conversation would silently retarget the page, and
+  /// destructive actions (delete, visibility, rename) act on whatever this
+  /// returns.
+  ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
 
@@ -63,20 +73,37 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (list != null && list.isNotEmpty) {
       if (id != null) {
         result = list.firstWhereOrNull((c) => c.id == id);
+      } else {
+        result = list.first;
+        _cachedConversationId = result.id;
       }
-      result ??= list.first;
-      _cachedConversationId = result.id;
     }
 
     result ??= _cachedConversation;
-    if (result != null &&
-        result.createdAt.year == selectedDate.year &&
-        result.createdAt.month == selectedDate.month &&
-        result.createdAt.day == selectedDate.day) {
-      return _cachedConversation = result;
+    if (result != null && id != null && result.id != id) return null;
+    if (result != null) {
+      // Validate with the *same* key function the list groups by
+      // (`conversationLocalDayKey` over startedAt ?? createdAt). Comparing the
+      // raw UTC year/month/day instead made this getter reject a conversation
+      // that is actually present in the selected day-group whenever the
+      // viewer's local day differs from the UTC day — an evening conversation
+      // for any UTC+ viewer, a post-UTC-midnight one for any UTC- viewer —
+      // blanking the detail page it was opened from (#10976).
+      final effectiveDate = result.startedAt ?? result.createdAt;
+      if (conversationLocalDayKey(effectiveDate) == conversationLocalDayKey(selectedDate)) {
+        return _cachedConversation = result;
+      }
     }
 
-    throw StateError("No valid conversation found");
+    return null;
+  }
+
+  /// Non-null accessor for call sites that already know the conversation is
+  /// valid (gestures, async handlers). Build paths use [conversationOrNull].
+  ServerConversation get conversation {
+    final c = conversationOrNull;
+    if (c == null) throw StateError("No valid conversation found");
+    return c;
   }
 
   List<bool> appResponseExpanded = [];
@@ -242,28 +269,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  bool hasConversationSummaryRatingSet = false;
-  Timer? _ratingTimer;
-  bool showRatingUI = false;
-
-  void setShowRatingUi(bool value) {
-    showRatingUI = value;
-    notifyListeners();
-  }
-
-  void setConversationRating(int value) {
-    setConversationSummaryRating(conversation.id, value);
-    hasConversationSummaryRatingSet = true;
-    setShowRatingUi(false);
-  }
-
   Future initConversation() async {
     // updateLoadingState(true);
     titleController?.dispose();
     titleFocusNode?.dispose();
-    _ratingTimer?.cancel();
-    showRatingUI = false;
-    hasConversationSummaryRatingSet = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
@@ -288,22 +297,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     // Pre-cache audio files in background
     if (conversation.hasAudio()) {
       precacheConversationAudio(conversation.id);
-    }
-
-    if (!conversation.discarded) {
-      getHasConversationSummaryRating(conversation.id).then((value) {
-        if (_isDisposed) return;
-        hasConversationSummaryRatingSet = value;
-        notifyListeners();
-        if (!hasConversationSummaryRatingSet) {
-          _ratingTimer = Timer(const Duration(seconds: 15), () {
-            if (_isDisposed) return;
-            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
-            showRatingUI = true;
-            notifyListeners();
-          });
-        }
-      });
     }
 
     // updateLoadingState(false);
@@ -374,14 +367,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// Returns the first app result from the conversation if available
-  /// This is typically the summary of the conversation
+  /// Returns the first app result that actually carries content, which is the
+  /// summary of the conversation. An app result with empty content is not a
+  /// summary: returning it suppressed the structured sections (they only render
+  /// when `appId == null`) while `AppResultDetailWidget` fell into its
+  /// "no summary" placeholder, so a conversation with a full sections summary
+  /// rendered as having none. Mirrors desktop's `ConversationSummarySelection`.
   AppResponse? getSummarizedApp() {
-    if (conversation.appResults.isNotEmpty) {
-      return conversation.appResults[0];
+    final appResult = conversation.appResults.firstWhereOrNull((r) => r.content.trim().isNotEmpty);
+    if (appResult != null) {
+      return appResult;
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty) {
+    // If no app result carries content but we have a structured overview or
+    // sections, create a fake AppResponse
+    if (conversation.structured.overview.isNotEmpty || conversation.structured.sections.isNotEmpty) {
       return AppResponse(conversation.structured.overview, appId: null);
     }
     return null;
@@ -476,7 +475,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
     if (suggestedApp != null) return suggestedApp;
 
-    return null;
+    // The two caches above only fill after the summary sheet fetches. The durable
+    // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
+    // resolve here instead of rendering "Unknown App" until the sheet is opened
+    // (SCA-359).
+    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
+    return providerApp;
   }
 
   /// Enables an app and updates the cached enabled apps list
@@ -484,7 +488,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> enableApp(App app) async {
     try {
       // Make the server call to enable the app
-      final success = await enableAppServer(app.id);
+      final (success, _) = await enableAppServer(app.id);
       if (_isDisposed) return false;
 
       if (success) {
@@ -573,6 +577,98 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  /// Unlinks the calendar event from the current conversation
+  Future<bool> unlinkCalendarEvent() async {
+    try {
+      final success = await conv_api.unlinkCalendarEvent(conversation.id);
+      if (success) {
+        _updateLocalConversationWithCalendarEvent(null);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Helper method to update the local conversation state with a calendar event
+  void _updateLocalConversationWithCalendarEvent(CalendarEventLink? calendarEvent) {
+    if (_cachedConversation != null) {
+      final updatedConversation = ServerConversation(
+        id: _cachedConversation!.id,
+        createdAt: _cachedConversation!.createdAt,
+        structured: _cachedConversation!.structured,
+        startedAt: _cachedConversation!.startedAt,
+        finishedAt: _cachedConversation!.finishedAt,
+        transcriptSegments: _cachedConversation!.transcriptSegments,
+        appResults: _cachedConversation!.appResults,
+        suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
+        geolocation: _cachedConversation!.geolocation,
+        photos: _cachedConversation!.photos,
+        audioFiles: _cachedConversation!.audioFiles,
+        discarded: _cachedConversation!.discarded,
+        deleted: _cachedConversation!.deleted,
+        source: _cachedConversation!.source,
+        language: _cachedConversation!.language,
+        externalIntegration: _cachedConversation!.externalIntegration,
+        calendarEvent: calendarEvent,
+        status: _cachedConversation!.status,
+        isLocked: _cachedConversation!.isLocked,
+        starred: _cachedConversation!.starred,
+        folderId: _cachedConversation!.folderId,
+        visibility: _cachedConversation!.visibility,
+      );
+      _cachedConversation = updatedConversation;
+      conversationProvider?.updateConversation(updatedConversation);
+    }
+    notifyListeners();
+  }
+
+  /// Auto-links the conversation to the best overlapping calendar event
+  Future<CalendarEventLink?> autoLinkCalendarEvent() async {
+    try {
+      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error auto-linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Links the conversation to a specific calendar event by event ID
+  Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
+    try {
+      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Lists Google Calendar events around the conversation time for the picker UI
+  Future<List<CalendarEventLink>> listCalendarEventsForPicker() async {
+    try {
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      final timeMin = conversationStart.subtract(const Duration(hours: 2));
+      final timeMax = conversationEnd.add(const Duration(hours: 2));
+
+      return await listGoogleCalendarEvents(timeMin: timeMin, timeMax: timeMax, maxResults: 30);
+    } catch (e) {
+      debugPrint('Error listing calendar events: $e');
+      return [];
+    }
+  }
+
   String? _preferredSummarizationAppId;
 
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
@@ -610,7 +706,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   @override
   void dispose() {
     _isDisposed = true;
-    _ratingTimer?.cancel();
     super.dispose();
   }
 }

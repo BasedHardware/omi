@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed a packaging bug on Linux and macOS builds where the assistant could silently fail to respond — the same bytecode-export bug previously fixed for Windows had never been fixed for those platforms' build scripts."
+  ]
+}

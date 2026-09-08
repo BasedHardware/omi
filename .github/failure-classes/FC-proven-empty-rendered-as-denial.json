@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-proven-empty-rendered-as-denial",
+  "violated_contract": "A read of an authoritative state that is proven empty (the source query ran and the governing document is absent) must be returned as a complete, empty result; it must not be served as an indeterminate incomplete receipt, which correctness-gated clients must discard — so a legitimately empty account can never complete its durable handshake.",
+  "canonical_prevention": "Classify absence once at the shared reader: only absence proven by an exhausted query may map to a complete empty projection carrying a deterministic revision, while unproven absence (read failure, malformed source) keeps the incomplete receipt; prove both directions plus the torn-read fence with behavioral tests on the reader.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/jit_trigger_snapshot.py",
+    "backend/tests/unit/test_jit_trigger_snapshot.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/**"
+  ],
+  "status": "open"
+}

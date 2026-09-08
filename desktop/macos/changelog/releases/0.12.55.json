@@ -1,0 +1,30 @@
+{
+  "version": "0.12.55",
+  "date": "2026-07-09",
+  "changes": [
+    "Hardened screen-aware agent launches, tool schemas, and realtime tool error reporting.",
+    "Improved desktop chat screen-context detection and diagnostics",
+    "Background agent chat links now reopen from the timeline even after pills dismiss",
+    "Fixed Background agent cards so the header collapses again, markdown renders in the expanded body, and the open-agent link hides when the agent is unavailable",
+    "Fixed floating bar treating block-only or artifact answers as failed empty responses",
+    "Fixed silent agent-link opens and restored background-agent chat continuity after pills dismiss",
+    "Fixed a main-thread freeze where chat text selection wrapped agent card headers and pegged CPU",
+    "Show typed notch, notch PTT, and spawned-agent link turns in the shared Omi chat history",
+    "Background agent cards and proactive notifications now stay consistent across chat surfaces after reload",
+    "Fixed continuity review findings: restage can create a missing assistant after a user-only stage, owner-swap clear no longer clobbers a mid-session auth uid, agent open ordering is generation-guarded, and agent cards hide dead Open links / avoid false-success status icons",
+    "Floating bar chat now reads from the shared chat timeline instead of keeping a separate copy",
+    "Attach Gemini push-to-talk screen frames immediately after activity start instead of at commit so current-screen questions have time to ground on the image",
+    "Send Gemini push-to-talk screen frames inside the active voice turn before commit so screen questions ground on current pixels instead of a too-late screenshot tool call",
+    "Fixed Home chat input focus after expansion and added Escape-to-Home navigation on secondary Home pages",
+    "Polished the desktop Home stage layout, wider chat surface, responsive ask bar, and icon-only notch thinking state",
+    "Fixed notch and chat so agent artifacts stay attached to the turn that produced them, old orphan artifact cards no longer appear in the floating viewport, and agent list/card previews show the prompt instead of the response",
+    "Fixed a test-owner swap that could wipe sign-in tokens and break chat loading until relaunch",
+    "Make push-to-talk screen context fresher and less brittle by prefetching canonical voice-turn screen context while the user speaks and preventing stale screenshot OCR from biasing transcript correction",
+    "Made push-to-talk screen context prefer live capture when finalized screen frames are more than a few seconds old",
+    "PTT now tries available Omi context before asking follow-up questions and delegates larger work to background agents when a short voice answer is not the right surface",
+    "Fixed duplicate chat messages after push-to-talk",
+    "Buffered push-to-talk screen context until realtime sessions are ready so cold starts and reconnects do not drop it",
+    "Fixed subagent chats so completed agents show their final output and stop showing stale Running or Working indicators",
+    "Keep main chat subagent links visible without showing completed implementation-only tool logs, and keep externally spawned agent pills synced to terminal runtime state"
+  ]
+}

@@ -1,14 +1,58 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence
+import logging
+from datetime import datetime, timezone, tzinfo
+from typing import Any, Dict, List, Optional, Sequence, Set, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
 from models.other import Person
 
-if TYPE_CHECKING:
-    from models.conversation import Conversation
+from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.conversation import Conversation
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_display_tz(tz: Optional[str]) -> Any:
+    """Return ``(tzinfo, label)`` for rendering timestamps in a user's local timezone.
+
+    Falls back to ``(UTC, "UTC")`` when the zone is missing or not a valid IANA name.
+    Shared by the chat retrieval tools so every user-facing timestamp is shown in the
+    user's local time rather than UTC (see issue #4643).
+    """
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except (ZoneInfoNotFoundError, ValueError):
+            logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
+    return timezone.utc, "UTC"
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC so ``astimezone`` cannot reinterpret it as server-local."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def format_local_time(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
+    """Render a stored timestamp as a labelled wall clock in the user's timezone.
+
+    Every timestamp a chat tool hands the model must carry a timezone label. An unlabelled
+    UTC wall clock reads as local time to the model, which then states the wrong time of day
+    ("tonight" for a mid-afternoon due date) — issues #4643 and #6214.
+    """
+    return f"{_as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
+    """Render a stored timestamp as a calendar date in the user's timezone.
+
+    Needed because the UTC date rolls over at a different instant than the user's: a memory
+    captured at 21:00 in Sao Paulo is stored as the next UTC day, so a raw UTC date is a day
+    late for anyone west of Greenwich in the evening (issue #6214).
+    """
+    return _as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d')
 
 
 # ---------------------------------------------------------------------------
@@ -16,7 +60,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
+def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
     """Add speaker_name to transcript segments based on person_id mappings.
 
     Mutates conversation dicts in-place. Works with both single conversations
@@ -25,36 +69,38 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
     user_profile = users_db.get_user_profile(uid)
     user_name = user_profile.get('name') or 'User'
 
-    all_person_ids = set()
+    all_person_ids: Set[str] = set()
     for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
+        segments: List[Dict[str, Any]] = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
+        for seg in segments:
             if seg.get('person_id'):
-                all_person_ids.add(seg['person_id'])
+                all_person_ids.add(str(seg['person_id']))
 
-    people_map = {}
+    people_map: Dict[str, str] = {}
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-        people_map = {p['id']: p['name'] for p in people_data}
+        people_map = {str(p['id']): str(p['name']) for p in people_data}
 
     for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
+        segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
+        for seg in segments:
             if seg.get('is_user'):
                 seg['speaker_name'] = user_name
-            elif seg.get('person_id') and seg['person_id'] in people_map:
-                seg['speaker_name'] = people_map[seg['person_id']]
+            elif seg.get('person_id') and str(seg['person_id']) in people_map:
+                seg['speaker_name'] = people_map[str(seg['person_id'])]
             else:
                 seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
-def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
+def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
     """Add folder_name to conversations based on folder_id mappings.
 
     Mutates conversation dicts in-place. Batch-loads all folder IDs in one query.
     """
-    folder_ids = set()
+    folder_ids: Set[str] = set()
     for conv in conversations:
         if conv.get('folder_id'):
-            folder_ids.add(conv['folder_id'])
+            folder_ids.add(str(conv['folder_id']))
 
     if not folder_ids:
         for conv in conversations:
@@ -62,11 +108,11 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
         return
 
     all_folders = folders_db.get_folders(uid)
-    folder_map = {f['id']: f['name'] for f in all_folders}
+    folder_map: Dict[str, str] = {str(f['id']): str(f['name']) for f in all_folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
-        conv['folder_name'] = folder_map.get(folder_id) if folder_id else None
+        conv['folder_name'] = folder_map.get(str(folder_id)) if folder_id else None
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +120,13 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def redact_conversation_for_list(conv: Dict) -> Dict:
+# Untrusted client-authored display siblings of ``structured``. Denylist sinks
+# iterate this set: classifying a field here is what strips it from the
+# integration payload, rather than only satisfying a test pin. Other denylist
+# sinks (persist strip, transcript-edit clear, in-memory drop) still hardcode
+# a single name today; the trust-boundary suite requires they actually clear
+# every member of this set.
+def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
         return conv
@@ -88,11 +140,32 @@ def redact_conversation_for_list(conv: Dict) -> Dict:
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
+    # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
+    conv['match_snippets'] = []
     return conv
 
 
-def redact_conversation_for_integration(conv: Dict) -> Dict:
-    """Integration-view redaction: strip everything including title/overview."""
+def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
+    """Integration-view redaction: strip private metadata and every projection.
+
+    This sink is a denylist plus a pinned ``Conversation`` field set, not an
+    explicit projection-free shape. The integration payload is a full
+    ``Conversation.model_dump()`` (via ``conversation_to_dict``) with every
+    name in ``PROJECTION_FAMILY_FIELDS`` then removed. Installed third-party
+    apps consume this public contract; converting it to an allowlist would
+    drop fields they already read. Removal (``pop``), not null assignment:
+    setting the key to ``None`` would add a field that was never part of the
+    contract. Classifying a sibling on ``Conversation`` into
+    ``PROJECTION_FAMILY_FIELDS`` is what strips it here; the trust-boundary
+    suite then requires every other denylist sink to clear it too. Locked
+    conversations also blank title/overview and drop evidence.
+    """
+    # Geolocation is private capture metadata and is not part of the public
+    # integration contract. Strip it before either locked or unlocked data is
+    # serialized into an integration response.
+    conv.pop('geolocation', None)
+    for field in PROJECTION_FAMILY_FIELDS:
+        conv.pop(field, None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:
@@ -107,15 +180,16 @@ def redact_conversation_for_integration(conv: Dict) -> Dict:
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
+    conv['match_snippets'] = []
     return conv
 
 
-def redact_conversations_for_list(conversations: List[Dict]) -> List[Dict]:
+def redact_conversations_for_list(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Apply standard list redaction to a batch of conversations."""
     return [redact_conversation_for_list(c) for c in conversations]
 
 
-def redact_conversations_for_integration(conversations: List[Dict]) -> List[Dict]:
+def redact_conversations_for_integration(conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Apply integration redaction to a batch of conversations."""
     return [redact_conversation_for_integration(c) for c in conversations]
 
@@ -129,18 +203,26 @@ def conversations_to_string(
     conversations: Sequence[Conversation],
     use_transcript: bool = False,
     include_timestamps: bool = False,
-    people: List[Person] = None,
-    user_name: str = None,
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
+    tz: Optional[str] = None,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
     Callers must pass deserialized Conversation objects (use factory.deserialize_conversation
     for raw dicts). This function does NOT accept dicts.
+
+    When ``tz`` (an IANA timezone name like "America/Sao_Paulo") is provided, timestamps are
+    rendered in that timezone and labelled accordingly; otherwise they default to UTC. Pass the
+    user's timezone when this text is fed to the chat LLM so it reasons about times correctly.
     """
-    result = []
-    people_map = {p.id: p for p in people} if people else {}
+    result: List[str] = []
+    people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
+    display_tz, tz_label = resolve_display_tz(tz)
     for i, conversation in enumerate(conversations):
-        formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+        formatted_date = (
+            _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+        )
         conversation_str = (
             f"Conversation #{i + 1}\n"
             f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
@@ -148,11 +230,13 @@ def conversations_to_string(
 
         # Add started_at and finished_at if available
         if conversation.started_at:
-            formatted_started = conversation.started_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+            formatted_started = (
+                _as_utc(conversation.started_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+            )
             conversation_str += f"Started: {formatted_started}\n"
         if conversation.finished_at:
             formatted_finished = (
-                conversation.finished_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                _as_utc(conversation.finished_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Finished: {formatted_finished}\n"
 
@@ -187,7 +271,7 @@ def conversations_to_string(
                 conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"
+            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
             # photos
             photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
             if photo_descriptions != 'None':
@@ -203,12 +287,52 @@ def serialize_datetimes(obj: Any) -> Any:
     if isinstance(obj, datetime):
         return obj.isoformat()
     elif isinstance(obj, dict):
-        return {key: serialize_datetimes(value) for key, value in obj.items()}
+        obj_dict = cast(Dict[Any, Any], obj)
+        return {key: serialize_datetimes(value) for key, value in obj_dict.items()}
     elif isinstance(obj, list):
-        return [serialize_datetimes(item) for item in obj]
+        obj_list = cast(List[Any], obj)
+        return [serialize_datetimes(item) for item in obj_list]
     return obj
 
 
-def conversation_to_dict(conversation: Conversation) -> Dict:
+def conversation_to_dict(conversation: Conversation) -> Dict[str, Any]:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
-    return serialize_datetimes(conversation.dict())
+    return serialize_datetimes(conversation.model_dump())
+
+
+# Allowlisted citation-card fields. A denylist cannot protect a field added
+# after it was written; this set is the only shape that may back RAG cards.
+_CITATION_STRUCTURED_FIELDS: tuple[str, ...] = ('title', 'emoji', 'overview', 'category')
+
+
+def conversation_to_citation_card(conversation: Any) -> Dict[str, Any]:
+    """Projection-free citation shape for chat RAG cards.
+
+    Explicit allowlist: never ``model_dump()`` of the Conversation. The
+    untrusted client projection is a sibling of ``structured`` and cannot
+    appear here. ``structured`` values are the server-authored canonical
+    fields, not the projection.
+    """
+    structured = getattr(conversation, 'structured', None)
+    structured_card: Dict[str, Any] = {}
+    for field in _CITATION_STRUCTURED_FIELDS:
+        if isinstance(structured, dict):
+            value: Any = structured.get(field, '')
+        elif structured is None:
+            value = ''
+        else:
+            value = getattr(structured, field, '')
+        if value is None:
+            value = ''
+        elif field == 'category':
+            enum_value = getattr(value, 'value', None)
+            if enum_value is not None:
+                value = enum_value
+        structured_card[field] = value
+    return {
+        'id': getattr(conversation, 'id', ''),
+        'created_at': getattr(conversation, 'created_at', None),
+        'started_at': getattr(conversation, 'started_at', None),
+        'finished_at': getattr(conversation, 'finished_at', None),
+        'structured': structured_card,
+    }

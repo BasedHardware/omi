@@ -1,20 +1,23 @@
-import { Plugin, PluginStat } from '../components/types';
+import { Plugin } from '../components/types';
 import { headers } from 'next/headers';
 import { CompactPluginCard } from '../components/plugin-card/compact';
 import { CategoryBreadcrumb } from '../components/category-breadcrumb';
 import { AppActionButton } from '../components/app-action-button';
 import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
 import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
+import { PRODUCT_INFO } from '@/src/app/components/product-banner/types';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
@@ -70,8 +73,6 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
-  const productUrl =
-    'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
   return {
     __html: JSON.stringify([
@@ -106,18 +107,18 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
       {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        name: 'OMI Necklace',
-        description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
+        name: 'Omi',
+        description: 'AI-powered wearable. Real-time AI voice assistant.',
         brand: {
           '@type': 'Brand',
           name: 'OMI',
         },
         offers: {
           '@type': 'Offer',
-          price: '69.99',
+          price: '89',
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
-          url: productUrl,
+          url: PRODUCT_INFO.url,
           priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split('T')[0], // Valid for 1 year
@@ -152,11 +153,13 @@ function getPlatformLink(userAgent: string) {
   const isAndroid = /android/i.test(userAgent);
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
-  return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-    : isIOS
-    ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-    : 'https://omi.me';
+  if (isAndroid) {
+    return 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  }
+  if (isIOS) {
+    return 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
+  }
+  return 'https://omi.me';
 }
 
 // Helper function to format date
@@ -168,19 +171,17 @@ function formatDate(dateString: string): string {
   });
 }
 
-export default async function PluginDetailView({ params }: { params: { id: string } }) {
+export default async function PluginDetailView(props: {
+  params: Promise<{ id: string }>;
+}) {
+  const params = await props.params;
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
-    throw new Error('App not found');
+    notFound();
   }
 
-  const statsResponse = await fetch(
-    'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
-  );
-  const stats = (await statsResponse.json()) as PluginStat[];
-
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent);
 
   // Get related apps based on category
@@ -214,7 +215,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
             <div className="lg:col-span-2">
               <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
                 <Image
-                  src={plugin.image}
+                  src={plugin.image || '/logo.webp'}
                   alt={plugin.name}
                   className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                   width={500}
@@ -347,7 +348,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
                   <div className="text-sm font-medium text-gray-400">Capabilities</div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 pl-7">
-                  {Array.from(plugin.capabilities).map((cap) => (
+                  {Array.from(plugin.capabilities ?? []).map((cap) => (
                     <span
                       key={cap}
                       className="rounded-full bg-[#1A1F2E] px-3 py-1 text-sm text-white"
@@ -367,12 +368,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
             </h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {relatedApps.map((app, index) => (
-                <CompactPluginCard
-                  key={app.id}
-                  plugin={app}
-                  stat={stats.find((s) => s.id === app.id)}
-                  index={index + 1}
-                />
+                <CompactPluginCard key={app.id} plugin={app} index={index + 1} />
               ))}
             </div>
           </section>

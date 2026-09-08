@@ -8,19 +8,19 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+
+import 'task_categorization.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/action_item_shimmer_widget.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
-
-enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -81,7 +81,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
-        provider.fetchActionItems(showShimmer: true);
+        provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
       if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
@@ -114,14 +114,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       _taskGoalLinks.remove(taskId);
     }
     SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
-  }
-
-  void _attachTaskToGoal(String taskId, String goalId) {
-    setState(() {
-      _taskGoalLinks[taskId] = goalId;
-    });
-    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
-    HapticFeedback.lightImpact();
   }
 
   String? _getGoalTitleForTask(ActionItemWithMetadata item) {
@@ -322,8 +314,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           showMenu();
         },
         child: Container(
-          width: 36,
-          height: 36,
+          width: 48,
+          height: 48,
           decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
           child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
         ),
@@ -353,48 +345,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     List<ActionItemWithMetadata> items,
     bool showCompleted,
   ) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-    final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
-    final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
-      TaskCategory.today: [],
-      TaskCategory.tomorrow: [],
-      TaskCategory.noDeadline: [],
-      TaskCategory.later: [],
-      TaskCategory.overdue: [],
-    };
-
-    for (var item in items) {
-      // Skip completed items unless showing completed
-      if (item.completed && !showCompleted) continue;
-      if (!item.completed && showCompleted) continue;
-
-      if (item.dueAt == null) {
-        // No deadline tasks older than 7 days go to overdue
-        if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-          categorized[TaskCategory.overdue]!.add(item);
-        } else {
-          categorized[TaskCategory.noDeadline]!.add(item);
-        }
-      } else {
-        final dueDate = item.dueAt!;
-        if (!showCompleted && dueDate.isBefore(startOfToday)) {
-          // Due date in the past → overdue
-          categorized[TaskCategory.overdue]!.add(item);
-        } else if (dueDate.isBefore(startOfTomorrow)) {
-          categorized[TaskCategory.today]!.add(item);
-        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-          categorized[TaskCategory.tomorrow]!.add(item);
-        } else {
-          categorized[TaskCategory.later]!.add(item);
-        }
-      }
-    }
-
-    return categorized;
+    // Extracted to task_categorization.dart so the bucketing rule is testable
+    // against the shared contracts/parity fixtures.
+    return categorizeTasks(items, showCompleted);
   }
 
   String _getCategoryTitle(BuildContext context, TaskCategory category) {
@@ -598,7 +551,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: const [
+        SliverPadding(padding: EdgeInsets.only(top: 16)),
+        ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
   }
 
   Widget _buildEmptyTasksList() {
@@ -828,46 +789,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ...goals.map((goal) => _buildGoalItem(goal, actionProvider)),
               const SizedBox(height: 8),
             ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildGoalDropTile(Goal? goal) {
-    return DragTarget<ActionItemWithMetadata>(
-      onWillAcceptWithDetails: (details) => goal != null,
-      onAcceptWithDetails: (details) {
-        if (goal == null) return;
-        PlatformManager.instance.analytics.taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
-        _attachTaskToGoal(details.data.id, goal.id);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty && goal != null;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(goal == null ? 0.04 : 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isHovering ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.08),
-              width: 1,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              goal?.title ?? '',
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              style: TextStyle(
-                color: goal == null ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.9),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.2,
-              ),
-            ),
           ),
         );
       },
@@ -1765,7 +1686,10 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1773,7 +1697,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.08),
+                      fillColor: Colors.white.withValues(alpha: 0.08),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
@@ -1791,7 +1715,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                       children: [
                         Text(
                           context.l10n.current,
-                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -1800,7 +1724,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
+                            fillColor: Colors.white.withValues(alpha: 0.08),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1816,7 +1740,10 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(context.l10n.target, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,
@@ -1824,7 +1751,7 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
+                            fillColor: Colors.white.withValues(alpha: 0.08),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1935,7 +1862,10 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: titleController,
@@ -1943,7 +1873,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.08),
+                      fillColor: Colors.white.withValues(alpha: 0.08),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
@@ -1961,7 +1891,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                       children: [
                         Text(
                           context.l10n.current,
-                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -1970,7 +1900,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
+                            fillColor: Colors.white.withValues(alpha: 0.08),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1986,7 +1916,10 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(context.l10n.target, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: targetController,
@@ -1994,7 +1927,7 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
+                            fillColor: Colors.white.withValues(alpha: 0.08),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -2102,7 +2035,7 @@ class _CircularProgressPainter extends CustomPainter {
 
     // Draw background circle (empty part)
     final bgPaint = Paint()
-      ..color = color.withOpacity(0.2)
+      ..color = color.withValues(alpha: 0.2)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, radius, bgPaint);
 

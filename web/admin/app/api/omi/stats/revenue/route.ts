@@ -1,124 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import type Stripe from 'stripe';
 import { getOptionalStripe } from '@/lib/stripe';
+import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import {
+  AllSubscriptionSourcesFailedError,
+  MRR_STATUSES,
+  PIPELINE_STATUSES,
+  countNonUsdSubscriptions,
+  fetchOmiSubscriptions,
+  groupByProduct,
+  monthlyAmount,
+  OMI_PLAN_PRODUCTS,
+} from '@/lib/stripe-subscriptions';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
+
+function cacheKey(): string {
+  // v3: `trialingSubscriptions` can now be null, and `nonUsdSkipped` was added.
+  return `revenue:v3`;
+}
+
+export { cacheKey as revenueCacheKey };
+
+export async function computeRevenue() {
+  const stripe = getOptionalStripe();
+
+  if (!stripe) {
+    return {
+      mrr: 0,
+      arr: 0,
+      trialingSubscriptions: null,
+      nonUsdSkipped: 0,
+      byProduct: [],
+      unavailable: true,
+    };
+  }
+
+  const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+
+  const mrr = subscriptions.reduce((sum, subscription) => sum + monthlyAmount(subscription), 0);
+
+  // Trials are pipeline, not revenue: reported alongside MRR, never inside it. A failure here
+  // must not cost the MRR figure that already succeeded — but it stays null rather than 0, so a
+  // fetch failure can never render as "no trials".
+  let trialingSubscriptions: number | null = null;
+  let trialPartial = false;
+  try {
+    const trials = await fetchOmiSubscriptions(stripe, PIPELINE_STATUSES);
+    trialingSubscriptions = trials.subscriptions.length;
+    trialPartial = trials.partial;
+  } catch (error) {
+    console.error('Error fetching trialing subscriptions:', error);
+    trialPartial = true;
+  }
+
+  return {
+    mrr,
+    arr: mrr * 12,
+    trialingSubscriptions,
+    /** Subscriptions left out of `mrr` because they are priced in a non-USD currency. */
+    nonUsdSkipped: countNonUsdSubscriptions(subscriptions),
+    byProduct: groupByProduct(subscriptions, OMI_PLAN_PRODUCTS),
+    partial: partial || trialPartial,
+  };
+}
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const stripe = getOptionalStripe();
-    const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-    const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
+    const key = cacheKey();
 
-    if (!stripe || !monthlyPriceId || !annualPriceId) {
-      return NextResponse.json({ mrr: 0, arr: 0, unavailable: true });
+    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(key);
+    if (cached) {
+      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
-    // Fetch all active subscriptions with pagination
-    const fetchAllSubscriptions = async (priceId: string) => {
-      let allSubscriptions: Stripe.Subscription[] = [];
-      let hasMore = true;
-      let startingAfter: string | undefined = undefined;
-
-      while (hasMore) {
-        const params: Stripe.SubscriptionListParams = {
-          status: 'active',
-          price: priceId,
-          limit: 100,
-          expand: ['data.items.data.price'],
-        };
-
-        if (startingAfter) {
-          params.starting_after = startingAfter;
-        }
-
-        const subscriptions = await stripe.subscriptions.list(params);
-        allSubscriptions = allSubscriptions.concat(subscriptions.data);
-        
-        hasMore = subscriptions.has_more;
-        if (hasMore && subscriptions.data.length > 0) {
-          startingAfter = subscriptions.data[subscriptions.data.length - 1].id;
-        }
-      }
-
-      return allSubscriptions;
-    };
-
-    const results = await Promise.allSettled([
-      fetchAllSubscriptions(monthlyPriceId),
-      fetchAllSubscriptions(annualPriceId),
-    ]);
-
-    const monthlySubscriptions = results[0].status === 'fulfilled' ? results[0].value : [];
-    const annualSubscriptions = results[1].status === 'fulfilled' ? results[1].value : [];
-
-    if (results[0].status === 'rejected') {
-      console.error('Error fetching monthly subscriptions:', results[0].reason);
-    }
-    if (results[1].status === 'rejected') {
-      console.error('Error fetching annual subscriptions:', results[1].reason);
-    }
-
-    if (results.every((r) => r.status === 'rejected')) {
-      return NextResponse.json(
-        { error: 'All revenue data sources failed' },
-        { status: 502 }
-      );
-    }
-
-    let monthlyMRR = 0;
-    let annualMRR = 0;
-    let monthlyARR = 0;
-    let annualARR = 0;
-
-    // Calculate MRR from monthly subscriptions using Stripe's subscription amount
-    monthlySubscriptions.forEach((subscription) => {
-      // Use the subscription's current period amount (which is the MRR for monthly subscriptions)
-      const amount = subscription.items.data.reduce((sum, item) => {
-        const price = typeof item.price === 'string' ? null : item.price;
-        if (!price) return sum;
-        
-        const unitAmount = price.unit_amount || 0;
-        const quantity = item.quantity || 1;
-        return sum + (unitAmount * quantity);
-      }, 0);
-      
-      const totalAmount = amount / 100; // Convert from cents to dollars
-      monthlyMRR += totalAmount;
-      monthlyARR += totalAmount * 12;
-    });
-
-    // Calculate MRR from annual subscriptions - convert to monthly equivalent
-    annualSubscriptions.forEach((subscription) => {
-      // Use the subscription's current period amount and convert to monthly
-      const amount = subscription.items.data.reduce((sum, item) => {
-        const price = typeof item.price === 'string' ? null : item.price;
-        if (!price) return sum;
-        
-        const unitAmount = price.unit_amount || 0;
-        const quantity = item.quantity || 1;
-        return sum + (unitAmount * quantity);
-      }, 0);
-      
-      const totalAmount = amount / 100; // Convert from cents to dollars
-      annualMRR += totalAmount / 12; // Convert annual to monthly equivalent
-      annualARR += totalAmount;
-    });
-
-    // Calculate combined totals
-    const partial = results.some((r) => r.status === 'rejected');
-    const totalMRR = monthlyMRR + annualMRR;
-    const totalARR = monthlyARR + annualARR;
-
-    return NextResponse.json({
-      mrr: totalMRR,
-      arr: totalARR,
-      partial,
-    });
+    const payload = await computeRevenue();
+    await setPayload(key, payload);
+    return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (error) {
+    if (error instanceof AllSubscriptionSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error calculating revenue metrics:', error);
     return NextResponse.json(
       { error: 'Failed to calculate revenue metrics' },

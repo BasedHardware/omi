@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-same-subject-counted-once-per-evidence-source",
+  "violated_contract": "A threshold computed over subjects must count each subject once, however many sources describe it. When a counter sums a landed-history source with a pending-change source that can carry the same subject, the total moves with the vantage point: the subject counts once before it lands and twice afterwards. The threshold then fires on a total no single moment ever held, and a gate that was answerable while the change was in review turns red where the author can no longer answer it.",
+  "canonical_prevention": "Keep one authority per subject and let the second source contribute only what the first cannot see: before adding the pending-change evidence, drop the subjects the historical source already counted -- for a git-history counter, the ones HEAD's own message carries. Pin the three vantage points such a check runs from -- the pull request, that pull request's landed push, and the local pre-push run -- with a test each, so a counting change that makes them disagree fails in review.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check_failure_class_guard_ratchet.py",
+    ".github/scripts/test_check_failure_class_guard_ratchet.py"
+  ],
+  "evidence_prs": [10518],
+  "scope_hints": [
+    ".github/scripts/check_failure_class_guard_ratchet.py",
+    ".github/scripts/check_product_file_line_count_ratchet.py",
+    ".github/scripts/pr_metadata.py"
+  ],
+  "status": "open"
+}

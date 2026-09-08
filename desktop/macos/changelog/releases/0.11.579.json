@@ -1,0 +1,7 @@
+{
+  "version": "0.11.579",
+  "date": "2026-07-01",
+  "changes": [
+    "Fixed desktop recordings that could stay stuck after the recording window closed"
+  ]
+}

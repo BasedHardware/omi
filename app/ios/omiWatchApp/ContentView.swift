@@ -1,11 +1,9 @@
 import SwiftUI
 
-struct WatchRecorderView: View {
-    @ObservedObject var viewModel: WatchAudioRecorderViewModel
+struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
+    @ObservedObject var viewModel: Recorder
+    @StateObject private var presentationController = RecordingPresentationController()
     @State private var isPressed = false
-    @State private var pulseScale: CGFloat = 1.0
-    @State private var rippleScale: CGFloat = 1.0
-    @State private var rippleOpacity: Double = 0.0
     
     var body: some View {
         GeometryReader { geometry in
@@ -35,25 +33,8 @@ struct WatchRecorderView: View {
                         }
                     }) {
                         ZStack {
-                            // Pulsating ripple effect when recording
-                            if viewModel.isRecording {
-                                ForEach(0..<3, id: \.self) { index in
-                                    Circle()
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
-                                        .frame(width: 100, height: 100)
-                                        .scaleEffect(rippleScale)
-                                        .opacity(rippleOpacity)
-                                        .animation(
-                                            Animation.easeOut(duration: 1.5)
-                                                .repeatForever(autoreverses: false)
-                                                .delay(Double(index) * 0.3),
-                                            value: rippleScale
-                                        )
-                                        .onAppear {
-                                            rippleScale = 2.5
-                                            rippleOpacity = 0.8
-                                        }
-                                }
+                            if presentationController.phase.showsRecordingRipple {
+                                RecordingRippleView()
                             }
                             
                             // Main button circle (white background)
@@ -72,45 +53,77 @@ struct WatchRecorderView: View {
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .accessibilityLabel(
+                        viewModel.isRecording
+                            ? Text("watch.accessibility.stopRecording")
+                            : Text("watch.accessibility.startRecording")
+                    )
                     
                     Spacer()
                     
-                    Text(viewModel.isRecording ? "Listening" : "Tap to Record")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.bottom, 20)
+                    Group {
+                        if viewModel.isRecording, let startedAt = viewModel.recordingStartedAt {
+                            if presentationController.phase.showsRecordingRipple {
+                                Text("Listening")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .accessibilityLabel(Text("watch.accessibility.recordingInProgress"))
+                            } else {
+                                Text(startedAt, style: .timer)
+                                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                                    .monospacedDigit()
+                                    .accessibilityLabel(Text("watch.accessibility.elapsedRecordingTime"))
+                                    .accessibilityValue(Text(startedAt, style: .timer))
+                            }
+                        } else {
+                            Text("Tap to Record")
+                                .font(.system(size: 16, weight: .medium))
+                        }
+                    }
+                    .foregroundColor(.white)
+
+                    Spacer()
+                        .frame(height: 20)
                 }
             }
         }
-        .onAppear {
-            if viewModel.isRecording {
-                startRippleAnimation()
-            }
+        .task(id: viewModel.recordingStartedAt) {
+            await presentationController.update(
+                isRecording: viewModel.isRecording,
+                startedAt: viewModel.recordingStartedAt
+            )
         }
-        .onChange(of: viewModel.isRecording) { isRecording in
-            if isRecording {
-                startRippleAnimation()
-            } else {
-                stopRippleAnimation()
-            }
-        }
-    }
-    
-    private func startRippleAnimation() {
-        rippleScale = 1.0
-        rippleOpacity = 0.8
-        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
-            rippleScale = 2.5
-            rippleOpacity = 0.0
-        }
-    }
-    
-    private func stopRippleAnimation() {
-        rippleScale = 1.0
-        rippleOpacity = 0.0
     }
 }
 
-#Preview {
-    WatchRecorderView(viewModel: WatchAudioRecorderViewModel())
+private struct RecordingRippleView: View {
+    @State private var rippleScale: CGFloat = 1
+    @State private var rippleOpacity: Double = 0.8
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    .frame(width: 100, height: 100)
+                    .scaleEffect(rippleScale)
+                    .opacity(rippleOpacity)
+                    .animation(
+                        .easeOut(duration: 1.5)
+                            .repeatForever(autoreverses: false)
+                            .delay(Double(index) * 0.3),
+                        value: rippleScale
+                    )
+            }
+        }
+        .onAppear {
+            rippleScale = 2.5
+            rippleOpacity = 0
+        }
+    }
 }
+
+#if canImport(WatchConnectivity)
+    #Preview {
+        WatchRecorderView(viewModel: WatchAudioRecorderViewModel())
+    }
+#endif

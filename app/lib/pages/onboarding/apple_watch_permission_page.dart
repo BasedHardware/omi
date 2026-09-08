@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -156,10 +157,12 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
         _isRequestingPermission = false;
       });
 
-      AppSnackbar.showSnackbar(
-        context.l10n.errorRequestingPermission(e.toString()),
-        duration: const Duration(seconds: 3),
-      );
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          context.l10n.errorRequestingPermission(readableError(e)),
+          duration: const Duration(seconds: 3),
+        );
+      }
     }
   }
 
@@ -168,15 +171,26 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       final bool recordingStarted = await widget.connection.checkPermissionAndStartRecording();
 
       if (recordingStarted) {
-        AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
+        }
 
         widget.onPermissionGranted?.call();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       } else {
-        AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
+        if (mounted) {
+          AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
+        }
       }
     } catch (e) {
-      AppSnackbar.showSnackbar(context.l10n.errorStartingRecording(e.toString()), duration: const Duration(seconds: 3));
+      if (mounted) {
+        AppSnackbar.showSnackbar(
+          context.l10n.errorStartingRecording(readableError(e)),
+          duration: const Duration(seconds: 3),
+        );
+      }
     }
   }
 

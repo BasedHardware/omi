@@ -1,11 +1,31 @@
 """Tests for subscription restructure: Basic + Operator ($49) + Architect ($400),
-deprecate Unlimited for existing users. Issue #6734."""
+deprecate Unlimited for existing users. Issue #6734.
 
-import sys
-import types
+``utils.subscription`` pulls in ``database.users`` / ``database.user_usage`` at import
+time, and ``database.users`` imports back from ``utils.subscription`` (circular). The
+original test broke the cycle by pre-corrupting ``sys.modules`` at module scope with
+empty stubs. This file uses the sanctioned Tier-2 reserve seam: a module-scoped
+fixture exposing a context manager that installs the stubs via ``stub_modules`` and
+exec's ``utils.subscription`` fresh with ``load_module_fresh`` each time, then
+restores on exit. No ``importlib.reload`` and no reliance on a specific
+``utils.subscription`` object identity surviving across tests. See
+backend/docs/test_isolation.md and testing/import_isolation.py.
+"""
 
-# Mock external dependencies before importing app code
-_announcements_mod = types.ModuleType("database.announcements")
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+import pytest
+
+from models.users import PlanLimits, PlanType, Subscription
+from testing.import_isolation import load_module_fresh, stub_modules
+
+pytestmark = pytest.mark.slow
+
+_BACKEND = Path(__file__).resolve().parents[2]
+_SUBSCRIPTION_PATH = os.path.join(str(_BACKEND), "utils", "subscription.py")
 
 
 def _compare_versions(a, b):
@@ -18,87 +38,100 @@ def _compare_versions(a, b):
     return len(a_parts) - len(b_parts)
 
 
-_announcements_mod._compare_versions = _compare_versions
-sys.modules.setdefault("database.users", types.SimpleNamespace())
-sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
-sys.modules.setdefault("database.announcements", _announcements_mod)
+def _circular_import_fakes():
+    """Stubs for the circular-import deps of utils.subscription."""
+    announcements = ModuleType("database.announcements")
+    announcements._compare_versions = _compare_versions
+    # subscription.py imports the public name `compare_versions`; expose it on the
+    # stub so the fresh exec resolves without the real database.announcements.
+    announcements.compare_versions = _compare_versions
+    return {
+        "database.users": SimpleNamespace(),
+        "database.user_usage": SimpleNamespace(),
+        "database.announcements": announcements,
+    }
 
-from models.users import PlanType, PlanLimits, Subscription
+
+@pytest.fixture(scope="module")
+def load_subscription():
+    """Return a context manager that loads ``utils.subscription`` fresh.
+
+    Each invocation re-installs the circular-import stubs (via ``stub_modules``) and
+    re-execs ``utils.subscription`` so env-var-driven module constants are read
+    against the current environment. Nothing relies on a specific module object
+    surviving in ``sys.modules`` across tests, which keeps the file safe in a
+    multi-file pytest run.
+    """
+
+    @contextmanager
+    def _loader():
+        with stub_modules(_circular_import_fakes()):
+            yield load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
+
+    return _loader
 
 
-def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
+def test_operator_chat_cap_independent_from_unlimited(monkeypatch, load_subscription):
     """F4: Operator and Unlimited chat caps must be independently configurable."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "750")
     monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "3000")
 
-    # Re-import to pick up env vars
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    operator_limits = sub_mod.get_plan_limits(PlanType.operator)
-    unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        operator_limits = sub_mod.get_plan_limits(PlanType.operator)
+        unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 750
     assert unlimited_limits.chat_questions_per_month == 3000
     assert operator_limits.chat_questions_per_month != unlimited_limits.chat_questions_per_month
 
 
-def test_operator_and_neo_defaults(monkeypatch):
+def test_operator_and_neo_defaults(monkeypatch, load_subscription):
     """Operator defaults to 500, Neo defaults to 200."""
     monkeypatch.delenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", raising=False)
     monkeypatch.delenv("NEO_CHAT_QUESTIONS_PER_MONTH", raising=False)
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    operator_limits = sub_mod.get_plan_limits(PlanType.operator)
-    unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        operator_limits = sub_mod.get_plan_limits(PlanType.operator)
+        unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 500
     assert unlimited_limits.chat_questions_per_month == 200
 
 
-def test_architect_uses_dollar_cap():
+def test_architect_uses_dollar_cap(load_subscription):
     """Architect plan uses dollar cap, not question count."""
-    from utils.subscription import get_plan_limits
+    with load_subscription() as sub_mod:
+        limits = sub_mod.get_plan_limits(PlanType.architect)
 
-    limits = get_plan_limits(PlanType.architect)
     assert limits.chat_cost_usd_per_month is not None
     assert limits.chat_questions_per_month is None
     assert limits.transcription_seconds is None  # unlimited transcription
 
 
-def test_operator_is_paid():
-    from utils.subscription import is_paid_plan
+def test_operator_is_paid(load_subscription):
+    with load_subscription() as sub_mod:
+        assert sub_mod.is_paid_plan(PlanType.operator)
+        assert sub_mod.is_paid_plan(PlanType.architect)
+        assert sub_mod.is_paid_plan(PlanType.unlimited)
+        assert not sub_mod.is_paid_plan(PlanType.basic)
 
-    assert is_paid_plan(PlanType.operator)
-    assert is_paid_plan(PlanType.architect)
-    assert is_paid_plan(PlanType.unlimited)
-    assert not is_paid_plan(PlanType.basic)
 
-
-def test_filter_plans_for_basic_user():
+def test_filter_plans_for_basic_user(load_subscription):
     """Basic users see Neo, Operator, and Architect in purchase catalog."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
-
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.basic)
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic)
 
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'operator' in plan_ids
     assert 'architect' in plan_ids
 
 
-def test_filter_plans_keeps_legacy_for_current_subscriber():
+def test_filter_plans_keeps_legacy_for_current_subscriber(load_subscription):
     """Unlimited subscribers see their plan in catalog for active-plan detection."""
-    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
-
-    definitions = get_paid_plan_definitions()
-    filtered = filter_plans_for_user(definitions, PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited)
 
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' in plan_ids
@@ -106,12 +139,208 @@ def test_filter_plans_keeps_legacy_for_current_subscriber():
     assert 'architect' in plan_ids
 
 
-def test_legacy_client_adaptation():
-    """Old clients see Unlimited Plan (not legacy suffix) and no Operator."""
-    from utils.subscription import get_paid_plan_definitions, adapt_plans_for_legacy_client
+def test_filter_plans_mobile_new_user_sees_only_plus_and_unlimited_v2(load_subscription):
+    """New / never-paid mobile users see only the consumer tiers Plus + Unlimited.
 
-    definitions = get_paid_plan_definitions()
-    adapted = adapt_plans_for_legacy_client(definitions)
+    Neo (unlimited) is deprecated, and Operator + Architect are desktop-only, so
+    all three are hidden from the mobile purchase catalog.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android'):
+            filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert plan_ids == ['plus', 'unlimited_v2'], (platform, plan_ids)
+
+
+def test_filter_plans_desktop_hides_mobile_tiers(load_subscription):
+    """Desktop sells Operator + Architect; Plus/Unlimited/Neo are hidden there."""
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='macos')
+        plan_ids = [d['plan_id'] for d in filtered]
+        assert plan_ids == ['operator', 'architect'], plan_ids
+
+
+def test_filter_plans_hides_neo_on_mobile_for_non_neo_subscribers(load_subscription):
+    """Neo is current-Neo only. Architect/Plus/Unlimited/basic must not see it.
+
+    Regression: `ever_purchased` was any paid plan, so Architect subscribers
+    saw Neo on the phone sheet next to cheaper Plus. Do not restore that leak.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for plan in (PlanType.basic, PlanType.plus, PlanType.unlimited_v2):
+            filtered = sub_mod.filter_plans_for_user(definitions, plan, platform='ios')
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert 'unlimited' not in plan_ids, (plan, plan_ids)
+            assert plan_ids == ['plus', 'unlimited_v2'], (plan, plan_ids)
+
+
+def test_filter_plans_mobile_desktop_plans_are_manage_only(load_subscription):
+    """Operator/Architect on iOS/Android see only their current plan.
+
+    Cheaper mobile SKUs must not appear: Continue onto them is an immediate
+    prorated swap that strips desktop. Desktop/web keep the full desktop catalog.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android'):
+            architect = [
+                d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.architect, platform=platform)
+            ]
+            operator = [
+                d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.operator, platform=platform)
+            ]
+            assert architect == ['architect'], (platform, architect)
+            assert operator == ['operator'], (platform, operator)
+
+        desktop = [
+            d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.architect, platform='macos')
+        ]
+        assert desktop == ['operator', 'architect'], desktop
+
+
+def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber(load_subscription):
+    """Current Neo subscribers (including cancel-at-period-end) still see Neo to manage it.
+
+    Plus + Unlimited stay visible so they can migrate off the deprecated SKU.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform='android')
+
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert 'unlimited' in plan_ids
+    assert 'plus' in plan_ids
+    assert 'unlimited_v2' in plan_ids
+    assert 'architect' not in plan_ids
+    assert 'operator' not in plan_ids
+
+
+def test_filter_plans_hides_neo_on_web_for_new_user(load_subscription):
+    """Web sells the full new catalog (Plus + Unlimited + Operator + Architect);
+    deprecated Neo is hidden from the web purchase catalog.
+
+    Regression: web (X-App-Platform: web) previously hid nothing, so Neo was
+    offered for purchase alongside the new tiers. Neo purchase is restricted to
+    existing subscribers only.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert 'unlimited' not in plan_ids  # Neo hidden
+    assert 'plus' in plan_ids
+    assert 'unlimited_v2' in plan_ids
+    assert 'operator' in plan_ids
+    assert 'architect' in plan_ids
+
+
+def test_filter_plans_shows_neo_on_web_for_current_neo_subscriber(load_subscription):
+    """Existing Neo subscribers still see Neo on web so they can manage/cancel."""
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform='web')
+    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+
+def test_filter_plans_keeps_neo_for_unknown_platform(load_subscription):
+    """A header-less / unknown platform is still unfiltered — Neo stays visible."""
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None)
+
+    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+
+def test_filter_plans_hides_neo_on_windows_for_new_user(load_subscription):
+    """New / never-paid Windows desktop users don't see Neo — same as macOS desktop.
+
+    Regression for the platform defect: _platform_hidden_plans only hid Neo for
+    'macos', so a Windows client would have been offered the deprecated Neo plan.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows')
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert 'unlimited' not in plan_ids
+    assert 'operator' in plan_ids
+    assert 'architect' in plan_ids
+
+
+def test_neo_hidden_from_purchase_on_every_client_platform(load_subscription):
+    """Reusable guard: the deprecated Neo plan is never offered for purchase to a
+    new user on ANY real client platform.
+
+    Twice now a platform was omitted from the Neo-hidden set and started offering
+    Neo: first Windows (only 'macos' was hidden), then web (hid nothing). This
+    pins the invariant across every X-App-Platform a client actually sends, so the
+    next platform added can't silently reintroduce the deprecated-plan-for-sale bug.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android', 'macos', 'windows', 'web'):
+            filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert 'unlimited' not in plan_ids, (platform, plan_ids)
+            assert plan_ids, platform  # never an empty catalog
+
+
+def test_windows_full_catalog_matches_macos_canonical(load_subscription):
+    """End-to-end catalog resolution for a Windows client (X-App-Platform: windows).
+
+    Pins the fix: a Windows client gets the SAME catalog macOS gets — Operator +
+    Architect visible under their canonical titles, Neo hidden from a new basic
+    desktop user — and NEVER the legacy 'Omi Pro' / 'Unlimited Plan' rename that
+    adapt_plans_for_legacy_client produces for pre-rollout clients.
+    """
+    with load_subscription() as sub_mod:
+        # Windows is a modern desktop client → new catalog, no legacy adaptation.
+        assert sub_mod.should_show_new_plans('windows', '0.1.0') is True
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows')
+    by_id = {d['plan_id']: d for d in filtered}
+    assert 'operator' in by_id
+    assert 'architect' in by_id
+    assert 'unlimited' not in by_id  # Neo hidden on desktop for a new user
+    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['architect']['title'] == 'Architect'
+    titles = [d['title'] for d in filtered]
+    assert 'Omi Pro' not in titles
+    assert 'Unlimited Plan' not in titles
+
+
+def test_windows_is_a_desktop_platform(load_subscription):
+    """Windows lives in the single-source-of-truth desktop platform set and tokens."""
+    with load_subscription() as sub_mod:
+        assert 'windows' in sub_mod.DESKTOP_PLATFORMS
+        assert 'macos' in sub_mod.DESKTOP_PLATFORMS
+        assert 'windows' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
+        assert 'desktop' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
+        # Mobile is never desktop.
+        assert 'ios' not in sub_mod.DESKTOP_PLATFORMS
+        assert 'android' not in sub_mod.DESKTOP_PLATFORMS
+
+
+def test_desktop_to_consumer_plan_change_is_blocked(load_subscription):
+    """Architect/Operator cannot swap onto Plus/Unlimited/Neo. Operator ↔ Architect stays open."""
+    with load_subscription() as sub_mod:
+        err = sub_mod.desktop_to_consumer_plan_change_error
+        for current in (PlanType.architect, PlanType.operator):
+            for target in (PlanType.plus, PlanType.unlimited_v2, PlanType.unlimited, PlanType.basic):
+                assert err(current, target), (current, target)
+        assert err(PlanType.architect, PlanType.operator) is None
+        assert err(PlanType.operator, PlanType.architect) is None
+        assert err(PlanType.plus, PlanType.unlimited_v2) is None
+        assert err(PlanType.unlimited, PlanType.plus) is None
+
+
+def test_legacy_client_adaptation(load_subscription):
+    """Old clients see Unlimited Plan (not legacy suffix) and no Operator."""
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        adapted = sub_mod.adapt_plans_for_legacy_client(definitions)
 
     plan_ids = [d['plan_id'] for d in adapted]
     assert 'operator' not in plan_ids
@@ -126,66 +355,118 @@ def test_legacy_client_adaptation():
     assert architect_def['title'] == 'Omi Pro'
 
 
-def test_version_gating_macos_always_new():
+def test_version_gating_macos_always_new(load_subscription):
     """macOS always gets new plans (no version header = True)."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('macos', None) is True
+        assert sub_mod.should_show_new_plans('macos', '99.99.999') is True
 
-    assert should_show_new_plans('macos', None) is True
-    assert should_show_new_plans('macos', '99.99.999') is True
+
+def test_version_gating_windows_always_new(load_subscription):
+    """Windows is a desktop platform: always gets the new Operator + Architect catalog.
+
+    Regression for the platform-recognition defect where only 'macos' was treated
+    as desktop, so Windows (X-App-Platform: windows) fell through to the legacy
+    catalog — hiding Operator and renaming Architect→'Omi Pro'. Windows defaults
+    permissive (pre-release), so every version and a missing version qualify.
+    """
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('windows', None) is True
+        assert sub_mod.should_show_new_plans('windows', '1.0.0') is True
+        assert sub_mod.should_show_new_plans('windows', '0.0.1') is True
+        assert sub_mod.should_show_new_plans('windows', '99.99.999') is True
+        # Case-insensitive, matching the macOS/mobile branches.
+        assert sub_mod.should_show_new_plans('Windows', '1.0.0') is True
+        # Unparseable version fails open on desktop (same as macOS).
+        assert sub_mod.should_show_new_plans('windows', 'not.a.version') is True
 
 
-def test_version_gating_mobile_requires_version():
+def test_version_gating_web_always_new(load_subscription):
+    """Web is an always-latest client: always gets the new catalog, version-agnostic."""
+    with load_subscription() as sub_mod:
+        assert 'web' in sub_mod.WEB_PLATFORMS
+        assert sub_mod.should_show_new_plans('web', None) is True
+        assert sub_mod.should_show_new_plans('web', '0.0.1') is True
+        assert sub_mod.should_show_new_plans('web', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('Web', '1.0.0') is True  # case-insensitive
+
+
+def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
+    """End-to-end catalog resolution for a web client (X-App-Platform: web).
+
+    Web renders the full new catalog under canonical titles — Plus + Unlimited
+    (mobile tiers) AND Operator + Architect (desktop tiers) — never the legacy
+    'Omi Pro' / 'Unlimited Plan' rename, and never deprecated Neo for a new user.
+    """
+    with load_subscription() as sub_mod:
+        new_plans_enabled = sub_mod.should_show_new_plans('web', None)
+        assert new_plans_enabled is True
+        definitions = sub_mod.get_paid_plan_definitions()
+        # No legacy adaptation for web (new_plans_enabled) → raw canonical catalog.
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
+    by_id = {d['plan_id']: d for d in filtered}
+    assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
+    assert 'unlimited' not in by_id  # Neo hidden
+    assert by_id['operator']['title'] == 'Operator'
+    assert by_id['architect']['title'] == 'Architect'
+    assert by_id['unlimited_v2']['title'] == 'Unlimited'
+    titles = [d['title'] for d in filtered]
+    assert 'Omi Pro' not in titles
+    assert 'Unlimited Plan' not in titles
+
+
+def test_version_gating_mobile_requires_version(load_subscription):
     """Mobile requires version header and must meet minimum."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', None) is False
+        assert sub_mod.should_show_new_plans('ios', None) is False
 
-    assert should_show_new_plans('android', None) is False
-    assert should_show_new_plans('ios', None) is False
-
-    assert should_show_new_plans('android', '99.99.999') is True
-    assert should_show_new_plans('ios', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('android', '99.99.999') is True
+        assert sub_mod.should_show_new_plans('ios', '99.99.999') is True
 
 
-def test_version_gating_old_mobile_gets_legacy():
+def test_version_gating_old_mobile_gets_legacy(load_subscription):
     """Old mobile builds get legacy catalog."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '0.0.1') is False
+        assert sub_mod.should_show_new_plans('ios', '0.0.1') is False
 
-    assert should_show_new_plans('android', '0.0.1') is False
-    assert should_show_new_plans('ios', '0.0.1') is False
 
-
-def test_version_gating_exact_threshold():
+def test_version_gating_exact_threshold(load_subscription):
     """Exact threshold version gets new plans."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '1.0.530') is True
+        assert sub_mod.should_show_new_plans('ios', '1.0.530') is True
+        assert sub_mod.should_show_new_plans('macos', '0.11.324') is True
 
-    assert should_show_new_plans('android', '1.0.530') is True
-    assert should_show_new_plans('ios', '1.0.530') is True
-    assert should_show_new_plans('macos', '0.11.324') is True
 
-
-def test_version_gating_just_below_threshold():
+def test_version_gating_just_below_threshold(load_subscription):
     """One version below threshold gets legacy."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('android', '1.0.529') is False
+        assert sub_mod.should_show_new_plans('ios', '1.0.529') is False
+        assert sub_mod.should_show_new_plans('macos', '0.11.323') is False
 
-    assert should_show_new_plans('android', '1.0.529') is False
-    assert should_show_new_plans('ios', '1.0.529') is False
-    assert should_show_new_plans('macos', '0.11.323') is False
 
-
-def test_version_gating_malformed_version():
+def test_version_gating_malformed_version(load_subscription):
     """Malformed version: macOS fail-open, mobile fail-closed."""
-    from utils.subscription import should_show_new_plans
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans('macos', 'not.a.version') is True
+        assert sub_mod.should_show_new_plans('android', 'not.a.version') is False
+        assert sub_mod.should_show_new_plans('ios', 'not.a.version') is False
 
-    assert should_show_new_plans('macos', 'not.a.version') is True
-    assert should_show_new_plans('android', 'not.a.version') is False
-    assert should_show_new_plans('ios', 'not.a.version') is False
 
+def test_version_gating_unknown_platform(load_subscription):
+    """Unknown / unrecognized platform gets legacy catalog.
 
-def test_version_gating_unknown_platform():
-    """Unknown platform gets legacy catalog."""
-    from utils.subscription import should_show_new_plans
-
-    assert should_show_new_plans(None, None) is False
-    assert should_show_new_plans('windows', '1.0.0') is False
+    'linux' is not a shipping desktop plan platform, so it stays on the legacy
+    catalog (see DESKTOP_PLATFORMS — only macOS and Windows are wired for plans).
+    """
+    with load_subscription() as sub_mod:
+        assert sub_mod.should_show_new_plans(None, None) is False
+        assert sub_mod.should_show_new_plans('linux', '1.0.0') is False
+        # 'web' is NOT unknown: it is an always-latest client that always gets
+        # the new catalog (see test_version_gating_web_always_new).
 
 
 def test_subscription_deprecation_fields():
@@ -201,41 +482,34 @@ def test_subscription_deprecation_fields():
     assert sub2.deprecation_message is None
 
 
-def test_operator_price_id_mapping(monkeypatch):
+def test_operator_price_id_mapping(monkeypatch, load_subscription):
     """Operator price IDs resolve to operator plan type."""
     monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_op_monthly")
     monkeypatch.setenv("STRIPE_OPERATOR_ANNUAL_PRICE_ID", "price_op_annual")
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    assert sub_mod.get_plan_type_from_price_id("price_op_monthly") == PlanType.operator
-    assert sub_mod.get_plan_type_from_price_id("price_op_annual") == PlanType.operator
+    with load_subscription() as sub_mod:
+        assert sub_mod.get_plan_type_from_price_id("price_op_monthly") == PlanType.operator
+        assert sub_mod.get_plan_type_from_price_id("price_op_annual") == PlanType.operator
 
 
-def test_plan_features_differentiate_operator_neo(monkeypatch):
+def test_plan_features_differentiate_operator_neo(monkeypatch, load_subscription):
     """Operator and Neo show separate feature lists with their own caps."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "600")
     monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "300")
 
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-
-    op_features = sub_mod.get_plan_features(PlanType.operator)
-    neo_features = sub_mod.get_plan_features(PlanType.unlimited)
+    with load_subscription() as sub_mod:
+        op_features = sub_mod.get_plan_features(PlanType.operator)
+        neo_features = sub_mod.get_plan_features(PlanType.unlimited)
 
     assert "600 chat questions per month" in op_features
     assert "300 chat questions per month" in neo_features
+    assert "Desktop capture with Free-tier allowance" in neo_features
+    assert "No desktop access" not in neo_features
 
 
-def test_plan_display_names():
-    from utils.subscription import get_plan_display_name
-
-    assert get_plan_display_name(PlanType.basic) == 'Free'
-    assert get_plan_display_name(PlanType.operator) == 'Operator'
-    assert get_plan_display_name(PlanType.architect) == 'Architect'
-    assert get_plan_display_name(PlanType.unlimited) == 'Neo'
+def test_plan_display_names(load_subscription):
+    with load_subscription() as sub_mod:
+        assert sub_mod.get_plan_display_name(PlanType.basic) == 'Free'
+        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Operator'
+        assert sub_mod.get_plan_display_name(PlanType.architect) == 'Architect'
+        assert sub_mod.get_plan_display_name(PlanType.unlimited) == 'Neo'

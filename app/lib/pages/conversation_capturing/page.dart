@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,7 +18,9 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/conversation_photo_image.dart';
+import 'package:omi/widgets/media_viewer_page.dart';
+import 'package:omi/widgets/transcript.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -32,12 +32,13 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
+  final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
+
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
   bool _isMuted = false;
-  final ScrollController _timelineScrollController = ScrollController();
 
   @override
   void initState() {
@@ -47,6 +48,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
       ..repeat(reverse: true);
     super.initState();
+  }
+
+  TranscriptScrollState _scrollStateFor(String sessionId) {
+    return _transcriptScrollStateStore.forSession(sessionId);
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
@@ -89,7 +94,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   void dispose() {
     _controller?.dispose();
     _animationController.dispose();
-    _timelineScrollController.dispose();
     super.dispose();
   }
 
@@ -124,7 +128,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
         return;
       }
       showDialog(
@@ -157,8 +163,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 onConfirm: () async {
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  }
                 },
               );
             },
@@ -173,6 +181,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         final effectivelyMuted = _isMuted || provider.isCallActive;
+        final transcriptSessionId =
+            provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
+        final transcriptScrollState = _scrollStateFor(transcriptSessionId);
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -234,15 +245,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(provider)
+                                      ? _buildChronologicalTimeline(provider, transcriptSessionId,
+                                          transcriptScrollState, widget.topConversationId ?? provider.topConversationId)
                                       : getTranscriptWidget(
                                           false,
                                           provider.segments,
                                           provider.photos,
                                           deviceProvider.connectedDevice,
-                                          bottomMargin: 150,
+                                          bottomMargin: 0,
                                           suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
+                                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                          followLatest: true,
+                                          scrollState: transcriptScrollState,
+                                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+                                          contentVersion: provider.segmentsPhotosVersion,
                                           onAcceptSuggestion: (suggestion) {
                                             provider.assignSpeakerToConversation(
                                               suggestion.speakerId,
@@ -383,7 +400,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(CaptureProvider provider) {
+  Widget _buildChronologicalTimeline(
+    CaptureProvider provider,
+    String sessionId,
+    TranscriptScrollState scrollState,
+    String? conversationId,
+  ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
@@ -402,32 +424,38 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       photoGroups.add(currentGroup);
     }
 
-    final totalItems = photoGroups.length + segments.length;
+    final leadingItems = [
+      for (var index = 0; index < photoGroups.length; index++)
+        Padding(
+          padding: EdgeInsets.only(top: index == 0 ? 16 : 0),
+          child: _buildPhotoGroupTimelineItem(photoGroups[index], photos, conversationId),
+        ),
+    ];
 
-    // Auto-scroll to bottom after frame renders
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_timelineScrollController.hasClients) {
-        _timelineScrollController.jumpTo(_timelineScrollController.position.maxScrollExtent);
-      }
-    });
-
-    return ListView.builder(
-      controller: _timelineScrollController,
-      padding: const EdgeInsets.only(top: 16, bottom: 180),
-      itemCount: totalItems,
-      itemBuilder: (context, index) {
-        // Show photo groups first, then transcript below
-        if (index < photoGroups.length) {
-          return _buildPhotoGroupTimelineItem(photoGroups[index], photos);
-        }
-        final segIndex = index - photoGroups.length;
-        if (segIndex >= segments.length) return const SizedBox.shrink();
-        return _buildTranscriptTimelineItem(segments[segIndex], provider);
-      },
+    return TranscriptWidget(
+      key: ValueKey('live-transcript-$sessionId'),
+      segments: segments,
+      horizontalMargin: false,
+      topMargin: false,
+      separator: false,
+      canDisplaySeconds: false,
+      bottomMargin: 0,
+      followLatest: true,
+      scrollState: scrollState,
+      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+      contentVersion: provider.segmentsPhotosVersion,
+      layoutIdentity: 'photo-timeline',
+      leadingItems: leadingItems,
+      leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider),
     );
   }
 
-  Widget _buildPhotoGroupTimelineItem(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos) {
+  Widget _buildPhotoGroupTimelineItem(
+    List<ConversationPhoto> group,
+    List<ConversationPhoto> allPhotos,
+    String? conversationId,
+  ) {
     final firstPhoto = group.first;
     final timeStr =
         '${firstPhoto.createdAt.hour.toString().padLeft(2, '0')}:${firstPhoto.createdAt.minute.toString().padLeft(2, '0')}';
@@ -437,14 +465,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          Column(
+          const Column(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 16,
                 backgroundColor: Color(0xFF2A5D3E),
                 child: Icon(Icons.camera_alt, size: 16, color: Colors.white70),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),
@@ -467,15 +495,17 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
                     child: group.length == 1
                         ? GestureDetector(
-                            onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(group.first)),
-                            child: Image.memory(
-                              base64Decode(group.first.base64),
-                              fit: BoxFit.cover,
+                            onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(group.first), conversationId),
+                            child: SizedBox(
                               width: double.infinity,
-                              gaplessPlayback: true,
+                              child: ConversationPhotoImage(
+                                photo: group.first,
+                                conversationId: conversationId,
+                                fit: BoxFit.cover,
+                              ),
                             ),
                           )
-                        : _buildPhotoGrid(group, allPhotos),
+                        : _buildPhotoGrid(group, allPhotos, conversationId),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -500,17 +530,17 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  Widget _buildPhotoGrid(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos) {
+  Widget _buildPhotoGrid(List<ConversationPhoto> group, List<ConversationPhoto> allPhotos, String? conversationId) {
     if (group.length == 2) {
       return Row(
         children: group
             .map(
               (photo) => Expanded(
                 child: GestureDetector(
-                  onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                  onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                   child: AspectRatio(
                     aspectRatio: 1,
-                    child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                    child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                   ),
                 ),
               ),
@@ -528,10 +558,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               .map(
                 (photo) => Expanded(
                   child: GestureDetector(
-                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                      child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                     ),
                   ),
                 ),
@@ -544,10 +574,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ...secondRow.map(
                 (photo) => Expanded(
                   child: GestureDetector(
-                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo)),
+                    onTap: () => _openPhotoViewer(allPhotos, allPhotos.indexOf(photo), conversationId),
                     child: AspectRatio(
                       aspectRatio: 1,
-                      child: Image.memory(base64Decode(photo.base64), fit: BoxFit.cover, gaplessPlayback: true),
+                      child: ConversationPhotoImage(photo: photo, conversationId: conversationId, fit: BoxFit.cover),
                     ),
                   ),
                 ),
@@ -560,10 +590,24 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index) {
+  void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index, String? conversationId) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PhotoViewerPage(photos: allPhotos, initialIndex: index >= 0 ? index : 0),
+        builder: (context) => MediaViewerPage(
+          items: allPhotos.map((photo) {
+            final hasInlineBytes = photo.base64.isNotEmpty;
+            return MediaViewerItem(
+              base64: hasInlineBytes ? photo.base64 : null,
+              bytesLoader: hasInlineBytes ? null : () => loadConversationPhotoBytes(photo, conversationId),
+              mimeType: photo.contentType,
+              heroTag: photo.id,
+              showCaptionStrip: true,
+              caption: photo.description,
+              discarded: photo.discarded,
+            );
+          }).toList(),
+          initialIndex: index >= 0 ? index : 0,
+        ),
       ),
     );
   }

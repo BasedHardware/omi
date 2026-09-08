@@ -35,6 +35,7 @@ class PaymentMethodProvider extends ChangeNotifier {
   String _searchQuery = '';
 
   PayPalDetails? paypalDetails;
+  int _sessionGeneration = 0;
 
   List<Map<String, dynamic>> get supportedCountries => _supportedCountries;
   List<Map<String, dynamic>> get filteredCountries => _filteredCountries;
@@ -48,8 +49,10 @@ class PaymentMethodProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   Future getSupportedCountries() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     var res = await getStripeSupportedCountries();
+    if (generation != _sessionGeneration) return;
     _isLoading = false;
     if (res != null) {
       _supportedCountries = res.cast<Map<String, dynamic>>();
@@ -73,8 +76,10 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   void setActiveMethod(PaymentMethodType method) async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     var res = await setDefaultPaymentMethod(method.name);
+    if (generation != _sessionGeneration) return;
     _isLoading = false;
     if (res) {
       _activeMethod = method;
@@ -85,9 +90,11 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   Future getPaymentMethodsStatus() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
     var res = await fetchPaymentMethodsStatus();
+    if (generation != _sessionGeneration) return;
     _isLoading = false;
     if (res != null) {
       _payPalConnectionState = getPaymentConnectionState(res['paypal']);
@@ -106,7 +113,9 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   Future getPayPalDetails() async {
+    final generation = _sessionGeneration;
     var res = await fetchPayPalDetails();
+    if (generation != _sessionGeneration) return;
     if (res != null) {
       paypalDetails = res;
       notifyListeners();
@@ -122,7 +131,9 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   Future<String?> connectStripe() async {
+    final generation = _sessionGeneration;
     var res = await getStripeAccountLink(_selectedCountryId);
+    if (generation != _sessionGeneration) return null;
     if (res != null) {
       return res['url'];
     }
@@ -130,7 +141,9 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   Future<bool> checkStripeConnectionStatus() async {
+    final generation = _sessionGeneration;
     var res = await isStripeOnboardingComplete();
+    if (generation != _sessionGeneration) return false;
     _stripeConnectionState = res ? PaymentConnectionState.connected : PaymentConnectionState.inComplete;
     notifyListeners();
     return res;
@@ -157,7 +170,9 @@ class PaymentMethodProvider extends ChangeNotifier {
   }
 
   Future<void> connectPayPal(String email, String link) async {
+    final generation = _sessionGeneration;
     var res = await savePayPalDetails(email, link);
+    if (generation != _sessionGeneration) return;
     if (!res) {
       AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.paymentFailedToSavePaypal);
       return;
@@ -166,6 +181,20 @@ class PaymentMethodProvider extends ChangeNotifier {
     if (!isStripeConnected) {
       _activeMethod = PaymentMethodType.paypal;
     }
+    notifyListeners();
+  }
+
+  void clearUserData() {
+    _sessionGeneration++;
+    _activeMethod = null;
+    _isStripePolling = false;
+    _isLoading = false;
+    _stripeConnectionState = PaymentConnectionState.notConnected;
+    _payPalConnectionState = PaymentConnectionState.notConnected;
+    _filteredCountries = _supportedCountries;
+    _searchQuery = '';
+    _selectedCountryId = null;
+    paypalDetails = null;
     notifyListeners();
   }
 }

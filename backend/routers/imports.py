@@ -2,25 +2,32 @@
 Import endpoints for importing data from external sources.
 """
 
-import asyncio
+import logging
 import os
-import uuid
-from typing import List, Optional
+from typing import List
 
-from utils.executors import storage_executor
+from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 import database.import_jobs as import_jobs_db
-import database.conversations as conversations_db
-from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
+from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.multipart import IMPORT_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
+logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+class DeleteLimitlessConversationsResponse(BaseModel):
+    deleted_count: int
+    message: str
 
 
 @router.post(
@@ -28,6 +35,7 @@ TEMP_DIR = '_temp'
     response_model=ImportJobResponse,
     tags=['import'],
 )
+@max_part_size(IMPORT_MAX_PART_SIZE)
 async def import_limitless_data(
     file: UploadFile = File(...),
     language: str = 'en',
@@ -50,7 +58,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
     # Create import job
-    job = create_import_job(uid, ImportSourceType.limitless)
+    job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
     os.makedirs(TEMP_DIR, exist_ok=True)
@@ -58,17 +66,19 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        f = open(zip_path, 'wb')
+        f = await run_blocking(storage_executor, open, zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(storage_executor, f.write, contents)
+                await run_blocking(storage_executor, f.write, contents)
         finally:
             f.close()
     except Exception as e:
         # Clean up on error
-        import_jobs_db.update_import_job(
-            job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
+        await run_blocking(
+            db_executor,
+            import_jobs_db.update_import_job,
+            job.id,
+            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
         )
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
@@ -86,30 +96,42 @@ async def import_limitless_data(
     response_model=List[ImportJobResponse],
     tags=['import'],
 )
-async def get_import_jobs(
+def get_import_jobs(
     uid: str = Depends(auth.get_current_user_uid),
     limit: int = 50,
-):
+) -> List[ImportJobResponse]:
     """
     Get all import jobs for the current user.
 
     Returns:
         List of import jobs ordered by creation date (newest first)
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection.
+    limit = max(1, min(limit, 1000))
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
-    return [
-        ImportJobResponse(
-            job_id=job['id'],
-            status=ImportJobStatus(job['status']),
-            total_files=job.get('total_files'),
-            processed_files=job.get('processed_files'),
-            conversations_created=job.get('conversations_created'),
-            created_at=job.get('created_at'),
-            error=job.get('error'),
-        )
-        for job in jobs
-    ]
+    # Build each response individually so one malformed/legacy job (missing id, or a status value not in
+    # the ImportJobStatus enum) doesn't fail the whole list with a 500.
+    result: List[ImportJobResponse] = []
+    for job in jobs:
+        try:
+            result.append(
+                ImportJobResponse(
+                    job_id=job['id'],
+                    status=ImportJobStatus(job['status']),
+                    total_files=job.get('total_files'),
+                    processed_files=job.get('processed_files'),
+                    conversations_created=job.get('conversations_created'),
+                    conversations_skipped=job.get('conversations_skipped'),
+                    created_at=job.get('created_at'),
+                    error=job.get('error'),
+                )
+            )
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Skipping malformed import job for uid {uid}: {e}")
+            continue
+    return result
 
 
 @router.get(
@@ -117,7 +139,7 @@ async def get_import_jobs(
     response_model=ImportJobResponse,
     tags=['import'],
 )
-async def get_import_job_status(
+def get_import_job_status(
     job_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -139,22 +161,74 @@ async def get_import_job_status(
     if job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this import job")
 
+    # Coerce an out-of-enum/missing stored status to failed instead of 500ing the request
+    try:
+        status_val = ImportJobStatus(job.get('status'))
+    except (ValueError, TypeError):
+        status_val = ImportJobStatus.failed
+
     return ImportJobResponse(
         job_id=job['id'],
-        status=ImportJobStatus(job['status']),
+        status=status_val,
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
+        conversations_skipped=job.get('conversations_skipped'),
         created_at=job.get('created_at'),
         error=job.get('error'),
     )
 
 
+@router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
+def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Cancel a pending or processing import job."""
+    job = import_jobs_db.get_import_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
+    if job.get('status') not in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
+        raise HTTPException(status_code=409, detail="Only a pending or processing import can be cancelled")
+
+    import_jobs_db.update_import_job(job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'})
+    return ImportJobResponse(
+        job_id=job['id'],
+        status=ImportJobStatus.cancelled,
+        total_files=job.get('total_files'),
+        processed_files=job.get('processed_files'),
+        conversations_created=job.get('conversations_created'),
+        conversations_skipped=job.get('conversations_skipped'),
+        created_at=job.get('created_at'),
+        error='Cancelled by user',
+    )
+
+
+class DeleteImportJobResponse(BaseModel):
+    status: str
+    job_id: str
+
+
+@router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
+def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete a finished (completed, failed, or cancelled) import job."""
+    job = import_jobs_db.get_import_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
+    if job.get('status') in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
+        raise HTTPException(status_code=409, detail="Cancel the in-progress import before deleting it")
+
+    import_jobs_db.delete_import_job(job_id)
+    return {'status': 'ok', 'job_id': job_id}
+
+
 @router.delete(
     '/v1/import/limitless/conversations',
+    response_model=DeleteLimitlessConversationsResponse,
     tags=['import'],
 )
-async def delete_limitless_conversations(
+def delete_limitless_conversations(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -163,10 +237,9 @@ async def delete_limitless_conversations(
     Returns:
         Number of deleted conversations
     """
-    # TODO: This deletes all the other conversations as well (which were created in omi using the pendant)
-    # TODO: Add a flag to the conversation to indicate that it was imported
-    # deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
-
-    # return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
+    # Selective delete is not implemented here yet. Conversations created by the
+    # Limitless ZIP import path are stamped with imported=True (see Conversation
+    # and persist_imported_conversation). Do not delete by source=limitless alone —
+    # that also matches pendant/sync uploads.
 
     return {'deleted_count': 0, 'message': 'Successfully deleted 0 Limitless conversations'}
