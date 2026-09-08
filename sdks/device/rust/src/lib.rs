@@ -86,13 +86,29 @@ pub mod whisper {
             }
         }
 
+        /// Buffer PCM16 LE mono audio at 16 kHz, transcribing the entire buffer
+        /// once it contains at least five seconds of audio. Call [`Self::flush`]
+        /// at the end of the stream to transcribe any shorter final batch.
         pub fn append_pcm(&mut self, pcm: &[u8]) -> Result<Option<String>, String> {
             self.buf.extend_from_slice(pcm);
             if self.buf.len() < self.batch {
                 return Ok(None);
             }
-            let chunk = std::mem::take(&mut self.buf);
-            let text = (self.runner)(&chunk)?;
+            self.flush()
+        }
+
+        /// Transcribe all buffered audio, regardless of the batch threshold.
+        ///
+        /// An empty buffer returns `Ok(None)` without calling the runner.
+        /// Success clears the buffer, even when the transcript is empty. An
+        /// error retains all audio for an explicit retry with `flush()`; do not
+        /// append the same audio again. More audio may be appended after flushing.
+        pub fn flush(&mut self) -> Result<Option<String>, String> {
+            if self.buf.is_empty() {
+                return Ok(None);
+            }
+            let text = (self.runner)(&self.buf)?;
+            self.buf.clear();
             Ok(if text.is_empty() { None } else { Some(text) })
         }
     }
@@ -123,5 +139,156 @@ mod tests {
             parakeet_ws_url("https://parakeet.example/", 16000),
             "wss://parakeet.example/v3/stream?sample_rate=16000"
         );
+    }
+
+    #[cfg(feature = "stt-whisper")]
+    mod whisper_tests {
+        use super::super::whisper::WhisperTranscriber;
+        use std::cell::{Cell, RefCell};
+
+        #[test]
+        fn failed_batch_is_retained_for_explicit_append_retry() {
+            let pcm: Vec<u8> = (0..160_000).map(|i| (i % 256) as u8).collect();
+            let calls = Cell::new(0);
+            let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                assert_eq!(chunk, pcm.as_slice());
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    Err("runner failed".to_string())
+                } else {
+                    Ok("retried batch".to_string())
+                }
+            });
+
+            assert_eq!(
+                transcriber.append_pcm(&pcm),
+                Err("runner failed".to_string())
+            );
+            assert_eq!(calls.get(), 1);
+            assert_eq!(
+                transcriber.append_pcm(&[]),
+                Ok(Some("retried batch".to_string()))
+            );
+            assert_eq!(calls.get(), 2);
+        }
+
+        #[test]
+        fn empty_flush_does_not_call_runner() {
+            let mut transcriber = WhisperTranscriber::new(|_: &[u8]| {
+                panic!("empty buffers must not reach the runner")
+            });
+
+            assert_eq!(transcriber.flush(), Ok(None));
+            assert_eq!(transcriber.flush(), Ok(None));
+        }
+
+        #[test]
+        fn final_tail_is_flushed_once_and_more_audio_can_be_appended() {
+            let chunks = RefCell::new(Vec::new());
+            let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                chunks.borrow_mut().push(chunk.to_vec());
+                Ok("tail".to_string())
+            });
+
+            assert_eq!(transcriber.append_pcm(&[1, 2, 3, 4]), Ok(None));
+            assert!(chunks.borrow().is_empty());
+            assert_eq!(transcriber.flush(), Ok(Some("tail".to_string())));
+            assert_eq!(transcriber.flush(), Ok(None));
+            assert_eq!(*chunks.borrow(), vec![vec![1, 2, 3, 4]]);
+
+            assert_eq!(transcriber.append_pcm(&[5, 6]), Ok(None));
+            assert_eq!(chunks.borrow().len(), 1);
+            assert_eq!(transcriber.flush(), Ok(Some("tail".to_string())));
+            assert_eq!(*chunks.borrow(), vec![vec![1, 2, 3, 4], vec![5, 6]]);
+        }
+
+        #[test]
+        fn successful_empty_transcript_clears_buffer() {
+            let calls = Cell::new(0);
+            let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                assert_eq!(chunk, &[1, 2]);
+                calls.set(calls.get() + 1);
+                Ok(String::new())
+            });
+
+            assert_eq!(transcriber.append_pcm(&[1, 2]), Ok(None));
+            assert_eq!(transcriber.flush(), Ok(None));
+            assert_eq!(calls.get(), 1);
+            assert_eq!(transcriber.flush(), Ok(None));
+            assert_eq!(calls.get(), 1);
+        }
+
+        #[test]
+        fn full_batch_and_final_tail_are_transcribed_separately() {
+            let pcm = vec![7; 160_000];
+            let chunks = RefCell::new(Vec::new());
+            let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                chunks.borrow_mut().push(chunk.to_vec());
+                Ok("transcript".to_string())
+            });
+
+            assert_eq!(transcriber.append_pcm(&pcm[..159_998]), Ok(None));
+            assert!(chunks.borrow().is_empty());
+            assert_eq!(
+                transcriber.append_pcm(&pcm[159_998..]),
+                Ok(Some("transcript".to_string()))
+            );
+            assert_eq!(transcriber.append_pcm(&[8, 9]), Ok(None));
+            assert_eq!(chunks.borrow().len(), 1);
+            assert_eq!(transcriber.flush(), Ok(Some("transcript".to_string())));
+            assert_eq!(*chunks.borrow(), vec![pcm, vec![8, 9]]);
+        }
+
+        #[test]
+        fn failed_partial_or_full_buffer_is_retained_for_explicit_flush_retry() {
+            for length in [4, 160_000] {
+                let pcm: Vec<u8> = (0..length).map(|i| (i % 256) as u8).collect();
+                let calls = Cell::new(0);
+                let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                    assert_eq!(chunk, pcm.as_slice());
+                    calls.set(calls.get() + 1);
+                    if calls.get() == 1 {
+                        Err("runner failed".to_string())
+                    } else {
+                        Ok("retried buffer".to_string())
+                    }
+                });
+
+                if length < 160_000 {
+                    assert_eq!(transcriber.append_pcm(&pcm), Ok(None));
+                    assert_eq!(calls.get(), 0);
+                    assert_eq!(transcriber.flush(), Err("runner failed".to_string()));
+                } else {
+                    assert_eq!(
+                        transcriber.append_pcm(&pcm),
+                        Err("runner failed".to_string())
+                    );
+                }
+                assert_eq!(calls.get(), 1);
+                assert_eq!(transcriber.flush(), Ok(Some("retried buffer".to_string())));
+                assert_eq!(calls.get(), 2);
+                assert_eq!(transcriber.flush(), Ok(None));
+                assert_eq!(calls.get(), 2);
+            }
+        }
+
+        #[test]
+        fn oversized_append_transcribes_entire_buffer_in_one_call() {
+            let pcm: Vec<u8> = (0..160_004).map(|i| (i % 256) as u8).collect();
+            let calls = Cell::new(0);
+            let mut transcriber = WhisperTranscriber::new(|chunk: &[u8]| {
+                assert_eq!(chunk, pcm.as_slice());
+                calls.set(calls.get() + 1);
+                Ok("oversized batch".to_string())
+            });
+
+            assert_eq!(
+                transcriber.append_pcm(&pcm),
+                Ok(Some("oversized batch".to_string()))
+            );
+            assert_eq!(calls.get(), 1);
+            assert_eq!(transcriber.flush(), Ok(None));
+            assert_eq!(calls.get(), 1);
+        }
     }
 }
