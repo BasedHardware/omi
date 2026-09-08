@@ -8,10 +8,9 @@ type NobleLike = {
   waitForPoweredOnAsync?: (timeout?: number) => Promise<void>;
   startScanningAsync: (serviceUUIDs?: string[], allowDuplicates?: boolean) => Promise<void>;
   stopScanningAsync: () => Promise<void>;
-  discoverAsync?: () => AsyncGenerator<any, void, unknown>;
   connectAsync?: (idOrAddress: string) => Promise<any>;
-  on?: (event: string, listener: (...args: any[]) => void) => void;
-  removeListener?: (event: string, listener: (...args: any[]) => void) => void;
+  on: (event: string, listener: (...args: any[]) => void) => void;
+  removeListener: (event: string, listener: (...args: any[]) => void) => void;
   state?: string;
   startScanning?: (serviceUUIDs?: string[], allowDuplicates?: boolean, cb?: (err?: Error) => void) => void;
   stopScanning?: (cb?: () => void) => void;
@@ -74,44 +73,50 @@ export async function scanForDevices(timeoutMs = 5000): Promise<ScannedDevice[]>
   await ensurePoweredOn(noble);
 
   const byId = new Map<string, ScannedDevice>();
-  const deadline = Date.now() + timeoutMs;
-
-  await noble.startScanningAsync([], false);
-
+  // Own one event subscription and one deadline. Waiting for the next item of
+  // discoverAsync() cannot enforce a deadline when the adapter is quiet.
+  const onDiscover = (peripheral: any) => {
+    const id = String(peripheral.id || peripheral.address || '');
+    if (!id) return;
+    byId.set(id, {
+      id,
+      name: String(peripheral.advertisement?.localName || peripheral.advertisement?.name || ''),
+      rssi: Number(peripheral.rssi ?? 0) || 0,
+    });
+  };
+  let active = false;
+  let restart: Promise<void> = Promise.resolve();
+  let failScan: (error: unknown) => void = () => {};
+  const scanFailure = new Promise<never>((_, reject) => { failScan = reject; });
+  const onScanStop = () => {
+    if (!active || noble.state !== 'poweredOn') return;
+    // Bindings can pause discovery while connecting. Serialize resumes and
+    // recheck ownership so a queued resume cannot outlive this scan window.
+    restart = restart.then(async () => {
+      if (active && noble.state === 'poweredOn') await noble.startScanningAsync([], false);
+    });
+    void restart.catch(failScan);
+  };
+  noble.on('discover', onDiscover);
+  noble.on('scanStop', onScanStop);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    if (typeof noble.discoverAsync === 'function') {
-      for await (const peripheral of noble.discoverAsync()) {
-        const id = String(peripheral.id || peripheral.address || '');
-        if (id) {
-          byId.set(id, {
-            id,
-            name: String(peripheral.advertisement?.localName || peripheral.advertisement?.name || ''),
-            rssi: Number(peripheral.rssi ?? 0) || 0,
-          });
-        }
-        if (Date.now() >= deadline) break;
-      }
-    } else {
-      await new Promise<void>((resolve) => {
-        const onDiscover = (peripheral: any) => {
-          const id = String(peripheral.id || peripheral.address || '');
-          if (!id) return;
-          byId.set(id, {
-            id,
-            name: String(peripheral.advertisement?.localName || ''),
-            rssi: Number(peripheral.rssi ?? 0) || 0,
-          });
-        };
-        noble.on?.('discover', onDiscover);
-        const left = Math.max(0, deadline - Date.now());
-        setTimeout(() => {
-          noble.removeListener?.('discover', onDiscover);
-          resolve();
-        }, left);
-      });
-    }
+    await noble.startScanningAsync([], false);
+    active = true;
+    await Promise.race([
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, Math.max(0, timeoutMs)); }),
+      scanFailure,
+    ]);
   } finally {
-    await noble.stopScanningAsync();
+    active = false;
+    clearTimeout(timer);
+    noble.removeListener('discover', onDiscover);
+    noble.removeListener('scanStop', onScanStop);
+    try {
+      await restart;
+    } finally {
+      await noble.stopScanningAsync();
+    }
   }
 
   return [...byId.values()];
