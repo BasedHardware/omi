@@ -353,23 +353,63 @@ test("SQLite chat history stays on the main session unless chatSessionId is requ
     payloadHash: "sha256:main",
     revision: "revision-main",
   }), "generation-stored-main").kind).toBe("created");
+  expect(messages.admitHuman("account", message({
+    id: "padded-main",
+    createdAt: 160,
+    updatedAt: 160,
+    chatSessionId: " chat-main ",
+    payloadHash: "sha256:padded-main",
+    revision: "revision-padded-main",
+  }), "generation-padded-main").kind).toBe("created");
+  expect(messages.admitHuman("account", message({
+    id: "space-main",
+    createdAt: 170,
+    updatedAt: 170,
+    chatSessionId: "  ",
+    payloadHash: "sha256:space-main",
+    revision: "revision-space-main",
+  }), "generation-space-main").kind).toBe("created");
+  expect(messages.admitHuman("account", message({
+    id: "padded-named",
+    createdAt: 180,
+    updatedAt: 180,
+    chatSessionId: " session-alpha ",
+    payloadHash: "sha256:padded-named",
+    revision: "revision-padded-named",
+  }), "generation-padded-named").kind).toBe("created");
   const afterStoredMain = messages.readSnapshotSequence("account");
   expect(messages.listHistory("account", {
     limit: 10,
     snapshotSequence: afterStoredMain,
     olderThan: null,
-  }).messages.map((stored) => stored.id)).toEqual(["main", "stored-main"]);
+  }).messages.map((stored) => stored.id)).toEqual([
+    "main",
+    "stored-main",
+    "padded-main",
+    "space-main",
+  ]);
   expect(messages.listHistory("account", {
     limit: 10,
     snapshotSequence: afterStoredMain,
     olderThan: null,
     chatSessionId: "chat-main",
-  }).messages.map((stored) => stored.id)).toEqual(["main", "stored-main"]);
+  }).messages.map((stored) => stored.id)).toEqual([
+    "main",
+    "stored-main",
+    "padded-main",
+    "space-main",
+  ]);
   expect(messages.listHistory("account", {
     limit: 10,
     snapshotSequence: afterStoredMain,
     olderThan: null,
     chatSessionId: "session-alpha",
   }).messages.map((stored) => stored.id)).toEqual(["named"]);
+  expect(messages.listHistory("account", {
+    limit: 10,
+    snapshotSequence: afterStoredMain,
+    olderThan: null,
+    chatSessionId: " session-alpha ",
+  }).messages.map((stored) => stored.id)).toEqual(["padded-named"]);
   db.close();
 });

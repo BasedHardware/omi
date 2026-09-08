@@ -1062,6 +1062,30 @@ describe("worker request contract", () => {
       position: 3,
       chatSessionId: "session-alpha",
     });
+    await insertChatMessage({
+      id: "padded-main",
+      accountId: "test-account",
+      text: "space-padded chat-main",
+      createdAt: 2_500,
+      position: 4,
+      chatSessionId: " chat-main ",
+    });
+    await insertChatMessage({
+      id: "space-main",
+      accountId: "test-account",
+      text: "space-only chatSessionId",
+      createdAt: 2_600,
+      position: 5,
+      chatSessionId: "  ",
+    });
+    await insertChatMessage({
+      id: "padded-named",
+      accountId: "test-account",
+      text: "padded named stays named",
+      createdAt: 2_700,
+      position: 6,
+      chatSessionId: " session-alpha ",
+    });
 
     const listed = await fetchWorker("/v1/conversations?limit=50", {
       headers: authenticatedHeaders,
@@ -1071,7 +1095,11 @@ describe("worker request contract", () => {
       (
         (await listed.json()) as { items: Array<{ id: string; title: string }> }
       ).items.map((item) => item.id)
-    ).toEqual(["chat:session-alpha", MAIN_CONVERSATION_ID]);
+    ).toEqual([
+      "chat:session-alpha",
+      "chat: session-alpha ",
+      MAIN_CONVERSATION_ID,
+    ]);
 
     const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
       headers: authenticatedHeaders,
@@ -1081,7 +1109,7 @@ describe("worker request contract", () => {
       (
         (await mainHistory.json()) as { messages: Array<{ id: string }> }
       ).messages.map((message) => message.id)
-    ).toEqual(["main-key", "null-main"]);
+    ).toEqual(["main-key", "null-main", "padded-main", "space-main"]);
 
     const aliased = await fetchWorker(
       "/v1/chat-messages?limit=50&chatSessionId=chat-main",
@@ -1092,7 +1120,18 @@ describe("worker request contract", () => {
       (
         (await aliased.json()) as { messages: Array<{ id: string }> }
       ).messages.map((message) => message.id)
-    ).toEqual(["main-key", "null-main"]);
+    ).toEqual(["main-key", "null-main", "padded-main", "space-main"]);
+
+    const paddedAlias = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedAlias.status).toBe(200);
+    expect(
+      (
+        (await paddedAlias.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual([]);
 
     const named = await fetchWorker(
       "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
@@ -1104,6 +1143,17 @@ describe("worker request contract", () => {
         (await named.json()) as { messages: Array<{ id: string }> }
       ).messages.map((message) => message.id)
     ).toEqual(["named"]);
+
+    const paddedNamed = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20session-alpha%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedNamed.status).toBe(200);
+    expect(
+      (
+        (await paddedNamed.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["padded-named"]);
   });
 
   test("conversation pagination and query validation match neighboring list routes", async () => {

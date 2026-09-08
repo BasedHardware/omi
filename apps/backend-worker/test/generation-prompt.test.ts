@@ -311,12 +311,54 @@ describe("composeGenerationPrompt", () => {
         "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
       )
       .bind(
+        "padded-main",
+        "acct-a",
+        "human",
+        "stored as space-padded chat-main",
+        2,
+        JSON.stringify({ chatSessionId: " chat-main " }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "space-main",
+        "acct-a",
+        "human",
+        "stored as space-only chatSessionId",
+        3,
+        JSON.stringify({ chatSessionId: "  " }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
         "named-prior",
         "acct-a",
         "human",
         "named session words",
-        2,
+        4,
         JSON.stringify({ chatSessionId: "session-a" }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        "padded-named",
+        "acct-a",
+        "human",
+        "padded named stays named",
+        5,
+        JSON.stringify({ chatSessionId: " session-a " }),
         null
       )
       .run();
@@ -329,7 +371,7 @@ describe("composeGenerationPrompt", () => {
         "acct-a",
         "human",
         "What is on main?",
-        3,
+        6,
         JSON.stringify({ chatSessionId: null }),
         null
       )
@@ -344,7 +386,11 @@ describe("composeGenerationPrompt", () => {
     expect(fromNull).toEqual({
       kind: "ok",
       prompt: "What is on main?",
-      history: [{ role: "user", content: "stored as chat-main" }],
+      history: [
+        { role: "user", content: "stored as chat-main" },
+        { role: "user", content: "stored as space-padded chat-main" },
+        { role: "user", content: "stored as space-only chatSessionId" },
+      ],
     });
 
     await db
@@ -356,7 +402,7 @@ describe("composeGenerationPrompt", () => {
         "acct-a",
         "human",
         "Continue on main",
-        4,
+        7,
         JSON.stringify({ chatSessionId: "chat-main" }),
         null
       )
@@ -373,6 +419,8 @@ describe("composeGenerationPrompt", () => {
       prompt: "Continue on main",
       history: [
         { role: "user", content: "stored as chat-main" },
+        { role: "user", content: "stored as space-padded chat-main" },
+        { role: "user", content: "stored as space-only chatSessionId" },
         { role: "user", content: "What is on main?" },
       ],
     });

@@ -198,7 +198,7 @@ export function recoveredPayloadTextKeySql(
     alias
   )}) WHERE key = '${key}' ORDER BY id DESC LIMIT 1)`;
   if (key !== "chatSessionId") return extracted;
-  return `(SELECT CASE WHEN typeof(value) = 'text' AND length(CAST(value AS BLOB)) > 0 AND value != 'chat-main' THEN value END FROM (SELECT ${extracted} AS value))`;
+  return `(SELECT CASE WHEN typeof(value) = 'text' AND length(CAST(trim(value) AS BLOB)) > 0 AND trim(value) != 'chat-main' THEN value END FROM (SELECT ${extracted} AS value))`;
 }
 
 export function visibleStoredTextTrimSql(expr: string): string {

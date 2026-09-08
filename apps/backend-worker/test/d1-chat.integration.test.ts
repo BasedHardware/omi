@@ -484,6 +484,78 @@ describe("D1 chat projects an honest conversation list", () => {
     ]);
   });
 
+  test("space-padded and space-only stored chat-main group onto chat:chat-main", async () => {
+    const bodies = [
+      { ...chatCreate("d1-exact-main", "stored as chat-main"), at: 1 },
+      {
+        ...chatCreate("d1-padded-main", "stored as space-padded chat-main"),
+        at: 2,
+        chatSessionId: " chat-main ",
+      },
+      {
+        ...chatCreate("d1-space-main", "stored as space-only chatSessionId"),
+        at: 3,
+        chatSessionId: "  ",
+      },
+      {
+        ...chatCreate("d1-named", "named session stays named"),
+        at: 5,
+        chatSessionId: "session-alpha",
+      },
+      {
+        ...chatCreate("d1-padded-named", "padded named stays named"),
+        at: 4,
+        chatSessionId: " session-alpha ",
+      },
+    ];
+    for (const body of bodies) {
+      const created = await fetchWorker("/v1/chat-messages", {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      expect(created.status).toBe(201);
+    }
+
+    const listed = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    expect(
+      ((await listed.json()) as { items: Array<{ id: string }> }).items.map(
+        (item) => item.id
+      )
+    ).toEqual([
+      "chat:session-alpha",
+      "chat: session-alpha ",
+      MAIN_CONVERSATION_ID,
+    ]);
+
+    const mainHistory = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(mainHistory.status).toBe(200);
+    expect(
+      (
+        (await mainHistory.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual(["d1-exact-main", "d1-padded-main", "d1-space-main"]);
+
+    const paddedQuery = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+      { headers: authenticatedHeaders }
+    );
+    expect(paddedQuery.status).toBe(200);
+    expect(
+      (
+        (await paddedQuery.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
+    ).toEqual([]);
+  });
+
   test("conversation metadata stays bounded and preserves projection semantics", async () => {
     const accountId = "bounded-conversation-metadata";
     const title = `\uFEFF\t${"😀".repeat(130)}${" ".repeat(1000)}tail\u00a0`;

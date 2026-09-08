@@ -62,14 +62,16 @@ export interface ChatHistoryQuery {
 
 export const MAIN_CHAT_SESSION_ID = "chat-main";
 
+const spaceTrimmedSessionId = (value: string): string => value.replace(/^ +| +$/g, "");
+
 export const historySessionMatches = (
   rowChatSessionId: string | null,
   queryChatSessionId: string | null | undefined,
 ): boolean => {
   const wanted = queryChatSessionId ?? null;
   const rowIsMain = rowChatSessionId === null
-    || rowChatSessionId.length === 0
-    || rowChatSessionId === MAIN_CHAT_SESSION_ID;
+    || spaceTrimmedSessionId(rowChatSessionId).length === 0
+    || spaceTrimmedSessionId(rowChatSessionId) === MAIN_CHAT_SESSION_ID;
   if (wanted === null || wanted === MAIN_CHAT_SESSION_ID) {
     return rowIsMain;
   }

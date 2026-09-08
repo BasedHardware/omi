@@ -139,6 +139,13 @@ describe("ratified /v1/chat-messages route", () => {
       chatSessionId: null,
     });
     expect(parseHistoryQuery(new Request(
+      "https://service.example/v1/chat-messages?limit=50&chatSessionId=%20chat-main%20",
+    ))).toEqual({
+      limit: 50,
+      olderCursor: null,
+      chatSessionId: " chat-main ",
+    });
+    expect(parseHistoryQuery(new Request(
       "https://service.example/v1/chat-messages?limit=50&appId=other",
     ))).toBeNull();
     expect(parseHistoryQuery(new Request(
@@ -232,6 +239,40 @@ describe("ratified /v1/chat-messages route", () => {
       revision: "revision-stored-main",
       attachments: [],
     }, "gen-stored-main").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "padded-main",
+      text: "stored as space-padded chat-main",
+      sender: "human",
+      type: "text",
+      createdAt: 4,
+      updatedAt: 4,
+      chatSessionId: " chat-main ",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"d".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-padded-main",
+      attachments: [],
+    }, "gen-padded-main").kind).toBe("created");
+    expect(stores.chatMessages.admitHuman(ACCOUNT, {
+      id: "space-main",
+      text: "stored as space-only chatSessionId",
+      sender: "human",
+      type: "text",
+      createdAt: 5,
+      updatedAt: 5,
+      chatSessionId: "  ",
+      appId: null,
+      journalRevision: 1,
+      payloadHash: `sha256:${"e".repeat(64)}`,
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "revision-space-main",
+      attachments: [],
+    }, "gen-space-main").kind).toBe("created");
     const storedMain = await local.app.request("/v1/chat-messages?limit=50", {
       headers: AUTHORIZATION(local.devToken),
     });
@@ -240,7 +281,7 @@ describe("ratified /v1/chat-messages route", () => {
       ((await storedMain.json()) as { messages: Array<{ id: string }> }).messages.map(
         (message) => message.id,
       ),
-    ).toEqual(["main-only", "stored-main"]);
+    ).toEqual(["main-only", "stored-main", "padded-main", "space-main"]);
     const aliasedMain = await local.app.request(
       "/v1/chat-messages?limit=50&chatSessionId=chat-main",
       { headers: AUTHORIZATION(local.devToken) },
@@ -250,7 +291,7 @@ describe("ratified /v1/chat-messages route", () => {
       ((await aliasedMain.json()) as { messages: Array<{ id: string }> }).messages.map(
         (message) => message.id,
       ),
-    ).toEqual(["main-only", "stored-main"]);
+    ).toEqual(["main-only", "stored-main", "padded-main", "space-main"]);
     const mainNewest = await local.app.request("/v1/chat-messages?limit=1", {
       headers: AUTHORIZATION(local.devToken),
     });
@@ -258,7 +299,7 @@ describe("ratified /v1/chat-messages route", () => {
       messages: Array<{ id: string }>;
       page: { olderCursor: string | null; hasOlder: boolean };
     };
-    expect(mainNewestBody.messages.map((message) => message.id)).toEqual(["stored-main"]);
+    expect(mainNewestBody.messages.map((message) => message.id)).toEqual(["space-main"]);
     expect(mainNewestBody.page.hasOlder).toBe(true);
     expect(mainNewestBody.page.olderCursor).not.toBeNull();
     const aliasedContinue = await local.app.request(
@@ -270,7 +311,7 @@ describe("ratified /v1/chat-messages route", () => {
       ((await aliasedContinue.json()) as { messages: Array<{ id: string }> }).messages.map(
         (message) => message.id,
       ),
-    ).toEqual(["main-only"]);
+    ).toEqual(["padded-main"]);
     const namedAfterStoredMain = await local.app.request(
       "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
       { headers: AUTHORIZATION(local.devToken) },
