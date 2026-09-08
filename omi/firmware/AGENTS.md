@@ -15,3 +15,8 @@ Build logic lives in `omi/firmware/scripts/ci/`.
 ## Formatting
 
 C/C++ files: `clang-format -i <files>` (the repo pre-commit hook covers this).
+
+## Local verification
+
+Run `bash omi/firmware/omi/tests/host/run.sh` for the sanitized host timing and
+queue tests. See [test scope and hardware checks](omi/tests/host/README.md).
