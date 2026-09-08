@@ -28,6 +28,19 @@ class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
+  // Added by the on-prem fork, not upstream: EnvFields declares an auth backend and a notifications
+  // backend (ADR-0011 / ADR-0038). null keeps this stub on upstream's behaviour -- Env falls back to
+  // 'firebase' and 'fcm' -- so the test reads exactly as it does on their tree.
+  @override
+  String? get authBackend => null;
+  @override
+  String? get oidcIssuer => null;
+  @override
+  String? get oidcClientId => null;
+  @override
+  String? get oidcRedirectScheme => null;
+  @override
+  String? get notificationsBackend => null;
 }
 
 void main() {

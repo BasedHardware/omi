@@ -1384,6 +1384,73 @@ Still failing, diagnosed:
   tests are latently order-dependent upstream (they never establish that precondition); left as-is by
   decision — not introduced by the self-host work. Each file passes in isolation.
 
+## Stack gauntlets and the Phase 0A replay harness
+
+Three jobs in `.github/workflows/backend-hermetic-e2e.yml` are **not** pytest suites. Each is a
+`run.sh` that launches the Firestore emulator (Java), a `redis-server` per test on an ephemeral port,
+and the backend itself in several process roles:
+
+| npm script | CI job | Blocks the merge gate? |
+|---|---|---|
+| `test:listen-pusher-stack:emulator` | Listen Pusher Stack Gauntlet | **yes** |
+| `test:sync-cloud-tasks-stack:emulator` | Sync Cloud Tasks Stack Gauntlet | **yes** |
+| `test:replay-harness-phase0a:emulator` | Replay Harness Phase 0A Feasibility | no (advisory) |
+
+"Advisory" is about the merge gate's `needs:` list, not about the signal: the Phase 0A run is the one
+that carries the mutant proof (`MUTANT_UNGUARDED` must defeat the idempotency boundary and re-run the
+real STT leaf; `MUTANT_GUARDED` must catch the bypass) and the egress attestation. Run all three.
+
+[`Dockerfile.replayharness`](Dockerfile.replayharness) carries Java 21, a real `redis-server`, Node 22
+and the CI-shaped `uv pip sync pylock.toml` virtualenv, so the harnesses run the way CI runs them on a
+box that has only Docker. The entrypoint links the image's `backend/.venv` and `node_modules` into the
+bind mount for the run and removes them on the way out (`run.sh` checks for the first; the emulator is
+launched through `npx --no-install firebase`, which resolves only from a `node_modules` in the cwd tree).
+
+```bash
+docker build -t omi-oss-replay-harness -f deploy/onprem/Dockerfile.replayharness .
+
+# Phase 0A (the image's default CMD)
+docker run --rm -v "$(git rev-parse --show-toplevel)":/repo \
+  -e OMI_REPLAY_STATE_ROOT=/opt/harness-home/state omi-oss-replay-harness
+
+# the two blocking gauntlets — same image, override the command
+docker run --rm -v "$(git rev-parse --show-toplevel)":/repo omi-oss-replay-harness \
+  npm run test:listen-pusher-stack:emulator -- --state-dir /opt/harness-home/listen-pusher
+docker run --rm -v "$(git rev-parse --show-toplevel)":/repo omi-oss-replay-harness \
+  npm run test:sync-cloud-tasks-stack:emulator
+```
+
+`OMI_REPLAY_STATE_ROOT` (and `--state-dir`) belong **inside the image**, not in the bind mount — but that
+does not keep the working tree clean, and it is worth knowing why. Each Phase 0A scenario invents a
+`replay-harness-uid-<hex>` (`backend/testing/replay_harness_phase0a/scenario.py:242`) and uploads a sync
+job for it; the upload path is built **relative** to the process cwd — `job_dir = f'syncing/{uid}/{job_id}'`
+(`backend/routers/sync.py:974`) — so it lands in `backend/syncing/` of the bind-mounted repo no matter
+where the harness state root points. `/backend/syncing/*` is gitignored, so these accumulate silently:
+sweep them with `rm -rf backend/syncing/replay-harness-uid-*` after a run. Verified they are ignored and
+never tracked: `git ls-files backend/syncing | grep -c replay-harness-uid-` is 0.
+
+## Hermetic e2e: run it through `run.sh`, never file-by-file
+
+The Hermetic Backend E2E job runs `bash backend/testing/e2e/run.sh -q --tb=short` — **one** pytest
+process over the whole `testing/e2e/` directory. Running those files individually, the way the
+file-isolated unit sweep does, is not this gate and produces failures the gate never sees:
+
+- `run.sh` exports `MEMORY_MODE="${E2E_MEMORY_MODE:-read}"`. Production manifests keep `MEMORY_MODE=off`
+  until the operator finishes the rollout proof, so a shell that does not set it runs the universal
+  memory CRUD tests against paused intake. `MEMORY_ENABLED=on` is a different switch and does not
+  substitute for it.
+- It creates `_temp/`, `_samples/`, `_segments/`, `_speech_profiles/`, which `main.py` expects to exist.
+- It prewarms the tiktoken cache before pytest installs the hermetic socket guard, so a cold tokenizer
+  download fails as itself rather than as a bogus outbound-network violation.
+- It caps the **whole** run at `E2E_PYTEST_TIMEOUT` (default 120s) via GNU `timeout`. On a loaded box
+  raise it deliberately (`E2E_PYTEST_TIMEOUT=300s`) rather than reading the timeout as a red.
+
+```bash
+docker run --rm -v "$PWD":/repo -w /repo/backend \
+  -e PATH=/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  omi-oss-backend-test:latest bash testing/e2e/run.sh -q --tb=short
+```
+
 ## Testing the Flutter app offline
 
 Same principle as the backend harness (ADR-0026): a **committed, pinned image** and a **repo-root

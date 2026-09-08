@@ -15,8 +15,6 @@ class TestEnvFields implements EnvFields {
   @override
   String? get apiBaseUrl => 'http://127.0.0.1:8000/';
   @override
-  String? get googleMapsApiKey => null;
-  @override
   String? get intercomAppId => null;
   @override
   String? get intercomIOSApiKey => null;

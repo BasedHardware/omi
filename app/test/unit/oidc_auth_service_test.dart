@@ -37,8 +37,6 @@ class _OidcEnvFields implements EnvFields {
   @override
   String? get apiBaseUrl => 'https://api.omi.me/';
   @override
-  String? get googleMapsApiKey => null;
-  @override
   String? get intercomAppId => null;
   @override
   String? get intercomIOSApiKey => null;

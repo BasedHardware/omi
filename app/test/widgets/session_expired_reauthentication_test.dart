@@ -71,9 +71,6 @@ class _FakeEnv implements EnvFields {
   String? get posthogApiKey => null;
 
   @override
-  String? get googleMapsApiKey => null;
-
-  @override
   String? get intercomAppId => null;
 
   @override
