@@ -771,7 +771,7 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(walked).toEqual(rows.map((row) => row.id));
   });
 
-  test("memories remain retryably unavailable because D1 has no memories store", async () => {
+  test("memories remain non-retryably unavailable because D1 has no memories store", async () => {
     const response = await fetchWorker("/v1/memories", {
       headers: authenticatedHeaders,
     });
@@ -779,8 +779,8 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(await response.json()).toEqual({
       error: {
         code: "projection_unavailable",
-        retryable: true,
-        action: "retry",
+        retryable: false,
+        action: "none",
       },
     });
   });
