@@ -249,10 +249,20 @@ struct ChatSelectableProseText: NSViewRepresentable {
       index = min(oldRange.upperBound, newRange.upperBound, characterPrefix)
     }
     // A combining mark can make `commonPrefix` land inside a composed
-    // character; back up to the composed boundary so the edit never splits one.
-    guard index > 0, index < newString.length else { return index }
-    let composed = newString.rangeOfComposedCharacterSequence(at: index)
-    return composed.location < index ? composed.location : index
+    // character — on either side. The reparse that removes a mark leaves the
+    // old storage's composed sequence straddling `index`, and starting the
+    // edit there would split it; back up to the composed boundary of both
+    // strings so the edit never starts inside one.
+    var boundary = index
+    if boundary > 0, boundary < newString.length {
+      let composed = newString.rangeOfComposedCharacterSequence(at: boundary)
+      if composed.location < boundary { boundary = composed.location }
+    }
+    if boundary > 0, boundary < oldString.length {
+      let composed = oldString.rangeOfComposedCharacterSequence(at: boundary)
+      if composed.location < boundary { boundary = composed.location }
+    }
+    return boundary
   }
 
   /// Height for the width the transcript proposed, measured **beside** the

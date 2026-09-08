@@ -175,7 +175,11 @@ struct ChatBubble: View {
   }
 
   private func makeRowText() -> RowText {
-    let answer = message.visibleAnswerText
+    // No blocks to walk: the answer is the trimmed body the copy payload keeps.
+    let answer =
+      message.contentBlocks.isEmpty
+      ? message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      : message.visibleAnswerText
     let bubble: String
     if message.sender == .ai, !message.contentBlocks.isEmpty {
       bubble = answer
@@ -183,20 +187,16 @@ struct ChatBubble: View {
       bubble = message.text
     }
     let budget = truncationBudget
-    let shouldTruncate = ChatBubbleTruncation.shouldTruncate(
-      text: bubble,
-      isStreaming: message.isStreaming,
-      isExpanded: isExpanded,
-      budget: budget
-    )
+    // One O(lines) scan per body pass; the truncation decision and the cut derive from it.
+    let exceeds = ChatBubbleTruncation.exceedsBudget(bubble, budget: budget)
+    let shouldTruncate = !message.isStreaming && !isExpanded && exceeds
     return RowText(
       answer: answer,
       bubble: bubble,
       display: shouldTruncate
-        ? ChatBubbleTruncation.displayText(
-          bubble, isStreaming: message.isStreaming, isExpanded: isExpanded, budget: budget)
+        ? ChatBubbleTruncation.collapsedPrefix(bubble, budget: budget) + "…"
         : bubble,
-      exceedsBudget: ChatBubbleTruncation.exceedsBudget(bubble, budget: budget),
+      exceedsBudget: exceeds,
       shouldTruncate: shouldTruncate
     )
   }

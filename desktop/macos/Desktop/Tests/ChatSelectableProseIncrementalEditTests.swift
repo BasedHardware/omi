@@ -70,6 +70,20 @@ final class ChatSelectableProseIncrementalEditTests: XCTestCase {
     XCTAssertEqual(storage.string, new.string)
   }
 
+  func testRemovingACombiningMarkNeverSplitsTheOldSequence() throws {
+    // The reparse drops the combining mark, so the literal prefix ends one
+    // unit into the OLD storage's composed "é". The boundary check has to
+    // consult the old string too — the edit range must start before that
+    // sequence, not inside it.
+    let old = NSAttributedString(string: "cafe\u{0301} x.Y")
+    let new = NSAttributedString(string: "cafe X.Y")
+    let prefix = ChatSelectableProseText.commonAttributedPrefixLength(old, new)
+    XCTAssertEqual(prefix, 3, "the edit starts before the old storage's composed sequence")
+    let storage = NSTextStorage(attributedString: old)
+    ChatSelectableProseText.apply(new, to: storage)
+    XCTAssertEqual(storage.string, new.string)
+  }
+
   // MARK: - Live height
 
   func testTheLiveLayoutReportsTheSameHeightAsAThrowawayMeasurement() throws {

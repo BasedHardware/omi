@@ -52,12 +52,6 @@ import Foundation
       lock.unlock()
     }
 
-    nonisolated static func count(_ counter: Counter) -> Int {
-      lock.lock()
-      defer { lock.unlock() }
-      return counts[counter] ?? 0
-    }
-
     nonisolated static func snapshot() -> [Counter: Int] {
       lock.lock()
       defer { lock.unlock() }

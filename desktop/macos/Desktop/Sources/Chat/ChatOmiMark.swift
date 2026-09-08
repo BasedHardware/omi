@@ -213,7 +213,16 @@ final class ChatOmiMarkFrameView: NSView {
   }
 
   deinit {
-    MainActor.assumeIsolated { stop() }
+    // An NSView's dealloc is not guaranteed to land on the main thread —
+    // SwiftUI can release a representable-backed view from a background
+    // queue — and an unconditional `MainActor.assumeIsolated` would trap
+    // there, turning a routine teardown into a crash. The timer's block only
+    // weakly captures self, so an off-main teardown costs at most one wasted
+    // tick before the next `tick()` no-ops; `dismantleNSView` stops the timer
+    // on the main thread for every SwiftUI-managed teardown.
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { stop() }
+    }
   }
 }
 
@@ -310,10 +319,15 @@ final class ChatMarkModel {
   }
 
   /// The same frame, drawn with Core Graphics for the AppKit-hosted animation.
-  /// `labelColor` is what `Ink.primary` is made of.
+  /// The fill is resolved through the glass's pinned appearance, not the
+  /// window's: on a dark-Aqua window the transcript panel is still light, and
+  /// a dynamic `labelColor` would resolve near-white there — dots on glass,
+  /// invisible. The resting `Ink.primary` Canvas reads the pinned scheme
+  /// through the environment; this is its AppKit twin.
   func draw(in context: CGContext, size: CGSize, base: CGFloat, anchor: ChatOmiMark.Anchor) {
+    let fill = Ink.nsPrimaryOnGlass
     for dot in dotPlacements(size: size, base: base, anchor: anchor, resting: false) {
-      context.setFillColor(NSColor.labelColor.withAlphaComponent(dot.opacity).cgColor)
+      context.setFillColor(fill.withAlphaComponent(dot.opacity).cgColor)
       context.fillEllipse(in: dot.rect)
     }
   }
