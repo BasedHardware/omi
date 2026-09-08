@@ -519,3 +519,64 @@ test('Bluetooth off keeps a dimmed Reconnect control and a live Forget control',
   expect(onForget).toHaveBeenCalledTimes(1);
   await act(async () => renderer.unmount());
 });
+
+test('Bluetooth off keeps a dimmed leftover Connect control and a live Disconnect control', async () => {
+  const onToggle = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOff',
+            devices: [
+              {
+                id: 'omi-left',
+                name: 'Omi leftover',
+                connected: false,
+                rssi: -40,
+              },
+              {id: 'omi-live', name: 'Omi live', connected: true, rssi: -35},
+            ],
+            connectedDeviceId: 'omi-live',
+            capture: 'idle',
+            lastEvent: '',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={() => {}}
+        onToggle={onToggle}
+      />,
+    );
+  });
+  const connect = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Connect Omi leftover',
+  );
+  expect(connect.props.disabled).toBe(true);
+  const connectStyle =
+    typeof connect.props.style === 'function'
+      ? connect.props.style({pressed: false})
+      : connect.props.style;
+  expect([connectStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Connect');
+  connect.props.onPress();
+  expect(onToggle).not.toHaveBeenCalled();
+  const disconnect = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Disconnect Omi live',
+  );
+  expect(disconnect.props.disabled).toBe(false);
+  const disconnectStyle =
+    typeof disconnect.props.style === 'function'
+      ? disconnect.props.style({pressed: false})
+      : disconnect.props.style;
+  expect(JSON.stringify([disconnectStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  disconnect.props.onPress();
+  expect(onToggle).toHaveBeenCalledWith('omi-live', true);
+  await act(async () => renderer.unmount());
+});

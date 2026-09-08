@@ -97,6 +97,10 @@ export function DeviceSession({
   const reconnectUnavailable =
     nativeSnapshot !== null &&
     !isBluetoothScanAvailable(nativeSnapshot.bluetooth);
+  const connectUnavailable = (device: {
+    connected?: boolean;
+    connecting?: boolean;
+  }) => scanUnavailable && !device.connected && !device.connecting;
   const devices = (nativeSnapshot?.devices ?? []).map(device => ({
     ...device,
     connecting:
@@ -174,13 +178,17 @@ export function DeviceSession({
                   : 'Connect'
               } ${device.name}`}
               accessibilityRole="button"
-              disabled={deviceBusy}
+              disabled={deviceBusy || connectUnavailable(device)}
               key={device.id}
-              onPress={() =>
-                onToggle(device.id, device.connected || device.connecting)
+              onPress={
+                connectUnavailable(device)
+                  ? () => undefined
+                  : () =>
+                      onToggle(device.id, device.connected || device.connecting)
               }
               style={({pressed}) => [
                 styles.macHomeDeviceChip,
+                connectUnavailable(device) && styles.scanButtonUnavailable,
                 pressed && styles.pressed,
               ]}>
               <Text style={styles.macHomeDeviceChipText}>
@@ -279,12 +287,17 @@ export function DeviceSession({
           : 'Connect'
       } ${device.name}`}
       accessibilityRole="button"
-      disabled={deviceBusy}
+      disabled={deviceBusy || connectUnavailable(device)}
       key={device.id}
-      onPress={() => onToggle(device.id, device.connected || device.connecting)}
+      onPress={
+        connectUnavailable(device)
+          ? () => undefined
+          : () => onToggle(device.id, device.connected || device.connecting)
+      }
       style={({pressed}) => [
         styles.deviceRow,
         variant === 'compact' && styles.homeDeviceRow,
+        connectUnavailable(device) && styles.scanButtonUnavailable,
         pressed && styles.pressed,
       ]}>
       {variant === 'compact' ? (
