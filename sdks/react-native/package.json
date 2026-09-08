@@ -34,7 +34,8 @@
     "prepare": "npm run build",
     "release": "release-it",
     "example": "yarn --cwd example",
-    "bootstrap": "yarn example && yarn install"
+    "bootstrap": "yarn example && yarn install",
+    "test:issue12979": "jest --config jest.config.issue12979.js"
   },
   "keywords": [
     "react-native",
@@ -101,6 +102,10 @@
     "modulePathIgnorePatterns": [
       "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/src/__tests__/zero-value.test.ts"
     ]
   },
   "commitlint": {
