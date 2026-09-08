@@ -310,7 +310,9 @@ Cloud Linux after `20a44eba4e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `49df6300bd`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Production `POST /v1/device-sessions/:id/transcribe` without a transcription source is nested `{error:{code:"service_unavailable",retryable:false,action:"none"}}` without `retry-after`, instead of advertising Check again for a door that cannot create speech. Identity and authorization 503s stay `{error:{code:"unavailable"}}` with `retry-after: 1`. GET transcript still reads stored rows. This does not invent a transcription producer.
 
-Cloud Linux after the live-capture device-row honesty slice: a connected device row no longer says Connected while audio is live. Waiting for audio stays Waiting for audio. Live capture uses Listening, matching the compact Home capture badge and `Connected · Listening` header. Idle stays Connected. This does not invent an STT or capture producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `a9baea4462`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. A connected device row no longer says Connected while audio is live. Waiting for audio stays Waiting for audio. Live capture uses Listening, matching the compact Home capture badge and `Connected · Listening` header. Idle stays Connected. This does not invent an STT or capture producer.
+
+Cloud Linux after the empty-list Bluetooth lastEvent honesty slice: an empty Devices list no longer keeps native lastEvent sentences Bluetooth is not powered on or Bluetooth permission is required when the Devices header already says Bluetooth off or Bluetooth permission needed. Android location-permission copy stays. Scan, Reconnect, and Connect stay present and dimmed when the radio cannot scan. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

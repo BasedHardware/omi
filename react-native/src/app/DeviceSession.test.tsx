@@ -292,8 +292,14 @@ test.each([
   ['Bluetooth is powered on', 'No Omi device was discovered.', 'poweredOn'],
   ['Bluetooth is poweredOff', 'Bluetooth off', 'poweredOff'],
   ['Bluetooth is unauthorized', 'Bluetooth permission needed', 'unauthorized'],
+  ['Bluetooth is not powered on', 'Bluetooth off', 'poweredOff'],
+  [
+    'Bluetooth permission is required',
+    'Bluetooth permission needed',
+    'unauthorized',
+  ],
 ] as const)(
-  'empty device list does not show Bluetooth wire token %s',
+  'empty device list maps Bluetooth lastEvent %s',
   async (lastEvent, expected, bluetooth) => {
     let renderer!: ReactTestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -321,6 +327,8 @@ test.each([
     expect(output).not.toContain('poweredOn');
     expect(output).not.toContain('poweredOff');
     expect(output).not.toContain('unauthorized');
+    expect(output).not.toContain('Bluetooth is not powered on');
+    expect(output).not.toContain('Bluetooth permission is required');
     await act(async () => renderer.unmount());
   },
 );

@@ -9,11 +9,16 @@ test.each([
   ['', 'poweredOff', 'Bluetooth off'],
   ['Bluetooth is unauthorized', 'unauthorized', 'Bluetooth permission needed'],
   ['Bluetooth is unknown', 'unknown', 'Bluetooth status unknown'],
-  ['Bluetooth is not powered on', 'poweredOff', 'Bluetooth is not powered on'],
+  ['Bluetooth is not powered on', 'poweredOff', 'Bluetooth off'],
   [
     'Bluetooth permission is required',
     'unauthorized',
-    'Bluetooth permission is required',
+    'Bluetooth permission needed',
+  ],
+  [
+    'Location permission is required for Bluetooth scanning',
+    'poweredOn',
+    'Location permission is required for Bluetooth scanning',
   ],
   ['Bluetooth is unavailable', 'unknown', 'Bluetooth is unavailable'],
   ['No Omi devices found', 'poweredOn', 'No Omi devices found'],

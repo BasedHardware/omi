@@ -44,6 +44,12 @@ export function emptyDeviceListHint(
   ) {
     return 'No Omi device was discovered.';
   }
+  if (trimmed === 'Bluetooth is not powered on') {
+    return bluetoothStatusLabel('poweredOff');
+  }
+  if (trimmed === 'Bluetooth permission is required') {
+    return bluetoothStatusLabel('unauthorized');
+  }
   if (trimmed === '' || wireToken !== null) {
     return bluetoothStatusLabel(wireToken ?? bluetooth);
   }
