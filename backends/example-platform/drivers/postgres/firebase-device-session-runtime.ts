@@ -11,10 +11,11 @@ import { DEVICE_UPLOAD_MAX_BODY, DEVICE_UPLOAD_MAX_BATCH_BODY, DEVICE_UPLOAD_SES
 const error = (status: number, code: string) => Response.json({ error: { code } }, {
   status, headers: { "cache-control": "no-store", ...(status === 503 ? { "retry-after": "1" } : {}) },
 });
-const ownershipUnavailable = () => Response.json(
-  { error: { code: "capture_ownership_unavailable", retryable: false, action: "none" } },
+const nestedNonRetryable = (code: string) => Response.json(
+  { error: { code, retryable: false, action: "none" } },
   { status: 503, headers: { "cache-control": "no-store" } },
 );
+const ownershipUnavailable = () => nestedNonRetryable("capture_ownership_unavailable");
 async function body(request: Request, maximumBytes = DEVICE_UPLOAD_MAX_BODY): Promise<unknown> {
   if (request.body === null) throw new TypeError("invalid_device_request");
   const reader = request.body.getReader();
@@ -84,7 +85,7 @@ export function createPostgresFirebaseDeviceSessionRuntime(options: PostgresFire
         if (!readingSession) ownership!.verify(authorized.context, receipt);
         const pool = bindPool(request.signal);
         if (match?.[2] === "transcribe" || match?.[2] === "transcript") {
-          if (match[2] === "transcribe" && source === undefined) return error(503, "unavailable");
+          if (match[2] === "transcribe" && source === undefined) return nestedNonRetryable("service_unavailable");
           const record = match[2] === "transcript"
             ? await createPostgresDeviceTranscriptionRepository({ pool }).read(authorized.context, match[1]!)
             : await transcribeDeviceSession({ pool: authority.pool, source: stableSource!, sessionId: match[1]!, signal: request.signal,

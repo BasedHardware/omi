@@ -191,3 +191,34 @@ test("identity and authorization outages stay retryable unavailable rather than 
     }
   }
 });
+
+test("a missing transcription source is nested non-retryable without inventing speech", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const ownershipKey = new Uint8Array(32).fill(7);
+  const runtime = createPostgresFirebaseDeviceSessionRuntime(
+    authorizationOptions(admittedPool(now), async () => claims(now)),
+    undefined,
+    ownershipKey,
+  );
+  const headers = { authorization: "Bearer header.payload.signature" };
+  const owner = await runtime.fetch(
+    captureRequest("/v1/device-sessions/ownership", "GET", headers),
+  );
+  expect(owner.status).toBe(200);
+  const receipt = ((await owner.json()) as { ownership: { receipt: string } })
+    .ownership.receipt;
+  const transcribe = await runtime.fetch(
+    new Request(
+      "https://service.example/v1/device-sessions/ad99598c-36a8-4e12-a428-63d0a3e06170/transcribe",
+      {
+        method: "POST",
+        headers: { ...headers, "x-omi-capture-ownership": receipt },
+      },
+    ),
+  );
+  expect(transcribe.status).toBe(503);
+  expect(transcribe.headers.get("retry-after")).toBeNull();
+  expect((await transcribe.json()) as unknown).toEqual({
+    error: { code: "service_unavailable", retryable: false, action: "none" },
+  });
+});
