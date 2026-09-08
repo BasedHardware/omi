@@ -70,5 +70,5 @@ def test_datetime_option_reaches_api(
 def test_invalid_datetime_never_calls_api(authed_profile, respx_mock, cli_runner):
     result = cli_runner.invoke(app, ["action-item", "create", "test", "--due-at", "2026-02-30T12:00:00Z"])
     assert result.exit_code != 0
-    assert "Invalid value" in result.output
+    assert "Invalid value" in result.stderr
     assert len(respx_mock.calls) == 0
