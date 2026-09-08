@@ -4,7 +4,7 @@ import {DeviceSession, homeConnectionStatus} from './DeviceSession';
 import type {PlatformNativeSnapshot} from '../omiNative';
 
 jest.mock('../omiNative', () => ({
-  isBluetoothScanAvailable: () => true,
+  isBluetoothScanAvailable: (state?: string) => state === 'poweredOn',
 }));
 
 test('connected device details show reported values and truthful unknown fields', async () => {
@@ -387,4 +387,79 @@ test('empty device list keeps an already-human Bluetooth last event', async () =
   expect(output).toContain('No Omi devices found');
   expect(output).not.toContain('poweredOn');
   await act(async () => renderer.unmount());
+});
+
+test('Bluetooth off keeps a dimmed Scan control instead of a live Scan pill', async () => {
+  const onScan = jest.fn();
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOff',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: '',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={onScan}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Scan for Omi devices',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Scan');
+  send.props.onPress();
+  expect(onScan).not.toHaveBeenCalled();
+  let live!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    live = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOn',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: '',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="compact"
+        onScan={onScan}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const liveScan = live.root.find(
+    node => node.props.accessibilityLabel === 'Scan for Omi devices',
+  );
+  expect(liveScan.props.disabled).toBe(false);
+  const liveStyle =
+    typeof liveScan.props.style === 'function'
+      ? liveScan.props.style({pressed: false})
+      : liveScan.props.style;
+  expect(JSON.stringify([liveStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  await act(async () => {
+    renderer.unmount();
+    live.unmount();
+  });
 });

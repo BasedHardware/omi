@@ -437,6 +437,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     justifyContent: 'center',
   },
+  scanButtonUnavailable: {opacity: 0.35},
   scanButtonText: {color: '#ffffff', fontSize: 12, fontWeight: '700'},
   deviceRow: {
     alignItems: 'center',

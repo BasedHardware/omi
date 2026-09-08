@@ -92,8 +92,8 @@ export function DeviceSession({
     nativeSnapshot.audioStatus === 'waiting'
       ? 'Waiting for audio'
       : 'Connected';
-  const scanDisabled =
-    deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
+  const scanUnavailable = !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
+  const scanDisabled = deviceBusy || scanUnavailable;
   const devices = (nativeSnapshot?.devices ?? []).map(device => ({
     ...device,
     connecting:
@@ -187,9 +187,10 @@ export function DeviceSession({
             accessibilityLabel="Scan for Omi devices"
             accessibilityRole="button"
             disabled={scanDisabled}
-            onPress={onScan}
+            onPress={scanUnavailable ? () => undefined : onScan}
             style={({pressed}) => [
               styles.macHomeDeviceChip,
+              scanUnavailable && styles.scanButtonUnavailable,
               pressed && styles.pressed,
             ]}>
             <Text style={styles.macHomeDeviceChipText}>
@@ -240,10 +241,11 @@ export function DeviceSession({
         accessibilityLabel="Scan for Omi devices"
         accessibilityRole="button"
         disabled={scanDisabled}
-        onPress={onScan}
+        onPress={scanUnavailable ? () => undefined : onScan}
         style={({pressed}) => [
           styles.scanButton,
           variant === 'compact' && styles.homeScanButton,
+          scanUnavailable && styles.scanButtonUnavailable,
           pressed && styles.pressed,
         ]}>
         <Text
