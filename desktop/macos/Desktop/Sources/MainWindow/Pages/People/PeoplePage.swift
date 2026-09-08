@@ -106,12 +106,18 @@ struct PeoplePage: View {
   @State private var activity: [String: PersonActivity] = [:]
   @State private var voices: [LocalSpeakerDiarizer.VoiceSummary] = []
   @State private var personPendingDeletion: Person?
+  /// Who was talked to according to the backend's conversations (from the last Refresh),
+  /// merged with the local transcript store.
+  @State private var remoteActivity: [String: PersonActivity] = [:]
+  @State private var isRefreshing = false
+  @State private var refreshStatus: String?
   /// Clips per voice owner ("user" or the person id), loaded with the summaries.
   @State private var snippets: [String: [VoiceSnippet]] = [:]
   @StateObject private var samplePlayer = VoiceSamplePlayer()
 
   private var rows: [PersonOverview] {
-    let all = PersonOverview.ordered(people: appState.people, activity: activity, voices: voices)
+    let merged = PeopleRebuildPlanner.merge(activity, remoteActivity)
+    let all = PersonOverview.ordered(people: appState.people, activity: merged, voices: voices)
     let query = searchText.trimmingCharacters(in: .whitespaces)
     guard !query.isEmpty else { return all }
     return all.filter { $0.person.name.localizedCaseInsensitiveContains(query) }
@@ -132,6 +138,7 @@ struct PeoplePage: View {
       content: {
         ScrollView {
           VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+            refreshRow
             peopleSection
           }
           .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
@@ -158,6 +165,68 @@ struct PeoplePage: View {
       Text("Removes them from your people, their speaker labels in future conversations, and the voice Omi remembered.")
     }
     .accessibilityIdentifier("people-page")
+  }
+
+  // MARK: - Refresh
+
+  /// Re-listens to recent conversations and rebuilds every remembered voice from them.
+  private var refreshRow: some View {
+    HStack(spacing: OmiSpacing.md) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(refreshStatus ?? "Rebuild people from your conversations")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .lineLimit(2)
+        if refreshStatus == nil {
+          Text(
+            "Goes through recent transcripts, listens again to everyone you've named and to you, and refreshes their voices and clips."
+          )
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.tertiary)
+          .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer(minLength: 0)
+      Button {
+        Task { await refreshPeople() }
+      } label: {
+        HStack(spacing: OmiSpacing.xs) {
+          if isRefreshing {
+            ProgressView().scaleEffect(0.5).frame(width: 14, height: 14)
+          } else {
+            Image(systemName: "arrow.clockwise")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+          }
+          Text(isRefreshing ? "Refreshing" : "Refresh")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+        }
+        .foregroundColor(isRefreshing ? Ink.secondary : Ink.surface)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.xs)
+        .background(Capsule().fill(isRefreshing ? Ink.rowFillHover : Ink.primary))
+      }
+      .buttonStyle(.plain)
+      .disabled(isRefreshing)
+      .accessibilityIdentifier("people-refresh")
+    }
+    .padding(OmiSpacing.md)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        .fill(Ink.rowFill)
+    )
+  }
+
+  private func refreshPeople() async {
+    guard !isRefreshing else { return }
+    isRefreshing = true
+    await appState.fetchPeople()
+    let summary = await PeopleRebuilder.shared.run { progress in
+      Task { @MainActor in refreshStatus = progress.message }
+    }
+    remoteActivity = summary.activity
+    refreshStatus = summary.message
+    isRefreshing = false
+    await reload()
   }
 
   // MARK: - People

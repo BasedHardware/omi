@@ -272,6 +272,13 @@ struct LocalSpeakerRegistry: Sendable {
     }
   }
 
+  /// Replace (or add) a remembered voice, e.g. after a rebuild from conversation audio.
+  mutating func rememberKnownVoice(_ voice: KnownVoice) {
+    guard let normalized = Self.normalized(voice.embedding) else { return }
+    knownVoices.removeAll { $0.personId == voice.personId }
+    knownVoices.append(KnownVoice(personId: voice.personId, embedding: normalized, isEnrolled: voice.isEnrolled))
+  }
+
   private mutating func rememberUserVoice(_ embedding: [Float], isEnrolled: Bool) {
     knownVoices.removeAll { $0.personId == nil }
     knownVoices.append(KnownVoice(personId: nil, embedding: embedding, isEnrolled: isEnrolled))

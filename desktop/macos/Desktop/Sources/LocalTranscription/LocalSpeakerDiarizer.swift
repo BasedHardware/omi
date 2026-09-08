@@ -157,7 +157,9 @@ actor LocalSpeakerDiarizer {
     if confident, let key = registry.cluster(forSpeakerId: outcome.resolution.speakerId)?.key {
       var windows = recentWindows[key, default: []]
       windows.append(window)
-      if windows.count > Self.recentWindowsPerCluster { windows.removeFirst(windows.count - Self.recentWindowsPerCluster) }
+      if windows.count > Self.recentWindowsPerCluster {
+        windows.removeFirst(windows.count - Self.recentWindowsPerCluster)
+      }
       recentWindows[key] = windows
     }
 
@@ -229,6 +231,60 @@ actor LocalSpeakerDiarizer {
       let relabels = result.relabels
       await MainActor.run { relabelSink(relabels) }
     }
+  }
+
+  /// Speaker embedding of a clip (16 kHz mono), for callers that rebuild voices from stored
+  /// audio. Nil until the models are loaded.
+  func embedding(for samples: [Float]) -> [Float]? {
+    guard case .ready = state, let manager else { return nil }
+    return dominantEmbedding(in: samples, manager: manager)
+  }
+
+  /// Replace remembered voices with ones rebuilt from conversation audio. Favorites and use
+  /// scores survive; the embedding becomes the mean of the rebuilt cuts and the longest cuts
+  /// become the voice's clips. Returns how many clips were saved.
+  func applyRebuild(_ rebuilt: [RebuiltVoice]) -> Int {
+    let now = now()
+    var clipsSaved = 0
+    for voice in rebuilt {
+      guard let centroid = Self.meanEmbedding(voice.embeddings) else { continue }
+      let update = VoiceprintUpdate(
+        personId: voice.personId, embedding: centroid, speechSeconds: voice.speechSeconds, isEnrolled: true)
+      // Replace rather than blend: the rebuild heard the whole history, not one session.
+      voiceprints.removeAll { $0.personId == voice.personId }
+      voiceprints = LocalVoiceprintStore.applying(update, to: voiceprints, now: now)
+      if let index = voiceprints.firstIndex(where: { $0.personId == voice.personId }) {
+        let previous = voiceprints[index]
+        voiceprints[index].useScore = max(
+          policy.decayedScore(previous.useScore, lastUsedAt: previous.lastUsedAt, now: now),
+          Double(voice.conversationCount))
+        voiceprints[index].lastUsedAt = [previous.lastUsedAt, voice.lastHeardAt].compactMap { $0 }.max()
+        store.removeAllSamples(personId: voice.personId)
+        voiceprints[index].sampleFiles = []
+        for (offset, clip) in voice.clips.enumerated() {
+          // Distinct names: clips share `now`, and the file name is the timestamp.
+          let stamp = now.addingTimeInterval(-Double(offset))
+          if let file = store.addSample(personId: voice.personId, samples: clip, now: stamp) {
+            voiceprints[index].sampleFiles.append(file)
+            clipsSaved += 1
+          }
+        }
+      }
+      registry.rememberKnownVoice(
+        LocalSpeakerRegistry.KnownVoice(personId: voice.personId, embedding: centroid, isEnrolled: true))
+    }
+    evictIfOverCapacity()
+    persist()
+    return clipsSaved
+  }
+
+  private static func meanEmbedding(_ embeddings: [[Float]]) -> [Float]? {
+    guard let first = embeddings.first else { return nil }
+    var sum = [Float](repeating: 0, count: first.count)
+    for embedding in embeddings where embedding.count == first.count {
+      for i in sum.indices { sum[i] += embedding[i] }
+    }
+    return LocalSpeakerRegistry.normalized(sum)
   }
 
   /// Forget a remembered voice and its audio (the user's when `personId` is nil).
@@ -330,7 +386,8 @@ actor LocalSpeakerDiarizer {
   }
 
   private static func knownVoice(_ stored: StoredVoiceprint) -> LocalSpeakerRegistry.KnownVoice {
-    LocalSpeakerRegistry.KnownVoice(personId: stored.personId, embedding: stored.embedding, isEnrolled: stored.isEnrolled)
+    LocalSpeakerRegistry.KnownVoice(
+      personId: stored.personId, embedding: stored.embedding, isEnrolled: stored.isEnrolled)
   }
 
   // MARK: - Embeddings
