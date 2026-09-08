@@ -44,64 +44,36 @@ def _messaging_module() -> ModuleType:
 
 
 @contextmanager
-def _loaded_notifications() -> Iterator[ModuleType]:
+def _loaded_chat_answer_notifications() -> Iterator[ModuleType]:
     messaging = _messaging_module()
-    auth = _module(
-        'firebase_admin.auth',
-        get_user=lambda _uid: SimpleNamespace(display_name='Ada', email='ada@example.com'),
-    )
-    firebase_admin = _module('firebase_admin', messaging=messaging, auth=auth)
+    firebase_admin = _module('firebase_admin', messaging=messaging)
     notification_db = _module(
         'database.notifications',
         get_all_tokens=lambda _uid: ['device-token'],
         remove_bulk_tokens=lambda _tokens: None,
-    )
-    redis_db = _module(
-        'database.redis_db',
-        has_credit_limit_notification_been_sent=lambda _uid: False,
-        set_credit_limit_notification_sent=lambda _uid: None,
-        has_silent_user_notification_been_sent=lambda _uid: False,
-        set_silent_user_notification_sent=lambda _uid: None,
-    )
-    database_auth = _module('database.auth', get_user_from_uid=lambda _uid: None)
-    llm_notifications = _module(
-        'utils.llm.notifications',
-        generate_notification_message=lambda *_a, **_k: ('t', 'b'),
-        generate_credit_limit_notification=lambda *_a, **_k: ('t', 'b'),
-        generate_silent_user_notification=lambda *_a, **_k: ('t', 'b'),
-    )
-    notification_text = _module('utils.notification_text', to_plain_text=lambda body: body)
-    executors = _module(
-        'utils.executors',
-        db_executor=None,
-        postprocess_executor=None,
-        run_blocking=None,
     )
 
     with stub_modules(
         {
             'firebase_admin': firebase_admin,
             'firebase_admin.messaging': messaging,
-            'firebase_admin.auth': auth,
             'database.notifications': notification_db,
-            'database.redis_db': redis_db,
-            'database.auth': database_auth,
-            'utils.llm.notifications': llm_notifications,
-            'utils.notification_text': notification_text,
-            'utils.executors': executors,
         }
     ):
-        yield load_module_fresh('utils.notifications', BACKEND_DIR / 'utils' / 'notifications.py')
+        yield load_module_fresh(
+            'utils.chat_answer_notifications',
+            BACKEND_DIR / 'utils' / 'chat_answer_notifications.py',
+        )
 
 
 def test_stringify_fcm_data_coerces_values_to_strings():
-    with _loaded_notifications() as notifications:
+    with _loaded_chat_answer_notifications() as notifications:
         out = notifications._stringify_fcm_data({'a': 1, 'b': None, 'c': True, 'd': 'x'})
         assert out == {'a': '1', 'b': '', 'c': 'True', 'd': 'x'}
 
 
 def test_build_client_displayed_message_omits_top_level_notification():
-    with _loaded_notifications() as notifications:
+    with _loaded_chat_answer_notifications() as notifications:
         data = {
             'push_type': 'chat_answer',
             'title': 'omi says',
@@ -127,7 +99,7 @@ def test_build_client_displayed_message_omits_top_level_notification():
 
 
 def test_send_client_displayed_notification_sets_push_type():
-    with _loaded_notifications() as notifications:
+    with _loaded_chat_answer_notifications() as notifications:
         captured: dict[str, Any] = {}
 
         def fake_send_each(messages):
