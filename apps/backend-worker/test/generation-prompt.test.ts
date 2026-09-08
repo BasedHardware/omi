@@ -43,7 +43,7 @@ function createR2GetMock(): R2Bucket & {
       const length = options?.range?.length ?? obj.bytes.byteLength;
       const slice = obj.bytes.slice(offset, offset + length);
       return {
-        size: slice.byteLength,
+        size: obj.bytes.byteLength,
         arrayBuffer: async () =>
           slice.buffer.slice(
             slice.byteOffset,
@@ -857,6 +857,81 @@ describe("composeGenerationPrompt", () => {
       r2,
       "acct-a",
       "msg-bad-utf8",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("keeps a valid UTF-8 prefix when the excerpt budget cuts a multi-byte character", async () => {
+    const euro = new TextEncoder().encode("€");
+    const completeCount = Math.floor(
+      GENERATION_ATTACHMENT_TEXT_BUDGET / euro.byteLength
+    );
+    const bytes = new Uint8Array((completeCount + 1) * euro.byteLength);
+    for (let i = 0; i < completeCount + 1; i++) {
+      bytes.set(euro, i * euro.byteLength);
+    }
+    await insertBound(db, {
+      id: "att-budget-utf8",
+      accountId: "acct-a",
+      messageId: "msg-budget-utf8",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes("attachments/acct-a/att-budget-utf8", bytes);
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-budget-utf8",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("summarize this");
+    expect(result.prompt).toContain("€".repeat(completeCount));
+    expect(result.prompt).not.toContain("€".repeat(completeCount + 1));
+  });
+
+  test("fails when a truncated range still contains invalid UTF-8", async () => {
+    const bytes = new Uint8Array(GENERATION_ATTACHMENT_TEXT_BUDGET + 8);
+    bytes.fill(0x61);
+    bytes[16] = 0xff;
+    await insertBound(db, {
+      id: "att-trunc-bad-utf8",
+      accountId: "acct-a",
+      messageId: "msg-trunc-bad-utf8",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes("attachments/acct-a/att-trunc-bad-utf8", bytes);
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-trunc-bad-utf8",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("fails when a complete bound text object ends with a truncated UTF-8 sequence", async () => {
+    await insertBound(db, {
+      id: "att-incomplete-utf8",
+      accountId: "acct-a",
+      messageId: "msg-incomplete-utf8",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-incomplete-utf8",
+      new Uint8Array([0x63, 0x61, 0x66, 0xc3])
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-incomplete-utf8",
       "summarize this"
     );
     expect(result).toEqual({ kind: "fail" });

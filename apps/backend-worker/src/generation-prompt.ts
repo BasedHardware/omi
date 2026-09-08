@@ -134,10 +134,15 @@ async function readTextExcerpt(
     const bytes = new Uint8Array(await object.arrayBuffer());
     if (bytes.byteLength === 0) return { kind: "empty" };
     if (bytes.includes(0)) return { kind: "missing" };
+    const truncated =
+      typeof object.size === "number" && object.size > bytes.byteLength;
     try {
       return {
         kind: "text",
-        value: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        value: new TextDecoder("utf-8", { fatal: true }).decode(
+          bytes,
+          truncated ? { stream: true } : undefined
+        ),
       };
     } catch {
       return { kind: "missing" };
