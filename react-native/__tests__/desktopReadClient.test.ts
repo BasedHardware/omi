@@ -11,6 +11,8 @@ import {
   developerWebhookTypeCopy,
   appCategoryCopy,
   appDisplaySource,
+  accountFieldCopy,
+  connectionIdentityCopy,
   chatMessageDisplayText,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
@@ -647,6 +649,42 @@ test('developer webhook status copy does not say unknown for a missing enablemen
   expect(developerWebhookStatusCopy(true)).toBe('Enabled');
   expect(developerWebhookStatusCopy(false)).toBe('Disabled');
   expect(developerWebhookStatusCopy(null)).toBe('Status unavailable');
+});
+
+test('whitespace-only account fields stay unset instead of a blank row', () => {
+  expect(accountFieldCopy(null, 'Name not set on this account.')).toBe(
+    'Name not set on this account.',
+  );
+  expect(accountFieldCopy(' \t\n', 'Name not set on this account.')).toBe(
+    'Name not set on this account.',
+  );
+  expect(accountFieldCopy('\u00A0', 'Email not set on this account.')).toBe(
+    'Email not set on this account.',
+  );
+  expect(accountFieldCopy('  Ada  ', 'Name not set on this account.')).toBe(
+    'Ada',
+  );
+});
+
+test('whitespace-only connection identity stays unavailable', () => {
+  expect(connectionIdentityCopy(null)).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(connectionIdentityCopy({displayName: '', email: ''})).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(connectionIdentityCopy({displayName: ' \t', email: '\n'})).toBe(
+    'Identity unavailable for this connection.',
+  );
+  expect(
+    connectionIdentityCopy({displayName: '  Local identity  ', email: ''}),
+  ).toBe('Local identity');
+  expect(
+    connectionIdentityCopy({
+      displayName: '',
+      email: '  ada@example.com  ',
+    }),
+  ).toBe('ada@example.com');
 });
 
 test('app category copy is not a raw wire token', () => {

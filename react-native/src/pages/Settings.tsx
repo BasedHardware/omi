@@ -29,6 +29,8 @@ import {
   dataProtectionCopy,
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
+  accountFieldCopy,
+  connectionIdentityCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
 } from '../desktopReadClient';
@@ -356,19 +358,31 @@ export function SettingsPage({
         ) : (
           <>
             <SettingRow
-              copy={snapshot.profile.name ?? 'Name not set on this account.'}
+              copy={accountFieldCopy(
+                snapshot.profile.name,
+                'Name not set on this account.',
+              )}
               title="Name"
             />
             <SettingRow
-              copy={snapshot.profile.email ?? 'Email not set on this account.'}
+              copy={accountFieldCopy(
+                snapshot.profile.email,
+                'Email not set on this account.',
+              )}
               title="Email"
             />
             <SettingRow copy={snapshot.profile.uid} title="Account id" />
-            {snapshot.profile.company !== null && (
-              <SettingRow copy={snapshot.profile.company} title="Company" />
+            {(snapshot.profile.company?.trim() ?? '') !== '' && (
+              <SettingRow
+                copy={(snapshot.profile.company ?? '').trim()}
+                title="Company"
+              />
             )}
-            {snapshot.profile.job !== null && (
-              <SettingRow copy={snapshot.profile.job} title="Job" />
+            {(snapshot.profile.job?.trim() ?? '') !== '' && (
+              <SettingRow
+                copy={(snapshot.profile.job ?? '').trim()}
+                title="Job"
+              />
             )}
             {snapshot.profile.dataProtectionLevel !== null && (
               <SettingRow
@@ -639,17 +653,7 @@ export function SettingsPage({
             <>
               <SettingRow
                 title="Connection identity"
-                copy={
-                  serviceSettings.identity === null
-                    ? 'Identity unavailable for this connection.'
-                    : [
-                        serviceSettings.identity.displayName,
-                        serviceSettings.identity.email,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') ||
-                      'Identity unavailable for this connection.'
-                }
+                copy={connectionIdentityCopy(serviceSettings.identity)}
               />
               {serviceSettings.entitlement !== null &&
               ['chat', 'transcription_seconds'].includes(

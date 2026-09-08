@@ -332,7 +332,7 @@ Cloud Linux after `f6cf4618c5`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `2e315c5bc7`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Worker and production device recordings without a published excerpt no longer invent the title Recording. Empty titles keep the existing client fallback: Processing conversation… while processing, Conversation title unavailable otherwise. Unfinished provider excerpts still stay unpublished. This does not invent a transcription producer.
 
-Cloud Linux after `4764dcca34`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. The macOS Apps gallery no longer leaves a blank source line when author, category, and description are empty or whitespace. That line says App details unavailable. Connectors still omits empty description and meta parts after trim. Human and completed chat bodies that are empty or whitespace say Message text unavailable instead of a blank bubble. Cancelled empty replies still say Response stopped. This does not invent an Apps catalogue or chat.write producer.
+Cloud Linux after `6d479e33fc`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Human and completed chat bodies that are empty or whitespace say Message text unavailable instead of a blank bubble. Cancelled empty replies still say Response stopped. Whitespace-only Settings identity, name, and email now use the same unset/unavailable copy as empty strings. Whitespace-only company and job rows are omitted. This does not invent a chat.write or Settings identity producer.
 
 ## Verified and pushed
 

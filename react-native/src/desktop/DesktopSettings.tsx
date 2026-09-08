@@ -16,6 +16,7 @@ import {
   desktopReadErrorCopy,
   developerWebhookStatusCopy,
   developerWebhookTypeCopy,
+  accountFieldCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
 } from '../desktopReadClient';
@@ -457,7 +458,10 @@ export function DesktopSettings({
             : account === null
             ? 'Loading account…'
             : account.profile != null
-            ? account.profile.email ?? 'Email not set on this account.'
+            ? accountFieldCopy(
+                account.profile.email,
+                'Email not set on this account.',
+              )
             : account.profileError ?? 'Account profile is unavailable.'
         }
         title="Account"
@@ -481,18 +485,23 @@ export function DesktopSettings({
       />
       {account?.profile != null ? (
         <Row
-          copy={account.profile.name ?? 'Name not set on this account.'}
+          copy={accountFieldCopy(
+            account.profile.name,
+            'Name not set on this account.',
+          )}
           title="Name"
         />
       ) : null}
       {account?.profile != null ? (
         <Row copy={account.profile.uid} title="Account id" />
       ) : null}
-      {account?.profile?.company != null ? (
-        <Row copy={account.profile.company} title="Company" />
+      {account?.profile != null &&
+      (account.profile.company?.trim() ?? '') !== '' ? (
+        <Row copy={(account.profile.company ?? '').trim()} title="Company" />
       ) : null}
-      {account?.profile?.job != null ? (
-        <Row copy={account.profile.job} title="Job" />
+      {account?.profile != null &&
+      (account.profile.job?.trim() ?? '') !== '' ? (
+        <Row copy={(account.profile.job ?? '').trim()} title="Job" />
       ) : null}
       {account?.profile?.dataProtectionLevel != null ? (
         <Row

@@ -1897,6 +1897,51 @@ test('Settings shows already-loaded Account id and Name not set', async () => {
   expect(tree).not.toContain('Signed in to Omi');
 });
 
+test('Settings treats whitespace-only Account name and email as unset', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: {
+      uid: 'user-42',
+      name: ' \t\n',
+      email: ' \t',
+      company: ' \t',
+      job: '\u00A0',
+      dataProtectionLevel: null,
+    },
+    profileError: null,
+    subscription: null,
+    subscriptionError: null,
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Name not set on this account.');
+  expect(tree).toContain('Email not set on this account.');
+  expect(tree).not.toContain('Company');
+  expect(tree).not.toContain('Job');
+});
+
 test('Settings Alerts does not claim privacy slices unavailable while account is loading', async () => {
   const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
     loadAccountSettings: jest.Mock;

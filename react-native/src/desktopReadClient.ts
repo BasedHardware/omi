@@ -90,6 +90,28 @@ export function accountWireCopy(value: string, unavailable: string): string {
     .join(' ');
 }
 
+export function accountFieldCopy(
+  value: string | null | undefined,
+  unset: string,
+): string {
+  const trimmed = value?.trim() ?? '';
+  return trimmed !== '' ? trimmed : unset;
+}
+
+export function connectionIdentityCopy(
+  identity: {displayName: string; email: string} | null,
+): string {
+  if (identity === null) {
+    return 'Identity unavailable for this connection.';
+  }
+  return (
+    [identity.displayName, identity.email]
+      .map(part => part.trim())
+      .filter(part => part !== '')
+      .join(' · ') || 'Identity unavailable for this connection.'
+  );
+}
+
 export function subscriptionPlanCopy(plan: string): string {
   return accountWireCopy(plan, 'Plan unavailable');
 }
