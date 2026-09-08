@@ -911,6 +911,12 @@ test('coverage copy wins over a complete Home search miss', () => {
   );
   expect(conversationHistory).toContain('chatClockLabel(');
   expect(conversationHistory).not.toContain('function formatChatTime');
+  const desktopHome = readFileSync(
+    resolve(__dirname, '../desktop/DesktopHome.tsx'),
+    'utf8',
+  );
+  expect(desktopHome).toContain('chatClockLabel(');
+  expect(desktopHome).not.toContain('function formatChatTime');
 });
 
 test('chat message timestamps date older days instead of time only', () => {

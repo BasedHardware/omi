@@ -242,7 +242,9 @@ Cloud Linux after `52f6d85548`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `b2d74d008e`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation-detail chat history uses the same Today/Yesterday/date clock as Home chat. A zero createdAt says Time unavailable instead of a blank clock or 1970. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the conversation-detail cancelled-response slice: conversation-detail chat history treats a cancelled assistant message as Response stopped instead of a completed blank Omi line. Partial cancelled text stays visible and still says Response stopped. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `3b67ab72b5`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation-detail chat history treats a cancelled assistant message as Response stopped instead of a completed blank Omi line. Partial cancelled text stays visible and still says Response stopped. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the macOS Home Ask-exchange clock slice: macOS Home chat rows use the same Today/Yesterday/date clock as compact Home and conversation-detail history instead of sender and text only. A zero createdAt says Time unavailable instead of omitting the clock. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

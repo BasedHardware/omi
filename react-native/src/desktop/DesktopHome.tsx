@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
+  chatClockLabel,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   type DesktopReadOutcomes,
@@ -135,6 +136,9 @@ function AskExchange({
               : item.generationOutcome === 'cancelled' && item.text === ''
               ? 'Response stopped.'
               : item.text}
+          </Text>
+          <Text style={styles.rowMeta}>
+            {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
           </Text>
         </View>
       ))}

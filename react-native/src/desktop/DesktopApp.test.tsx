@@ -402,7 +402,7 @@ test('desktop chat renders a truthful failed terminal state', () => {
         id: 'failed-1',
         text: '',
         sender: 'ai',
-        createdAt: 1,
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
         generationOutcome: 'failed',
         generationRetryable: true,
       },
@@ -414,6 +414,24 @@ test('desktop chat renders a truthful failed terminal state', () => {
       node => node.props.accessibilityLabel === 'Failed response',
     ),
   ).not.toHaveLength(0);
+});
+
+test('a zero macOS Home chat timestamp says Time unavailable instead of omitting the clock', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'undated-1',
+        text: 'undated prompt',
+        sender: 'human',
+        createdAt: 0,
+        generationOutcome: null,
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('undated prompt');
+  expect(copy).toContain('Time unavailable');
+  expect(copy).not.toContain('1970');
 });
 
 test('desktop chat can load earlier messages', () => {
