@@ -2610,6 +2610,13 @@ actor AgentRuntimeProcess {
       env["OMI_PROVIDER"] = "omi-local"
       env["OMI_LOCAL_BASE_URL"] = localBaseURL
       env["OMI_LOCAL_MODEL_ID"] = localModelID
+      // Optional vision subagent: a second model on the same local server the
+      // main model can delegate screenshot interpretation to. Omitted
+      // entirely when unset so the bridge treats "absent" as "feature off".
+      let localVisionModelID = defaults.string(forKey: AIProvider.localVisionModelIDKey) ?? ""
+      if !localVisionModelID.isEmpty {
+        env["OMI_LOCAL_VISION_MODEL_ID"] = localVisionModelID
+      }
     }
 
     let rustBase = await APIClient.shared.rustBackendURL

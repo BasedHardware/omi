@@ -31,7 +31,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { appendFile, chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   isStdioServer,
@@ -541,8 +541,6 @@ async function omiRelayContextRaw(): Promise<string | undefined> {
   }
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Denylist patterns
 // ---------------------------------------------------------------------------
@@ -805,12 +803,58 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   return null;
 }
 
+/** Filename pattern for the on-disk screenshot handed to the vision
+ *  subagent (see agent/src/index.ts's writeScreenshotForVisionSubagent).
+ *  Matched on the basename only so it's independent of the OS temp dir. */
+const VISION_SCREENSHOT_BASENAME = /^omi-screen\.(?:png|jpe?g|webp)$/;
+
+/** The provider name pi-mono-extension registers the vision-capable local
+ *  model under (see the omi-local-vision registerProvider call below). The
+ *  vision subagent's frontmatter pins it to "omi-local-vision/<id>", so any
+ *  tool call made while that's the active model is, by construction, the
+ *  vision subagent's own work rather than the main assistant's. */
+const VISION_PROVIDER_NAME = "omi-local-vision";
+
+/** Classify a `read` of the vision screenshot file. Returns null (allowed)
+ *  for any path that isn't the fixed screenshot path, or when the currently
+ *  active model is the vision subagent's own model (it legitimately reads
+ *  its own input image). Blocks everything else — in practice, the main
+ *  model trying to look at the screenshot itself instead of delegating to
+ *  the vision subagent, whether because it never tried delegating or
+ *  because delegation just failed.
+ *
+ *  Note: this can't be done by tracking the subagent tool-call's in-flight
+ *  window (tempting, since we already see "before"/"after" events for it) —
+ *  the vision agent's frontmatter declares its own `extensions:` entry (see
+ *  agent/src/index.ts), so pi-subagents loads a *separate* instance of this
+ *  extension for the child session, with its own module-level state. Only
+ *  ctx.model — which correctly reflects whichever session is currently
+ *  active in each extension instance — survives that split. */
+export function classifyVisionScreenshotRead(filePath: string, activeModelProvider: string | undefined): DenyDecision | null {
+  if (typeof filePath !== "string" || filePath.length === 0) return null;
+  if (activeModelProvider === VISION_PROVIDER_NAME) return null;
+  const resolved = resolve(filePath);
+  if (!VISION_SCREENSHOT_BASENAME.test(basename(resolved))) return null;
+  return {
+    blocked: true,
+    reason:
+      "This screenshot must be interpreted by the vision subagent — call " +
+      "subagent(agent:\"vision\", task:...) with this file path instead of " +
+      "reading it directly. If that delegation just failed, tell the user " +
+      "you're unable to interpret images right now rather than guessing.",
+  };
+}
+
 /** Classify a whole tool_call event by dispatching on toolName.
  *  When OMI_YOLO_MODE=1, the ordinary interactive denylist is bypassed.
- *  Kernel read-only authority remains mandatory in every build. */
+ *  Kernel read-only authority remains mandatory in every build.
+ *  `activeModelProvider` is ctx.model?.provider from the extension context —
+ *  optional so existing callers/tests that don't care about the vision-read
+ *  guard can keep calling this with just an event. */
 export function inspectToolCall(
   event: ToolCallEvent,
   builtInToolPolicy: OmiBuiltInToolPolicy = "default",
+  activeModelProvider?: string,
 ): DenyDecision | null {
   if (
     builtInToolPolicy === "read_only"
@@ -833,8 +877,14 @@ export function inspectToolCall(
       const path = (event.input as { path?: unknown })?.path;
       return typeof path === "string" ? classifyFileWrite(path) : null;
     }
+    case "read": {
+      const path = (event.input as { path?: unknown })?.path;
+      return typeof path === "string"
+        ? classifyVisionScreenshotRead(path, activeModelProvider)
+        : null;
+    }
     default:
-      // read, grep, find, ls, and custom tools pass through unchanged.
+      // grep, find, ls, and custom tools pass through unchanged.
       return null;
   }
 }
@@ -1826,24 +1876,30 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);
   }
 
-  pi.registerProvider("omi", {
-    api: "openai-completions",
-    baseUrl,
-    apiKey,
-    ...(byokActive ? { headers: byokHeaders } : {}),
-    models: [
-      {
-        id: "omi-sonnet",
-        name: "Omi Sonnet",
-        reasoning: true,
-        input: ["text", "image"],
-        contextWindow: 200_000,
-        maxTokens: 16_384,
-        // Cost set to 0 client-side — tracked server-side by the backend
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      },
-    ],
-  });
+  // Only register the cloud "omi" provider when an API key is actually
+  // configured — pi's registerProvider validates auth eagerly and throws
+  // if it's missing, which would otherwise crash the extension on every
+  // startup for local-only installs that never set OMI_API_KEY.
+  if (apiKey) {
+    pi.registerProvider("omi", {
+      api: "openai-completions",
+      baseUrl,
+      apiKey,
+      ...(byokActive ? { headers: byokHeaders } : {}),
+      models: [
+        {
+          id: "omi-sonnet",
+          name: "Omi Sonnet",
+          reasoning: true,
+          input: ["text", "image"],
+          contextWindow: 200_000,
+          maxTokens: 16_384,
+          // Cost set to 0 client-side — tracked server-side by the backend
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+      ],
+    });
+  }
 
   // Pi asks for headers once per provider request and keeps them for retries,
   // which preserves one safe correlation id across an upstream retry chain.
@@ -1891,7 +1947,34 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
     });
   }
 
-  pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
+  // Local vision provider: an optional second model on the same server (e.g.
+  // a vision-capable model resident alongside the main text model in LM
+  // Studio) that the "vision" pi-subagents role is pinned to. Only registered
+  // when a vision model id is configured — absent by default, so existing
+  // single-local-model setups are completely unaffected.
+  const localVisionModelId = process.env.OMI_LOCAL_VISION_MODEL_ID;
+  if (localBaseUrl && localVisionModelId) {
+    pi.registerProvider("omi-local-vision", {
+      api: "openai-completions",
+      baseUrl: localBaseUrl,
+      apiKey: process.env.OMI_LOCAL_API_KEY || "not-needed",
+      models: [
+        {
+          id: localVisionModelId,
+          name: localVisionModelId,
+          reasoning: false,
+          input: ["text", "image"],
+          contextWindow: 32_000,
+          maxTokens: 8_192,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          // See the "omi-local" model above — same LM Studio max-tokens quirk.
+          compat: { maxTokensField: "max_tokens" },
+        },
+      ],
+    });
+  }
+
+  pi.on("tool_call", async (event, ctx): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
     let builtInToolPolicy: OmiBuiltInToolPolicy = "read_only";
     try {
@@ -1911,7 +1994,7 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
         summary: summarizeInput(event),
       });
     }
-    decision = inspectToolCall(event, builtInToolPolicy);
+    decision = inspectToolCall(event, builtInToolPolicy, ctx?.model?.provider);
 
     void appendAudit({
       ts: new Date().toISOString(),

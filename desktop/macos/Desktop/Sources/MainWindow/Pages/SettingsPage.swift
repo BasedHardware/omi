@@ -368,6 +368,7 @@ struct SettingsContentView: View {
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
   @AppStorage(AIProvider.localBaseURLKey) var localLLMBaseURL: String = AIProvider.defaultLocalBaseURL
   @AppStorage(AIProvider.localModelIDKey) var localLLMModelID: String = AIProvider.defaultLocalModelID
+  @AppStorage(AIProvider.localVisionModelIDKey) var localLLMVisionModelID: String = ""
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false

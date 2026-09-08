@@ -18,6 +18,7 @@ import { basename, join as pathJoin } from "node:path";
 import {
   classifyBash,
   classifyFileWrite,
+  classifyVisionScreenshotRead,
   inspectToolCall,
   summarizeInput,
   appendAudit,
@@ -1277,6 +1278,50 @@ test("inspectToolCall: read-only service authority blocks adapter mutations even
     if (previous === undefined) delete process.env.OMI_YOLO_MODE;
     else process.env.OMI_YOLO_MODE = previous;
   }
+});
+
+// ---------------------------------------------------------------------------
+// classifyVisionScreenshotRead
+//
+// Note: this can't be verified via a shared "in-flight call id" set — the
+// vision agent's frontmatter declares its own `extensions:` entry, so
+// pi-subagents loads a *separate* instance of this extension for the child
+// session, with its own module-level state. ctx.model is what actually
+// survives that split (see the doc comment on classifyVisionScreenshotRead).
+// ---------------------------------------------------------------------------
+
+test("classifyVisionScreenshotRead: blocks the vision screenshot path when the main model is asking", () => {
+  const tmp = tmpdir();
+  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.png`, "omi-local"));
+  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.jpg`, "omi-local"));
+  assert.ok(classifyVisionScreenshotRead(`${tmp}/omi-screen.webp`, undefined));
+});
+
+test("classifyVisionScreenshotRead: allows the vision screenshot path when the vision model is asking", () => {
+  const tmp = tmpdir();
+  assert.equal(classifyVisionScreenshotRead(`${tmp}/omi-screen.png`, "omi-local-vision"), null);
+});
+
+test("classifyVisionScreenshotRead: leaves unrelated paths alone regardless of active model", () => {
+  assert.equal(classifyVisionScreenshotRead("/Users/someone/Documents/photo.png", "omi-local"), null);
+  assert.equal(classifyVisionScreenshotRead("/Users/someone/Documents/photo.png", "omi-local-vision"), null);
+});
+
+test("inspectToolCall: denies a direct read of the vision screenshot from a non-vision model", () => {
+  const tmp = tmpdir();
+  const d = inspectToolCall(readEvent(`${tmp}/omi-screen.png`), "default", "omi-local");
+  assert.ok(d);
+});
+
+test("inspectToolCall: denies a direct read of the vision screenshot when no model context is known", () => {
+  const tmp = tmpdir();
+  const d = inspectToolCall(readEvent(`${tmp}/omi-screen.png`));
+  assert.ok(d);
+});
+
+test("inspectToolCall: allows the vision model reading its own screenshot", () => {
+  const tmp = tmpdir();
+  assert.equal(inspectToolCall(readEvent(`${tmp}/omi-screen.png`), "default", "omi-local-vision"), null);
 });
 
 test("inspectToolCall: passthrough for unknown custom tools", () => {
@@ -3040,7 +3085,14 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
 
 test("omiProvider: registers omi-local when both env vars are present", () => {
   withEnv(
-    { OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+    {
+      OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1",
+      OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
+      // The "omi" cloud provider only registers when an API key is present
+      // (see the if (apiKey) gate) — set one so this test's unrelated
+      // assertion that "omi" still registers alongside "omi-local" holds.
+      OMI_API_KEY: "test-key",
+    },
     () => {
       const pi = fakePi();
       omiProvider(pi as any);
@@ -3101,10 +3153,24 @@ test("omiProvider: does not register omi-local when OMI_LOCAL_BASE_URL is missin
 });
 
 test("omiProvider: does not register omi-local when neither env var is set", () => {
-  withEnv({ OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: undefined }, () => {
-    const pi = fakePi();
-    omiProvider(pi as any);
-    assert.ok(!pi.registered.some((r) => r.name === "omi-local"));
-    assert.ok(pi.registered.some((r) => r.name === "omi"));
-  });
+  withEnv(
+    { OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: undefined, OMI_API_KEY: "test-key" },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      assert.ok(!pi.registered.some((r) => r.name === "omi-local"));
+      assert.ok(pi.registered.some((r) => r.name === "omi"));
+    }
+  );
+});
+
+test("omiProvider: does not register omi when OMI_API_KEY is not set (local-only install)", () => {
+  withEnv(
+    { OMI_LOCAL_BASE_URL: undefined, OMI_LOCAL_MODEL_ID: undefined, OMI_API_KEY: undefined },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      assert.ok(!pi.registered.some((r) => r.name === "omi"));
+    }
+  );
 });

@@ -247,7 +247,11 @@ function resolveBundledPi(): string {
  *  Dev: <repo>/desktop/agent/dist/adapters/../../.. → <repo>/desktop/pi-mono-extension/index.ts
  *  Shipped: <App>.app/Contents/Resources/agent/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
  */
-function resolveBundledExtension(): string {
+/** Exported so callers outside this adapter (e.g. the vision subagent's
+ *  generated frontmatter — see index.ts's syncVisionSubagentFile) can point
+ *  a pi-subagents child session at the same extension file the main pi
+ *  process is launched with. */
+export function resolveBundledExtension(): string {
   return decodeURIComponent(new URL(
     "../../../pi-mono-extension/index.ts",
     import.meta.url

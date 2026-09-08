@@ -3023,8 +3023,7 @@ class FloatingControlBarManager {
   private var notificationPresentationCallbacks: [UUID: NotificationPresentationCallbacks] = [:]
   private var activeQueryGeneration: Int = 0
   private var selectedFloatingModel: String {
-    let selected = ShortcutSettings.shared.selectedModel
-    return selected.isEmpty ? ModelQoS.Claude.defaultSelection : selected
+    AIProvider.resolveQuickChatModel()
   }
   private var pendingFollowUpQuery: PendingFollowUpQuery?
 

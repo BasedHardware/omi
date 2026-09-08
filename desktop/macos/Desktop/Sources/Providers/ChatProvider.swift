@@ -1976,6 +1976,19 @@ class ChatProvider: ObservableObject {
     return "Reply in \(name) (\(code)) unless the user asks for another language."
   }
 
+  /// On the local provider, when a vision-capable subagent model is
+  /// configured, the bridge stops attaching screenshots directly to the
+  /// session (see agent/src/index.ts) — this tells the model to delegate
+  /// instead. Nil (and thus omitted from responseContext) whenever no vision
+  /// model is set, so behavior for existing single-local-model setups is
+  /// unchanged, and nil for every provider other than local.
+  static func visionSubagentInstruction(bridgeMode: String) -> String? {
+    guard bridgeMode == BridgeMode.local.rawValue else { return nil }
+    let visionModelID = UserDefaults.standard.string(forKey: AIProvider.localVisionModelIDKey) ?? ""
+    guard !visionModelID.isEmpty else { return nil }
+    return "<vision_subagent>\nYou cannot see images yourself. When a screenshot is attached, the prompt will include a line like \"[Screen image saved at: <path> — delegate to the vision subagent to interpret it]\". When you see that, use the subagent tool with agent \"vision\" and a task describing what you need, including that exact file path, to have it read and describe the image for you. Do not guess about screen contents you have not delegated for. You are not able to open that file yourself — a direct read of it will be refused. If the subagent call itself errors or fails, do not retry it more than once and do not fall back to any other tool to inspect the image: tell the user plainly that you're currently unable to interpret images (screenshot delegation failed) rather than guessing at what might be on screen.\n</vision_subagent>"
+  }
+
   private func resolveKernelQuerySession(
     surface: AgentSurfaceReference,
     requestedModelProfile: String?
@@ -2082,6 +2095,7 @@ class ChatProvider: ObservableObject {
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
       promptCitationLedger.responseInstruction,
+      Self.visionSubagentInstruction(bridgeMode: bridgeMode),
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
