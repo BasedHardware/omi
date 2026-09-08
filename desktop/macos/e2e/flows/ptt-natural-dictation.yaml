@@ -22,7 +22,11 @@ steps:
     verify: true
   - id: S2
     name: Dictation and guarded undo in a scratch editor
-    do: "In a new disposable TextEdit document type Original, keeping the caret at its end. Hold PTT, say 'type Hello', then release. Verify exactly 'Original Hello' appears. Without editing or moving the caret, use the named app's status-menu Undo Last Dictation and verify only 'Original' remains. Repeat but edit the document before invoking Undo; Undo must be disabled and the edit preserved."
+    do: "In a new disposable TextEdit document type Original, keeping the caret at its end. Hold PTT, say 'type Hello', then release. Verify exactly 'Original Hello' appears. Without editing or moving the caret, use the named app's status-menu Undo Last Dictation and verify only 'Original' remains. Repeat but edit the document before invoking Undo; Undo must leave the later edit untouched, even if the menu still offers the guarded action."
+    verify: true
+  - id: S2b
+    name: Clean acknowledgement skips polish
+    do: "In the same disposable editor, hold PTT and say 'type Thanks', then release. On a capture whose acknowledgement payload is already clean and matches the locally formatted text, with no on-screen spelling hints, verify unchanged insertion and the llm_polish-to-local_format policy diagnostic with no remote polish request. If recognition changed casing or formatting, record that as ineligible rather than claiming a skip. Repeat with 'type Meet at three, no, four' and verify the normal polish path still runs."
     verify: true
   - id: S3
     name: Changed target copies instead of writing

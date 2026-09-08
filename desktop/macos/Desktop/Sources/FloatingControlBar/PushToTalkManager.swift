@@ -392,7 +392,13 @@ class PushToTalkManager: ObservableObject {
     return false
   }
 
-  private init() {}
+  private var voiceTypingObservation: AnyCancellable?
+
+  private init() {
+    voiceTypingObservation = voiceTypeSession.objectWillChange.sink { [weak self] in
+      self?.objectWillChange.send()
+    }
+  }
 
   // MARK: - Setup / Teardown
 
@@ -784,7 +790,6 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     seenFinalSegmentIDs.removeAll()
     lastInterimText = ""
-    OfflinePTTQuestionRecovery.shared.clear()
     voiceTypeSession.begin()
     resetVoiceTypingSources()
     voiceTypingLastOutcome = VoiceTypingOutcome()
@@ -857,7 +862,6 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
-      OfflinePTTQuestionRecovery.shared.clear()
       voiceTypeSession.begin()
       resetVoiceTypingSources()
       voiceTypingLastOutcome = VoiceTypingOutcome()
@@ -3090,6 +3094,14 @@ class PushToTalkManager: ObservableObject {
     return voiceTypeSession.undoLastDictation()
   }
 
+  /// Menu tracking can temporarily own AX focus. Execute after AppKit returns
+  /// to the default run-loop mode; the action still revalidates the exact editor.
+  func undoLastDictationAfterMenuTracking() {
+    RunLoop.main.perform(inModes: [.default]) { [weak self] in
+      MainActor.assumeIsolated { _ = self?.undoLastDictation() }
+    }
+  }
+
   /// When the opening of the hold is decoded for the wake word. Advisory: the
   /// closing transcript decides the turn on its own.
   private var voiceTypingProbeSchedule = VoiceTypeWakeWordProbeSchedule()
@@ -3518,14 +3530,22 @@ class PushToTalkManager: ObservableObject {
       case .copied(let delivered):
         self.voiceTypingLastOutcome.delivery = "copied"
         self.voiceTypingLastOutcome.characters = delivered.count
+      case .pasteRequested(let delivered):
+        self.voiceTypingLastOutcome.delivery = "paste_requested"
+        self.voiceTypingLastOutcome.characters = delivered.count
+      case .insertionUncertain(let delivered):
+        self.voiceTypingLastOutcome.delivery = "insertion_uncertain"
+        self.voiceTypingLastOutcome.characters = delivered.count
       }
       log(
         "PushToTalkManager: dictation \(self.voiceTypingLastOutcome.delivery) — "
           + "\(self.voiceTypingLastOutcome.characters) chars via \(run.transcriber)"
           + "\(run.polished ? ", polished" : "") in \(elapsed)ms")
       AnalyticsManager.shared.floatingBarPTTEnded(
-        mode: self.finalizedMode, committed: true, transcriptLength: self.voiceTypingLastOutcome.characters)
-      self.terminateVoiceTypingLifecycle(disposition: .committed, totalSec: totalSec)
+        mode: self.finalizedMode, committed: run.completion.isConfirmedDelivery,
+        transcriptLength: self.voiceTypingLastOutcome.characters)
+      self.terminateVoiceTypingLifecycle(
+        disposition: run.completion.isConfirmedDelivery ? .committed : .cancelled, totalSec: totalSec)
       // The journal write is awaited before the turn ends, so a lifecycle
       // change at turn end cannot drop it; the wait is bounded so a slow
       // bridge cannot hold the bar, and the write itself is not cancelled
@@ -3542,8 +3562,8 @@ class PushToTalkManager: ObservableObject {
         log("PushToTalkManager: voice typing exchange not confirmed journaled before the turn ended")
       }
       guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
-      if case .copied = run.completion {
-        self.voiceTurnCoordinator.publish(.hintChanged(turnID: turnID, text: "Copied — press ⌘V to paste"))
+      if let hint = run.completion.statusHint {
+        self.voiceTurnCoordinator.publish(.hintChanged(turnID: turnID, text: hint))
         try? await Task.sleep(nanoseconds: UInt64(Self.voiceTypingCopiedHintSeconds * 1_000_000_000))
         guard self.voiceTurnCoordinator.activeTurnID == turnID else { return }
       }
@@ -3576,7 +3596,6 @@ class PushToTalkManager: ObservableObject {
     pcm16k: Data, allowNetwork: Bool, knownTranscript: String? = nil
   ) async -> [String: String] {
     guard currentVoiceTurnID == nil else { return ["error": "a voice turn is active"] }
-    OfflinePTTQuestionRecovery.shared.clear()
     voiceTypeSession.begin()
     voiceTypeSession.noteRelease()
     let started = Date()
@@ -3597,6 +3616,8 @@ class PushToTalkManager: ObservableObject {
     case .none: delivery = "none"
     case .pasted: delivery = "pasted"
     case .copied: delivery = "copied"
+    case .pasteRequested: delivery = "paste_requested"
+    case .insertionUncertain: delivery = "insertion_uncertain"
     }
     return [
       "accessibility_trusted": AXIsProcessTrusted() ? "true" : "false",
@@ -3624,14 +3645,7 @@ class PushToTalkManager: ObservableObject {
   private func recordVoiceTypingExchange(
     utterance: String, completion: VoiceTypeSession.Completion, turnID: VoiceTurnID
   ) async -> Bool {
-    guard let delivered = completion.text?.trimmingCharacters(in: .whitespacesAndNewlines), !delivered.isEmpty
-    else { return false }
-    let assistantText: String
-    if case .copied = completion {
-      assistantText = "Copied to clipboard: \(delivered)"
-    } else {
-      assistantText = "Typed: \(delivered)"
-    }
+    guard let assistantText = completion.journalAcknowledgement else { return false }
     let manager = FloatingControlBarManager.shared
     // `realtime_voice`, not a voice-typing origin of its own: the journal
     // runtime accepts a closed set of origins (agent/src/index.ts), and a

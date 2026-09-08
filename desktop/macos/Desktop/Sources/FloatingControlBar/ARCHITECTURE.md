@@ -98,12 +98,15 @@ The fuller recovery, insertion, and notch contract lives in
      a verified AX insertion addresses the captured field and selection when
      the editor supports it. A successful insertion at a collapsed caret keeps
      a 30-second, owner-authorized receipt for `Undo Last Dictation`; a changed
-     target or value, owner, or Accessibility grant invalidates it. If AX
-     insertion is unavailable, the clipboard fallback rechecks the captured
+     target or value, owner, or Accessibility grant prevents execution. Menu
+     availability reads preserve the receipt; its expiry publishes a refresh.
+     If AX insertion is unavailable, the clipboard fallback rechecks the captured
      field and posts `Cmd-V` to that same PID. A target change before that
      final check falls back to copy; a same-PID focus change after the check but
      before the paste event is delivered remains a limitation and does not
-     offer Undo. The fallback restores the previous clipboard after its
+     offer Undo. It reports an unconfirmed paste request; an unverified AX write
+     reports insertion uncertainty without copying for a retry. The fallback
+     restores the previous clipboard after its
      transient paste unless the user has copied something since. A caret right
      after a word or closing punctuation gets a separating space first; after
      whitespace or an opener it does not.

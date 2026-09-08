@@ -102,24 +102,99 @@ final class PushToTalkSpeechGateTests: XCTestCase {
     let url = repositoryRoot.appendingPathComponent(
       "backend/testing/release_fixtures/transcription-release-probe.wav")
     let wav = try Data(contentsOf: url)
+
+    guard wav.count >= 12 else {
+      throw fixtureError("WAV header truncated: expected 12 bytes, found \(wav.count)")
+    }
+    guard String(decoding: wav[0..<4], as: UTF8.self) == "RIFF" else {
+      throw fixtureError("WAV header invalid: RIFF signature missing")
+    }
+    guard String(decoding: wav[8..<12], as: UTF8.self) == "WAVE" else {
+      throw fixtureError("WAV header invalid: WAVE signature missing")
+    }
+
     var offset = 12
-    while offset + 8 <= wav.count {
+    var foundPCM16Mono16kFormat = false
+    while offset < wav.count {
+      guard wav.count - offset >= 8 else {
+        throw fixtureError(
+          "WAV chunk header truncated at byte \(offset): expected 8 bytes, found \(wav.count - offset)"
+        )
+      }
       let chunkID = String(decoding: wav[offset..<(offset + 4)], as: UTF8.self)
       let chunkSize =
         Int(wav[offset + 4])
         | (Int(wav[offset + 5]) << 8)
         | (Int(wav[offset + 6]) << 16)
         | (Int(wav[offset + 7]) << 24)
-      if chunkID == "data" {
-        let start = offset + 8
-        let end = min(wav.count, start + chunkSize)
-        return Data(wav[start..<end])
+      let payloadStart = offset + 8
+      guard chunkSize <= wav.count - payloadStart else {
+        throw fixtureError(
+          "WAV \(chunkID) chunk truncated at byte \(payloadStart): declared \(chunkSize) bytes, "
+            + "found \(wav.count - payloadStart)"
+        )
       }
-      offset += 8 + chunkSize + (chunkSize % 2)
+      let payloadEnd = payloadStart + chunkSize
+
+      if chunkID == "fmt " {
+        guard chunkSize >= 16 else {
+          throw fixtureError(
+            "WAV fmt chunk truncated: expected at least 16 bytes, found \(chunkSize)"
+          )
+        }
+        let audioFormat = Int(wav[payloadStart]) | (Int(wav[payloadStart + 1]) << 8)
+        let channelCount = Int(wav[payloadStart + 2]) | (Int(wav[payloadStart + 3]) << 8)
+        let sampleRate =
+          Int(wav[payloadStart + 4])
+          | (Int(wav[payloadStart + 5]) << 8)
+          | (Int(wav[payloadStart + 6]) << 16)
+          | (Int(wav[payloadStart + 7]) << 24)
+        let blockAlign = Int(wav[payloadStart + 12]) | (Int(wav[payloadStart + 13]) << 8)
+        let bitsPerSample = Int(wav[payloadStart + 14]) | (Int(wav[payloadStart + 15]) << 8)
+        guard audioFormat == 1, channelCount == 1, sampleRate == 16_000, blockAlign == 2,
+          bitsPerSample == 16
+        else {
+          throw fixtureError(
+            "WAV fmt unsupported: expected PCM16 mono at 16 kHz "
+              + "(format=1, channels=1, sampleRate=16000, blockAlign=2, bitsPerSample=16), "
+              + "found format=\(audioFormat), channels=\(channelCount), sampleRate=\(sampleRate), "
+              + "blockAlign=\(blockAlign), bitsPerSample=\(bitsPerSample)"
+          )
+        }
+        foundPCM16Mono16kFormat = true
+      } else if chunkID == "data" {
+        guard foundPCM16Mono16kFormat else {
+          throw fixtureError("WAV data chunk appeared before a valid PCM16 mono 16 kHz fmt chunk")
+        }
+        guard chunkSize.isMultiple(of: 2) else {
+          throw fixtureError(
+            "WAV data chunk truncated: PCM16 payload has odd byte count \(chunkSize)"
+          )
+        }
+        return Data(wav[payloadStart..<payloadEnd])
+      }
+
+      let paddedEnd = payloadEnd + (chunkSize % 2)
+      guard paddedEnd <= wav.count else {
+        throw fixtureError(
+          "WAV \(chunkID) chunk padding truncated at byte \(payloadEnd): expected one pad byte"
+        )
+      }
+      offset = paddedEnd
     }
-    throw NSError(
-      domain: "PushToTalkSpeechGateTests", code: 1,
-      userInfo: [NSLocalizedDescriptionKey: "WAV data chunk missing"])
+    throw fixtureError(
+      foundPCM16Mono16kFormat
+        ? "WAV data chunk missing after valid PCM16 mono 16 kHz fmt chunk"
+        : "WAV data chunk missing: valid PCM16 mono 16 kHz fmt chunk not found"
+    )
+  }
+
+  private func fixtureError(_ message: String) -> NSError {
+    NSError(
+      domain: "PushToTalkSpeechGateTests",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: message]
+    )
   }
 
   private func scalePCM16(_ data: Data, gain: Double) -> Data {

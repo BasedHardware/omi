@@ -37,6 +37,22 @@ final class OfflinePTTQuestionRecoveryTests: XCTestCase {
     XCTAssertTrue(recovery.isAvailable)
   }
 
+  func testInvalidReplacementPreservesPriorQuestion() throws {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    let snapshot = try XCTUnwrap(authority.capture(ownerID: "test", expectedOwnerID: "test"))
+    let otherAuthority = RuntimeOwnerAuthorizationAuthority()
+    let otherSnapshot = try XCTUnwrap(otherAuthority.capture(ownerID: "other", expectedOwnerID: "other"))
+    let recovery = OfflinePTTQuestionRecovery(isAuthorized: { $0 == snapshot })
+
+    XCTAssertTrue(recovery.capture("keep this question", authorization: snapshot))
+    XCTAssertFalse(recovery.capture("  \n  ", authorization: snapshot))
+    XCTAssertFalse(recovery.capture("unauthorized replacement", authorization: otherSnapshot))
+
+    var copied: String?
+    XCTAssertTrue(recovery.copy { copied = $0 })
+    XCTAssertEqual(copied, "keep this question")
+  }
+
   func testSameUserReauthenticationRevokesRecoveredText() throws {
     let authority = RuntimeOwnerAuthorizationAuthority()
     let snapshot = try XCTUnwrap(authority.capture(ownerID: "test", expectedOwnerID: "test"))
@@ -92,9 +108,8 @@ final class OfflinePTTQuestionRecoveryTests: XCTestCase {
       }
     }
 
-    // The first task was cancelled by the replacement, but the injected clock
-    // deliberately ignores cancellation so its late wake-up exercises the
-    // question-id fence instead of disappearing from the test.
+    // The injected sleeper ignores cancellation. Even when the cancelled
+    // timer wakes late, it must leave the replacement question intact.
     await gate.release(0)
     await gate.waitUntilReturned(0)
     XCTAssertTrue(recovery.hasQuestion)
