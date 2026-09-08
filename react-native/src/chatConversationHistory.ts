@@ -126,6 +126,7 @@ export function useChatConversationHistory(
         result.status !== 'loaded' ||
         !result.hasOlder ||
         result.olderCursor === null ||
+        result.olderCursor.length === 0 ||
         loadingOlder
       ) {
         return;

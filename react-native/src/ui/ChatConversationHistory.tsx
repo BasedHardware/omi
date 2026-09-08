@@ -69,7 +69,7 @@ export function ChatConversationHistory({
               </FocusPressable>
             )}
           {result.messages.length === 0 ? (
-            chatHistoryHasOlder(result.hasOlder, result.olderCursor) ? null : (
+            result.hasOlder ? null : (
               <Text style={styles.conversationDetailSummary}>
                 No messages in this chat yet.
               </Text>

@@ -34,6 +34,7 @@ type Props = {
   conversationNotice?: string | null;
   draft: string;
   hasOlderChat: boolean;
+  olderChatAvailable?: boolean;
   loadingOlderChat: boolean;
   memoryNotice?: string | null;
   memoriesLoadingMore?: boolean;
@@ -94,20 +95,20 @@ export function DesktopReadBanner({
 
 function AskExchange({
   chatBusy,
-  hasOlderChat,
+  olderChatAvailable,
   loadingOlderChat,
   messages,
   onLoadOlderChat,
 }: {
   chatBusy: boolean;
-  hasOlderChat: boolean;
+  olderChatAvailable: boolean;
   loadingOlderChat: boolean;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
 }) {
   return (
     <View accessibilityLabel="Ask exchange" style={styles.exchange}>
-      {hasOlderChat ? (
+      {olderChatAvailable ? (
         <FocusPressable
           accessibilityLabel="Load earlier messages"
           accessibilityRole="button"
@@ -148,6 +149,7 @@ export function DesktopHome({
   conversationNotice = null,
   draft,
   hasOlderChat,
+  olderChatAvailable = hasOlderChat,
   loadingOlderChat,
   memoryNotice = null,
   memoriesLoadingMore = false,
@@ -260,7 +262,7 @@ export function DesktopHome({
           style={styles.chatList}>
           <AskExchange
             chatBusy={chatBusy}
-            hasOlderChat={hasOlderChat}
+            olderChatAvailable={olderChatAvailable}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
             onLoadOlderChat={() => {

@@ -58,6 +58,7 @@ type Props = TaskMutationProps & {
   draft: string;
   messages: ChatMessage[];
   hasOlderChat: boolean;
+  olderChatAvailable?: boolean;
   loadingOlderChat: boolean;
   chatBusy: boolean;
   chatError: string | null;
@@ -84,6 +85,7 @@ export function DesktopApp({
   chatSendUnavailable = false,
   draft,
   hasOlderChat,
+  olderChatAvailable = hasOlderChat,
   loadingOlderChat,
   memoryNotice = null,
   memoriesLoadingMore = false,
@@ -181,6 +183,7 @@ export function DesktopApp({
             chatBusy={chatBusy}
             draft={draft}
             hasOlderChat={hasOlderChat}
+            olderChatAvailable={olderChatAvailable}
             loadingOlderChat={loadingOlderChat}
             memoryNotice={memoryNotice}
             conversationNotice={conversationNotice}

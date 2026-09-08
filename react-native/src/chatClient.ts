@@ -66,7 +66,7 @@ export function chatHistoryHasOlder(
   hasOlder: boolean,
   olderCursor: string | null,
 ): boolean {
-  return hasOlder && olderCursor !== null;
+  return hasOlder && olderCursor !== null && olderCursor.length > 0;
 }
 
 export function chatComposerIsResting(

@@ -658,6 +658,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       backend === undefined ||
       backend === null ||
       cursor === null ||
+      cursor.length === 0 ||
       loadingOlderChat
     ) {
       return;
@@ -792,7 +793,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const chatResting = chatComposerIsResting(
     messages.length,
     chatBusy,
-    olderChatAvailable,
+    hasOlderChat,
     chatError,
   );
 
@@ -985,6 +986,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }
           draft={draft}
           hasOlderChat={hasOlderChat}
+          olderChatAvailable={olderChatAvailable}
           loadingOlderChat={loadingOlderChat}
           messages={messages}
           onDraftChange={setDraft}

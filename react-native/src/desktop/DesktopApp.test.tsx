@@ -496,6 +496,32 @@ test('desktop chat can load earlier messages', () => {
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
 });
 
+test('desktop chat omits Load earlier when the older cursor is empty', () => {
+  const onLoadOlderChat = jest.fn();
+  const renderer = renderDesktop({
+    hasOlderChat: true,
+    olderChatAvailable: false,
+    onLoadOlderChat,
+    messages: [
+      {
+        id: 'human-1',
+        text: 'saved prompt',
+        sender: 'human',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: null,
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('saved prompt');
+  expect(copy).not.toContain("I'm ready.");
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load earlier messages',
+    ),
+  ).toHaveLength(0);
+});
+
 test('signed-out Mac sees only the Welcome, never product chrome', () => {
   const onSignIn = jest.fn();
   const renderer = renderDesktop({

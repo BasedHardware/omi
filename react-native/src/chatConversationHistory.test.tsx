@@ -337,6 +337,52 @@ test('an empty chat page with older history does not claim the chat is empty', a
   expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
 });
 
+test('an empty chat page with an empty older cursor does not claim the chat is empty', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([], {olderCursor: '', hasOlder: true}),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
+
+test('keeps loaded chat rows when olderCursor is empty instead of offering Load older', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([{id: 'human-2', text: 'newer prompt', sender: 'human'}], {
+      olderCursor: '',
+      hasOlder: true,
+    }),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(textOf(renderer)).not.toContain('No messages in this chat yet.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
+
 test('loads older main-chat pages instead of dropping persisted history', async () => {
   mockRequest
     .mockResolvedValueOnce(

@@ -356,6 +356,8 @@ Cloud Linux after `3529501827`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `e97e244feb`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. GET `/v1/settings` entitlements with an empty limitKey no longer fail the whole Settings page as malformed. Identity stays visible and usage uses the existing unknown-unit copy. Missing limitKey keys still fail closed. This does not invent a Settings identity producer.
 
+Cloud Linux after `56317dd8a8`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Canonical chat history that claims older messages with an empty `olderCursor` no longer offers Load older that then throws. Loaded rows stay. An empty first page with that window still does not claim the chat is empty. Conversation, memory, and task windows already reject `hasMore` without a cursor. This does not invent a chat.write producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

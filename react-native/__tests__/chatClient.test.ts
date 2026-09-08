@@ -527,6 +527,7 @@ test('maps ratified public recovery without automatically retrying', () => {
   );
   expect(chatHistoryHasOlder(false, null)).toBe(false);
   expect(chatHistoryHasOlder(true, null)).toBe(false);
+  expect(chatHistoryHasOlder(true, '')).toBe(false);
   expect(chatHistoryHasOlder(false, 'older-1')).toBe(false);
   expect(chatHistoryHasOlder(true, 'older-1')).toBe(true);
   expect(chatComposerIsResting(0, false, false, null)).toBe(true);
@@ -705,6 +706,35 @@ test('loads opaque older cursors and preserves exact page metadata', async () =>
   await loadOlderChatHistory(backend, olderCursor);
   expect(paths[1]).toBe(
     `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+  );
+});
+
+test('keeps chat history when olderCursor is empty instead of offering Load older', async () => {
+  const human = {
+    id: 'human-1',
+    text: 'saved prompt',
+    sender: 'human' as const,
+    createdAt: 100,
+    generationOutcome: null,
+  };
+  const backend = {
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body: historyBody([human], {olderCursor: '', hasOlder: true}),
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  } satisfies OmiBackend;
+
+  await expect(loadNewestChatHistory(backend)).resolves.toEqual({
+    messages: [expect.objectContaining({id: 'human-1', text: 'saved prompt'})],
+    olderCursor: '',
+    hasOlder: true,
+  });
+  expect(chatHistoryHasOlder(true, '')).toBe(false);
+  await expect(loadOlderChatHistory(backend, '')).rejects.toThrow(
+    'Chat history cursor is empty',
   );
 });
 
