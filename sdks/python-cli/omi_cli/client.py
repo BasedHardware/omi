@@ -52,21 +52,35 @@ KNOWN_RATE_LIMIT_POLICIES = {
 }
 
 
+def validate_api_base(value: str) -> httpx.URL:
+    """Validate local API configuration before authentication or HTTP work."""
+    # HTTPX accepts port zero and ports above the TCP port range. Reject these here
+    # instead of retrying the resulting ConnectError as a server failure.
+    try:
+        api_base: Optional[httpx.URL] = httpx.URL(value.rstrip("/"))
+    except httpx.InvalidURL:
+        api_base = None
+    if (
+        api_base is None
+        or api_base.scheme not in ("http", "https")
+        or not api_base.host
+        or (api_base.port is not None and not 1 <= api_base.port <= 65535)
+    ):
+        # Never include a possibly credential-bearing URL in public errors.
+        raise UsageError(
+            message="Invalid API base URL",
+            detail="Use a valid absolute http:// or https:// URL for the Omi API.",
+        )
+    return api_base
+
+
 class OmiClient:
     """Thin wrapper around :class:`httpx.Client`. One per CLI invocation."""
 
     def __init__(self, profile: Profile, *, timeout: Optional[httpx.Timeout] = None, verbose: bool = False) -> None:
         # Invalid local configuration must not trigger requests, token refresh,
         # or transport retries. Do not include a possibly credential-bearing URL.
-        try:
-            api_base: Optional[httpx.URL] = httpx.URL(profile.api_base.rstrip("/"))
-        except httpx.InvalidURL:
-            api_base = None
-        if api_base is None or api_base.scheme not in ("http", "https") or not api_base.host:
-            raise UsageError(
-                message="Invalid API base URL",
-                detail="Use a valid absolute http:// or https:// URL for the Omi API.",
-            )
+        api_base = validate_api_base(profile.api_base)
 
         # Pre-flight: if this is an OAuth profile and the cached Firebase ID
         # token is expired (or close to it), refresh before we build the bearer

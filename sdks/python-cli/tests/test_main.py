@@ -65,8 +65,15 @@ def test_omi_api_key_env_var_with_valid_format_is_accepted(config_path, cli_runn
 
 @pytest.mark.parametrize("source", ["flag", "env"])
 @pytest.mark.parametrize("json_mode", [False, True])
-def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsys, source, json_mode) -> None:
-    api_base = "ftp://user:secret@example.invalid/?token=private-token"
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "ftp://user:secret@example.invalid/?token=private-token",
+        "http://user:secret@127.0.0.1:0/?token=private-token",
+        "http://user:secret@127.0.0.1:99999/?token=private-token",
+    ],
+)
+def test_invalid_api_base_is_safe_usage_error(authed_profile, monkeypatch, capsys, source, json_mode, api_base) -> None:
     argv = ["omi", "--no-color", *(["--json"] if json_mode else [])]
     if source == "flag":
         argv.extend(["--api-base", api_base])

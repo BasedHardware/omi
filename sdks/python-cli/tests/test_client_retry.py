@@ -10,7 +10,7 @@ import pytest
 from omi_cli import __version__
 from omi_cli import config as cfg
 from omi_cli.auth.store import store_oauth_tokens
-from omi_cli.client import MAX_RETRY_ATTEMPTS, USER_AGENT, OmiClient
+from omi_cli.client import MAX_RETRY_ATTEMPTS, USER_AGENT, OmiClient, validate_api_base
 from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError, UsageError
 
 
@@ -27,13 +27,16 @@ def test_user_agent_contains_version_and_repo() -> None:
         "example.invalid",
         "https://",
         "https://example.invalid:private-token",
+        "http://127.0.0.1:0",
+        "http://127.0.0.1:65536",
+        "https://user:secret@example.invalid:99999/?token=private-token",
     ],
 )
 def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch, api_base) -> None:
     authed_profile.api_base = api_base
     authed_profile.auth_method = "oauth"
     authed_profile.id_token = "expired"
-    authed_profile.expires_at = time.time() - 60
+    authed_profile.id_token_expires_at = time.time() - 60
 
     def unexpected_call(*args, **kwargs):
         pytest.fail("Invalid API configuration must fail before HTTP, OAuth refresh, or retry backoff")
@@ -50,6 +53,11 @@ def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch
     assert info.value.detail == "Use a valid absolute http:// or https:// URL for the Omi API."
     assert "secret" not in str(info.value)
     assert "private-token" not in str(info.value)
+
+
+@pytest.mark.parametrize("api_base", ["http://localhost:1", "https://localhost:65535", "https://api.omi.me"])
+def test_valid_api_base_port_boundaries(api_base) -> None:
+    assert validate_api_base(api_base).host
 
 
 def test_oauth_pre_flight_refresh_when_token_expired(config_path, monkeypatch) -> None:

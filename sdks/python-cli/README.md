@@ -260,7 +260,16 @@ transport exception details. This guarantee does not cover separate OAuth HTTP
 requests (token exchange, refresh, or API-key minting) or local companion API
 requests.
 
-The shared client requires a valid absolute `http://` or `https://` API base URL.
+If post-login verification encounters a transport or usage error after saving
+the new credential, the error explicitly reports that it is stored but
+unverified. JSON errors include
+`credential_stored: true` and `credential_verified: false`; the transport failure
+still exits with code `3`. Run `omi auth whoami` when connectivity is restored
+to verify the stored credential. Browser login has already created a developer
+API key, and an earlier key for this machine may have been replaced.
+
+The shared client requires a valid absolute `http://` or `https://` API base URL,
+with any explicit port in the range `1`–`65535` (port `0` is reserved).
 Invalid API base configuration is reported as a usage error (exit `1`) before
 the client attempts a request or refreshes credentials.
 
