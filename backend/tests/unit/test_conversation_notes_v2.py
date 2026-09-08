@@ -272,9 +272,7 @@ def test_notes_without_calendar_context_strip_speaker_placeholders():
     assert structured.action_items[0].owner_name is None
 
 
-def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(monkeypatch):
-    from models.transcript_segment import TranscriptSegment
-    from utils.conversations import transcript_for_llm
+def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
     from utils.conversations.meeting_context import context_from_screen_activity
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
 
@@ -290,15 +288,10 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
         finished_at=datetime(2026, 8, 18, 14, 30, tzinfo=timezone.utc),
     )
     assert context is not None
-    monkeypatch.setattr(transcript_for_llm, 'get_user_name', lambda *_args, **_kwargs: 'David')
-    conversation = SimpleNamespace(
-        transcript_segments=[
-            TranscriptSegment(
-                id='seg-1', text='the flight is at noon', speaker='SPEAKER_01', is_user=False, start=0, end=4
-            )
-        ]
-    )
-    transcript, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
+    # Inputs exactly as the compact renderer emits them for one unresolved cluster
+    # (renderer→map wiring is pinned in test_compact_speaker_transcript.py).
+    transcript = '[seg-1 1] the flight is at noon'
+    speaker_map = {1: None}
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-telegram',
         transcript=transcript,
@@ -308,7 +301,7 @@ def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder(
         calendar_context=context,
         speaker_map=speaker_map,
     )
-    assert transcript == '[seg-1 1] the flight is at noon'
+    assert transcript in prefix.context
     assert 'spk 1 Alice Chen' in prefix.context
     assert 'Speaker' not in prefix.context
 
