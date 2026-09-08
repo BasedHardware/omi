@@ -49,6 +49,9 @@ enum ChatSelectableProse {
     fontScale: CGFloat,
     citationOrdinals: Set<Int> = []
   ) -> NSAttributedString? {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.appKitProseBuild)
+    #endif
     let processed = OmiMarkdownContent.preprocessText(source)
     let escaped = OmiMarkdownTilde.escapingNonPairDelimiters(processed)
     guard
@@ -110,9 +113,7 @@ enum ChatSelectableProse {
   /// as dead text.
   static func applyCitationLinks(to text: NSMutableAttributedString, ordinals: Set<Int>) {
     guard !ordinals.isEmpty else { return }
-    guard
-      let pattern = try? NSRegularExpression(pattern: ChatCitationMarkup.numericMarkerPattern)
-    else { return }
+    guard let pattern = citationMarkerExpression else { return }
     let full = NSRange(location: 0, length: text.length)
     for match in pattern.matches(in: text.string, range: full).reversed() {
       guard match.numberOfRanges == 2,
@@ -125,6 +126,10 @@ enum ChatSelectableProse {
         [.link: url, .foregroundColor: NSColor.systemBlue], range: match.range)
     }
   }
+
+  /// Compiled once; `NSRegularExpression` is immutable and thread-safe.
+  private static let citationMarkerExpression = try? NSRegularExpression(
+    pattern: ChatCitationMarkup.numericMarkerPattern)
 
   private static func font(size: CGFloat, bold: Bool, italic: Bool, code: Bool) -> NSFont {
     if code { return .monospacedSystemFont(ofSize: size, weight: bold ? .semibold : .regular) }
@@ -165,7 +170,12 @@ struct ChatSelectableProseText: NSViewRepresentable {
   }
 
   func makeNSView(context: Context) -> NSTextView {
-    let textView = ChatProseTextView()
+    // TextKit 1 from the start. The hover path already reaches for
+    // `layoutManager`, which would convert a TextKit 2 view on first use; the
+    // height this view reports from its own layout (`liveHeight`) and the
+    // height a throwaway `NSLayoutManager` measures have to be the same
+    // number, and they are only guaranteed to be when both are TextKit 1.
+    let textView = ChatProseTextView(usingTextLayoutManager: false)
     textView.isEditable = false
     textView.isSelectable = true
     textView.drawsBackground = false
@@ -191,10 +201,58 @@ struct ChatSelectableProseText: NSViewRepresentable {
   func updateNSView(_ textView: NSTextView, context: Context) {
     context.coordinator.onOpenCitation = onOpenCitation
     context.coordinator.onHoverCitation = onHoverCitation
-    guard textView.textStorage?.isEqual(to: attributed) != true else { return }
-    // Replacing the storage of the one view that owns this selection. There is
-    // no second overlay to install, which is why this is AppKit.
-    textView.textStorage?.setAttributedString(attributed)
+    guard let storage = textView.textStorage else { return }
+    Self.apply(attributed, to: storage)
+  }
+
+  /// Edits `storage` into `attributed` from the first character that differs.
+  ///
+  /// A streamed answer changes by a few words per flush. Replacing the whole
+  /// storage for that made TextKit throw away every line it had laid out and
+  /// lay the entire answer out again — the single largest cost of a flush on
+  /// a long reply, and one that grew with every word that arrived. An edit
+  /// scoped to the tail invalidates only the lines from the edit on, so the
+  /// work of a flush is the size of the flush, not the size of the answer.
+  ///
+  /// The prefix is compared on attributes as well as characters: a `**` that
+  /// closes in this flush re-styles words that arrived earlier, and those
+  /// words are then part of the edit. The one view that owns the selection
+  /// keeps it — an edit after the selected range does not move it.
+  static func apply(_ attributed: NSAttributedString, to storage: NSTextStorage) {
+    let prefix = commonAttributedPrefixLength(storage, attributed)
+    guard prefix < storage.length || prefix < attributed.length else { return }
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(
+        prefix == 0 && storage.length > 0 ? .storageReplacement : .storageIncrementalEdit)
+    #endif
+    let replaced = NSRange(location: prefix, length: storage.length - prefix)
+    let replacement = attributed.attributedSubstring(
+      from: NSRange(location: prefix, length: attributed.length - prefix))
+    storage.beginEditing()
+    storage.replaceCharacters(in: replaced, with: replacement)
+    storage.endEditing()
+  }
+
+  /// Length of the longest leading range on which both strings agree in
+  /// characters *and* attributes.
+  static func commonAttributedPrefixLength(_ old: NSAttributedString, _ new: NSAttributedString) -> Int {
+    let oldString = old.string as NSString
+    let newString = new.string as NSString
+    let characterPrefix = (oldString.commonPrefix(with: new.string, options: .literal) as NSString).length
+    var index = 0
+    while index < characterPrefix {
+      var oldRange = NSRange(location: 0, length: 0)
+      var newRange = NSRange(location: 0, length: 0)
+      let oldAttributes = old.attributes(at: index, effectiveRange: &oldRange)
+      let newAttributes = new.attributes(at: index, effectiveRange: &newRange)
+      guard (oldAttributes as NSDictionary).isEqual(to: newAttributes) else { return index }
+      index = min(oldRange.upperBound, newRange.upperBound, characterPrefix)
+    }
+    // A combining mark can make `commonPrefix` land inside a composed
+    // character; back up to the composed boundary so the edit never splits one.
+    guard index > 0, index < newString.length else { return index }
+    let composed = newString.rangeOfComposedCharacterSequence(at: index)
+    return composed.location < index ? composed.location : index
   }
 
   /// Height for the width the transcript proposed, measured **beside** the
@@ -206,20 +264,57 @@ struct ChatSelectableProseText: NSViewRepresentable {
   /// manager answers the question without touching what is on screen, and the
   /// live container simply tracks the frame it is finally given.
   func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.proseSizeQuery)
+    #endif
     guard let width = proposal.width, width > 0, width < .greatestFiniteMagnitude else { return nil }
+    let measure = {
+      Self.liveHeight(of: nsView, showing: attributed, fittingWidth: width)
+        ?? Self.height(of: attributed, fittingWidth: width)
+    }
     let height: CGFloat
     if let heightEntry {
-      height = ChatProseRenderCache.height(for: heightEntry, width: width) {
-        Self.height(of: attributed, fittingWidth: width)
-      }
+      height = ChatProseRenderCache.height(for: heightEntry, width: width, measure: measure)
     } else {
-      height = Self.height(of: attributed, fittingWidth: width)
+      height = measure()
     }
     return CGSize(width: width, height: height)
   }
 
+  /// The height the live view's own layout already has, when it is an answer
+  /// to the question being asked: the view must be showing exactly
+  /// `attributed`, and its container must already be `width` wide.
+  ///
+  /// This never *sets* the container's width — that is what broke the column
+  /// once (see `height(of:fittingWidth:)`). It only reads the layout the view
+  /// keeps for the frame it was last given, and that layout is incremental:
+  /// after a tail edit TextKit has only re-laid the lines from the edit on.
+  /// The throwaway stack, by contrast, lays out the whole answer from scratch
+  /// on every query, so on a streaming row it was doing the same work as the
+  /// live view again on every flush.
+  static func liveHeight(
+    of textView: NSTextView, showing attributed: NSAttributedString, fittingWidth width: CGFloat
+  ) -> CGFloat? {
+    guard
+      let container = textView.textContainer,
+      let layoutManager = textView.layoutManager,
+      let storage = textView.textStorage,
+      abs(container.size.width - width) < 0.5,
+      storage.length == attributed.length,
+      storage.string == attributed.string
+    else { return nil }
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.liveHeightRead)
+    #endif
+    layoutManager.ensureLayout(for: container)
+    return ceil(layoutManager.usedRect(for: container).height)
+  }
+
   /// Exposed so a test can assert the row's height without mounting a window.
   static func height(of attributed: NSAttributedString, fittingWidth width: CGFloat) -> CGFloat {
+    #if DEBUG
+      ChatStreamingRenderProbe.hit(.throwawayHeightMeasure)
+    #endif
     let storage = NSTextStorage(attributedString: attributed)
     let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
     container.lineFragmentPadding = 0

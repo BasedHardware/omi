@@ -817,6 +817,15 @@ extension ChatMessage {
     visibleAnswerText
   }
 
+  /// `!copyableText.isEmpty` without deriving the text.
+  var hasCopyableText: Bool {
+    ChatAssistantAnswerText.hasVisible(
+      contentBlocks: contentBlocks,
+      fallback: text,
+      isStreaming: isStreaming
+    )
+  }
+
   var displayResources: [ChatResource] {
     if !resources.isEmpty {
       return resources
@@ -3886,6 +3895,17 @@ class ChatProvider: ObservableObject {
   /// starts persisting one of them.
   static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
     var merged = projected
+    // A journal echo of a row this client is still streaming is the snapshot
+    // it wrote a round trip ago; the live projection has moved on since. Taking
+    // the echo's text put the visible answer a few words back on every write
+    // and forward again on the next flush — the stutter the reader saw. The
+    // journal stays the durable authority: a terminal or kernel-owned row is
+    // never streaming and is taken whole, and a streaming echo that has more
+    // than the live row (a restore from another writer) still wins.
+    if existing.isStreaming, projected.isStreaming, existing.text.utf8.count >= projected.text.utf8.count {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
     if merged.rating == nil { merged.rating = existing.rating }
     if merged.metadata == nil { merged.metadata = existing.metadata }
     if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
@@ -3919,9 +3939,13 @@ class ChatProvider: ObservableObject {
     // would regress the turn back to streaming), so it stays gated by
     // terminalization. Every other update is a durable, non-regressing content
     // mutation and must remain journalable after the turn terminalizes.
+    // A streaming flush is a snapshot the next flush supersedes: coalesced,
+    // so a slow kernel round trip leaves the newest row waiting rather than
+    // every flush since. Durable mutations keep their own place in line.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescing: status == .streaming
     ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(
@@ -6440,16 +6464,27 @@ class ChatProvider: ObservableObject {
     return normalizedParts.joined(separator: "`")
   }
 
+  /// Compiled once. Both used to be compiled inside this function, which runs
+  /// per line of the whole accumulated answer on every streaming flush — two
+  /// pattern compiles per line per flush, for two patterns that never change.
+  private static let sentencePunctuationBeforeUpper =
+    try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#)
+  private static let sentencePunctuationBeforeQuotedUpper =
+    try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#)
+
   private static func applySentenceSpacing(_ text: String) -> String {
+    // Both patterns need sentence punctuation; most lines of prose end with it
+    // exactly once and most Markdown structure has none at all.
+    guard text.contains(where: { $0 == "." || $0 == "!" || $0 == "?" }) else { return text }
     var normalized = text
 
-    if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
+    if let punctuationUpper = sentencePunctuationBeforeUpper {
       let range = NSRange(normalized.startIndex..., in: normalized)
       normalized = punctuationUpper.stringByReplacingMatches(
         in: normalized, options: [], range: range, withTemplate: "$1 ")
     }
 
-    if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
+    if let punctuationQuotedUpper = sentencePunctuationBeforeQuotedUpper {
       let range = NSRange(normalized.startIndex..., in: normalized)
       normalized = punctuationQuotedUpper.stringByReplacingMatches(
         in: normalized, options: [], range: range, withTemplate: "$1 ")
