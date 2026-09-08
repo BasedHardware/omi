@@ -337,6 +337,61 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("omits an unreadable named-session assistant from main-session generation history", async () => {
+    const generationId = "11111111-1111-4111-8111-111111111111";
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, 'acct-a', 'human', 'main session words', 1, 1, ?, NULL)"
+      )
+      .bind("main", JSON.stringify({ chatSessionId: null, appId: null }))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, 'acct-a', 'ai', 'named session answer', 2, 1, '{broken', 'completed')"
+      )
+      .bind(generationId)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, 'acct-a', 'human', 'What is my name?', 3, 1, ?, NULL)"
+      )
+      .bind("current", JSON.stringify({ chatSessionId: null, appId: null }))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, 'acct-a', ?, ?, ?)"
+      )
+      .bind(
+        "named-human",
+        "op-named-human",
+        JSON.stringify({
+          op: "create",
+          opId: "op-named-human",
+          id: "named-human",
+          at: 1,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-a",
+        }),
+        generationId
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [{ role: "user", content: "main session words" }],
+    });
+  });
+
   test("omits whitespace-only earlier messages from generation history", async () => {
     const rows = [
       ["human", "acct-a", "human", "My name is Ana", 1, null],

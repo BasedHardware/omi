@@ -1631,6 +1631,104 @@ describe("worker request contract", () => {
     ]);
   });
 
+  test("history GET keeps an unreadable named-session assistant out of main history", async () => {
+    const generationId = "11111111-1111-4111-8111-111111111111";
+    const assistant = {
+      id: generationId,
+      text: "named session answer",
+      sender: "ai" as const,
+    };
+    await insertChatMessage({
+      id: "readable-human",
+      accountId: "test-account",
+      text: "hello from you",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: null,
+    });
+    await insertChatMessage({
+      id: "named-human",
+      accountId: "test-account",
+      text: "named session words",
+      createdAt: 2,
+      position: 2,
+      chatSessionId: "session-alpha",
+    });
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', ?, ?)"
+      )
+      .bind(generationId, "test-account", assistant.text, 3, 3, "{broken")
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_generation_events (generation_id, account_id, event_id, ordinal, payload) VALUES (?, ?, '2', 2, ?)"
+      )
+      .bind(
+        generationId,
+        "test-account",
+        JSON.stringify({ id: "2", kind: "done", message: assistant })
+      )
+      .run();
+    await d1Mock
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "named-human",
+        "test-account",
+        "op-named-human",
+        JSON.stringify({
+          op: "create",
+          opId: "op-named-human",
+          id: "named-human",
+          at: 2,
+          text: "named session words",
+          sender: "human",
+          journalRevision: 0,
+          attachmentIds: [],
+          chatSessionId: "session-alpha",
+        }),
+        generationId
+      )
+      .run();
+
+    const main = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(main.status).toBe(200);
+    const mainEnvelope = wireToChatHistoryEnvelope(await main.json());
+    expect(mainEnvelope).not.toBeNull();
+    expect(mainEnvelope!.messages.map((message) => message.text)).toEqual([
+      "hello from you",
+    ]);
+
+    const named = await fetchWorker(
+      "/v1/chat-messages?limit=50&chatSessionId=session-alpha",
+      { headers: authenticatedHeaders }
+    );
+    expect(named.status).toBe(200);
+    const namedEnvelope = wireToChatHistoryEnvelope(await named.json());
+    expect(namedEnvelope).not.toBeNull();
+    expect(namedEnvelope!.messages.map((message) => message.text)).toEqual([
+      "named session words",
+      "named session answer",
+    ]);
+    expect(namedEnvelope!.messages[1]!.chatSessionId).toBe("session-alpha");
+
+    const conversations = await fetchWorker("/v1/conversations?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    expect(conversations.status).toBe(200);
+    const page = (await conversations.json()) as {
+      items: Array<{ id: string }>;
+    };
+    expect(page.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+      MAIN_CONVERSATION_ID,
+    ]);
+  });
+
   test("cancellation distinguishes accepted from already terminal", async () => {
     const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
       method: "DELETE",

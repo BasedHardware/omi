@@ -199,7 +199,7 @@ export async function readHistory(
       `SELECT id, text, sender, created_at AS createdAt, generation_outcome AS generationOutcome, position, payload
        FROM (
          SELECT id, text, sender, created_at, generation_outcome, position, payload,
-           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.message_id = chat_messages.id AND admissions.account_id = chat_messages.account_id), '{}') END)
+           (SELECT CASE WHEN type = 'text' THEN value END FROM json_each(CASE WHEN json_valid(payload) THEN payload ELSE COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.account_id = chat_messages.account_id AND (admissions.message_id = chat_messages.id OR admissions.generation_id = chat_messages.id) LIMIT 1), '{}') END)
             WHERE key = 'chatSessionId' ORDER BY id DESC LIMIT 1) AS session_key
          FROM chat_messages WHERE account_id = ?
        ) AS normalized
@@ -603,7 +603,14 @@ function overlayAdmissionPayload(
     return message;
   }
   if (isChatCreate(parsed)) {
-    return overlayCreateFields(message, parsed);
+    if (message.sender === "human") {
+      return overlayCreateFields(message, parsed);
+    }
+    return {
+      ...message,
+      chatSessionId: parsed.chatSessionId ?? null,
+      appId: parsed.appId ?? null,
+    };
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return message;
@@ -626,9 +633,9 @@ async function withAdmissionCreateFields(
 ): Promise<ChatMessage> {
   const row = await db
     .prepare(
-      "SELECT payload FROM chat_admissions WHERE message_id = ? AND account_id = ?"
+      "SELECT payload FROM chat_admissions WHERE account_id = ? AND (message_id = ? OR generation_id = ?) LIMIT 1"
     )
-    .bind(message.id, accountId)
+    .bind(accountId, message.id, message.id)
     .first<{ payload: string }>();
   if (row === null) return message;
   return overlayAdmissionPayload(message, row.payload);

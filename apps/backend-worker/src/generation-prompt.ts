@@ -138,7 +138,7 @@ function recoveredPayloadJsonExtract(
   alias: "prior" | "current",
   key: "chatSessionId" | "appId"
 ): string {
-  return `CASE WHEN json_valid(${alias}.payload) THEN json_extract(${alias}.payload, '$.${key}') ELSE json_extract(COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.message_id = ${alias}.id AND admissions.account_id = ${alias}.account_id), '{}'), '$.${key}') END`;
+  return `CASE WHEN json_valid(${alias}.payload) THEN json_extract(${alias}.payload, '$.${key}') ELSE json_extract(COALESCE((SELECT CASE WHEN json_valid(admissions.payload) THEN admissions.payload END FROM chat_admissions AS admissions WHERE admissions.account_id = ${alias}.account_id AND (admissions.message_id = ${alias}.id OR admissions.generation_id = ${alias}.id) LIMIT 1), '{}'), '$.${key}') END`;
 }
 
 function utf8Bytes(value: string): number {
