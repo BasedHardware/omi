@@ -92,6 +92,18 @@ def login(
     )
 
 
+def _mark_stored_but_unverified(exc: CliError, *, browser: bool) -> None:
+    """Describe the completed credential write without losing the typed failure."""
+    detail = (
+        "The new credential is stored but has not been verified. "
+        "Run `omi auth whoami` to verify it when the API is reachable."
+    )
+    if browser:
+        detail += " Browser login created a developer API key; an earlier machine key may have been replaced."
+    exc.detail = f"{exc.detail} {detail}" if exc.detail else detail
+    exc.extra.update({"credential_stored": True, "credential_verified": False})
+
+
 def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
     """Run the OAuth browser flow + verify the resulting Firebase token works."""
     api_base = ctx.api_base_override or ctx.get_profile().api_base
@@ -107,8 +119,8 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
     except AuthError as exc:
         clear_credentials(ctx.profile_name)
         raise exc
-    except (TransportError, UsageError):
-        # Verification never completed; do not report a successful login.
+    except (TransportError, UsageError) as exc:
+        _mark_stored_but_unverified(exc, browser=True)
         raise
     except CliError as exc:
         # Other API errors retain the existing warn-and-keep policy.
@@ -147,8 +159,8 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
     except AuthError as exc:
         clear_credentials(ctx.profile_name)
         raise exc
-    except (TransportError, UsageError):
-        # Verification never completed; do not report a successful login.
+    except (TransportError, UsageError) as exc:
+        _mark_stored_but_unverified(exc, browser=False)
         raise
     except CliError as exc:
         ctx.renderer.warn(f"Could not verify the key right now ({exc.message}). It is stored — try again shortly.")

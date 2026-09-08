@@ -36,7 +36,7 @@ def test_invalid_api_base_fails_before_http_or_oauth(authed_profile, monkeypatch
     authed_profile.api_base = api_base
     authed_profile.auth_method = "oauth"
     authed_profile.id_token = "expired"
-    authed_profile.expires_at = time.time() - 60
+    authed_profile.id_token_expires_at = time.time() - 60
 
     def unexpected_call(*args, **kwargs):
         pytest.fail("Invalid API configuration must fail before HTTP, OAuth refresh, or retry backoff")
