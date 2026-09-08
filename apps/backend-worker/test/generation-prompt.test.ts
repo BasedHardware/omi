@@ -606,6 +606,49 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("whitespace-only rows do not consume the generation history message limit", async () => {
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("kept-visible", "kept visible")
+      .run();
+    for (
+      let position = 2;
+      position <= GENERATION_HISTORY_MESSAGE_LIMIT + 1;
+      position += 1
+    ) {
+      await db
+        .prepare(
+          "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, ?, 1, NULL)"
+        )
+        .bind(`blank-${position}`, " \t\n", position)
+        .run();
+    }
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, ?, 1, NULL)"
+      )
+      .bind(
+        "current-limit",
+        "What is my name?",
+        GENERATION_HISTORY_MESSAGE_LIMIT + 2
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current-limit",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [{ role: "user", content: "kept visible" }],
+    });
+  });
+
   test("bounds default-session history by message count and UTF-8 bytes", async () => {
     for (let position = 1; position <= 43; position += 1) {
       await db

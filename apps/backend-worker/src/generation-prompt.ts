@@ -100,6 +100,7 @@ async function readGenerationHistory(
            "appId"
          )} IS ${recoveredPayloadTextKeySql("current", "appId")}
          AND (prior.sender = 'human' OR (prior.sender = 'ai' AND prior.generation_outcome = 'completed'))
+         AND ${visibleStoredTextSql("prior")}
        ORDER BY prior.position DESC
        LIMIT ?`
     )
@@ -191,6 +192,10 @@ export function recoveredPayloadTextKeySql(
   return `(SELECT CASE WHEN type = 'text' THEN value END FROM json_each(${recoveredPayloadSql(
     alias
   )}) WHERE key = '${key}' ORDER BY id DESC LIMIT 1)`;
+}
+
+function visibleStoredTextSql(alias: string): string {
+  return `length(trim(${alias}.text, char(9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279))) > 0`;
 }
 
 function utf8Bytes(value: string): number {
