@@ -445,6 +445,72 @@ final class RealtimeTurnEvidenceTests: XCTestCase {
         key: key,
         turnID: KernelTurnProjection.stableTurnID(continuityKey: "voice:unlicensed", role: "user")))
   }
+
+  func testRejectedOrMissingJournalReceiptRetiresUnlicensedCapture() throws {
+    let ledger = RealtimeTurnEvidenceLedger()
+    let turnID = VoiceTurnID()
+    let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+    let key = try XCTUnwrap(
+      ledger.begin(ownerID: "owner-a", turnID: turnID, continuityKey: continuityKey))
+
+    XCTAssertTrue(
+      RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+        ledger: ledger, key: key, accepted: false))
+    XCTAssertNil(ledger.entry(for: key))
+    XCTAssertFalse(
+      ledger.resolve(
+        key: key,
+        evidence: ConversationEvidence.nativeScreenOCR(
+          evidenceID: "stale",
+          capturedAt: Date(timeIntervalSince1970: 8),
+          text: "invented late capture",
+          turnID: turnID),
+        state: .complete))
+  }
+
+  func testRejectedJournalReceiptPreservesAdmittedPendingWrite() throws {
+    let ledger = RealtimeTurnEvidenceLedger()
+    let turnID = VoiceTurnID()
+    let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+    let key = try XCTUnwrap(
+      ledger.begin(ownerID: "owner-a", turnID: turnID, continuityKey: continuityKey))
+    let producingRow = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    XCTAssertTrue(ledger.attachJournalUserTurn(key: key, turnID: producingRow))
+
+    XCTAssertTrue(
+      RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+        ledger: ledger, key: key, accepted: false))
+    XCTAssertNotNil(ledger.entry(for: key))
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: Date(timeIntervalSince1970: 9),
+      text: "admitted row screen",
+      turnID: turnID)
+    XCTAssertTrue(ledger.resolve(key: key, evidence: evidence, state: .complete))
+    XCTAssertEqual(ledger.evidence(for: key), evidence)
+    XCTAssertEqual(ledger.entry(for: key)?.journalUserTurnID, producingRow)
+  }
+
+  func testAcceptedJournalReceiptFencesPendingCaptureInsteadOfRetiring() throws {
+    let ledger = RealtimeTurnEvidenceLedger()
+    let turnID = VoiceTurnID()
+    let continuityKey = RealtimeHubController.voiceContinuityKey(for: turnID)
+    let key = try XCTUnwrap(
+      ledger.begin(ownerID: "owner-a", turnID: turnID, continuityKey: continuityKey))
+
+    XCTAssertTrue(
+      RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+        ledger: ledger, key: key, accepted: true))
+    XCTAssertNotNil(ledger.entry(for: key))
+    XCTAssertEqual(ledger.entry(for: key)?.persistenceFenced, true)
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: Date(timeIntervalSince1970: 10),
+      text: "late ocr after accepted write",
+      turnID: turnID)
+    XCTAssertTrue(ledger.resolve(key: key, evidence: evidence, state: .complete))
+    XCTAssertEqual(ledger.evidence(for: key), evidence)
+  }
 }
 
 @MainActor

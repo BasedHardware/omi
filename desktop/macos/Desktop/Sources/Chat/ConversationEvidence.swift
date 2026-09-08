@@ -28,6 +28,8 @@ enum ConversationEvidenceExtractionCompleteness: String, Codable, Equatable, Sen
 struct ConversationEvidence: Codable, Equatable, Identifiable, Sendable {
   static let schema = "omi.evidence@1"
   static let maxBodyBytes = 64 * 1024
+  static let maxMetadataBytes = 512 * 1024
+  static let maxItems = 8
   static let maxIDCharacters = 160
   static let maxTitleCharacters = 240
   static let maxDigestCharacters = 160
@@ -78,10 +80,12 @@ struct ConversationEvidence: Codable, Equatable, Identifiable, Sendable {
     } else {
       self.bodyText = boundedBody
     }
-    let computedDigest = boundedBody.map(Self.digest)
+    // A supplied digest is only authoritative for bodyless evidence. When a
+    // body is retained, the digest must describe those exact bytes or the
+    // runtime rejects the item.
     self.digest =
-      digest.map { Self.boundedRequired($0, maxCharacters: Self.maxDigestCharacters) }
-      ?? computedDigest
+      self.bodyText.map(Self.digest)
+      ?? digest.map { Self.boundedRequired($0, maxCharacters: Self.maxDigestCharacters) }
     self.artifactId = artifactId.map { Self.boundedRequired($0, maxCharacters: Self.maxIDCharacters) }
     self.provenance = provenance.flatMap(Self.boundedProvenance)
   }
@@ -174,6 +178,25 @@ struct ConversationEvidence: Codable, Equatable, Identifiable, Sendable {
     case provenance
   }
 
+  /// Keep identity and the digest of the previously retained body when the
+  /// aggregate envelope can no longer carry that body under the metadata budget.
+  fileprivate func droppingRetainedBodyForMetadataBudget() -> ConversationEvidence {
+    ConversationEvidence(
+      id: id,
+      kind: kind,
+      title: title,
+      capturedAtMs: capturedAtMs,
+      availability: (availability == .pending || availability == .unavailable) ? availability : .partial,
+      extractionCompleteness: (availability == .pending || availability == .unavailable)
+        ? extractionCompleteness
+        : .partial,
+      bodyText: nil,
+      digest: digest,
+      artifactId: artifactId,
+      provenance: provenance
+    )
+  }
+
   private static func boundedRequired(_ value: String, maxCharacters: Int) -> String {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "unknown" }
@@ -233,8 +256,40 @@ struct ConversationEvidenceEnvelope: Codable, Equatable, Sendable {
 
   init(items: [ConversationEvidence]) {
     var seen = Set<String>()
-    self.items = items.filter { seen.insert($0.id).inserted }.prefix(8).map { $0 }
+    let unique = Array(items.filter { seen.insert($0.id).inserted }.prefix(ConversationEvidence.maxItems))
     schema = ConversationEvidence.schema
+    self.items = Self.fittingMetadataBudget(unique)
+  }
+
+  /// Probe constructor used only while measuring encoded size. Applying the
+  /// budget here would recurse through the encoder.
+  private init(uncheckedSchema schema: String, items: [ConversationEvidence]) {
+    self.schema = schema
+    self.items = items
+  }
+
+  /// Prefer keeping earlier full bodies. Overflowing later items become honest
+  /// partial records with the digest of the bytes that had been retained,
+  /// rather than dropping the envelope or pretending the source never existed.
+  private static func fittingMetadataBudget(_ items: [ConversationEvidence]) -> [ConversationEvidence] {
+    var result = items
+    while encodedJSONByteCount(items: result) > ConversationEvidence.maxMetadataBytes {
+      guard let index = result.lastIndex(where: { $0.bodyText != nil }) else { break }
+      result[index] = result[index].droppingRetainedBodyForMetadataBudget()
+    }
+    return result
+  }
+
+  private static func encodedJSONByteCount(items: [ConversationEvidence]) -> Int {
+    let probe = ConversationEvidenceEnvelope(
+      uncheckedSchema: ConversationEvidence.schema, items: items)
+    guard let object = ConversationEvidenceMetadataCodec.encodeEnvelope(probe),
+      JSONSerialization.isValidJSONObject(object),
+      let data = try? JSONSerialization.data(withJSONObject: object)
+    else {
+      return ConversationEvidence.maxMetadataBytes + 1
+    }
+    return data.count
   }
 }
 

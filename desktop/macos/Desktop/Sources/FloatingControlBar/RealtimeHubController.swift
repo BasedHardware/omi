@@ -449,11 +449,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
-    if let previousOwnerID {
-      _ = turnEvidenceLedger.revoke(ownerID: previousOwnerID)
-    } else {
-      _ = turnEvidenceLedger.revokeAll()
-    }
+    _ = turnEvidenceLedger.revokeAll()
     sealedCompletedVoiceJournalRows.removeAll()
     cancelStreamingJournalWrites()
     turnEpoch &+= 1

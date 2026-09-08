@@ -1169,7 +1169,10 @@ extension RealtimeHubController {
       guard let self else { return }
       let receipt = await self.turnPersistenceLedger.consumeReceipt(for: idempotencyKey)
       if let key = self.turnEvidenceLedger.key(turnID: turnID, continuityKey: idempotencyKey) {
-        _ = self.turnEvidenceLedger.markPersistenceFence(key: key)
+        _ = RealtimeTurnEvidenceTerminalPolicy.applyJournalReceipt(
+          ledger: self.turnEvidenceLedger,
+          key: key,
+          accepted: receipt?.accepted == true)
       }
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
       let accepted = receipt?.accepted == true

@@ -74,7 +74,8 @@ enum ChatAttachmentEvidence {
     }
 
     guard let readResult = read(localPath: localPath),
-      let bodyText = decodeUTF8(readResult.data, wasTruncated: readResult.wasTruncated)
+      let bodyText = decodeUTF8(readResult.data, wasTruncated: readResult.wasTruncated),
+      !bodyText.isEmpty
     else {
       return base.make(
         availability: .unavailable,

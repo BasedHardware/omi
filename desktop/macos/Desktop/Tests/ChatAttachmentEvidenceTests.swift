@@ -183,6 +183,27 @@ final class ChatAttachmentEvidenceTests: XCTestCase {
     XCTAssertEqual(userMessage.metadata?.evidence.first?.bodyText, sourceText)
   }
 
+  func testEmptyTextAttachmentIsUnavailableInsteadOfAvailableWithoutBody() async throws {
+    let fileURL = try writeTemporaryFile(named: "empty.txt", contents: "")
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+    let attachment = ChatAttachment(
+      id: "empty",
+      fileName: "empty.txt",
+      mimeType: "text/plain",
+      localFileURL: fileURL,
+      state: .localOnly
+    )
+
+    let capturedEvidence = await ChatAttachmentEvidence.capture(attachments: [attachment])
+    let evidence = try XCTUnwrap(capturedEvidence.first)
+
+    XCTAssertEqual(evidence.availability, .unavailable)
+    XCTAssertEqual(evidence.extractionCompleteness, .none)
+    XCTAssertNil(evidence.bodyText)
+    XCTAssertNil(evidence.digest)
+    XCTAssertFalse(evidence.isReadable)
+  }
+
   private func writeTemporaryFile(named name: String, contents: String) throws -> URL {
     try writeTemporaryData(named: name, data: Data(contents.utf8))
   }

@@ -280,4 +280,21 @@ enum RealtimeTurnEvidenceTerminalPolicy {
   ) -> Bool {
     ledger.finishTerminal(key: key, allowsLateEvidence: false)
   }
+
+  /// Journal-receipt terminal for a reserved native source. An accepted write
+  /// only fences so a still-pending capture can finish. A rejected or missing
+  /// receipt retires unlicensed late capture; an already-admitted producing
+  /// row is preserved by `retireRejectedWrite`.
+  @discardableResult
+  @MainActor
+  static func applyJournalReceipt(
+    ledger: RealtimeTurnEvidenceLedger,
+    key: RealtimeTurnEvidenceLedger.Key,
+    accepted: Bool
+  ) -> Bool {
+    if accepted {
+      return ledger.markPersistenceFence(key: key)
+    }
+    return retireRejectedWrite(ledger: ledger, key: key)
+  }
 }
