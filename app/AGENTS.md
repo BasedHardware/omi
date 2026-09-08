@@ -95,6 +95,8 @@ flutter test test/unit/  # specific directory
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
 
+Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` runs production Swift writers for frame durability, preference freshness, and location snapshots (macOS manifest, local + CI).
+
 PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 ### Test Patterns
