@@ -250,23 +250,30 @@ actor LocalSpeakerDiarizer {
       guard let centroid = Self.meanEmbedding(voice.embeddings) else { continue }
       let update = VoiceprintUpdate(
         personId: voice.personId, embedding: centroid, speechSeconds: voice.speechSeconds, isEnrolled: true)
-      // Replace rather than blend: the rebuild heard the whole history, not one session.
+      // Replace rather than blend: the rebuild heard the whole history, not one session. What
+      // the person chose — a pin, and how often Omi has heard them — is theirs and carries over.
+      let previous = voiceprints.first { $0.personId == voice.personId }
       voiceprints.removeAll { $0.personId == voice.personId }
       voiceprints = LocalVoiceprintStore.applying(update, to: voiceprints, now: now)
       if let index = voiceprints.firstIndex(where: { $0.personId == voice.personId }) {
-        let previous = voiceprints[index]
+        voiceprints[index].isFavorite = previous?.isFavorite ?? false
         voiceprints[index].useScore = max(
-          policy.decayedScore(previous.useScore, lastUsedAt: previous.lastUsedAt, now: now),
+          policy.decayedScore(previous?.useScore ?? 0, lastUsedAt: previous?.lastUsedAt, now: now),
           Double(voice.conversationCount))
-        voiceprints[index].lastUsedAt = [previous.lastUsedAt, voice.lastHeardAt].compactMap { $0 }.max()
-        store.removeAllSamples(personId: voice.personId)
-        voiceprints[index].sampleFiles = []
-        for (offset, clip) in voice.clips.enumerated() {
-          // Distinct names: clips share `now`, and the file name is the timestamp.
-          let stamp = now.addingTimeInterval(-Double(offset))
-          if let file = store.addSample(personId: voice.personId, samples: clip, now: stamp) {
-            voiceprints[index].sampleFiles.append(file)
-            clipsSaved += 1
+        voiceprints[index].lastUsedAt = [previous?.lastUsedAt, voice.lastHeardAt].compactMap { $0 }.max()
+        // Only trade clips for clips: a rebuild that heard nothing must not leave the voice mute.
+        if voice.clips.isEmpty {
+          voiceprints[index].sampleFiles = previous?.sampleFiles ?? []
+        } else {
+          store.removeAllSamples(personId: voice.personId)
+          voiceprints[index].sampleFiles = []
+          for (offset, clip) in voice.clips.enumerated() {
+            // Distinct names: clips share `now`, and the file name is the timestamp.
+            let stamp = now.addingTimeInterval(-Double(offset))
+            if let file = store.addSample(personId: voice.personId, samples: clip, now: stamp) {
+              voiceprints[index].sampleFiles.append(file)
+              clipsSaved += 1
+            }
           }
         }
       }
