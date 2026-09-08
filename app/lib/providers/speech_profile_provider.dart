@@ -309,7 +309,8 @@ class SpeechProfileProvider extends ChangeNotifier
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await openSpeechProfileSocket(
+    final generation = _sessionGeneration;
+    var socket = await openSpeechProfileSocket(
       codec: codec,
       sampleRate: rate,
       language: language,
@@ -317,6 +318,15 @@ class SpeechProfileProvider extends ChangeNotifier
       speechProfileRedo: !_isOnboardingFlow,
       customSttConfig: usingLocalStt ? _localSttConfig : null,
     );
+    if (!_isCurrentSession(generation)) {
+      // The session was closed or reset while the socket was being created.
+      // Adopting it anyway would leak a live backend session that close()'s
+      // stop() never saw, so discard it and fail the attempt exactly like a
+      // null socket does.
+      await socket?.stop(reason: 'stale-session');
+      socket = null;
+    }
+    _socket = socket;
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }

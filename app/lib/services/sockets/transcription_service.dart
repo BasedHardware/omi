@@ -387,10 +387,13 @@ class TranscriptSocketServiceFactory {
   /// question flow and progress only need *some* transcript to arrive, and the
   /// backend already accepts client-supplied `suggested_transcript` segments in
   /// custom-STT mode (routers/listen/receiver.py) and feeds them to the
-  /// OnboardingHandler exactly like server-side STT output. Raw audio is still
-  /// forwarded so the backend keeps its session clock; the voice print itself
-  /// is computed from the WAV the client uploads at finalize(), never from the
-  /// transcript, so a locally transcribed session yields the same profile.
+  /// OnboardingHandler exactly like server-side STT output. Raw audio follows
+  /// the same forwarding setting as the conversation composite (a local-only
+  /// config keeps raw audio off the Omi socket; suggested transcripts still
+  /// reach the backend and keep its session clock alive); the voice print
+  /// itself is computed from the WAV the client uploads at finalize(), never
+  /// from the transcript, so a locally transcribed session yields the same
+  /// profile.
   static TranscriptSegmentSocketService createSpeechProfileOnDevice(
     int sampleRate,
     BleAudioCodec codec,
@@ -413,7 +416,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
       sttProvider: config.provider.name,
-      forwardRawAudioToSecondary: true,
+      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,

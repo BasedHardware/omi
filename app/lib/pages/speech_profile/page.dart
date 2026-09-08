@@ -87,10 +87,11 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     }
   }
 
-  // Guards the pre-flight availability check itself, which runs before
+  // Guards the whole recording startup path, which runs before
   // provider.isInitialising ever becomes true — without this, a rapid double
-  // tap on Redo/Get Started during that network round-trip could start two
-  // concurrent sessions.
+  // tap on Redo/Get Started could start two concurrent sessions: once during
+  // the pre-flight availability round-trip, and again during the dialogs,
+  // codec lookup, and initialise() that follow it. Held until startup exits.
   bool _isCheckingAvailability = false;
 
   @override
@@ -99,6 +100,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     _profilePlayerSub = _profilePlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed && mounted) {
         setState(() => _profilePlaying = false);
+        unawaited(_deactivatePlaybackAudioSession());
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -188,6 +190,20 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     );
   }
 
+  /// Returns the global audio session from playback to the app's recording
+  /// configuration after profile playback ends. Every playback teardown path
+  /// (stop, natural completion, failure after activation, disposal) calls this
+  /// so a still-active media session cannot interfere with later capture or
+  /// other audio.
+  Future<void> _deactivatePlaybackAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.setActive(false);
+    } catch (e) {
+      Logger.debug('Speech profile playback session deactivate failed: $e');
+    }
+  }
+
   Future<void> _toggleProfilePlayback() async {
     if (_profilePlaying) {
       await _stopProfilePlayback();
@@ -195,6 +211,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     }
     if (_profileLoading) return;
     setState(() => _profileLoading = true);
+    bool sessionActivated = false;
     try {
       final url = await getUserSpeechProfile();
       if (url == null || url.isEmpty) throw StateError('no speech profile url');
@@ -213,6 +230,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
         ),
       );
       await session.setActive(true);
+      sessionActivated = true;
       await _profilePlayer.setVolume(1.0);
       await _profilePlayer.setUrl(url);
       if (!mounted) return;
@@ -220,6 +238,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       unawaited(_profilePlayer.play());
     } catch (e) {
       Logger.debug('Speech profile playback failed: $e');
+      // The session may already be playing media volume with no player to
+      // stop; hand it back instead of leaving it active.
+      if (sessionActivated) unawaited(_deactivatePlaybackAudioSession());
       if (mounted) AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     } finally {
       if (mounted) setState(() => _profileLoading = false);
@@ -229,6 +250,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
   Future<void> _stopProfilePlayback() async {
     await _profilePlayer.stop();
     if (mounted) setState(() => _profilePlaying = false);
+    unawaited(_deactivatePlaybackAudioSession());
   }
 
   @override
@@ -236,6 +258,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
     _profilePlayerSub?.cancel();
     _profilePlayer.dispose();
     _allDoneTimer?.cancel();
+    unawaited(_deactivatePlaybackAudioSession());
     super.dispose();
   }
 
@@ -258,10 +281,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       }
     }
 
-    Future<void> startRecording(SpeechProfileProvider provider) async {
-      if (_isCheckingAvailability || provider.isInitialising) return;
-      setState(() => _isCheckingAvailability = true);
-
+    Future<void> startRecordingChecked(SpeechProfileProvider provider) async {
       // Pre-flight: don't enter the recording UI at all if the streaming
       // primary is known down — otherwise the socket connects and audio uploads, but no
       // question/progress ever arrives (see STT_UNAVAILABLE handling below,
@@ -271,7 +291,6 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       // rather than dead-ending in a dialog. The voice print comes from the
       // uploaded audio either way.
       final useLocalStt = !available && await provider.enableLocalStt();
-      if (mounted) setState(() => _isCheckingAvailability = false);
       if (!available && !useLocalStt) {
         if (!context.mounted) return;
         await showDialog(
@@ -295,6 +314,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
+      // The dialog above awaits user input; the page can have been left meanwhile.
+      if (!context.mounted) return;
 
       bool usePhoneMic = false;
 
@@ -317,6 +338,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
       }
 
       await stopDeviceRecording();
+      if (!mounted) return;
       bool success = await provider.initialise(
         finalizedCallback: restartDeviceRecording,
         processConversationCallback: () {
@@ -336,6 +358,20 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> {
         },
       );
       provider.updateStartedRecording(true);
+    }
+
+    Future<void> startRecording(SpeechProfileProvider provider) async {
+      if (_isCheckingAvailability || provider.isInitialising) return;
+      setState(() => _isCheckingAvailability = true);
+      // The guard stays set until the whole startup path exits (finally below):
+      // a second tap while the availability check, dialogs, codec lookup, or
+      // provider.initialise() are still awaiting would otherwise race socket
+      // and microphone initialization.
+      try {
+        await startRecordingChecked(provider);
+      } finally {
+        if (mounted) setState(() => _isCheckingAvailability = false);
+      }
     }
 
     return PopScope(
