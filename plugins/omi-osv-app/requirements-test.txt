@@ -1,0 +1,2 @@
+-r requirements.txt
+# The test runner is Python's standard-library unittest; no extra packages.

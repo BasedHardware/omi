@@ -119,6 +119,27 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
+      - name: Install manifest-selected OSV app test dependencies
+        run: |
+          python3 .github/scripts/run_checks.py \
+            --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --output json > "$RUNNER_TEMP/omi-osv-check-selection.json"
+          python3 - "$RUNNER_TEMP/omi-osv-check-selection.json" <<'PYTHON'
+          import json
+          import subprocess
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as source:
+              selected = json.load(source)["checks"]
+          if any(check["id"] == "omi-osv-app-tests" for check in selected):
+              subprocess.run(
+                  ["uv", "pip", "install", "--system", "-r",
+                   "plugins/omi-osv-app/requirements-test.txt"],
+                  check=True,
+              )
+          PYTHON
+
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:
