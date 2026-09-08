@@ -35,11 +35,12 @@ import {
   isAllowedChatAttachmentMimeType,
   MAIN_CHAT_ATTACHMENT_SCOPE,
 } from "../chat/attachment-policy";
-import type {
-  ChatMessageRecord,
-  ChatMessagesStore,
-  StoredChatMessage,
-  WritableChatMessageType,
+import {
+  MAIN_CHAT_SESSION_ID,
+  type ChatMessageRecord,
+  type ChatMessagesStore,
+  type StoredChatMessage,
+  type WritableChatMessageType,
 } from "../stores/chat-messages-store";
 import type {
   ChatGenerationEvent,
@@ -329,7 +330,7 @@ export const parseHistoryQuery = (request: Request): {
   return {
     limit: rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit),
     olderCursor,
-    chatSessionId,
+    chatSessionId: chatSessionId === MAIN_CHAT_SESSION_ID ? null : chatSessionId,
   };
 };
 

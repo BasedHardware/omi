@@ -202,8 +202,8 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           SELECT ${SELECT_FIELDS}
           FROM service_chat_messages
           WHERE account_id = ? AND app_id IS NULL
-            AND CASE WHEN ? IS NULL
-              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0)
+            AND CASE WHEN ? IS NULL OR ? = 'chat-main'
+              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0 OR chat_session_id = 'chat-main')
               ELSE chat_session_id = ?
             END
             AND sequence <= ?
@@ -211,6 +211,7 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           LIMIT ?
         `).all(
           accountId,
+          chatSessionId,
           chatSessionId,
           chatSessionId,
           query.snapshotSequence,
@@ -220,8 +221,8 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           SELECT ${SELECT_FIELDS}
           FROM service_chat_messages
           WHERE account_id = ? AND app_id IS NULL
-            AND CASE WHEN ? IS NULL
-              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0)
+            AND CASE WHEN ? IS NULL OR ? = 'chat-main'
+              THEN (chat_session_id IS NULL OR length(trim(chat_session_id)) = 0 OR chat_session_id = 'chat-main')
               ELSE chat_session_id = ?
             END
             AND sequence <= ?
@@ -230,6 +231,7 @@ export class SqliteChatMessagesStore implements ChatMessagesStore {
           LIMIT ?
         `).all(
           accountId,
+          chatSessionId,
           chatSessionId,
           chatSessionId,
           query.snapshotSequence,

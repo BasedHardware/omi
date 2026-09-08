@@ -60,13 +60,18 @@ export interface ChatHistoryQuery {
   readonly chatSessionId?: string | null;
 }
 
+export const MAIN_CHAT_SESSION_ID = "chat-main";
+
 export const historySessionMatches = (
   rowChatSessionId: string | null,
   queryChatSessionId: string | null | undefined,
 ): boolean => {
   const wanted = queryChatSessionId ?? null;
-  if (wanted === null) {
-    return rowChatSessionId === null || rowChatSessionId.length === 0;
+  const rowIsMain = rowChatSessionId === null
+    || rowChatSessionId.length === 0
+    || rowChatSessionId === MAIN_CHAT_SESSION_ID;
+  if (wanted === null || wanted === MAIN_CHAT_SESSION_ID) {
+    return rowIsMain;
   }
   return rowChatSessionId === wanted;
 };
