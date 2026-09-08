@@ -48,12 +48,16 @@ export async function composeGenerationPrompt(
     const remaining = GENERATION_ATTACHMENT_TEXT_BUDGET - usedBytes;
     if (remaining <= 0) continue;
     const excerpt = await readTextExcerpt(r2, attachment.r2Key, remaining);
-    if (excerpt === null || !isVisibleGenerationText(excerpt)) continue;
-    usedBytes += utf8Bytes(excerpt);
+    if (excerpt.kind === "missing") {
+      return { kind: "fail" };
+    }
+    if (excerpt.kind !== "text" || !isVisibleGenerationText(excerpt.value))
+      continue;
+    usedBytes += utf8Bytes(excerpt.value);
     excerpts.push(
       isVisibleGenerationText(attachment.displayName)
-        ? `Attachment "${attachment.displayName}":\n${excerpt}`
-        : excerpt
+        ? `Attachment "${attachment.displayName}":\n${excerpt.value}`
+        : excerpt.value
     );
   }
 
@@ -111,26 +115,34 @@ async function readGenerationHistory(
   return history.reverse();
 }
 
+type TextExcerpt =
+  | { kind: "text"; value: string }
+  | { kind: "empty" }
+  | { kind: "missing" };
+
 async function readTextExcerpt(
   r2: R2Bucket | undefined,
   r2Key: string,
   maxBytes: number
-): Promise<string | null> {
-  if (r2 === undefined || maxBytes <= 0) return null;
+): Promise<TextExcerpt> {
+  if (r2 === undefined || maxBytes <= 0) return { kind: "empty" };
   try {
     const object = await r2.get(r2Key, {
       range: { offset: 0, length: maxBytes },
     });
-    if (object === null) return null;
+    if (object === null) return { kind: "missing" };
     const bytes = new Uint8Array(await object.arrayBuffer());
-    if (bytes.byteLength === 0 || bytes.includes(0)) return null;
+    if (bytes.byteLength === 0 || bytes.includes(0)) return { kind: "empty" };
     try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      return {
+        kind: "text",
+        value: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+      };
     } catch {
-      return null;
+      return { kind: "empty" };
     }
   } catch {
-    return null;
+    return { kind: "missing" };
   }
 }
 

@@ -674,13 +674,13 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).toContain("notes.txt");
   });
 
-  test("omits foreign-account and missing R2 objects without leaking bytes", async () => {
+  test("omits foreign-account attachments without leaking bytes", async () => {
     await insertBound(db, {
-      id: "att-own-missing",
+      id: "att-own",
       accountId: "acct-a",
       messageId: "msg-1",
       mimeType: "text/plain",
-      displayName: "missing.txt",
+      displayName: "notes.txt",
     });
     await insertBound(db, {
       id: "att-foreign",
@@ -689,6 +689,10 @@ describe("composeGenerationPrompt", () => {
       mimeType: "text/plain",
       displayName: "foreign.txt",
     });
+    r2.putBytes(
+      "attachments/acct-a/att-own",
+      new TextEncoder().encode("own file bytes")
+    );
     r2.putBytes(
       "attachments/acct-other/att-foreign",
       new TextEncoder().encode(FOREIGN_TEXT)
@@ -703,7 +707,8 @@ describe("composeGenerationPrompt", () => {
     );
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") return;
-    expect(result.prompt).toBe("hello");
+    expect(result.prompt).toContain("hello");
+    expect(result.prompt).toContain("own file bytes");
     expect(result.prompt).not.toContain(FOREIGN_TEXT);
     expect(result.prompt).not.toContain("foreign.txt");
   });
@@ -749,6 +754,68 @@ describe("composeGenerationPrompt", () => {
       ""
     );
     expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("fails when a bound text object is missing instead of dropping it from a visible prompt", async () => {
+    await insertBound(db, {
+      id: "att-missing-visible",
+      accountId: "acct-a",
+      messageId: "msg-missing-visible",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-missing-visible",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("fails when object storage throws for a bound text file instead of dropping it", async () => {
+    await insertBound(db, {
+      id: "att-throw",
+      accountId: "acct-a",
+      messageId: "msg-throw",
+      mimeType: "text/plain",
+    });
+    const throwing = {
+      async get() {
+        throw new Error("r2");
+      },
+    } as unknown as R2Bucket;
+    const result = await composeGenerationPrompt(
+      db,
+      throwing,
+      "acct-a",
+      "msg-throw",
+      "summarize this"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("visible user text omits an empty bound text file", async () => {
+    await insertBound(db, {
+      id: "att-empty-file",
+      accountId: "acct-a",
+      messageId: "msg-empty-file",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes("attachments/acct-a/att-empty-file", new Uint8Array());
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-empty-file",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toBe("summarize this");
+    expect(result.prompt).not.toContain("notes.txt");
   });
 
   test("fails when the user text is only whitespace and no attachment bytes load", async () => {
