@@ -61,6 +61,8 @@ def validate_api_base(value: str) -> httpx.URL:
         api_base = None
     if (
         api_base is None
+        # HTTPX percent-encodes raw whitespace, including in otherwise invalid hosts.
+        or any(char.isspace() for char in value)
         or api_base.scheme not in ("http", "https")
         or not api_base.host
         # HTTPX turns URL userinfo into Basic auth, overriding the Bearer header.

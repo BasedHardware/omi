@@ -138,6 +138,8 @@ def test_explicit_login_key_recovers_from_invalid_environment_key(config_path, r
         "https://example.invalid/api?tenant=private-token",
         "https://example.invalid/api#private-token",
         "https://user:secret@example.invalid/api",
+        "https://api.omi.me ",
+        "https://api.omi.me/api v1",
         "",
     ],
 )
