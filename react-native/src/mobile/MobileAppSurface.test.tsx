@@ -201,6 +201,39 @@ test('compact Home empty Send is disabled without omitting Ask', () => {
   });
 });
 
+test('compact Home NEXT LINE-only Send is disabled without omitting Ask', () => {
+  const onAskSubmit = jest.fn();
+  const renderer = render({askValue: '\u0085', onAskSubmit});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send to Omi',
+  );
+  expect(send.props.disabled).toBe(true);
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onAskSubmit).not.toHaveBeenCalled();
+  const ask = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+  expect(ask.props.editable).toBe(true);
+  expect(ask.props.onSubmitEditing).toBeUndefined();
+  const askStyle =
+    typeof ask.props.style === 'function'
+      ? ask.props.style({pressed: false})
+      : ask.props.style;
+  expect(JSON.stringify([askStyle].flat(Infinity))).not.toContain(
+    '"opacity":0.35',
+  );
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 describe('MobileAppSurface', () => {
   test.each(['home', 'tasks', 'chat', 'apps'] as const)(
     '%s uses the native safe-area boundary',

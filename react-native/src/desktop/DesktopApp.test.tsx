@@ -807,6 +807,32 @@ test('desktop empty Ask is disabled without omitting Search', () => {
   expect(omnibar.props.onSubmitEditing).toBeUndefined();
 });
 
+test('desktop NEXT LINE-only Ask is disabled without omitting Search', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '\u0085', onSend});
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  expect(renderedText(renderer)).toContain('Ask');
+  const sendStyle =
+    typeof send.props.style === 'function'
+      ? send.props.style({pressed: false})
+      : send.props.style;
+  expect([sendStyle].flat(Infinity)).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
+  );
+  send.props.onPress();
+  expect(onSend).not.toHaveBeenCalled();
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(
+      node => node.props.placeholder === "Search what you've seen and heard…",
+    )!;
+  expect(omnibar.props.editable).not.toBe(false);
+  expect(omnibar.props.onSubmitEditing).toBeUndefined();
+});
+
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
   const renderer = renderDesktop();
   await act(async () => {

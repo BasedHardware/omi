@@ -8,7 +8,7 @@ jest.mock('../omiNative', () => ({
 
 import {Composer} from './Composer';
 
-function renderComposer(sendUnavailable: boolean) {
+function renderComposer(sendUnavailable: boolean, draft = '') {
   const onSend = jest.fn();
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -20,7 +20,7 @@ function renderComposer(sendUnavailable: boolean) {
         composerFocused={false}
         composerMaxWidth={640}
         composerRef={{current: null}}
-        draft=""
+        draft={draft}
         onDraftChange={jest.fn()}
         onFocusChange={jest.fn()}
         onSend={onSend}
@@ -69,4 +69,18 @@ test('composer does not keep an Ask anything door when send is unusable', () => 
   expect([inputStyle].flat(Infinity)).toEqual(
     expect.arrayContaining([expect.objectContaining({opacity: 0.35})]),
   );
+});
+
+test('composer NEXT LINE-only draft stays disabled instead of sendable', () => {
+  const {renderer} = renderComposer(false, '\u0085');
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Send message')
+      .props.disabled,
+  ).toBe(true);
+  const live = renderComposer(false, 'What did we decide?');
+  expect(
+    live.renderer.root.find(
+      node => node.props.accessibilityLabel === 'Send message',
+    ).props.disabled,
+  ).toBe(false);
 });

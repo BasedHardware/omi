@@ -2,6 +2,7 @@ import React from 'react';
 import {TextInput, View} from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Square from 'lucide-react-native/icons/square';
+import {visibleDisplayText} from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -76,12 +77,13 @@ export function Composer({
             accessibilityRole="button"
             disabled={
               sendBlocked ||
-              (activeGenerationId === null && (draft.trim() === '' || chatBusy))
+              (activeGenerationId === null &&
+                (visibleDisplayText(draft) === '' || chatBusy))
             }
             onPress={activeGenerationId === null ? onSend : onStop}
             style={({pressed}) => [
               styles.sendButton,
-              draft.trim() !== '' &&
+              visibleDisplayText(draft) !== '' &&
                 !chatBusy &&
                 !sendBlocked &&
                 styles.sendButtonEnabled,

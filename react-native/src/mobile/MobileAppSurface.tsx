@@ -25,6 +25,7 @@ import Settings from 'lucide-react-native/icons/settings';
 import {
   desktopBackendUnavailableCopy,
   taskDisplayTitle,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {
   mobileColor,
@@ -338,7 +339,7 @@ export function MobileAppSurface({
   mindMapCoverageCopy,
   onRefresh,
 }: MobileAppSurfaceProps): React.JSX.Element {
-  const sendDisabled = askUnavailable || askValue.trim() === '';
+  const sendDisabled = askUnavailable || visibleDisplayText(askValue) === '';
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
   const taskFeedback = useMemo(

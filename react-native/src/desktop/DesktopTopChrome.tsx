@@ -8,6 +8,7 @@ import Search from 'lucide-react-native/icons/search';
 import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
+import {visibleDisplayText} from '../desktopReadClient';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
   desktopMotion,
@@ -75,7 +76,8 @@ export function DesktopChrome({
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
   const sendDisabled =
-    activeGenerationId === null && (sendUnavailable || draft.trim() === '');
+    activeGenerationId === null &&
+    (sendUnavailable || visibleDisplayText(draft) === '');
 
   useEffect(() => {
     if (activeNav === null) {

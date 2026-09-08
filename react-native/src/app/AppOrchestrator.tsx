@@ -44,6 +44,7 @@ import {
   desktopReadsCanRetry,
   desktopRecoveryCopy,
   homeSearchItems,
+  visibleDisplayText,
 } from '../desktopReadClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import {styles} from '../ui/styles';
@@ -546,7 +547,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (
       backend === undefined ||
       backend === null ||
-      text === '' ||
+      visibleDisplayText(draft) === '' ||
       chatBusy ||
       chatWriteDoorClosed
     ) {
@@ -1180,7 +1181,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         )}
         onAskChange={setDraft}
         onAskSubmit={() => {
-          if (draft.trim() === '') {
+          if (visibleDisplayText(draft) === '') {
             return;
           }
           setRoute('Home');
