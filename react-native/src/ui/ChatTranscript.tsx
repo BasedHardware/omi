@@ -1,17 +1,9 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
+import {chatClockLabel} from '../desktopReadClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
-
-function formatChatTime(createdAt: number): string {
-  const milliseconds =
-    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
-  return new Date(milliseconds).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 const ChatMessageRow = memo(function ChatMessageRow({
   animate,
@@ -89,7 +81,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
         )}
         <Text
           style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
-          {formatChatTime(message.createdAt)}
+          {chatClockLabel(message.createdAt, Date.now())}
         </Text>
       </View>
     </Animated.View>

@@ -175,6 +175,33 @@ export function projectionTimestamp(
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
 }
 
+export function clockLabel(
+  timestampMs: number,
+  nowEpochMilliseconds: number,
+): string {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) {
+    return '';
+  }
+  const day = conversationGroupLabel(
+    new Date(timestampMs).toISOString(),
+    nowEpochMilliseconds,
+  );
+  const time = new Date(timestampMs).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return day === 'Today' ? time : `${day} · ${time}`;
+}
+
+export function chatClockLabel(
+  createdAt: number,
+  nowEpochMilliseconds: number,
+): string {
+  const milliseconds =
+    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
+  return clockLabel(milliseconds, nowEpochMilliseconds);
+}
+
 export function projectionClockLabel(
   item: DesktopReadProjection,
   nowEpochMilliseconds: number,
@@ -183,15 +210,7 @@ export function projectionClockLabel(
   if (timestamp === null || timestamp <= 0) {
     return '';
   }
-  const day = conversationGroupLabel(
-    new Date(timestamp).toISOString(),
-    nowEpochMilliseconds,
-  );
-  const time = new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  return day === 'Today' ? time : `${day} · ${time}`;
+  return clockLabel(timestamp, nowEpochMilliseconds);
 }
 
 export function homeSearchItems(

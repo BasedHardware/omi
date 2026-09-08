@@ -208,7 +208,9 @@ Cloud Linux after `fba3e2150f`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `e45def0560`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Tasks no longer labels a disabled read-only task control Complete or Reopen. Incomplete read-only rows stay Task; completed read-only rows stay Completed; Complete/Reopen stay when writes are available. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the macOS Home clock-label slice: macOS Home and Conversations rows no longer show only a clock time for older days. Today stays time-only; Yesterday and older days use the same Today/Yesterday/date grouping as compact Daily Recaps. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `eef1371fd0`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Home and Conversations rows no longer show only a clock time for older days. Today stays time-only; Yesterday and older days use the same Today/Yesterday/date grouping as compact Daily Recaps. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the chat clock-label slice: Home and conversation-detail chat history no longer show only a clock time for older messages. Today stays time-only; Yesterday and older days use the same Today/Yesterday/date grouping as compact Daily Recaps and macOS Home. Seconds and millisecond `createdAt` values stay supported. This does not invent a chat-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

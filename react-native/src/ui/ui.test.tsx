@@ -99,6 +99,7 @@ import {
   omiMarkDotCenter,
   omiMarkGeometry,
 } from './OmiAvatar';
+import {ChatMessageRow} from './ChatTranscript';
 
 function render(element: React.ReactElement) {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
@@ -898,6 +899,80 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain(
     'requestedConversationId={requestedConversationId}',
   );
+  const transcript = readFileSync(
+    resolve(__dirname, 'ChatTranscript.tsx'),
+    'utf8',
+  );
+  expect(transcript).toContain('chatClockLabel(');
+  expect(transcript).not.toContain('function formatChatTime');
+});
+
+test('chat message timestamps date older days instead of time only', () => {
+  const now = new Date(2026, 7, 14, 12, 0);
+  jest.useFakeTimers();
+  jest.setSystemTime(now);
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const message = (createdAt: number) => ({
+    id: 'chat-1',
+    text: 'Hello',
+    sender: 'human' as const,
+    createdAt,
+    generationOutcome: null,
+  });
+  try {
+    const today = new Date(2026, 7, 14, 8, 0);
+    const todayTree = JSON.stringify(
+      render(
+        <ChatMessageRow
+          animate={false}
+          compact
+          message={message(today.getTime())}
+          reduceMotion
+        />,
+      ).toJSON(),
+    );
+    expect(todayTree).toContain(time(today));
+    expect(todayTree).not.toContain('Yesterday');
+    expect(todayTree).not.toContain(' · ');
+    const yesterday = new Date(2026, 7, 13, 23, 0);
+    expect(
+      JSON.stringify(
+        render(
+          <ChatMessageRow
+            animate={false}
+            compact
+            message={message(yesterday.getTime())}
+            reduceMotion
+          />,
+        ).toJSON(),
+      ),
+    ).toContain(`Yesterday · ${time(yesterday)}`);
+    const older = new Date(2026, 7, 10, 12, 0);
+    expect(
+      JSON.stringify(
+        render(
+          <ChatMessageRow
+            animate={false}
+            compact
+            message={message(older.getTime())}
+            reduceMotion
+          />,
+        ).toJSON(),
+      ),
+    ).toContain(
+      `${older.toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })} · ${time(older)}`,
+    );
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test('wide Home search rows keep untitled processing conversations visible', () => {

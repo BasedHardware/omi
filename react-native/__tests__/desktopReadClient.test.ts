@@ -26,6 +26,7 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   parseMemoryText,
+  chatClockLabel,
   projectionClockLabel,
   projectionTimestamp,
   taskGroup,
@@ -745,6 +746,32 @@ test('clock labels keep Today as time and date older days', () => {
       now,
     ),
   ).toBe('');
+});
+
+test('chat clock labels date older days and keep seconds or milliseconds', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 8, 0);
+  expect(chatClockLabel(today.getTime(), now)).toBe(time(today));
+  expect(chatClockLabel(Math.floor(today.getTime() / 1000), now)).toBe(
+    time(today),
+  );
+  const yesterday = new Date(2026, 7, 13, 23, 0);
+  expect(chatClockLabel(yesterday.getTime(), now)).toBe(
+    `Yesterday · ${time(yesterday)}`,
+  );
+  const older = new Date(2026, 7, 10, 12, 0);
+  expect(chatClockLabel(older.getTime(), now)).toBe(
+    `${older.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })} · ${time(older)}`,
+  );
 });
 
 test('groups timeline rows through one canonical timestamp policy', () => {
