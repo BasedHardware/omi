@@ -69,28 +69,37 @@ def get_goal(
     ctx.renderer.emit(result, title="goal")
 
 
-@app.command("create", help="Create a new goal. Up to 3 active goals per user.")
+@app.command(
+    "create", help="Create a new goal. Up to 3 active goals per user. Omit all metric options for a qualitative goal."
+)
 def create_goal(
     typer_ctx: typer.Context,
     title: str = typer.Argument(..., help="Goal title (1-500 chars)."),
-    target_value: float = typer.Option(..., "--target", help="Target value to achieve."),
-    goal_type: GoalType = typer.Option(GoalType.scale, "--type", help="boolean, scale, or numeric."),
-    current_value: float = typer.Option(0, "--current", help="Current progress value."),
-    min_value: float = typer.Option(0, "--min", help="Minimum scale value."),
-    max_value: float = typer.Option(10, "--max", help="Maximum scale value."),
+    target_value: Optional[float] = typer.Option(
+        None, "--target", help="Target value to achieve. Omit for qualitative goals."
+    ),
+    goal_type: Optional[GoalType] = typer.Option(
+        None, "--type", help="boolean, scale, or numeric. Omit for qualitative goals."
+    ),
+    current_value: Optional[float] = typer.Option(None, "--current", help="Current progress value."),
+    min_value: Optional[float] = typer.Option(None, "--min", help="Minimum scale value."),
+    max_value: Optional[float] = typer.Option(None, "--max", help="Maximum scale value."),
     unit: Optional[str] = typer.Option(None, "--unit", help="Unit label (e.g. 'users', 'points')."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {
-        "title": title,
-        "goal_type": goal_type.value,
-        "target_value": target_value,
-        "current_value": current_value,
-        "min_value": min_value,
-        "max_value": max_value,
-    }
+    body: dict[str, object] = {"title": title}
     if unit is not None:
         body["unit"] = unit
+    has_metrics = any(value is not None for value in (target_value, goal_type, current_value, min_value, max_value))
+    if has_metrics:
+        # Metric goal: keep the historical defaults for options the caller did not set.
+        body["goal_type"] = (goal_type if goal_type is not None else GoalType.scale).value
+        if target_value is not None:
+            body["target_value"] = target_value
+        body["current_value"] = current_value if current_value is not None else 0
+        body["min_value"] = min_value if min_value is not None else 0
+        body["max_value"] = max_value if max_value is not None else 10
+    # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
     ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
