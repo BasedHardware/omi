@@ -422,8 +422,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   var durationInSeconds: Int {
     if let span = transcriptSpanSeconds {
       // A finite segment end can still exceed Int.max (a malformed persisted
-      // segment), where Int(Double) would trap and crash the client.
-      return Int(min(max(span, 0), Double(Int.max)))
+      // segment), where Int(Double) would trap and crash the client. Clamp in
+      // Double space first: Double(Int.max) rounds up to 2^63, so converting
+      // that boundary back to Int traps — compare before converting.
+      let bounded = max(span, 0)
+      return bounded >= Double(Int.max) ? Int.max : Int(bounded)
     }
     guard let start = startedAt, let end = finishedAt else { return 0 }
     return max(0, Int(end.timeIntervalSince(start)))
