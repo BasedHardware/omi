@@ -59,6 +59,10 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 omi --json memory list | jq '.[] | {id, content}'
 ```
 
+Pretty output displays returned text literally, including square brackets and
+emoji-like codes such as `:warning:`. Styling applies to the table layout, not
+to the contents of your memories or conversations.
+
 ## Auth
 
 Two auth methods, both fully wired:

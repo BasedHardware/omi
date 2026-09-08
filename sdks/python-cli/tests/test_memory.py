@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from omi_cli.main import app
 
 
@@ -125,3 +127,13 @@ def test_memory_get_found_in_later_page(authed_profile, respx_mock, cli_runner) 
     )
     result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("command", [["memory", "list"], ["memory", "get", "m1"]])
+def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock, cli_runner, command) -> None:
+    respx_mock.get("/v1/dev/user/memories").respond(
+        json=[{"id": "m1", "content": "[draft] literal [/bold] :warning:", "tags": []}]
+    )
+    result = cli_runner.invoke(app, ["--no-color", *command])
+    assert result.exit_code == 0, result.output
+    assert "[draft] literal [/bold] :warning:" in result.stdout

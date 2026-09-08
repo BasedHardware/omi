@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import pytest
+
 from omi_cli.output import Renderer, coalesce_rows, shorten
 
 
@@ -89,3 +91,26 @@ def test_no_color_env_disables_color(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     # No ANSI codes when NO_COLOR is set.
     assert "\x1b[" not in captured.err
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [{"content": "[draft] literal [/bold] :warning:"}],
+        {"content": "[draft] literal [/bold] :warning:"},
+        "[draft] literal [/bold] :warning:",
+    ],
+)
+def test_pretty_data_is_literal(data, capsys) -> None:
+    Renderer(no_color=True).emit(data)
+    assert "[draft] literal [/bold] :warning:" in capsys.readouterr().out
+
+
+def test_pretty_data_keys_and_matched_tags_are_literal(capsys) -> None:
+    renderer = Renderer(no_color=True)
+    data = {"[key]": "[bold]keep tags[/bold] :warning:"}
+    renderer.emit(data)
+    renderer.emit([data])
+    output = capsys.readouterr().out
+    assert output.count("[key]") == 2
+    assert output.count("[bold]keep tags[/bold] :warning:") == 2
