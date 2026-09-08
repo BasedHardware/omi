@@ -346,6 +346,8 @@ Cloud Linux after `0e8e693234`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `4b653d3403`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Canonical conversation reads no longer treat an empty status or source as a malformed page. Empty or whitespace status still says Status unavailable. Empty source stays a missing transcript door instead of hiding the rest of the library. Known statuses stay mapped. Unknown statuses such as queued stay visible. This does not invent a conversation producer.
 
+Cloud Linux after `c7e116242a`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4 (`postgres:18.4-bookworm`) and dry-run deploy. Catalogue `/v1/apps` records with an empty name no longer fail the whole Apps page as malformed. Those tiles stay visible as App name unavailable. Whitespace names already used that fallback. Missing name keys still fail closed. This does not invent an Apps catalogue producer.
+
 ## Verified and pushed
 
 Backend slices include authorized PostgreSQL tasks/audio (a64e477a56), transcription with durable paid-response recovery (f22f1d8572), conversation reads with revision-fenced cursors (8546a0e574), trusted chat context packets (01bdb648bb), GET-only PostgreSQL chat history under an explicit `chat.read` grant, and GET-only Settings that stay unavailable until an owner-backed identity/entitlement producer exists. Chat writes, generation SSE, cancellation and attachments stay explicit nested 404s without admission. Settings identity/entitlement producers and deployed gateway identity composition remain missing.

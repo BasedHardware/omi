@@ -163,8 +163,7 @@ async function cloudRequest(
 export function parseCloudApp(value: unknown, label: string): CloudApp {
   const record = object(value, label);
   const id = optionalString(record.id);
-  const name = optionalString(record.name);
-  if (id === null || name === null) {
+  if (id === null || typeof record.name !== 'string') {
     throw new Error(`${label} is malformed`);
   }
   if (record.deleted === true) {
@@ -179,7 +178,7 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
   }
   return {
     id,
-    name,
+    name: record.name,
     description:
       typeof record.description === 'string' ? record.description : '',
     category: typeof record.category === 'string' ? record.category : '',

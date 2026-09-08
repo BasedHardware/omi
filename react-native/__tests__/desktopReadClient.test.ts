@@ -1692,6 +1692,26 @@ test('parses catalogue, enabled, owned, and service app records without inventin
   );
 });
 
+test('keeps empty catalogue names instead of failing the Apps page', () => {
+  expect(
+    parseCloudApps(
+      [
+        {id: 'catalog-app-1', name: ''},
+        {id: 'catalog-app-2', name: ' \t\n'},
+        {id: 'catalog-app-3', name: 'Owned app'},
+      ],
+      'Apps response',
+    ),
+  ).toEqual([
+    expect.objectContaining({id: 'catalog-app-1', name: ''}),
+    expect.objectContaining({id: 'catalog-app-2', name: ' \t\n'}),
+    expect.objectContaining({id: 'catalog-app-3', name: 'Owned app'}),
+  ]);
+  expect(() => parseCloudApp({id: 'catalog-app-1'}, 'App 0')).toThrow(
+    'App 0 is malformed',
+  );
+});
+
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {
   const backend = backendFor(request => {
     if (request.path === '/v1/apps') {
