@@ -1515,6 +1515,37 @@ test('keeps ratified empty task descriptions instead of failing the page', async
   ]);
 });
 
+test('keeps empty conversation status and source instead of failing the page', async () => {
+  const result = await loadConversations(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(
+        conversationPage([
+          {...conversation, status: ''},
+          {...conversation, id: 'conversation-2', source: ''},
+          {...conversation, id: 'conversation-3', status: ' \t\n'},
+        ]),
+      ),
+    })),
+  );
+  expect(result.items).toEqual([
+    expect.objectContaining({
+      id: 'conversation-1',
+      status: '',
+      source: 'omi',
+    }),
+    expect.objectContaining({
+      id: 'conversation-2',
+      source: '',
+      status: 'completed',
+    }),
+    expect.objectContaining({
+      id: 'conversation-3',
+      status: ' \t\n',
+    }),
+  ]);
+});
+
 test('marks a full conversation window as potentially incomplete', async () => {
   const conversations = Array.from({length: 50}, (_, index) => ({
     ...conversation,

@@ -914,8 +914,8 @@ export async function loadConversations(
       record.finishedAt,
       `Conversation ${index} finishedAt`,
     );
-    const source = string(record.source, `Conversation ${index} source`);
-    const status = string(record.status, `Conversation ${index} status`);
+    const source = text(record.source, `Conversation ${index} source`);
+    const status = text(record.status, `Conversation ${index} status`);
     const discarded = boolean(
       record.discarded,
       `Conversation ${index} discarded`,
