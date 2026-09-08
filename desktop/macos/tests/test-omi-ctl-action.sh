@@ -51,5 +51,10 @@ for argument in ("missing-separator", "=missing-key"):
     assert result.returncode != 0
     assert "key=value" in result.stderr
     assert not request.exists(), "invalid arguments must fail before transport"
+request.unlink(missing_ok=True)
+result = run("set_conversations_search", "enabled=true", "enabled=false")
+assert result.returncode != 0
+assert "duplicate action parameter key" in result.stderr
+assert not request.exists(), "duplicate keys must fail before transport"
 print("omi-ctl action request encoding tests passed")
 PY

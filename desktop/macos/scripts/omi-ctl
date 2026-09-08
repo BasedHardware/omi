@@ -108,6 +108,8 @@ for argument in sys.argv[2:]:
     key, separator, value = argument.partition("=")
     if not separator or not key:
         raise SystemExit("omi-ctl: action parameters must be nonempty key=value pairs")
+    if key in params:
+        raise SystemExit("omi-ctl: duplicate action parameter key: " + key)
     params[key] = value
 if params:
     body["params"] = params
