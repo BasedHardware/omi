@@ -440,6 +440,53 @@ describe("composeGenerationPrompt", () => {
     expect(unreadable).toEqual({ kind: "fail" });
   });
 
+  test("fails when user text and loaded attachment excerpts are only whitespace", async () => {
+    await insertBound(db, {
+      id: "att-whitespace-excerpt",
+      accountId: "acct-a",
+      messageId: "msg-whitespace-excerpt",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-whitespace-excerpt",
+      new TextEncoder().encode(" \t\n")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-whitespace-excerpt",
+      " \t\n"
+    );
+    expect(result).toEqual({ kind: "fail" });
+  });
+
+  test("visible user text omits whitespace-only attachment excerpts", async () => {
+    await insertBound(db, {
+      id: "att-whitespace-omit",
+      accountId: "acct-a",
+      messageId: "msg-whitespace-omit",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-whitespace-omit",
+      new TextEncoder().encode(" \t\n")
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-whitespace-omit",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toBe("summarize this");
+    expect(result.prompt).not.toContain("notes.txt");
+  });
+
   test("whitespace-only user text still composes when a bound text file loads", async () => {
     await insertBound(db, {
       id: "att-whitespace-ok",

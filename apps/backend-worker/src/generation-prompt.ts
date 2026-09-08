@@ -42,17 +42,13 @@ export async function composeGenerationPrompt(
   }
   const excerpts: string[] = [];
   let usedBytes = 0;
-  let textFiles = 0;
-  let loadedTextFiles = 0;
 
   for (const attachment of bound) {
     if (!isGenerationTextMimeType(attachment.mediaType)) continue;
-    textFiles += 1;
     const remaining = GENERATION_ATTACHMENT_TEXT_BUDGET - usedBytes;
     if (remaining <= 0) continue;
     const excerpt = await readTextExcerpt(r2, attachment.r2Key, remaining);
-    if (excerpt === null) continue;
-    loadedTextFiles += 1;
+    if (excerpt === null || !isVisibleGenerationText(excerpt)) continue;
     usedBytes += utf8Bytes(excerpt);
     excerpts.push(`Attachment "${attachment.displayName}":\n${excerpt}`);
   }
@@ -61,10 +57,7 @@ export async function composeGenerationPrompt(
   if (isVisibleGenerationText(userText)) parts.push(userText);
   parts.push(...excerpts);
   const prompt = parts.join("\n\n");
-  if (
-    !isVisibleGenerationText(prompt) &&
-    (textFiles === 0 || loadedTextFiles === 0)
-  ) {
+  if (!isVisibleGenerationText(prompt)) {
     return { kind: "fail" };
   }
   return {
