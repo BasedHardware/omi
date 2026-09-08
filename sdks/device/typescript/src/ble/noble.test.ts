@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { stripPacketHeader, PACKET_HEADER_BYTES } from '../index.ts';
-import { connectAndListen, createNobleTransport, NOBLE_MISSING } from './index.ts';
+import { connectAndListen, createNobleTransport } from './index.ts';
 
 describe('stripPacketHeader', () => {
   test('strips 3-byte header', () => {
@@ -17,9 +17,33 @@ describe('stripPacketHeader', () => {
 });
 
 describe('createNobleTransport', () => {
+  test('gives an install hint when the optional Noble import fails', () => {
+    // Isolate the module cache: a throwing mock cannot replace an already loaded
+    // module in Bun, and this path must not initialize a native Bluetooth adapter.
+    const result = Bun.spawnSync([
+      process.execPath,
+      '--eval',
+      `import { mock } from 'bun:test';
+       import { createNobleTransport } from './index.ts';
+       mock.module('@stoprocent/noble', () => {
+         throw Object.assign(new Error("Cannot find module '@stoprocent/noble'"), { code: 'MODULE_NOT_FOUND' });
+       });
+       try {
+         await createNobleTransport('omi');
+         console.log('unexpected success');
+       } catch (error) {
+         console.log(error.message);
+       }`,
+    ], { cwd: import.meta.dir });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString().trim()).toBe(
+      'Optional BLE dependency missing. Install with: bun add @stoprocent/noble (or npm i @stoprocent/noble)'
+    );
+  });
+
   test('creates the transport before subscribing to audio', async () => {
     const { subscribe } = mockNobleDiscovery();
-    expect(NOBLE_MISSING.includes('@stoprocent/noble')).toBe(true);
     const transport = await createNobleTransport('omi');
     expect(typeof transport.startAudioNotifications).toBe('function');
     expect(typeof transport.stopAudioNotifications).toBe('function');
