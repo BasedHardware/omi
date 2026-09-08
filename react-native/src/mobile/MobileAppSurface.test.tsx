@@ -739,3 +739,13 @@ test('idle capture does not claim Paused when nothing is recording', () => {
   expect(renderedText(renderer)).not.toContain('Capture is paused');
   act(() => renderer.unmount());
 });
+
+test('live capture without a transcript does not claim speech text', () => {
+  const renderer = render({
+    capture: {active: true, waitingForAudio: false, transcript: ''},
+  });
+  expect(renderedText(renderer)).toContain('Listening');
+  expect(renderedText(renderer)).not.toContain('Listening for speech');
+  expect(renderedText(renderer)).not.toContain('Waiting for audio');
+  act(() => renderer.unmount());
+});

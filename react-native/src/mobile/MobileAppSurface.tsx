@@ -397,12 +397,13 @@ export function MobileAppSurface({
               />
             </View>
             <Text numberOfLines={1} style={styles.transcript}>
-              {capture.transcript ||
-                (capture.active
-                  ? capture.waitingForAudio
-                    ? 'Your Omi is connected. Waiting for audio…'
-                    : 'Listening for speech…'
-                  : 'Not capturing')}
+              {capture.transcript !== ''
+                ? capture.transcript
+                : !capture.active
+                ? 'Not capturing'
+                : capture.waitingForAudio
+                ? 'Your Omi is connected. Waiting for audio…'
+                : ''}
             </Text>
             <View style={styles.microphoneButton}>
               <Mic color={mobileColor.text} size={18} />
