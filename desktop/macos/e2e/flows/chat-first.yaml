@@ -9,6 +9,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  # The composer's screen-frame capability (recent-frames menu, card handoff,
+  # send-time fallback) has its own flow — `screen-frame-attach.yaml` — whose
+  # steps actually exercise and verify it; this route-contract flow does not,
+  # so it claims no coverage of those sources.
   # Every bridge.navigate step waits for the requested Chat-first route to
   # mount through the split visibility policy before returning success.
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+ChatFirst.swift

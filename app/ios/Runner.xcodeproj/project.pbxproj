@@ -18,6 +18,7 @@
 		15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
 		18B5E977FCEDF03D5DDE4A21 /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
+		7A3F1C2E9B4D5E6F0A1B2C3E /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
 		19570D5AA4C5B2E3154671BE /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
 		1D93FD645488AAB7DBE4EF49 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
 		2233D9F0F73BEE78D735B79C /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
@@ -87,6 +88,7 @@
 		A99145F1E008BFA300A30BA0 /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		AB12345678901234567890AB /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		AB12345678901234567890AC /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
+		7A3F1C2E9B4D5E6F0A1B2C3F /* FlutterLaunchEngineGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */; };
 		AFF50718E1B191240567E4A7 /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
 		B017E73914CFF7C22190E0C3 /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
@@ -279,6 +281,7 @@
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CE /* AppleHealthService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleHealthService.swift; sourceTree = "<group>"; };
+		7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FlutterLaunchEngineGuard.swift; sourceTree = "<group>"; };
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
@@ -487,6 +490,7 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
+				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
 			);
@@ -944,6 +948,7 @@
 				BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */,
 				AB12345678901234567890AB /* AppleRemindersService.swift in Sources */,
 				AB12345678901234567890AC /* AppleHealthService.swift in Sources */,
+				7A3F1C2E9B4D5E6F0A1B2C3F /* FlutterLaunchEngineGuard.swift in Sources */,
 				42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */,
 				BAADF00DF00DF00DF00DFC03 /* RayBanMetaAudioCapture.swift in Sources */,
 				BAADF00DF00DF00DF00DFC04 /* RayBanMetaHostApiImpl.swift in Sources */,
@@ -989,6 +994,7 @@
 				648454527D23C31E3AF5A635 /* LimitlessFlashDrainEngine.swift in Sources */,
 				5A2653E6C23BCD2FF632A493 /* AppleRemindersService.swift in Sources */,
 				18B5E977FCEDF03D5DDE4A21 /* AppleHealthService.swift in Sources */,
+				7A3F1C2E9B4D5E6F0A1B2C3E /* FlutterLaunchEngineGuard.swift in Sources */,
 				A99145F1E008BFA300A30BA0 /* BleHostApiImpl.swift in Sources */,
 				5FC8F848E2BD3FDF3AF27F37 /* RayBanMetaAudioCapture.swift in Sources */,
 				19570D5AA4C5B2E3154671BE /* RayBanMetaHostApiImpl.swift in Sources */,
