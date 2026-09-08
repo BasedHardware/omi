@@ -35,6 +35,30 @@ def test_local_jit_qa_firebase_is_verify_only() -> None:
     assert firebase_verify_only_credential({}) is None
 
 
+def test_cloud_jit_qa_firebase_is_verify_only_without_blocking_firestore_adc() -> None:
+    from google.auth.credentials import AnonymousCredentials
+
+    environment = {
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+    }
+    credential = firebase_verify_only_credential(environment)
+    assert credential is not None
+    assert isinstance(credential.get_credential(), AnonymousCredentials)
+
+
+def test_cloud_jit_qa_verify_only_fence_normalizes_stage_and_project() -> None:
+    credential = firebase_verify_only_credential(
+        {
+            "OMI_JIT_QA_AUTH_ONLY": " TRUE ",
+            "OMI_ENV_STAGE": " DEV ",
+            "GOOGLE_CLOUD_PROJECT": " based-hardware-dev ",
+        }
+    )
+    assert credential is not None
+
+
 def test_local_jit_qa_blocks_firebase_auth_mutations() -> None:
     class FakeAuth:
         pass
@@ -85,6 +109,24 @@ def test_google_adc_guard_is_inert_outside_local_jit() -> None:
     assert FakeGoogleAuth.default is original
 
 
+def test_cloud_qa_auth_only_fence_blocks_auth_mutations_but_keeps_firestore_adc() -> None:
+    class FakeAuth:
+        pass
+
+    fake = FakeAuth()
+    from utils.firebase_admin_runtime import _AUTH_MUTATORS
+
+    for name in _AUTH_MUTATORS:
+        setattr(fake, name, lambda: None)
+    environment = {
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+    }
+    assert install_firebase_auth_mutation_guard(environment, auth_module=fake)
+    assert not install_google_adc_guard(environment, google_auth_module=FakeAuth)
+
+
 def test_the_firebase_fences_stay_off_when_the_auth_port_is_not_firebase() -> None:
     """The QA flag alone must not arm a Firebase-only fence on an OIDC deployment.
 
@@ -113,7 +155,11 @@ def test_the_firebase_fences_stay_off_when_the_auth_port_is_not_firebase() -> No
     assert firebase_verify_only_credential(oidc) is None
     assert not install_firebase_auth_mutation_guard(oidc, auth_module=FakeAuth)
     assert FakeAuth.create_user() == "allowed"
-    assert not install_google_adc_guard(oidc, google_auth_module=FakeGoogleAuth)
+    # NOT install_google_adc_guard: upstream's +1002 separated it from the Firebase fence on purpose
+    # ("Cloud QA still needs Firestore ADC for its isolated data plane"), and what it does is BLOCK
+    # Google credential discovery — a restriction, not a Firebase call. Gating it on AUTH_BACKEND would
+    # make an OIDC deployment *less* fenced, which is the opposite of this test's point. It stays keyed
+    # to OMI_JIT_QA_LOCAL_STACK, which no on-prem deployment sets.
     assert FakeGoogleAuth.default is adc_original
 
     # ... and the Firebase deployment still gets the fence, explicitly and by default.

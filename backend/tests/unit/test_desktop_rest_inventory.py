@@ -97,14 +97,14 @@ def _in_scope(routes: Set[str]) -> Set[str]:
 def _load_spec_paths() -> Set[str]:
     import json
 
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     return set(spec.get('paths', {}).keys())
 
 
 def _load_spec() -> dict[str, Any]:
     import json
 
-    return json.loads(SPEC_PATH.read_text())
+    return json.loads(SPEC_PATH.read_text(encoding='utf-8'))
 
 
 def _normalize_for_match(path: str) -> str:
@@ -284,7 +284,7 @@ def test_desktop_named_model_response_items_are_not_free_form_objects():
 
 
 def test_conversations_search_hydrates_index_hits_before_returning_app_client_rows():
-    source = CONVERSATIONS_ROUTER.read_text()
+    source = CONVERSATIONS_ROUTER.read_text(encoding='utf-8')
     endpoint_start = source.index('def search_conversations_endpoint(')
     endpoint_end = source.index(
         '@router.get(\n    "/v1/conversations/{conversation_id}/suggested-apps"', endpoint_start
@@ -300,7 +300,7 @@ def test_conversations_search_hydrates_index_hits_before_returning_app_client_ro
 
 
 def test_conversation_id_hydration_backfills_legacy_missing_ids():
-    source = CONVERSATIONS_DB.read_text()
+    source = CONVERSATIONS_DB.read_text(encoding='utf-8')
     helper_start = source.index('def _get_conversations_by_id(')
     helper_end = source.index('# **************************************', helper_start)
     helper_source = source[helper_start:helper_end]

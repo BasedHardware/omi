@@ -13,7 +13,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       previewData: Data([0x00, 0x01, 0x02]),
       grounding: SuggestionGrounding(
         memories: ["memory content must never leave the device"],
-        openCommitments: ["private commitment"],
+        commitmentRecords: [SuggestionCommitment(id: "c1", text: "private commitment")],
         relatedScreens: ["screen text"]
       )
     )
@@ -130,6 +130,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
       (GeminiClient.GeminiClientError.apiError("HTTP 503: upstream body", retryable: true), .httpStatus5xx),
       (GeminiClient.GeminiClientError.apiError("HTTP 400: prompt leaked", retryable: false), .httpStatus4xx),
       (GeminiClient.GeminiClientError.missingAPIKey, .other),
+      (GeminiClient.GeminiClientError.planGated, .other),
     ]
     for (error, expected) in classified {
       XCTAssertEqual(SuggestionAssistantTelemetry.EvaluationFailureReason(error), expected, String(describing: error))
@@ -281,7 +282,7 @@ final class SuggestionAssistantTelemetryBoundaryTests: XCTestCase {
   func testGoalOnlyGroundingIsCountedAsASpentSource() throws {
     let goalOnly = SuggestionGrounding(
       memories: [],
-      openCommitments: [],
+      commitmentRecords: [],
       relatedScreens: [],
       goals: ["Reach 200k total users by month-end"]
     )

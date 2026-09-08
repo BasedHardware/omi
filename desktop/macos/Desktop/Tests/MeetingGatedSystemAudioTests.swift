@@ -30,6 +30,10 @@ import XCTest
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Discord", title: nil))
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Slack", title: "#general | Acme"))
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "WhatsApp", title: nil))
+      XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Telegram", title: nil))
+      XCTAssertTrue(ConferencingApps.isMessagingCallApp(appName: "Telegram"))
+      XCTAssertTrue(ConferencingApps.isMessagingCallApp(appName: "discord"))
+      XCTAssertFalse(ConferencingApps.isMessagingCallApp(appName: "Google Chrome"))
     }
 
     /// A *joined* Google Meet tab is titled with the bare meeting code and contains none of

@@ -194,6 +194,20 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
+def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
+    """Write ``time_zone`` on the user document only when it has none. Returns True when it wrote.
+
+    ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
+    registration. A desktop-only owner never registers a token, so their document never carried
+    the field — and ``get_users_for_daily_summary`` selects users *by* it, so the daily-summary
+    cron never saw them. Mobile stays authoritative: a zone already present is never replaced here.
+    """
+    if get_user_time_zone(uid):
+        return False
+    db.collection('users').document(uid).set({'time_zone': time_zone}, merge=True)
+    return True
+
+
 # **************************************
 # *** Daily Summary Time Preferences ***
 # **************************************
@@ -407,6 +421,12 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
                 user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
                 if user_hour != target_local_hour:
                     continue
+                # Ours (cubic PR 10887 #427/#3): this helper stays backend-NEUTRAL and returns the user
+                # DOCUMENT, not FCM tokens. Upstream collects tokens here; doing that would hard-wire the
+                # query to Firebase and leave an on-prem UnifiedPush deployment with an empty recipient
+                # list. Their note that tokenless users must not be dropped holds a fortiori here — this
+                # branch never looks at a token at all. Resolution is the service layer's job
+                # (utils/other/notifications.py), which picks UnifiedPush endpoints or FCM tokens.
                 chunk_users.append((str(user_doc.id), user_data, user_data.get('time_zone')))
         except Exception as e:
             logger.error(f"Error querying chunk for daily summary: {e}")

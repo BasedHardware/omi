@@ -56,6 +56,16 @@ BEAM_SIZE = int(os.environ.get("NLLB_BEAM_SIZE", "1"))
 INFERENCE_WORKERS = int(os.environ.get("NLLB_INFERENCE_WORKERS", "2"))
 PORT = int(os.environ.get("PORT", "8080"))
 
+_requested_max_in_flight = int(os.environ.get("NLLB_MAX_IN_FLIGHT", str(INFERENCE_WORKERS * 2)))
+if _requested_max_in_flight < INFERENCE_WORKERS:
+    logger.warning(
+        "NLLB_MAX_IN_FLIGHT=%d is below NLLB_INFERENCE_WORKERS=%d; clamping to worker count",
+        _requested_max_in_flight,
+        INFERENCE_WORKERS,
+    )
+MAX_IN_FLIGHT = max(INFERENCE_WORKERS, _requested_max_in_flight)
+SATURATED_LIVE_SECONDS = float(os.environ.get("NLLB_SATURATED_LIVE_SECONDS", "180"))
+
 BCP47_TO_NLLB: Dict[str, str] = {
     "en": "eng_Latn",
     "es": "spa_Latn",
@@ -194,6 +204,24 @@ def _resolve_nllb_code(bcp47_code: str) -> Optional[str]:
 
 _inference_pool = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="nllb-infer")
 
+# Admission control: at most MAX_IN_FLIGHT requests may hold an inference slot
+# at once. Anything beyond the cap is rejected with 503 immediately instead of
+# parking on the executor queue (2026-09-03: the unbounded queue grew to 38k
+# in-flight while the pod stayed Ready behind a TCP-only liveness probe).
+_admission = asyncio.Semaphore(MAX_IN_FLIGHT)
+_in_flight = 0
+_saturation_since: Optional[float] = None
+
+
+def _update_saturation() -> None:
+    """Stamp when in-flight first reaches the cap; clear once it drops below."""
+    global _saturation_since
+    if _in_flight >= MAX_IN_FLIGHT:
+        if _saturation_since is None:
+            _saturation_since = time.monotonic()
+    else:
+        _saturation_since = None
+
 
 def _translate_batch(
     texts: List[str], source_nllb: str, target_nllb: str, t_queued: float = 0.0
@@ -241,7 +269,17 @@ def _translate_batch(
 
 @app.post("/v1/translate", response_model=TranslateResponse)
 async def translate(req: TranslateRequest):
+    global _in_flight
+
+    if _admission.locked():
+        # Saturated: fail fast with 503 instead of queueing on the executor.
+        # Listen maps HTTP >=500 to provider_5xx and falls back to Gemini.
+        raise HTTPException(status_code=503, detail="admission_full")
+
     t_queued = time.monotonic()
+    await _admission.acquire()
+    _in_flight += 1
+    _update_saturation()
     ACTIVE_REQUESTS.inc()
     try:
         target_nllb = _resolve_nllb_code(req.target_language_code)
@@ -284,6 +322,9 @@ async def translate(req: TranslateRequest):
         raise HTTPException(status_code=500, detail="Internal translation error")
     finally:
         ACTIVE_REQUESTS.dec()
+        _in_flight -= 1
+        _update_saturation()
+        _admission.release()
 
 
 @app.get("/health")
@@ -305,7 +346,19 @@ async def health():
 async def ready():
     if _translator is None or _tokenizer is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
+    if _in_flight >= MAX_IN_FLIGHT:
+        # Saturated pod: drop from Endpoints so callers fail fast elsewhere
+        # instead of timing out against this replica.
+        raise HTTPException(status_code=503, detail="saturated")
     return {"status": "ready"}
+
+
+@app.get("/live")
+async def live():
+    if _saturation_since is not None and time.monotonic() - _saturation_since >= SATURATED_LIVE_SECONDS:
+        # Stuck saturated for the full window: let kube restart the pod.
+        raise HTTPException(status_code=503, detail="saturated")
+    return {"status": "alive"}
 
 
 @app.get("/metrics")

@@ -110,6 +110,7 @@ def test_re_capturing_the_same_proposal_keeps_the_original_first_seen_time(accou
     task being proposed twice restarts from the retry.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     first = candidates_db.create_candidate(
         account['uid'],
@@ -137,6 +138,7 @@ def test_the_same_key_with_a_different_proposal_is_refused_rather_than_overwriti
     loudly: silently overwriting changes the task the user is about to approve after they have seen
     it."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     created = candidates_db.create_candidate(
         account['uid'],
@@ -170,6 +172,7 @@ def test_a_key_already_spent_on_a_proposal_is_refused_even_when_its_alias_is_gon
     Candidate read or the proposal the user is about to approve is silently swapped underneath them.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     created = candidates_db.create_candidate(
         account['uid'],
@@ -204,6 +207,7 @@ def test_two_captures_of_the_same_task_coalesce_into_one_proposal(account):
     first one would not be on the second.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     first = candidates_db.create_candidate(
         account['uid'],
@@ -244,6 +248,7 @@ def test_replaying_a_capture_the_user_already_rejected_does_not_re_propose_it(ac
     turned down.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
     from models.candidate import CandidateStatus
 
     first = candidates_db.create_candidate(
@@ -288,6 +293,7 @@ def test_a_distinct_task_is_not_coalesced_into_the_first(account):
     """The other half of the claim: coalescing is keyed on the task, not on the user. A different
     description is different work and must survive as its own proposal."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     first = candidates_db.create_candidate(
         account['uid'],
@@ -314,6 +320,7 @@ def test_accepting_a_proposal_creates_exactly_one_task_and_one_dispatch(account)
     of that landed without the others the user would see a task with no proposal behind it, or an
     accepted proposal with no task."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
     from models.candidate import CandidateStatus
 
     candidate = candidates_db.create_candidate(
@@ -347,6 +354,7 @@ def test_re_accepting_a_proposal_does_not_re_arm_the_integration_dispatch(accoun
     second time. So drive the outbox into `processing` first and assert the retry leaves it there.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     candidate = candidates_db.create_candidate(
         account['uid'],
@@ -358,7 +366,7 @@ def test_re_accepting_a_proposal_does_not_re_arm_the_integration_dispatch(accoun
     first = candidates_db.resolve_task_candidate(
         account['uid'], candidate.candidate_id, account_generation=GENERATION, now=BASE + timedelta(minutes=1)
     )
-    lease = candidates_db.claim_candidate_integration_dispatch(
+    lease = outbox_db.claim_candidate_integration_dispatch(
         account['uid'], candidate.candidate_id, account_generation=GENERATION, now=BASE + timedelta(minutes=2)
     )
     assert lease is not None
@@ -379,6 +387,7 @@ def test_a_fenced_proposal_cannot_be_resolved_by_another_writer(account):
     """The legacy promotion path claims a Candidate before it mutates task state. A resolver that
     ignored the claim would create a second task for work the claim holder is already committing."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     candidate = candidates_db.create_candidate(
         account['uid'],
@@ -405,6 +414,7 @@ def test_an_expired_fence_does_not_block_the_next_writer_forever(account):
     """The other side of the fence: a lease that has run out must not pin the Candidate. A claim that
     outlived its holder would leave the proposal permanently unresolvable and the task never created."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     candidate = candidates_db.create_candidate(
         account['uid'],
@@ -429,6 +439,7 @@ def test_an_in_flight_dispatch_is_not_handed_to_a_second_worker(account):
     pushed downstream twice; a completion accepted from a worker that no longer holds the lease means
     the live attempt is marked done and its result is dropped."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     candidate = candidates_db.create_candidate(
         account['uid'],
@@ -441,10 +452,10 @@ def test_an_in_flight_dispatch_is_not_handed_to_a_second_worker(account):
         account['uid'], candidate.candidate_id, account_generation=GENERATION, now=BASE
     )
 
-    lease = candidates_db.claim_candidate_integration_dispatch(
+    lease = outbox_db.claim_candidate_integration_dispatch(
         account['uid'], candidate.candidate_id, account_generation=GENERATION, now=BASE, lease_seconds=300
     )
-    second = candidates_db.claim_candidate_integration_dispatch(
+    second = outbox_db.claim_candidate_integration_dispatch(
         account['uid'],
         candidate.candidate_id,
         account_generation=GENERATION,
@@ -456,7 +467,7 @@ def test_an_in_flight_dispatch_is_not_handed_to_a_second_worker(account):
     assert second is None, 'a second worker took a dispatch that is still leased'
 
     assert (
-        candidates_db.complete_candidate_integration_dispatch(
+        outbox_db.complete_candidate_integration_dispatch(
             account['uid'],
             candidate.candidate_id,
             account_generation=GENERATION,
@@ -466,7 +477,7 @@ def test_an_in_flight_dispatch_is_not_handed_to_a_second_worker(account):
         is False
     )
     assert (
-        candidates_db.complete_candidate_integration_dispatch(
+        outbox_db.complete_candidate_integration_dispatch(
             account['uid'],
             candidate.candidate_id,
             account_generation=GENERATION,
@@ -483,6 +494,7 @@ def test_a_write_for_a_retired_account_generation_is_refused(account):
     wiped-and-restarted account keeps the old account's in-flight proposals out: a write that skipped
     the check would resurrect them into the fresh account."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     with pytest.raises(candidates_db.CandidateGenerationMismatchError):
         candidates_db.create_candidate(
@@ -506,6 +518,7 @@ def _seed_scan(account, total=5):
     semantic claim, and the scan would have nothing to page.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     return [
         candidates_db.create_candidate(
@@ -525,6 +538,7 @@ def test_the_compatibility_scan_pages_without_repeating_or_skipping(account):
     never finishes — the compatibility rescore loops on the newest two proposals and the rest are never
     scored."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     seeded = set(_seed_scan(account))
 
@@ -545,6 +559,7 @@ def test_the_compatibility_scan_reports_exhaustion_at_the_tail(account):
     """A short page is how the caller knows to stop. Reporting a full one at the tail is an endless
     scan; reporting a short one early stops before the oldest proposal."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     seeded = _seed_scan(account)
 
@@ -570,6 +585,7 @@ def test_a_malformed_row_does_not_make_a_full_page_look_exhausted(account):
     are what keep the scan going past the corruption.
     """
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     seeded = _seed_scan(account, total=3)
     corrupt_id = f"broken-{account['run']}"
@@ -611,6 +627,7 @@ def test_the_scan_keeps_its_generation_filter_on_every_page(account):
     keyset was applied would start handing the compatibility scan proposals from the account the user
     already wiped."""
     import database.candidates as candidates_db
+    import database.candidate_integration_outbox as outbox_db
 
     seeded = set(_seed_scan(account, total=3))
     stranger = f"old-{account['run']}"

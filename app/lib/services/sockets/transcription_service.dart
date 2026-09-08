@@ -47,6 +47,7 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
     super.customSttMode,
     super.onboardingMode,
     super.geolocation,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: false);
 }
 
@@ -58,6 +59,7 @@ class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocket
     super.source,
     super.customSttMode,
     super.geolocation,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: true);
 }
 
@@ -68,7 +70,9 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.language, {
     super.source,
     super.geolocation,
-  }) : super.create(includeSpeechProfile: true, customSttMode: true);
+    super.clientConversationId,
+    bool includeSpeechProfile = true,
+  }) : super.create(includeSpeechProfile: includeSpeechProfile, customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -90,6 +94,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
+  String? clientConversationId;
 
   bool onboardingMode;
   Geolocation? geolocation;
@@ -104,6 +109,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.sttConfigId,
     this.onboardingMode = false,
     this.geolocation,
+    this.clientConversationId,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -111,6 +117,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (source != null && source!.isNotEmpty) {
       params += '&source=${Uri.encodeComponent(source!)}';
+    }
+
+    if (clientConversationId != null && clientConversationId!.isNotEmpty) {
+      params += '&client_conversation_id=${Uri.encodeComponent(clientConversationId!)}';
     }
 
     if (customSttMode) {
@@ -154,6 +164,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.sttConfigId,
     this.onboardingMode = false,
     this.geolocation,
+    this.clientConversationId,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -318,8 +329,15 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
-  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
-    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+  static bool shouldBlockUnsupportedCodecFallback(
+    BleAudioCodec codec,
+    CustomSttConfig? config, {
+    bool allowanceOnDevice = false,
+  }) {
+    if (isCodecSupportedForCustomStt(codec)) return false;
+    if (allowanceOnDevice) return true;
+    if (config == null || !config.isEnabled) return false;
+    return !config.sendRawAudioToOmi;
   }
 
   /// Create default Omi transcription service
@@ -331,6 +349,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     String? sttConfigId,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -340,6 +359,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId ?? 'omi:default',
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
     );
   }
 
@@ -362,9 +382,17 @@ class TranscriptSocketServiceFactory {
     CustomSttConfig config, {
     String? source,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     if (!config.isEnabled) {
-      return createDefault(sampleRate, codec, language, source: source, geolocation: geolocation);
+      return createDefault(
+        sampleRate,
+        codec,
+        language,
+        source: source,
+        geolocation: geolocation,
+        clientConversationId: clientConversationId,
+      );
     }
 
     final sttConfigId = config.sttConfigId;
@@ -390,7 +418,14 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
       forwardRawAudioToSecondary: config.sendRawAudioToOmi,
+      clientConversationId: clientConversationId,
     );
+  }
+
+  /// S19: synthesized freemium local mode is unnamed. User Custom STT keeps
+  /// today's speech-profile request on the Omi secondary socket.
+  static bool includeSpeechProfileForCustomSecondary(String? sttConfigId) {
+    return sttConfigId != 'freemium:on-device';
   }
 
   /// Create streaming WebSocket for live STT
@@ -518,6 +553,7 @@ class TranscriptSocketServiceFactory {
     String? sttProvider,
     required bool forwardRawAudioToSecondary,
     Geolocation? geolocation,
+    String? clientConversationId,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -525,6 +561,8 @@ class TranscriptSocketServiceFactory {
       language,
       source: source,
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
+      includeSpeechProfile: includeSpeechProfileForCustomSecondary(sttConfigId),
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -541,6 +579,7 @@ class TranscriptSocketServiceFactory {
       customSttMode: true,
       sttConfigId: sttConfigId,
       geolocation: geolocation,
+      clientConversationId: clientConversationId,
     );
   }
 }

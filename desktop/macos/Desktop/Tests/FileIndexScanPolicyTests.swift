@@ -28,6 +28,43 @@ final class FileIndexScanPolicyTests: XCTestCase {
     )
   }
 
+  func testAutomaticScanRootsWithoutFullDiskAccessSkipTCCProtectedFolders() {
+    // A background scan must never be the thing that raises a per-folder
+    // "grant access to Documents?" consent sheet (#12695). Without Full Disk
+    // Access the protected home roots drop out; everything else stays.
+    let policy = FileIndexScanPolicy.standard
+    let home = URL(fileURLWithPath: "/tmp/omi-test-home", isDirectory: true)
+    let applications = URL(fileURLWithPath: "/tmp/omi-test-applications", isDirectory: true)
+
+    let roots = policy.automaticScanRoots(
+      homeURL: home, applicationsURL: applications, fullDiskAccessGranted: false)
+
+    XCTAssertEqual(
+      roots.map(\.path),
+      [
+        "/tmp/omi-test-home/Developer",
+        "/tmp/omi-test-home/Projects",
+        "/tmp/omi-test-home/Code",
+        "/tmp/omi-test-home/src",
+        "/tmp/omi-test-home/repos",
+        "/tmp/omi-test-home/Sites",
+        "/tmp/omi-test-applications",
+        "/tmp/omi-test-home/Applications",
+      ]
+    )
+  }
+
+  func testAutomaticScanRootsWithFullDiskAccessMatchStandardRoots() {
+    let policy = FileIndexScanPolicy.standard
+    let home = URL(fileURLWithPath: "/tmp/omi-test-home", isDirectory: true)
+    let applications = URL(fileURLWithPath: "/tmp/omi-test-applications", isDirectory: true)
+
+    XCTAssertEqual(
+      policy.automaticScanRoots(
+        homeURL: home, applicationsURL: applications, fullDiskAccessGranted: true),
+      policy.standardScanRoots(homeURL: home, applicationsURL: applications))
+  }
+
   func testSkipFoldersAreRejectedBeforeRecursiveDescent() {
     let policy = FileIndexScanPolicy.standard
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import hashlib
 import importlib
 import os
@@ -971,6 +972,63 @@ def test_readding_a_deleted_manual_memory_lands_on_a_fresh_evidence_identity(mon
     # The deleted submission's evidence identity stays retired: the re-add is a
     # new source artifact, not a resurrection of the deleted one.
     assert retired_evidence == []
+
+
+def test_resubmitting_an_identical_manual_memory_resolves_to_the_existing_row(monkeypatch, canonical_db):
+    """Prod regression (#12084 deploy, 2026-08-28 onward): duplicate POST /v3/memories 500s.
+
+    Manual/API memory ids derive deterministically from content, but operation
+    identity folds the observed head commit into the operation id — so a
+    duplicate submission is replay-idempotent only while the account head has
+    not moved. Any other canonical write in between makes the duplicate propose
+    a fresh operation whose add collides with the existing row id, which
+    surfaced as ``canonical write failed: ApplyStatus.invalid_patch (add patch
+    new_memory_id already exists)`` at over a thousand requests per day. An
+    identical resubmission carries no new information: it must resolve to the
+    existing row and leave it untouched.
+    """
+    uid = "uid-canonical-ws-j"
+    _stub_delete_side_effects(monkeypatch)
+
+    first_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+    # An unrelated write advances the account head, so the resubmission below
+    # can never be recognized as a replay of the first operation.
+    write_canonical_external_memory(uid, _external_memory_payload(uid, "I bike to work"), db_client=canonical_db)
+    before = copy.deepcopy(canonical_db.docs[f"users/{uid}/memory_items/{first_id}"])
+
+    resubmitted_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+
+    assert resubmitted_id == first_id
+    assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"] == before
+
+
+def test_reusing_a_row_id_for_different_content_still_fails(monkeypatch, canonical_db):
+    """The duplicate resolution must never quietly swallow a genuine conflict.
+
+    A collision is benign only when the existing row carries the same content.
+    A client-supplied id reused for different text is a real conflict and keeps
+    failing, with the stored row left exactly as it was.
+    """
+    uid = "uid-canonical-ws-j"
+    _stub_delete_side_effects(monkeypatch)
+
+    first_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+    write_canonical_external_memory(uid, _external_memory_payload(uid, "I bike to work"), db_client=canonical_db)
+    before = copy.deepcopy(canonical_db.docs[f"users/{uid}/memory_items/{first_id}"])
+
+    conflicting = _external_memory_payload(uid, "I drink almond milk")
+    conflicting["id"] = first_id
+
+    with pytest.raises(RuntimeError, match="already exists"):
+        write_canonical_external_memory(uid, conflicting, db_client=canonical_db)
+
+    assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"] == before
 
 
 def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatch, canonical_db):

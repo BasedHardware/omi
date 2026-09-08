@@ -16,10 +16,12 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     ProviderUsage,
     anthropic_usage_from_response,
+    aggregate_accounting_events,
     build_accounting_event,
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
+    jit_gateway_receipt_for_trace,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
@@ -174,6 +176,76 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
 
 
+def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
+    """OpenAI prompt_tokens already includes both cached and write units."""
+    metadata = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-jit-receipt',
+            'model': 'gpt-5.4-nano',
+            'usage': {
+                'prompt_tokens': 100,
+                'completion_tokens': 12,
+                'prompt_tokens_details': {'cached_tokens': 40, 'cache_write_tokens': 10},
+            },
+        },
+        cache_requested=True,
+    )
+
+    usage = metadata.usage
+    assert usage is not None
+    assert usage.prompt_tokens == 100
+    assert usage.cached_input_tokens == 40
+    assert usage.cache_write_tokens == 10
+    assert usage.uncached_input_tokens == 50
+
+
+def test_jit_aggregate_includes_retries_and_stops_on_unknown_cost() -> None:
+    context = AccountingContext.create(
+        request_id='request-jit-run',
+        caller='jit-proactivity',
+        user_uid='user-123',
+        feature='jit_proactivity',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-run-opaque-1',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    trace = AttemptTrace()
+    priced_attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.4-nano',
+        route_artifact_id='route.jit.nano.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(prompt_tokens=100, uncached_input_tokens=80, cached_input_tokens=20, output_tokens=8)
+        ),
+    )
+    retry_without_receipt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.4-nano',
+        route_artifact_id='route.jit.nano.001',
+        fallback_reason='provider_timeout',
+        retry_ordinal=1,
+        outcome='error',
+        error_class='timeout',
+    )
+
+    aggregate = aggregate_accounting_events(
+        [build_accounting_event(context, priced_attempt), build_accounting_event(context, retry_without_receipt)]
+    )
+
+    assert aggregate is not None
+    assert aggregate.attempt_count == 2
+    assert aggregate.normalized_uncached_input_tokens == 80
+    assert aggregate.cached_input_tokens == 20
+    assert aggregate.cost_status == CostStatus.INDETERMINATE
+    assert aggregate.estimated_cost_micro_usd is None
+    assert not aggregate.cost_is_known
+
+
 def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
     trace = AttemptTrace()
     attempt = trace.record(
@@ -301,6 +373,46 @@ def test_openai_reasoning_tokens_are_an_output_subset_not_double_charged() -> No
     assert usage.output_tokens_include_reasoning is True
     assert usage.billable_output_tokens == 100
     assert usage.total_tokens == 110
+
+
+def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
+    context = AccountingContext.create(
+        request_id='request-reasoning-jit',
+        caller='jit-proactivity',
+        user_uid='user-123',
+        feature='jit_proactivity',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-reasoning-run',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    trace = AttemptTrace()
+    trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.jit.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=10,
+                uncached_input_tokens=10,
+                output_tokens=100,
+                reasoning_tokens=40,
+                output_tokens_include_reasoning=True,
+            )
+        ),
+    )
+
+    receipt = jit_gateway_receipt_for_trace(context, trace)
+
+    assert receipt is not None
+    assert receipt.aggregate.output_tokens == 100
+    assert receipt.aggregate.reasoning_tokens == 40
+    assert receipt.as_dict()['aggregate']['reasoning_tokens'] == 40
+    assert receipt.as_dict()['attempts'][0]['reasoning_tokens'] == 40
 
 
 def test_vertex_and_anthropic_usage_preserve_provider_cache_fields() -> None:

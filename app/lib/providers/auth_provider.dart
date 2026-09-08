@@ -181,7 +181,7 @@ class AuthenticationProvider extends BaseProvider {
           credential = await AuthService.instance.authenticateWithProvider('google');
         }
         if (credential != null && _hasFirebaseUser) {
-          await _signIn(onSignIn);
+          await _signIn(onSignIn, credential: credential, authProvider: 'google');
         } else {
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
@@ -210,7 +210,7 @@ class AuthenticationProvider extends BaseProvider {
           credential = await AuthService.instance.authenticateWithProvider('apple');
         }
         if (credential != null && _hasFirebaseUser) {
-          await _signIn(onSignIn);
+          await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
@@ -283,7 +283,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<void> _signIn(Function() onSignIn) async {
+  Future<void> _signIn(Function() onSignIn, {required UserCredential credential, required String authProvider}) async {
     final token = await _getIdToken();
 
     if (token != null) {
@@ -304,7 +304,13 @@ class AuthenticationProvider extends BaseProvider {
       user = currentUser;
       authToken = token;
       _requiresReauthentication = false;
-      PlatformManager.instance.analytics.identify();
+      PlatformManager.instance.analytics.identify(
+        authMethod: authProvider,
+        userCreatedAt: currentUser.metadata.creationTime,
+      );
+      if (credential.additionalUserInfo?.isNewUser == true) {
+        PlatformManager.instance.analytics.accountCreated(authProvider: authProvider);
+      }
       notifyListeners();
       onSignIn();
     } else {

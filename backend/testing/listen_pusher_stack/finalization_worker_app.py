@@ -1,8 +1,9 @@
 """Instrumented Cloud Tasks worker entrypoint for durable finalization scenarios.
 
 This is a separate process from the listener. The production FastAPI route,
-Firestore leases, and finalizer ownership remain real; only JWT crypto and
-provider-side work are replaced with deterministic local seams.
+Firestore leases, the real memory configuration parser/fence, process
+persistence, and finalizer ownership remain real; only JWT crypto and
+credentialed provider leaves below those boundaries are deterministic.
 """
 
 from testing.listen_pusher_stack.cloud_tasks import install_loopback_task_auth

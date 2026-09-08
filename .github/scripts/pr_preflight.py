@@ -14,7 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pr_metadata import TransientPRMetadataError, PullRequestMetadata, load_from_api, load_from_event_file, load_from_gh
-from run_checks import detect_platform, load_manifest, resolve_checks
+from run_checks import (
+    MANIFEST_RELATIVE_PATH,
+    detect_platform,
+    load_manifest,
+    manifest_changed_check_ids,
+    resolve_checks,
+)
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,49 @@ def run_git(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def changed_files(root: Path, base: str, head: str) -> list[str]:
+def run_python_capture(root: Path, *args: str, errors: str = "strict") -> subprocess.CompletedProcess[str]:
+    """Run an owned Python check with a UTF-8 pipe contract on every host."""
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
+    return subprocess.run(
+        [sys.executable, *args],
+        cwd=root,
+        env=env,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors=errors,
+    )
+
+
+def current_branch(root: Path) -> str:
+    """Return the current branch without inheriting the Windows host locale."""
+    return subprocess.run(
+        ["git", "symbolic-ref", "--short", "-q", "HEAD"],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="backslashreplace",
+    ).stdout.strip()
+
+
+def configure_output_streams() -> None:
+    """Keep direct Windows preflight output UTF-8 and non-fatal."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        options = {"errors": "backslashreplace"}
+        if os.name == "nt":
+            options["encoding"] = "utf-8"
+        reconfigure(**options)
+
+
+def changed_files(root: Path, base: str, head: str, *, include_worktree: bool = False) -> list[str]:
     output = run_git(
         root,
         "diff",
@@ -53,15 +101,40 @@ def changed_files(root: Path, base: str, head: str) -> list[str]:
         "--diff-filter=ACMRTD",
         f"{base}...{head}",
     )
-    return [line for line in output.splitlines() if line]
+    files = set(output.splitlines())
+    if include_worktree and head == "HEAD":
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
+        files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
+    return sorted(path for path in files if path)
 
 
-def select_checks(files: list[str], lane: str = "ci", platform: str | None = None) -> list[Check]:
-    root = Path(__file__).resolve().parents[2]
-    manifest = load_manifest(root / ".github/checks-manifest.yaml")
+def select_checks(
+    files: list[str],
+    lane: str = "ci",
+    platform: str | None = None,
+    *,
+    metadata_only: bool = False,
+    root: Path | None = None,
+    base: str | None = None,
+    head: str = "HEAD",
+) -> list[Check]:
+    root = root or Path(__file__).resolve().parents[2]
+    manifest = load_manifest(root / MANIFEST_RELATIVE_PATH)
+    changed_ids = (
+        manifest_changed_check_ids(root, base, head, include_worktree=lane == "local")
+        if base is not None and MANIFEST_RELATIVE_PATH in files
+        else None
+    )
     return [
         Check(check.id, check.reason)
-        for check in resolve_checks(manifest, files, lane, platform=platform or detect_platform())
+        for check in resolve_checks(
+            manifest,
+            files,
+            lane,
+            platform=platform or detect_platform(),
+            manifest_changed_ids=changed_ids,
+        )
+        if not metadata_only or check.requires_pr_body
     ]
 
 
@@ -164,6 +237,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--lane", choices=("local", "ci"), default="ci")
     parser.add_argument("--pr-body-file", type=Path)
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Validate only metadata-dependent contracts, reporting all errors in one pass.",
+    )
     parser.add_argument("--repository", help="GitHub repository as owner/name; requires --pr-number")
     parser.add_argument("--pr-number", type=int, help="Load current PR metadata through the GitHub API")
     parser.add_argument(
@@ -183,6 +261,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_output_streams()
     args = parse_args()
     if bool(args.repository) != bool(args.pr_number):
         print("FAIL: --repository and --pr-number must be supplied together", file=sys.stderr)
@@ -191,11 +270,18 @@ def main() -> int:
     started = time.monotonic()
     try:
         merge_base = run_git(root, "merge-base", args.base, args.head)
-        files = changed_files(root, args.base, args.head)
+        files = changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
     except subprocess.CalledProcessError as exc:
         print(f"FAIL: could not resolve preflight diff: {exc.stderr.strip()}", file=sys.stderr)
         return 1
-    checks = select_checks(files, args.lane)
+    checks = select_checks(
+        files,
+        args.lane,
+        metadata_only=args.metadata_only,
+        root=root,
+        base=merge_base,
+        head=args.head,
+    )
     summary = f"PR preflight: lane={args.lane} base={args.base} ({merge_base[:12]}) head={args.head} files={len(files)}"
     print(summary, file=sys.stderr if args.suggest else sys.stdout)
     for check in checks:
@@ -208,19 +294,13 @@ def main() -> int:
         files_path = temp / "changed-files.txt"
         files_path.write_text("".join(f"{path}\n" for path in files), encoding="utf-8")
         if args.suggest:
-            invariants = subprocess.run(
-                [
-                    sys.executable,
-                    ".github/scripts/check_product_invariants.py",
-                    "--changed-files",
-                    str(files_path),
-                    "--suggest",
-                ],
-                cwd=root,
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
+            invariants = run_python_capture(
+                root,
+                ".github/scripts/check_product_invariants.py",
+                "--changed-files",
+                str(files_path),
+                "--suggest",
+                errors="backslashreplace",
             )
             if invariants.stdout:
                 print(invariants.stdout, end="")
@@ -229,25 +309,18 @@ def main() -> int:
 
             suggestion_body = temp / "suggest-pr-body.md"
             suggestion_body.write_text("", encoding="utf-8")
-            failure_classes = subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/failure-class",
-                    "prepare",
-                    "--base",
-                    args.base,
-                    "--head",
-                    args.head,
-                    "--pr-body-file",
-                    str(suggestion_body),
-                    "--format",
-                    "json",
-                ],
-                cwd=root,
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
+            failure_classes = run_python_capture(
+                root,
+                "scripts/failure-class",
+                "prepare",
+                "--base",
+                args.base,
+                "--head",
+                args.head,
+                "--pr-body-file",
+                str(suggestion_body),
+                "--format",
+                "json",
             )
             if failure_classes.returncode:
                 print("FAIL: failure-class preparation failed.", file=sys.stderr)
@@ -274,13 +347,7 @@ def main() -> int:
             return 1
         head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
         if not head_branch:
-            head_branch = subprocess.run(
-                ["git", "symbolic-ref", "--short", "-q", "HEAD"],
-                cwd=root,
-                check=False,
-                stdout=subprocess.PIPE,
-                text=True,
-            ).stdout.strip()
+            head_branch = current_branch(root)
         skip_changelog = head_branch.startswith("changelog/v") or os.getenv("PRE_PUSH_SKIP_DESKTOP_CHANGELOG") == "1"
         if metadata:
             print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
@@ -303,6 +370,8 @@ def main() -> int:
             "--pr-body-file",
             str(body_path),
         ]
+        if args.metadata_only:
+            command.append("--metadata-only")
         if skip_changelog:
             command.append("--skip-changelog")
         result = subprocess.run(command, cwd=root, check=False)

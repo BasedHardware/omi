@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-private-runtime-state-permissions",
+  "violated_contract": "Owner-scoped agent runtime state that can contain prompt material must be created and retained with owner-only directory, database, and SQLite sidecar permissions before the state is admitted to a JIT source projection.",
+  "canonical_prevention": "Set a private process umask before SQLite opens, reject symlinked state paths, and enforce 0700 for the state directory and 0600 for the database and WAL/SHM sidecars on every open, with a regression test over newly created and existing state.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/src/runtime/sqlite-store.ts",
+    "desktop/macos/agent/tests/sqlite-store.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/**",
+    "desktop/macos/agent/tests/**"
+  ],
+  "status": "open"
+}

@@ -67,4 +67,38 @@ extension FloatingControlBarManager {
     }
     return false
   }
+
+  /// Revises an assistant row that was finalized `.completed` at
+  /// provider-response-finish after its turn terminalized without delivering
+  /// the answer (#12743). The revision is payload-free — it changes only the
+  /// row's status and truncation cause — so the sealed row's content blocks,
+  /// resources, and canonical metadata (model attribution, continuity) stay
+  /// exactly as the funnel wrote them; the kernel merges the terminal reason
+  /// into the existing metadata instead of replacing it. The journal stays
+  /// the one transcript authority (INV-CHAT-1). Bounded retry mirrors
+  /// `completeStreamingRealtimeExchange` so a transient rejection does not
+  /// strand the optimistic status.
+  func reviseSealedRealtimeAssistantStatus(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    continuityKey: String,
+    terminalReason: String
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let provider = sharedFloatingProvider
+    else { return false }
+    let turnID = KernelTurnProjection.stableTurnID(
+      continuityKey: continuityKey, role: "assistant")
+    for _ in 0..<3 {
+      if await provider.kernelTurnProjection.reviseSealedTerminalTurn(
+        surface: surface,
+        turnId: turnID,
+        terminalReason: terminalReason,
+        ownerID: ownerID) != nil
+      {
+        return true
+      }
+    }
+    return false
+  }
 }

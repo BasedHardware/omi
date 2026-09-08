@@ -342,11 +342,15 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'attempt_count': 2,
         'task_retry_count': 0,
         'meeting_treatment_eligible': False,
+        'terminal_outcome': 'unknown',
+        'fanout_status': 'unknown',
     }
 
     job['status'] = 'dead_letter'
     job['task_retry_count'] = 3
     job['meeting_treatment_eligible'] = True
+    job['terminal_outcome'] = 'failure'
+    job['fanout_status'] = 'fenced'
     assert lifecycle_service.get_finalization_status('uid-1', 'conversation-1') == {
         'job_id': 'job-1',
         'status': 'dead_letter',
@@ -355,7 +359,33 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'attempt_count': 2,
         'task_retry_count': 3,
         'meeting_treatment_eligible': True,
+        'terminal_outcome': 'failure',
+        'fanout_status': 'fenced',
     }
+
+
+def test_finalization_status_distinguishes_success_from_fenced_completion(monkeypatch):
+    monkeypatch.setattr(
+        lifecycle_service.conversations_db,
+        'get_conversation',
+        lambda uid, conversation_id, **kwargs: {'finalization_job_id': 'job-1'},
+    )
+    job = {
+        'uid': 'uid-1',
+        'conversation_id': 'conversation-1',
+        'status': 'completed',
+        'terminal_outcome': 'stale',
+        'fanout_status': 'fenced',
+    }
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'get_finalization_job', lambda job_id: job)
+
+    status = lifecycle_service.get_finalization_status('uid-1', 'conversation-1')
+
+    assert status is not None
+    assert status['status'] == 'completed'
+    assert status['terminal'] is True
+    assert status['terminal_outcome'] == 'stale'
+    assert status['fanout_status'] == 'fenced'
 
 
 def test_byok_live_session_uses_pusher_even_when_platform_jobs_use_cloud_tasks(monkeypatch):

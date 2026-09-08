@@ -73,6 +73,17 @@ ALLOWED_COMPONENTS = frozenset(
         'knowledge_graph',
         'agent_tools',
         'conversation_finalization',
+        # Redis cache decode (database/redis_db.py): a cached value that is not the JSON it should be,
+        # served as raw text rather than dropped. Silent otherwise, and it means a writer somewhere is
+        # putting the wrong shape in the cache.
+        'redis_cache',
+        # Live STT session degrade (routers/chat.py, routers/listen/receiver.py) — distinct from
+        # 'stt_selection', which is the provider CHOICE. This one is a session already running.
+        'stt_live_session',
+        # Static map imagery (routers/static_map.py): the provider gave nothing and the app draws its own
+        # pin canvas. On-prem this is the normal state — there is no map vendor configured — so it must
+        # be countable rather than buried in 'other'.
+        'static_map',
         # Vector store (ADR-0033): an unconfigured store makes writes and deletes no-ops, and a capability
         # silently lost is the thing this counter exists for. Without the label it buckets to 'other'.
         'vector_store',
@@ -95,6 +106,7 @@ ALLOWED_COMPONENTS = frozenset(
         # Speaker identity (BACKLOG L20): the matcher unreachable, the batch diarizer failing, or an
         # enrolment that stored no embedding. All three keep the conversation — and lose WHO said it.
         'speaker',
+        'daily_summary',
         'other',
     }
 )

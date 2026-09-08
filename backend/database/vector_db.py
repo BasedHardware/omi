@@ -10,7 +10,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar
 
 from database import projection_repair
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
@@ -191,16 +191,6 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 @_account_external_data_write
-def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
-    # Its immediate neighbours (upsert_vector2, update_vector_metadata) have this gate and this one did
-    # not, so with no store configured it raised from the adapter instead of skipping.
-    if not is_vector_available():
-        return
-    res = _vector_store().upsert("ns1", [_get_data(uid, conversation_id, vector)])
-    logger.info(f'upsert_vector {res}')
-
-
-@_account_external_data_write
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
     if not is_vector_available():
         return
@@ -219,15 +209,6 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
     metadata['memory_id'] = conversation_id
     _vector_store().update_metadata("ns1", f'{uid}-{conversation_id}', metadata)
     return metadata
-
-
-@_account_external_data_write
-def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
-    if not is_vector_available():  # same missing gate as upsert_vector above
-        return
-    data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
-    res = _vector_store().upsert("ns1", data)
-    logger.info(f'upsert_vectors {res}')
 
 
 def _created_at_filter(starts_at: Optional[int] = None, ends_at: Optional[int] = None) -> Optional[Dict[str, int]]:
@@ -488,7 +469,7 @@ def upsert_memory_vector(
     metadata.update(
         strip_null_metadata_values(
             projection_metadata
-            or memory_projection_metadata(
+            or projection_repair.projection_metadata_for_fact(
                 {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
             )
         )
@@ -537,7 +518,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
         metadata.update(
             strip_null_metadata_values(
                 item.get('projection_metadata')
-                or memory_projection_metadata(
+                or projection_repair.projection_metadata_for_fact(
                     {
                         'id': item['memory_id'],
                         'category': item['category'],
@@ -591,38 +572,6 @@ def find_similar_memories(
             )
 
     return results
-
-
-def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> Optional[Dict[str, Any]]:
-    """
-    Check if a similar memory already exists.
-    Returns the duplicate info if found, None otherwise.
-    """
-    similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
-    if similar:
-        logger.warning(f'Found duplicate memory: {similar[0]}')
-        return similar[0]
-    return None
-
-
-def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str]:
-    """
-    Semantic search for memories.
-    Returns list of memory_ids ordered by relevance.
-    """
-    if not is_vector_available():
-        logger.warning('Pinecone index not initialized, skipping memory search')
-        return []
-
-    vector = embeddings.embed_query(query)
-    filter_data = build_legacy_memory_vector_filter(uid)
-
-    matches = _vector_store().query(MEMORIES_NAMESPACE, vector, top_k=limit, include_metadata=True, filter=filter_data)
-
-    # A match whose metadata carries no memory_id cannot be returned as one: the declared
-    # List[str] would then hold a None and the caller would look it up and find nothing.
-    ids = (_metadata_of(match).get('memory_id') for match in matches)
-    return [i for i in ids if isinstance(i, str)]
 
 
 @_account_external_data_write
@@ -753,55 +702,6 @@ def delete_memory_vector(uid: str, memory_id: str) -> None:
     vector_id = f'{uid}-{memory_id}'
     result = _vector_store().delete_by_ids(MEMORIES_NAMESPACE, [vector_id])
     logger.info(f'delete_memory_vector {vector_id} {result}')
-
-
-def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None) -> List[str]:
-    return projection_repair.enqueue_projection_repairs(
-        uid,
-        {
-            'commit_id': source_commit_id or 'manual',
-            'mutations': [{'type': reason, 'fact_id': fact_id}],
-        },
-    )
-
-
-def memory_projection_metadata(memory: Dict[str, Any], source_commit_id: str | None = None) -> Dict[str, Any]:
-    return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
-
-
-def repair_memory_projection(uid: str, memory: Dict[str, Any] | None) -> str:
-    if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
-        memory_id = (memory or {}).get('id')
-        if memory_id:
-            delete_memory_vector(uid, memory_id)
-        return 'delete'
-
-    upsert_memory_vector(
-        uid,
-        memory['id'],
-        memory.get('content', ''),
-        memory.get('category', 'system'),
-        subject_entity_id=memory.get('subject_entity_id'),
-        projection_metadata=memory_projection_metadata(memory),
-    )
-    return projection_repair.projection_action_for_fact(memory)
-
-
-def reconcile_projections(uid: str, facts: List[Dict[str, Any]], vector_fact_ids: List[str]) -> Dict[str, Any]:
-    return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
-
-
-def process_projection_repair_queue(
-    uid: str,
-    fact_loader: Callable[[str], Optional[Dict[str, Any]]],
-    limit: int = 100,
-) -> Dict[str, Any]:
-    return projection_repair.process_projection_repairs(
-        uid,
-        fact_loader=fact_loader,
-        repair_func=repair_memory_projection,
-        limit=limit,
-    )
 
 
 # ==========================================
@@ -963,7 +863,11 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     if not is_vector_available():
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
-    _vector_store().delete_by_ids(SCREEN_ACTIVITY_NAMESPACE, vector_ids)
+    # Chunk to stay within the provider's per-delete id limit (1,000 on Pinecone). Upstream's, kept:
+    # the bound is a real provider constraint, and a single oversized delete would fail the whole purge
+    # rather than part of it. Expressed on the port so it holds on Qdrant too (ADR-0033).
+    for i in range(0, len(vector_ids), 1000):
+        _vector_store().delete_by_ids(SCREEN_ACTIVITY_NAMESPACE, vector_ids[i : i + 1000])
 
 
 # ==========================================

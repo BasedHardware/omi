@@ -29,15 +29,21 @@ def captured(monkeypatch):
     """Capture the fan-out instead of generating and sending."""
     seen: dict = {'fan_out': None, 'recipient_reads': []}
 
-    async def fake_send_bulk(users, push_backend=None):
+    # Upstream's +1002 gave the fan-out a budget: `_send_bulk_summary_notification` now takes a deadline,
+    # a stats accumulator, the hour and the cursor key, and returns whether it finished the group. The
+    # stub follows that contract; what this file asserts — WHO reaches the sender — is unchanged.
+    async def fake_send_bulk(users, *, deadline=None, stats=None, target_hour=None, cursor_key=None):
         seen['fan_out'] = list(users)
-        seen['backend'] = push_backend
+        return True
 
     monkeypatch.setattr(notif, '_send_bulk_summary_notification', fake_send_bulk)
     monkeypatch.setattr(notif, '_get_timezones_grouped_by_hour', lambda: {9: ['UTC']})
 
+    # (users, query_error, every_chunk_read) — upstream's +1002 signature. The middle element of each
+    # user tuple is the user DOCUMENT: the read stays backend-neutral and this layer swaps in the
+    # recipients for the resolved transport.
     async def fake_users(timezones, target_hour):
-        return [('u-with', {}, 'UTC'), ('u-without', {}, 'UTC')]
+        return [('u-with', {}, 'UTC'), ('u-without', {}, 'UTC')], None, True
 
     monkeypatch.setattr(notif, '_get_users_for_daily_summary', fake_users)
 

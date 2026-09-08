@@ -14,11 +14,13 @@ extension AppState {
     }
   }
 
-  /// Start real-time transcription
-  /// - Parameter source: Audio source to use (defaults to current audioSource setting)
+  /// Starts transcription. `userInitiated` is false on automatic paths (launch,
+  /// reactivation, key load, sync, wake, rotations, post-onboarding), which must
+  /// never raise the mic TCC sheet — see `MicrophoneCaptureAuthorizationPolicy`.
   func startTranscription(
     source: AudioSource? = nil,
-    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+    conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
+    userInitiated: Bool = true
   ) {
     guard !isTranscribing else { return }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
@@ -51,9 +53,19 @@ extension AppState {
         return
       }
     } else {
-      // For microphone, check permission
-      guard AudioCaptureService.checkPermission() else {
-        requestMicrophonePermission()
+      // For microphone: user-initiated starts may raise the sheet (or the denied
+      // alert); automatic starts abandon and let the intent wait for an explicit
+      // Listen/Grant action instead of re-prompting after a skip.
+      let action = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
+      guard action == .proceed else {
+        if action == .abandonAutomaticStart {
+          log(
+            "Transcription: automatic start abandoned — microphone permission not granted; automatic paths never prompt"
+          )
+        } else {
+          requestMicrophonePermission()
+        }
         return
       }
     }
@@ -68,14 +80,20 @@ extension AppState {
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
       // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
       // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      // Pendant BLE used to force cloud; identified basic now matches mic (local, unnamed).
+      // Cache miss / unknown plan fail open to the previous BLE→cloud path; prefetch warms the next start.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
       )
+      let preferLocalOnBasic =
+        SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity() == .planGated
+      Task { _ = await SubscriptionEntitlementService.shared.snapshot() }
       sttSession.beginRecording(
         audioSource: effectiveSource,
         isAppleSilicon: Self.isAppleSilicon,
-        debugForceCloud: debugForceCloud
+        debugForceCloud: debugForceCloud,
+        preferLocalOnBasic: preferLocalOnBasic
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
@@ -331,7 +349,7 @@ extension AppState {
               )
             }
           }
-          self.startTranscription(conversationRole: conversationRole)
+          self.startTranscription(conversationRole: conversationRole, userInitiated: false)
         }
       }
 
@@ -485,6 +503,11 @@ extension AppState {
       await parked.waitForPhysicalStop()
       guard let current = audioCaptureService, current === mic else { return false }
     }
+    // A warm PTT capture whose CoreAudio start has not resolved holds the same
+    // device and cannot be stopped from here — waiting for its own completion is
+    // the boundary. See `PushToTalkManager.releaseInFlightWarmCapture`.
+    await PushToTalkManager.shared.drainInFlightWarmCapture()
+    guard let current = audioCaptureService, current === mic else { return false }
 
     do {
       let useLocalSTT = sttSession.useLocalSTT
@@ -512,6 +535,13 @@ extension AppState {
         return false
       }
       log("Transcription: Microphone capture started")
+      // This path released the parked push-to-talk capture above so the two
+      // IOProcs could not overlap, and until now nothing put one back: every
+      // press after an ambient capture start paid a cold CoreAudio start inside
+      // the hold. Re-arm now that this session's device is open — PTT routes
+      // around a contended input, so the warm capture it opens is not the one
+      // this session holds.
+      PushToTalkManager.shared.schedulePTTCaptureWarmup(trigger: .ambientCaptureStarted)
       return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)
@@ -1032,7 +1062,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source, conversationRole: conversationRole)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -1086,7 +1116,7 @@ extension AppState {
         if !self.isTranscribing { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
-      self.startTranscription(source: source, conversationRole: conversationRole)
+      self.startTranscription(source: source, conversationRole: conversationRole, userInitiated: false)
       self.sttSession.completeFallback()
     }
   }
@@ -1228,7 +1258,7 @@ extension AppState {
             )
           }
         }
-        self.startTranscription(conversationRole: conversationRole)
+        self.startTranscription(conversationRole: conversationRole, userInitiated: false)
       }
     }
 

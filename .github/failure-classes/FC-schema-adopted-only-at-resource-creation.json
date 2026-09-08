@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-schema-adopted-only-at-resource-creation",
+  "violated_contract": "A schema requirement enforced by a fail-closed runtime check must have a migration path for resources that already exist. Attaching new required fields only to the resource-creation branch leaves every pre-existing resource permanently non-compliant: the check fails closed on each call, forever, and the failure reads as a transient provider error rather than the missing migration it is.",
+  "canonical_prevention": "When a fail-closed schema check gains new required fields, ship the idempotent adoption (additive alter) in the same change, keyed off the check's own missing-field computation, with the post-alter re-read as the authority — and share one field-definition table between the creation and adoption paths so they cannot drift. Keep tests for adoption, no-op on complete schemas, race-losing adoption, and a failed alter still failing closed.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_ws_m_atom_keyword_index.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/atom_keyword_index.py",
+    "backend/utils/conversations/search.py"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,5 @@
+{
+  "area": "flutter",
+  "comment": "Ratchet floor of unreachable/zero-importer files tolerated at seed time. Shrink by deleting files and re-running check_dead_code.py --update-baseline --area flutter; new entries fail CI.",
+  "unreachable": []
+}

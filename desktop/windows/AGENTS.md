@@ -22,10 +22,10 @@ in those three files with no matching commit, this is almost certainly why;
 If your local `pnpm --version` is a different major (e.g. a system package
 manager installed 11+), `.npmrc`'s `node-linker=hoisted` may be silently
 ignored, breaking the pi-mono dependency-closure postinstall check
-(`scripts/verify-pimono-unpack.mjs`) with a confusing "closure package(s) do
+(`scripts/verify-pimono-unpack.mjs`) with "closure package(s) do
 not resolve on disk" error. Use `npx pnpm@10 <command>` if your system pnpm
 is a different major version — don't downgrade a system-managed pnpm install
-for this alone.
+for this alone. **Node pin:** `>=22.19.0 <23` (`.nvmrc`; 24+ fails pretest).
 
 ## Development Workflow
 
@@ -48,27 +48,11 @@ for this alone.
   can't reach (live ASR, agent spawning, OAuth flows, Rewind semantics). Specs
   live under `e2e/`. Run the relevant one manually before shipping a change
   in that area; don't assume `pnpm test` alone covers it.
-
-### Linux dev environment (niri / Wayland compositors)
-
-On native Wayland compositors with limited XWayland support (e.g. niri), the
-default XWayland path (`ozone-platform=x11`, chosen deliberately for global
-shortcuts + active-window support — see `src/main/index.ts`) can fail to map
-the main window at all (tray icon appears, window never does). Set
-`OMI_OZONE=wayland` to run under native Wayland instead, at the cost of global
-shortcuts (push-to-talk / overlay summon) and active-window detection not
-working. See `docs/multi-worktree-dev.md`'s environment-overrides table for
-this and other dev-only env vars (`OMI_DEV_HW_GPU`, etc.).
-
-`OMI_OZONE=wayland` alone can still leave the main window mapped but blank
-(tray works fine) — `pnpm dev`'s software-render default has known
-presentation bugs on native Wayland; add `OMI_DEV_HW_GPU=1` alongside it. See
-`docs/multi-worktree-dev.md`'s
-troubleshooting section for the confirmed repro (Asahi Fedora + niri) and a
-second known limitation: the bar and the focus-halo glow window both
-position themselves via explicit `setBounds`, which native Wayland ignores,
-so they float in the screen center instead of staying parked off-screen —
-functional, just misplaced.
+- **Linux Wayland compositors (niri/Sway/Hyprland)**: `pnpm dev` auto-detects
+  these and defaults to native Wayland instead of XWayland; see
+  `docs/multi-worktree-dev.md`'s environment-overrides and troubleshooting
+  sections for the detection mechanism, `OMI_OZONE` override, and known
+  limitations.
 
 ## CI
 
@@ -116,8 +100,9 @@ starting this from scratch.
 - `docs/conversation-sync.md` — offline-retry outbox design.
 - `docs/multi-worktree-dev.md` — parallel-worktree port/profile isolation, dev
   env var reference.
-- `docs/perf-invisible-wins.md`, `docs/perf-startup-burst-2026-07-19.md` —
-  perf investigation notes.
+- `docs/linux-screen-recording.md` — Rewind needs a Wayland desktop portal;
+  wlroots compositors (niri, Sway, Hyprland) often ship none configured.
+- `docs/perf-invisible-wins.md`, `docs/perf-startup-burst-2026-07-19.md` — perf notes.
 
 ## Changelog Entries
 

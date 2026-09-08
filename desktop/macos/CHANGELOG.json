@@ -2,6 +2,499 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.317",
+      "date": "2026-09-08",
+      "changes": [
+        "Added recent screen frames to the chat paperclip menu, so you can attach what you were looking at as an image",
+        "Fixed \"what's on my screen?\" asked from Omi's own window answering with Omi's interface — it now answers from the most recent frame of the app you were actually in, and when you switch into your first real app, the on-screen prompt includes that frame for you",
+        "Improved chat responsiveness with reusable Markdown rendering and a more compact composer with consistent Send and Stop controls",
+        "Added image pasting to the chat composer, so ⌘V with a screenshot or a copied file stages it as an attachment"
+      ]
+    },
+    {
+      "version": "0.12.316",
+      "date": "2026-09-07",
+      "changes": [
+        "Hardened the local agent runtime state used by proactive JIT processing"
+      ]
+    },
+    {
+      "version": "0.12.315",
+      "date": "2026-09-07",
+      "changes": [
+        "Improved proactive JIT notifications so reasoning requests stay within the backend budget and failures retain actionable diagnostics"
+      ]
+    },
+    {
+      "version": "0.12.314",
+      "date": "2026-09-07",
+      "changes": [
+        "You can now attach a file, image, or conversation and press Return without typing anything; Omi responds to the attachment directly.",
+        "Attached files, images, and conversations are now treated as the subject of your message, so Omi answers about the attachment instead of describing your screen.",
+        "Voice typing now capitalizes sentence starts and the pronoun \"I\" even when the AI cleanup is unavailable",
+        "Completed realtime voice conversations now keep their final answer in conversation history"
+      ]
+    },
+    {
+      "version": "0.12.313",
+      "date": "2026-09-07",
+      "changes": [
+        "Clicking the daily summary card in the notch now opens the app on that day's recap page; the click previously did nothing, and a plan/permission card that cannot open a conversation now opens the app's chat instead of ignoring the tap"
+      ]
+    },
+    {
+      "version": "0.12.312",
+      "date": "2026-09-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.311",
+      "date": "2026-09-07",
+      "changes": [
+        "Fixed planned reminders not firing when a matching app was on screen but that context was not independently notification-worthy"
+      ]
+    },
+    {
+      "version": "0.12.310",
+      "date": "2026-09-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.309",
+      "date": "2026-09-07",
+      "changes": [
+        "Chat answers no longer run the pre-tool sentence and the post-tool continuation together when Omi pauses to think or search mid-turn (\"...handle it.Capture the context...\" now renders as two properly separated sentences)",
+        "Fixed the remaining scrunched-notch states: closing a conversation over a notification card, a card auto-dismissing under an open chat, card replacements, and the moment a voice hold releases no longer collapse the notch to its resting width while wider content is still showing."
+      ]
+    },
+    {
+      "version": "0.12.308",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.307",
+      "date": "2026-09-06",
+      "changes": [
+        "Voice typing now always copies (or pastes) what you dictated instead of occasionally asking Omi to type it for you when Accessibility access hasn't been granted"
+      ]
+    },
+    {
+      "version": "0.12.306",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.305",
+      "date": "2026-09-06",
+      "changes": [
+        "Fixed the Unlimited plan's fallback description showing the wrong monthly question count",
+        "Typing with no text field focused now starts a search in the page's search bar (or lands in the chat composer on Chat) instead of playing the system alert sound",
+        "Free-plan Pendant recording on Apple Silicon now uses on-device transcription instead of forcing the cloud STT path.",
+        "Settings search field placeholder now reads \"Search\""
+      ]
+    },
+    {
+      "version": "0.12.304",
+      "date": "2026-09-06",
+      "changes": [
+        "Free-plan screen proactivity now stops on the plan gate instead of retrying paid Gemini calls, and a mid-session voice quota close shows the usage-limit prompt."
+      ]
+    },
+    {
+      "version": "0.12.303",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.302",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.301",
+      "date": "2026-09-06",
+      "changes": [
+        "Named test bundles now inherit shortcuts and settings from your installed Omi app — production first, Omi Dev when production is absent — instead of always mirroring a stale Omi Dev; the launch log warns and names the effective hotkey default when the source app has none set, and auth seeding falls back to your production session when Omi Dev's has expired"
+      ]
+    },
+    {
+      "version": "0.12.300",
+      "date": "2026-09-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.299",
+      "date": "2026-09-06",
+      "changes": [
+        "The daily recap in Chat history is now its own card — day, emoji, title, overview, and the day's stats — and the once-a-day announcement no longer adds a generic bell notification on top of it",
+        "Ambient proactive notifications now let you mark a reminder Useful or Not relevant"
+      ]
+    },
+    {
+      "version": "0.12.298",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive knowledge tools and standing notification setup in Chat"
+      ]
+    },
+    {
+      "version": "0.12.297",
+      "date": "2026-09-05",
+      "changes": [
+        "Improved proactive notification timing when your device and profile use different time zones"
+      ]
+    },
+    {
+      "version": "0.12.296",
+      "date": "2026-09-05",
+      "changes": [
+        "Daily recap generation now explains itself: days the backend declines say \"Nothing to summarize yet\" instead of a generic failure, and recap scheduling reaches owners who only use Omi on the Mac"
+      ]
+    },
+    {
+      "version": "0.12.295",
+      "date": "2026-09-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.294",
+      "date": "2026-09-05",
+      "changes": [
+        "Omi can now use what you've been working on across your devices, so chat picks up your context instead of asking you to re-explain it. Screenshots and on-screen text never leave your Mac, and excluding an app removes what it already learned."
+      ]
+    },
+    {
+      "version": "0.12.293",
+      "date": "2026-09-05",
+      "changes": [
+        "A long reply now stays whole once it finishes instead of collapsing to its first paragraph, and asking by voice what's on your list returns the same tasks the Tasks page shows — including ones overdue by more than a week and ones that have been sitting there without a date",
+        "Added \"Select Text\" to every chat message — it opens a selectable copy you can drag through and copy from — alongside a right-click Copy, a tighter transcript, and a mark on any reply that was cut off",
+        "Every account now gets the same chat window, and every card in a reply — tasks, goals, conversations, memories, captures, questions — is something you can act on wherever you read it",
+        "Voice typing: the notch's red dots now ease back out when the dictation ends instead of snapping to white",
+        "Voice typing: a hold that heard nothing to type pastes nothing and leaves your clipboard alone, and the cleanup no longer strips letters out of addresses, hyphenated words, or units",
+        "Voice typing: if you switch documents in the same app while a dictation is being transcribed, the text is copied for you to paste instead of landing in the new document",
+        "Voice typing with no network: a spoken question now says \"No network — say “type …” to dictate offline\" instead of reporting a failed reply"
+      ]
+    },
+    {
+      "version": "0.12.292",
+      "date": "2026-09-05",
+      "changes": [
+        "Fixed screenshots sitting at a slightly different left edge than the rest of the activity timeline when they follow a conversation"
+      ]
+    },
+    {
+      "version": "0.12.291",
+      "date": "2026-09-05",
+      "changes": [
+        "Say \"type\" during push-to-talk to dictate into whatever app you are in. Release the key and the whole dictation is transcribed, cleaned up, and pasted in one piece — and it still works with no network",
+        "The notch dots turn red once a push-to-talk hold is recognized as a dictation, so you can see \"type\" was heard before you let go"
+      ]
+    },
+    {
+      "version": "0.12.290",
+      "date": "2026-09-04",
+      "changes": [
+        "Chat now warns above the composer at 90% and 100% of your monthly limit, with a usage meter, the count and the reset date, so running out is never a surprise; plans that bill overage keep working past the limit instead of being blocked"
+      ]
+    },
+    {
+      "version": "0.12.289",
+      "date": "2026-09-04",
+      "changes": [
+        "Push-to-talk answers that were never spoken are no longer recorded as delivered in your conversation history, so Omi no longer assumes you heard a reply it actually cut off"
+      ]
+    },
+    {
+      "version": "0.12.288",
+      "date": "2026-09-04",
+      "changes": [
+        "An answer that Omi speaks after deferring a voice question (\"Let me verify...\") is now written to the conversation journal, so a follow-up no longer gets answered from the earlier reply it already corrected.",
+        "Bring your own MCP servers and skills: browse the official MCP registry and skill catalogs on the Apps page, or add your own local command or remote URL, and chat sees a compact index of each server's tools and loads full details on demand — all stored as plain files under ~/.omi",
+        "MCP servers work on both transports; chat discovers their tools through a compact sorted index instead of hundreds of tool definitions (mcp_tools_info / mcp_call), published prompts stay usable, local servers spawn with a minimal environment instead of Omi's full process env, and dropped SSE servers reconnect before giving up. Installing a skill brings its scripts and references instead of just the instructions, skills load a section at a time with parts returned by default, and the disable toggle now fully hides a skill from the assistant",
+        "Added or removed MCP servers now reach an open chat right away instead of waiting for a restart, and hand-edits to ~/.omi/mcp.json are picked up on the Apps page",
+        "Fixed an MCP server change being dropped when it landed while the agent runtime was already restarting, and task chat now applies pending server changes too",
+        "Tightened permissions on ~/.omi and its mcp.json, which can hold OAuth tokens, so they are now readable only by your user account",
+        "Quoted paths and arguments now survive when adding a local command server instead of being split at every space",
+        "Renaming or deleting a skill now keeps its disabled state in sync instead of silently re-enabling it or leaving stale entries"
+      ]
+    },
+    {
+      "version": "0.12.287",
+      "date": "2026-09-04",
+      "changes": [
+        "Improved ChatGPT and Claude memory imports so mixed-format exports stay complete and partial saves are clearly reported"
+      ]
+    },
+    {
+      "version": "0.12.286",
+      "date": "2026-09-04",
+      "changes": [
+        "Omi no longer reads Interject's classification aloud during voice replies",
+        "Skipping or denying a permission during onboarding no longer makes Omi re-ask for it on every launch, app switch, or settings sync — microphone, screen recording, and file indexing stay off until you turn them on yourself",
+        "Push-to-talk replies you fully heard are no longer repeated or re-corrected on later, unrelated questions",
+        "Voice transcripts no longer duplicate Omi's own spoken replies picked up by the microphone"
+      ]
+    },
+    {
+      "version": "0.12.285",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.284",
+      "date": "2026-09-04",
+      "changes": [
+        "Reminders can now bind to the app or document you were in, and come back the next time you open it",
+        "Daily recaps now generate without a phone, fill missed days, and show on the Activity timeline"
+      ]
+    },
+    {
+      "version": "0.12.283",
+      "date": "2026-09-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.282",
+      "date": "2026-09-04",
+      "changes": [
+        "Desktop thumbs-down now asks why, and Focus/memory cards stop repeating the same mistake."
+      ]
+    },
+    {
+      "version": "0.12.281",
+      "date": "2026-09-03",
+      "changes": [
+        "Daily summaries now include time watched and proactive moments from the Mac app"
+      ]
+    },
+    {
+      "version": "0.12.280",
+      "date": "2026-09-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.279",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk deep-think answers now come from a dedicated thinking agent that sees the same screenshots you showed Omi and can think extra hard when you ask for it"
+      ]
+    },
+    {
+      "version": "0.12.278",
+      "date": "2026-09-03",
+      "changes": [
+        "Onboarding no longer quits if the Mac's speakers are not ready to play the intro sounds"
+      ]
+    },
+    {
+      "version": "0.12.277",
+      "date": "2026-09-03",
+      "changes": [
+        "Push-to-talk now has the microphone running before your first hold, so the first question after setup is no longer dropped with \"Hold longer to record\". A hold whose microphone was still starting says so and retries instead of blaming the press.",
+        "Fixed ChatGPT and Claude tagged memory imports and added actionable failure messages"
+      ]
+    },
+    {
+      "version": "0.12.276",
+      "date": "2026-09-03",
+      "changes": [
+        "Rating a chat answer thumbs-down now asks what went wrong — pick Incorrect, Not helpful, Ignored instructions, Too long, or Other, or skip it. Your thumbs-down is recorded either way."
+      ]
+    },
+    {
+      "version": "0.12.275",
+      "date": "2026-09-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.274",
+      "date": "2026-09-03",
+      "changes": [
+        "Fixed the Permissions page reporting Automation as \"Not Granted\" when it was already granted in System Settings"
+      ]
+    },
+    {
+      "version": "0.12.273",
+      "date": "2026-09-03",
+      "changes": [
+        "Added a Things I learned today section to the daily summary in Chat where you can confirm, drop, or fix what Omi picked up",
+        "Added a tappable follow-up question under grounded chat and floating-bar answers, never on failed turns",
+        "Fixed the Home suggestions list repeating the same tasks and tips day after day; rows you have seen or dismissed now rotate out",
+        "Conversations that are still being summarized now show their first transcript line instead of \"Processing…\", tell you when processing is taking longer than usual or looks stuck, offer Reprocess right on the row, and land in place when a recording ends"
+      ]
+    },
+    {
+      "version": "0.12.272",
+      "date": "2026-09-03",
+      "changes": [
+        "Notification cards in the notch no longer shrink to a narrow strip when you hold the push-to-talk shortcut to reply to them.",
+        "Push-to-talk on a second display now plays the start sound and shows the listening animation on the first press instead of the second"
+      ]
+    },
+    {
+      "version": "0.12.271",
+      "date": "2026-09-03",
+      "changes": [
+        "Voice answers now carry the exact current-screen image into deeper thinking, keep unrelated background results out of your next question, and use deeper research for company and product history"
+      ]
+    },
+    {
+      "version": "0.12.270",
+      "date": "2026-09-03",
+      "changes": [
+        "Double-tap for Locked Mode works again on modifier-only push-to-talk keys; a single accidental tap still does nothing"
+      ]
+    },
+    {
+      "version": "0.12.269",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+      ]
+    },
+    {
+      "version": "0.12.268",
+      "date": "2026-09-02",
+      "changes": [
+        "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+        "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+      ]
+    },
+    {
+      "version": "0.12.267",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.266",
+      "date": "2026-09-02",
+      "changes": [
+        "Your daily summary now appears at the top of Chat — the day's headline, stats, highlights, and action items, with a one-tap follow-up question",
+        "The first app you open after setup now gets a notch card that opens Ask Omi with a question about your screen already typed",
+        "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
+      ]
+    },
+    {
+      "version": "0.12.265",
+      "date": "2026-09-02",
+      "changes": [
+        "Fixed large voice-tool results so useful summaries load successfully and can be inspected in more detail.",
+        "Fixed meeting notes and daily opener cards getting stuck behind an undeliverable Chat item",
+        "Redesigned the first-use popup: pick what to try first (a game, design feedback, a post, shopping) and Try it now opens that site",
+        "The first-use popup previews are back to the drawn pages, with the site name larger at the top",
+        "Omi can ask users who never got going to walk through onboarding again on their next launch"
+      ]
+    },
+    {
+      "version": "0.12.260",
+      "date": "2026-09-02",
+      "changes": [
+        "Onboarding door 3 hint asks the question directly instead of telling Omi to check screen history, which is not searchable yet that early in onboarding"
+      ]
+    },
+    {
+      "version": "0.12.259",
+      "date": "2026-09-02",
+      "changes": [
+        "Voice questions about what is on screen now always see the current screen: the frame captured when you press the key is attached to every turn, and think-deeper answers read its text too"
+      ]
+    },
+    {
+      "version": "0.12.258",
+      "date": "2026-09-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.257",
+      "date": "2026-09-01",
+      "changes": [
+        "Fixed the onboarding riddle demo answering the first door again when you asked about the second: Omi now checks which door is on screen and passes it along when it thinks deeper"
+      ]
+    },
+    {
+      "version": "0.12.256",
+      "date": "2026-09-01",
+      "changes": [
+        "Onboarding's ask demo now opens a three-door riddle page in your browser so you can try asking Omi about what's on screen, including something no longer visible",
+        "Fixed Omi answering \"that was never mentioned\" when you ask about something you read on screen earlier; voice and chat now check your screen history, not just conversations",
+        "When you ask Omi by voice about what's on your screen, what it saw is now kept with that message, so later questions like \"what did that page say?\" work from conversation history"
+      ]
+    },
+    {
+      "version": "0.12.255",
+      "date": "2026-09-01",
+      "changes": [
+        "Proactive Focus, Insight and Task notifications now come from one just-in-time lane that prioritizes what you already told Omi (open tasks, goals, calendar) and spreads its daily budget across the day instead of spending it all after midnight"
+      ]
+    },
+    {
+      "version": "0.12.254",
+      "date": "2026-09-01",
+      "changes": [
+        "Fixed chat jumping to the latest message while you are still scrolling",
+        "Memories you delete on another device now disappear here too, and deleting a memory that is already gone no longer makes it reappear a few seconds later"
+      ]
+    },
+    {
+      "version": "0.12.253",
+      "date": "2026-09-01",
+      "changes": [
+        "Every answer now shows which model actually produced it: the Response Context (i) popover — including on the latest message and on voice answers — gains a Model row reporting the served model observed on the response itself (e.g. the managed chat lane's real model), never the requested alias.",
+        "Stop meeting notes from labeling Telegram (and other native messaging-app) calls as Speaker 1 when the other party's name is on the call window."
+      ]
+    },
+    {
+      "version": "0.12.252",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed Interject reply cards shrinking into an unreadable notch island, and follow-up PTT no longer drops to a fallback voice that then fails"
+      ]
+    },
+    {
+      "version": "0.12.251",
+      "date": "2026-08-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.250",
+      "date": "2026-08-31",
+      "changes": [
+        "Fixed push-to-talk replies going silent after an audio device change"
+      ]
+    },
+    {
       "version": "0.12.249",
       "date": "2026-08-31",
       "changes": [

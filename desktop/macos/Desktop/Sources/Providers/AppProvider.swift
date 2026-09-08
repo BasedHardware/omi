@@ -21,6 +21,15 @@ class AppProvider: ObservableObject {
   @Published var summaryApps: [OmiApp] = []  // Apps with memories capability
   @Published var notificationApps: [OmiApp] = []  // Apps with proactive_notification capability
   @Published var enabledApps: [OmiApp] = []
+  @Published var localSkills: [LocalSkillsStore.Skill] = []  // User-authored skills on disk
+  @Published var localMcpServers: [LocalMcpStore.Entry] = []  // ~/.omi/mcp.json entries
+  @Published var mcpCatalog: [ExtensionCatalog.Entry] = []  // Marketplace MCP servers
+  @Published var skillCatalog: [ExtensionCatalog.Entry] = []  // Marketplace skills
+  @Published var isLoadingMcpCatalog = false
+  @Published var isLoadingSkillCatalog = false
+  @Published var mcpStatuses: [String: McpServerProbe.Status] = [:]
+  private var mcpCatalogCache: [String: [ExtensionCatalog.Entry]] = [:]
+  private var skillCatalogCache: [String: [ExtensionCatalog.Entry]] = [:]
   @Published var categories: [OmiAppCategory] = []
   @Published var capabilities: [OmiAppCapability] = []
 
@@ -404,6 +413,67 @@ class AppProvider: ObservableObject {
     } catch {
       logError("Failed to fetch enabled apps", error: error)
     }
+  }
+
+  /// Re-scan the user's local skills and MCP servers under ~/.omi.
+  func fetchUserExtensions() async {
+    localSkills = LocalSkillsStore.listSkills()
+    localMcpServers = LocalMcpStore.listServers()
+  }
+
+  /// Ask every configured server whether it actually answers. Probes run concurrently and publish
+  /// as they land, so one slow server does not hold the others' status.
+  func refreshMcpStatuses() async {
+    let servers = LocalMcpStore.readAllServers()
+    let names = servers.keys.sorted()
+    for name in names where mcpStatuses[name] == nil { mcpStatuses[name] = .checking }
+    // A server removed since the last pass must not keep a stale badge.
+    mcpStatuses = mcpStatuses.filter { servers[$0.key] != nil }
+
+    let targets = names.compactMap { name -> (String, McpServerProbe.Target)? in
+      guard let entry = servers[name] as? [String: Any] else { return nil }
+      return (name, McpServerProbe.Target(entry: entry))
+    }
+    await withTaskGroup(of: (String, McpServerProbe.Status).self) { group in
+      for (name, target) in targets {
+        group.addTask { (name, await McpServerProbe.probe(target)) }
+      }
+      for await (name, status) in group { mcpStatuses[name] = status }
+    }
+  }
+
+  /// Marketplace catalogs. The service is fail-open, so a failure lands here as an empty list and
+  /// the installed sections above it are unaffected.
+  ///
+  /// Results are held for the session and keyed by query: browsing away from the tab and back
+  /// otherwise re-ran dozens of requests — the catalogs each resolve one detail fetch per entry —
+  /// for a list the user just looked at.
+  func fetchMcpCatalog(search: String) async {
+    let key = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if let cached = mcpCatalogCache[key] {
+      mcpCatalog = cached
+      return
+    }
+    isLoadingMcpCatalog = true
+    let entries = await ExtensionCatalogService.mcpEntries(search: search)
+    isLoadingMcpCatalog = false
+    // An empty result is a failed or unreachable catalog as often as it is a genuine miss, and
+    // caching that would keep the section empty for the rest of the session.
+    if !entries.isEmpty { mcpCatalogCache[key] = entries }
+    mcpCatalog = entries
+  }
+
+  func fetchSkillCatalog(search: String) async {
+    let key = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if let cached = skillCatalogCache[key] {
+      skillCatalog = cached
+      return
+    }
+    isLoadingSkillCatalog = true
+    let entries = await ExtensionCatalogService.skillEntries(search: search)
+    isLoadingSkillCatalog = false
+    if !entries.isEmpty { skillCatalogCache[key] = entries }
+    skillCatalog = entries
   }
 
   // MARK: - App Management

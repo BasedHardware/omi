@@ -336,32 +336,27 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(snippet.contains("await sendMessage(prompt)"))
   }
 
-  func testDashboardShowsChatErrorCard() throws {
-    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
-    XCTAssertTrue(source.contains("dashboardChatErrorCard"))
+  func testHomeShowsChatErrorCard() throws {
+    let source = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     XCTAssertTrue(source.contains("ChatErrorCard("))
   }
 
-  /// Static tripwire for the Home chat layout. The shared ChatErrorCard belongs to
-  /// homePanelStage, below the composer; placing it inside homeChatPanel as well
-  /// visibly duplicates the sign-in recovery CTA for the same ChatProvider state.
-  func testDashboardHomeChatHasOneSharedErrorCardRenderSite() throws {
-    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
-    let panelStart = try XCTUnwrap(source.range(of: "private func homePanelStage"))
-    let chatStart = try XCTUnwrap(source.range(of: "private func homeChatPanel"))
-    let connectStart = try XCTUnwrap(source.range(of: "private func homeConnectPanel"))
-
-    let panelSource = String(source[panelStart.lowerBound..<chatStart.lowerBound])
-    let chatSource = String(source[chatStart.lowerBound..<connectStart.lowerBound])
-
+  /// Static tripwire for the Home chat layout. The shared `ChatErrorCard` has one
+  /// render site: the answer thread, below the transcript. `DashboardPage` used to
+  /// carry a second copy inside its embedded chat panel, which duplicated the
+  /// sign-in recovery CTA for the same `ChatProvider` state; the page is gone and
+  /// this pins the surviving surface to exactly one site.
+  func testHomeChatHasOneSharedErrorCardRenderSite() throws {
+    let source = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     XCTAssertEqual(
-      panelSource.components(separatedBy: "dashboardChatErrorCard").count - 1,
+      source.components(separatedBy: "ChatErrorCard(").count - 1,
       1,
-      "Home must have one canonical error-card owner outside the chat panel."
+      "Home must have exactly one error-card render site."
     )
+    let home = try sourceFile("MainWindow/QueryShell/QueryShellHome.swift")
     XCTAssertFalse(
-      chatSource.contains("dashboardChatErrorCard"),
-      "The embedded chat panel must not render a second copy of the shared auth gate."
+      home.contains("ChatErrorCard("),
+      "The host must not render a second copy of the shared auth gate above the thread."
     )
   }
 

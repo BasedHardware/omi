@@ -28,13 +28,23 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'widgets/conversations_group_widget.dart';
-import 'widgets/conversation_list_item.dart';
-import 'widgets/date_list_item.dart';
-import 'widgets/empty_conversations.dart';
-import 'widgets/recording_list_item.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/pages/conversations/widgets/capture_gap_list_item.dart';
+import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 
-enum _ConversationListRowKind { topSpacer, dateHeader, conversation, recording, groupSpacer }
+enum _ConversationListRowKind {
+  topSpacer,
+  dateHeader,
+  captureGapHeader,
+  captureGap,
+  conversation,
+  recording,
+  groupSpacer
+}
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -42,6 +52,7 @@ typedef _ConversationListRow = ({
   bool isFirst,
   ServerConversation? conversation,
   LocalRecording? recording,
+  CalendarCaptureGap? captureGap,
   int conversationIndex,
 });
 
@@ -134,6 +145,7 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  Map<DateTime, List<CalendarCaptureGap>> captureGapsByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -142,11 +154,14 @@ List<_ConversationListRow> _buildConversationListRows({
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
+    final captureGaps = captureGapsByDate[date] ?? const <CalendarCaptureGap>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
-    if (entries.isEmpty) continue;
+    // A day with only uncaptured meetings still deserves its date header —
+    // the capture-gap group is the honest row for that day.
+    if (entries.isEmpty && captureGaps.isEmpty) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -155,6 +170,7 @@ List<_ConversationListRow> _buildConversationListRows({
         isFirst: true,
         conversation: null,
         recording: null,
+        captureGap: null,
         conversationIndex: -1,
       ));
     }
@@ -164,8 +180,32 @@ List<_ConversationListRow> _buildConversationListRows({
       isFirst: !hasRenderedDate,
       conversation: null,
       recording: null,
+      captureGap: null,
       conversationIndex: -1,
     ));
+
+    if (captureGaps.isNotEmpty) {
+      rows.add((
+        kind: _ConversationListRowKind.captureGapHeader,
+        date: date,
+        isFirst: false,
+        conversation: null,
+        recording: null,
+        captureGap: null,
+        conversationIndex: -1,
+      ));
+      for (final captureGap in captureGaps) {
+        rows.add((
+          kind: _ConversationListRowKind.captureGap,
+          date: date,
+          isFirst: false,
+          conversation: null,
+          recording: null,
+          captureGap: captureGap,
+          conversationIndex: -1,
+        ));
+      }
+    }
 
     for (final entry in entries) {
       final conversation = entry.conversation;
@@ -177,6 +217,7 @@ List<_ConversationListRow> _buildConversationListRows({
           isFirst: false,
           conversation: conversation,
           recording: null,
+          captureGap: null,
           conversationIndex: conversationIndexes[conversation.id] ?? -1,
         ));
       } else {
@@ -186,6 +227,7 @@ List<_ConversationListRow> _buildConversationListRows({
           isFirst: false,
           conversation: null,
           recording: recording,
+          captureGap: null,
           conversationIndex: -1,
         ));
       }
@@ -197,6 +239,7 @@ List<_ConversationListRow> _buildConversationListRows({
       isFirst: false,
       conversation: null,
       recording: null,
+      captureGap: null,
       conversationIndex: -1,
     ));
     hasRenderedDate = true;
@@ -220,6 +263,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
+  Map<DateTime, List<CalendarCaptureGap>> _captureGapsByDate = const {};
+  String? _captureGapsSpanKey;
+  bool _captureGapsRequestInFlight = false;
 
   void _refreshGoals() {}
 
@@ -253,6 +299,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       // Keep filesystem scanning off the first navigation/scroll frame.
       _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
 
+      // Capture gaps depend on the loaded date span; refresh once it exists.
+      _scheduleDeferred(() => _refreshCaptureGapsIfNeeded(context.read<ConversationProvider>()));
+
       // Load folders for folder tabs
       final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
@@ -279,6 +328,54 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
       }),
     );
+  }
+
+  /// The capture-gap group only belongs in the unfiltered default view; the
+  /// same predicate gates the fetch and the rendering so a filtered view never
+  /// shows stale gaps beside filtered rows.
+  bool _captureGapsEligible(ConversationProvider provider) =>
+      provider.previousQuery.isEmpty &&
+      provider.selectedFolderId == null &&
+      provider.selectedSpeakerId == null &&
+      provider.selectedStartDate == null &&
+      provider.selectedEndDate == null &&
+      !provider.showStarredOnly &&
+      !provider.showDailySummaries &&
+      !provider.showDiscardedConversations &&
+      !provider.showShortConversations;
+
+  /// SCA-381: keep the Conversations list honest — calendar events in the
+  /// loaded date span that have no recorded conversation render as a compact
+  /// "Not captured" group per day, above the audio rows, never replacing them.
+  /// Refetched only when the loaded span changes; a failed fetch keeps the
+  /// previous rows and releases the span key so the next change retries.
+  Future<void> _refreshCaptureGapsIfNeeded(ConversationProvider provider) async {
+    if (!_captureGapsEligible(provider)) return;
+    final dates = provider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    if (dates.isEmpty) {
+      _captureGapsSpanKey = null;
+      if (_captureGapsByDate.isNotEmpty && mounted) setState(() => _captureGapsByDate = const {});
+      return;
+    }
+    final oldestDay = dates.last;
+    final newestDay = dates.first;
+    final spanKey = '${oldestDay.toIso8601String()}|${newestDay.toIso8601String()}';
+    if (spanKey == _captureGapsSpanKey || _captureGapsRequestInFlight) return;
+    _captureGapsSpanKey = spanKey;
+    _captureGapsRequestInFlight = true;
+    try {
+      final gaps = await getCalendarCaptureGaps(
+        start: DateTime(oldestDay.year, oldestDay.month, oldestDay.day).toUtc(),
+        end: DateTime(newestDay.year, newestDay.month, newestDay.day + 1).toUtc(),
+      );
+      if (!mounted) return;
+      setState(() => _captureGapsByDate = groupCaptureGapsByLocalDay(gaps));
+    } catch (error) {
+      _captureGapsSpanKey = null;
+      Logger.error('capture-gaps refresh failed: $error');
+    } finally {
+      _captureGapsRequestInFlight = false;
+    }
   }
 
   bool _requestMoreIfNeeded(ConversationProvider provider) {
@@ -329,6 +426,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             // the latch so the next scroll can retry the same offset.
             _lastLoadMoreRequestKey = null;
           }
+          // Loading a page extends the loaded date span; the capture-gap
+          // window must follow it or older days show no gaps.
+          if (mounted) unawaited(_refreshCaptureGapsIfNeeded(context.read<ConversationProvider>()));
         }),
       );
     }
@@ -522,12 +622,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
-        final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
+        final bool showCaptureGaps = _captureGapsEligible(convoProvider) && !convoProvider.isSelectionModeActive;
+        final captureGapsByDate = showCaptureGaps ? _captureGapsByDate : const <DateTime, List<CalendarCaptureGap>>{};
+        final mergedDates = <DateTime>{
+          ...convoProvider.groupedConversations.keys,
+          ...recordingsByDate.keys,
+          if (showCaptureGaps) ...captureGapsByDate.keys,
+        }.toList()
           ..sort((a, b) => b.compareTo(a));
         final conversationRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
+          captureGapsByDate: captureGapsByDate,
         );
 
         return RefreshIndicator(
@@ -543,6 +650,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               Provider.of<FolderProvider>(context, listen: false).loadFolders(),
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
             ]);
+            // Pull-to-refresh is the explicit user request for honest data.
+            _captureGapsSpanKey = null;
+            await _refreshCaptureGapsIfNeeded(convoProvider);
           },
           color: Colors.deepPurpleAccent,
           backgroundColor: Colors.white,
@@ -713,6 +823,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                           isFirst: row.isFirst,
                         );
+                      case _ConversationListRowKind.captureGapHeader:
+                        return CaptureGapHeader(
+                          key: ValueKey('gaps_${row.date.toIso8601String()}'),
+                          count: captureGapsByDate[row.date]?.length ?? 0,
+                        );
+                      case _ConversationListRowKind.captureGap:
+                        return CaptureGapListItem(
+                            key: ValueKey('gap_${row.captureGap!.eventId}'), gap: row.captureGap!);
                       case _ConversationListRowKind.conversation:
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),

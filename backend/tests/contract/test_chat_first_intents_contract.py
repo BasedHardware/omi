@@ -421,12 +421,15 @@ def test_a_due_deferral_is_released_into_one_intent_and_marked_released(chat_fir
         chat_first['uid'], account_generation=GENERATION, now=NOW + timedelta(hours=25)
     )
 
-    assert len(released) == 1
-    assert released[0].source == 'deferral_reraise'
+    # `release_due_deferrals` returns a DeferralReleaseBatch since upstream's +1002 — the released
+    # intents plus a count of rows it could not parse, which a bare list could not carry.
+    assert released.malformed_count == 0
+    assert len(released.intents) == 1
+    assert released.intents[0].source == 'deferral_reraise'
     stored_deferral = chat_first['store'].get(f"users/{chat_first['uid']}/{DEFERRALS}/{receipt.deferral_id}").data
     assert stored_deferral['state'] == 'released'
-    assert stored_deferral['released_intent_id'] == released[0].intent_id
-    assert [row['intent_id'] for row in _intents(chat_first)] == [released[0].intent_id]
+    assert stored_deferral['released_intent_id'] == released.intents[0].intent_id
+    assert [row['intent_id'] for row in _intents(chat_first)] == [released.intents[0].intent_id]
 
 
 def test_a_second_release_pass_does_not_raise_the_question_again(chat_first):
@@ -440,8 +443,8 @@ def test_a_second_release_pass_does_not_raise_the_question_again(chat_first):
     first_pass = intents_db.release_due_deferrals(chat_first['uid'], account_generation=GENERATION, now=later)
     second_pass = intents_db.release_due_deferrals(chat_first['uid'], account_generation=GENERATION, now=later)
 
-    assert len(first_pass) == 1
-    assert second_pass == [], 'the deferral was released twice'
+    assert len(first_pass.intents) == 1
+    assert second_pass.intents == [], 'the deferral was released twice'
     assert len(_intents(chat_first)) == 1
 
 
@@ -454,7 +457,9 @@ def test_a_deferral_that_is_not_due_yet_is_left_alone(chat_first):
     _record_deferral(chat_first, f"d-{chat_first['run']}")
 
     assert (
-        intents_db.release_due_deferrals(chat_first['uid'], account_generation=GENERATION, now=NOW + timedelta(hours=1))
+        intents_db.release_due_deferrals(
+            chat_first['uid'], account_generation=GENERATION, now=NOW + timedelta(hours=1)
+        ).intents
         == []
     )
     assert _intents(chat_first) == []

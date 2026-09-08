@@ -184,7 +184,10 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
     XCTAssertEqual(result.noMatches.map(\.triggerID), ["planned"])
   }
 
-  func testEmptyCompleteWatchlistSuppressesInsteadOfAmbientFallback() throws {
+  /// Owner decision 2026-09-01: an account with no standing trigger hands off to
+  /// the bounded ambient lane instead of going silent (the #12452 behaviour left
+  /// every trigger-less JIT account with zero proactive output).
+  func testEmptyCompleteWatchlistFallsThroughToAmbient() throws {
     let result = KnowledgeLedgerTriggerWatchlistRuntime.evaluate(
       projection: try makeProjection([] as [KnowledgeLedgerTriggerRow]),
       observation: KnowledgeLedgerTriggerObservation(text: "lunch"),
@@ -192,7 +195,7 @@ final class KnowledgeLedgerTriggerRuntimeTests: XCTestCase {
       authority: authority())
 
     XCTAssertEqual(result.status, .evaluated)
-    XCTAssertEqual(result.nextLane, .none)
+    XCTAssertEqual(result.nextLane, .ambientFallback)
     XCTAssertTrue(result.matches.isEmpty)
     XCTAssertTrue(result.noMatches.isEmpty)
   }

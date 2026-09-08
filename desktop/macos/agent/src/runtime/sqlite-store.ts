@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
@@ -429,9 +429,29 @@ export class SqliteAgentStore implements AgentStore {
 
   constructor(options: SqliteAgentStoreOptions = {}) {
     const databasePath = options.databasePath ?? databasePathForStateDir(requiredStateDir(options.stateDir));
-    mkdirSync(dirname(databasePath), { recursive: true });
+    // The Swift JIT source projection preflight requires the agent state and
+    // SQLite files to be owner-only because the database can contain prompt
+    // material.  The default process umask on a developer Mac is commonly
+    // 022, which otherwise leaves new directories at 0755 and SQLite files at
+    // 0644.  Set a private umask before SQLite creates its WAL/SHM sidecars,
+    // and repair the existing directory/file modes on every open.
+    process.umask(0o077);
+    const isInMemory = databasePath === ":memory:";
+    if (!isInMemory) {
+      const stateDirectory = dirname(databasePath);
+      mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
+      hardenOwnerOnlyDirectory(stateDirectory);
+      rejectSymlink(databasePath, "database");
+    }
     const Database = options.databaseFactory ?? DatabaseSync;
     this.db = new Database(databasePath) as DatabaseSync;
+    if (!isInMemory) {
+      hardenOwnerOnlyFile(databasePath, "database");
+      for (const suffix of ["-wal", "-shm"]) {
+        const sidecarPath = `${databasePath}${suffix}`;
+        if (pathExists(sidecarPath)) hardenOwnerOnlyFile(sidecarPath, `database ${suffix} sidecar`);
+      }
+    }
     this.nowMs = options.nowMs ?? Date.now;
 
     applyConnectionPragmas(this.db);
@@ -1676,6 +1696,44 @@ export class SqliteAgentStore implements AgentStore {
       payloadJson: input.payloadJson ?? "{}",
       createdAtMs: input.createdAtMs ?? this.nowMs(),
     };
+  }
+}
+
+function hardenOwnerOnlyDirectory(path: string): void {
+  const attributes = lstatSync(path);
+  if (!attributes.isDirectory() || attributes.isSymbolicLink()) {
+    throw new Error(`SqliteAgentStore state directory must be a real directory: ${path}`);
+  }
+  chmodSync(path, 0o700);
+}
+
+function hardenOwnerOnlyFile(path: string, label: string): void {
+  const attributes = lstatSync(path);
+  if (!attributes.isFile() || attributes.isSymbolicLink()) {
+    throw new Error(`SqliteAgentStore ${label} must be a real file: ${path}`);
+  }
+  chmodSync(path, 0o600);
+}
+
+function rejectSymlink(path: string, label: string): void {
+  try {
+    const attributes = lstatSync(path);
+    if (attributes.isSymbolicLink()) {
+      throw new Error(`SqliteAgentStore ${label} cannot be a symbolic link: ${path}`);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+}
+
+function pathExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-implicit-index-requires-impossible-provisioning",
+  "violated_contract": "A serving-schema readiness gate must distinguish an implicit document-key index from a provisionable composite. Turning a document-ID-only query into a one-field __name__ composite blocks deployment indefinitely even though the query succeeds and the provider rejects that composite shape.",
+  "canonical_prevention": "Keep the query registered while exempting only key-only ranges whose declared index fields contain exactly one directional __name__ field. Test that adding another ordering field still generates a composite requirement and that a genuinely missing multi-field index still blocks readiness.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_firestore_query_contract.py",
+    "backend/tests/unit/test_reconcile_firestore_indexes.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/firestore_index_registry.py",
+    "firestore.indexes.json"
+  ],
+  "status": "open"
+}

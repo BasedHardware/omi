@@ -43,6 +43,25 @@ def test_health_and_root_preserve_release_identity(monkeypatch):
     assert client.get("/health").json() == expected
 
 
+def test_health_uses_shared_backend_release_sha_when_desktop_sha_is_absent(monkeypatch):
+    monkeypatch.delenv("OMI_DESKTOP_BACKEND_RELEASE_SHA", raising=False)
+    monkeypatch.setenv("OMI_BACKEND_RELEASE_SHA", "b" * 40)
+
+    response = make_client().get("/health").json()
+
+    assert response["backend_release_sha"] == "b" * 40
+
+
+def test_health_reports_null_backend_release_sha_when_unset(monkeypatch):
+    monkeypatch.delenv("OMI_DESKTOP_BACKEND_RELEASE_SHA", raising=False)
+    monkeypatch.delenv("OMI_BACKEND_RELEASE_SHA", raising=False)
+
+    response = make_client().get("/health").json()
+
+    assert response["backend_release_sha"] is None
+    assert response["status"] == "healthy"
+
+
 def test_ready_requires_configured_redis(monkeypatch):
     monkeypatch.delenv("REDIS_DB_HOST", raising=False)
 

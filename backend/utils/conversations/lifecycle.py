@@ -353,26 +353,43 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     processing. The compare-and-swap fences a stale worker from hiding a newer
     or already-completed generation.
     """
-    return conversations_db.claim_conversation_status(
+    claimed = conversations_db.claim_conversation_status(
         uid,
         conversation_id,
         ConversationStatus.processing,
         ConversationStatus.failed,
         extra_updates={'discarded': True},
     )
+    if claimed:
+        # This path flips `discarded` outside update_conversation /
+        # set_conversation_as_discarded, so their index hooks never run.
+        try:
+            from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+            sync_conversation_index_after_write(uid, conversation_id)
+        except Exception:
+            logger.warning('failed-finalization Typesense sync failed uid=%s conversation_id=%s', uid, conversation_id)
+    return claimed
 
 
 def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
-    """Atomically clear deferred and renew the admission lease.
+    """Atomically claim deferred ownership and renew the admission lease.
 
-    Deferred enrichment must clear ``deferred`` and renew its processing lease
-    in one guarded transition.  A plain ``update(deferred=False)`` followed by a
-    delayed first heartbeat leaves a window where the stale-processing sweep
-    can terminalize the row; the stale processor would then persist derived
-    side effects after ownership loss.  This transaction closes that window and
-    fails closed if the row is no longer ``processing`` or was discarded.
+    ``deferred=True`` is also the ownership fence, so two concurrent first
+    opens cannot both launch enrichment. A completed deferred row is an
+    explicit failed-attempt terminal and may be reopened for retry.
     """
     return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+
+
+def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+    """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
+
+    The paired status/flag mutation belongs here rather than in a router so a
+    partial recovery write cannot strand a row in ``processing`` while the
+    stale sweep intentionally excludes deferred conversations.
+    """
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
@@ -563,6 +580,17 @@ def delete_empty_recording_conversation(
         deleted_conversation=deleted_conversation,
     )
     if deleted:
+        # Remove the search projection before photo/audio cleanup: a later
+        # cleanup failure must not leave the deleted conversation indexed.
+        # This path deletes the Firestore row in its own transaction inside
+        # recording_sessions_db, so conversations_db.delete_conversation's
+        # index cleanup never runs.
+        try:
+            from utils.conversations.typesense_index import delete_conversation_index_doc
+
+            delete_conversation_index_doc(uid, conversation_id)
+        except Exception:
+            logger.warning('empty-recording Typesense delete failed uid=%s conversation_id=%s', uid, conversation_id)
         # Parent deletion is transactionally fenced with content writes; photos
         # are a subcollection and need their physical cleanup afterwards.
         conversations_db.delete_conversation_photos(uid, conversation_id)
@@ -810,6 +838,12 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         return None
 
     status = str(job.get('status') or 'unknown')
+    terminal_outcome = str(job.get('terminal_outcome') or 'unknown')
+    if terminal_outcome not in {'success', 'failure', 'stale'}:
+        terminal_outcome = 'unknown'
+    fanout_status = str(job.get('fanout_status') or 'unknown')
+    if fanout_status not in {'pending', 'leased', 'completed', 'fenced'}:
+        fanout_status = 'unknown'
     return {
         'job_id': job_id,
         'status': status,
@@ -820,4 +854,6 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
         'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),
+        'terminal_outcome': terminal_outcome,
+        'fanout_status': fanout_status,
     }

@@ -96,6 +96,29 @@ void main() {
       expect(secondary.sent, [same(audio)]);
     });
 
+    test('freemium on-device composite stays unnamed and does not forward audio', () {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        identity: 'freemium:on-device',
+        sendRawAudioToOmi: false,
+      );
+
+      expect(TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary(config.sttConfigId), isFalse);
+
+      final service = TranscriptSocketServiceFactory.createFromCustomConfig(16000, BleAudioCodec.pcm16, 'en', config);
+
+      expect(service.socket, isA<CompositeTranscriptionSocket>());
+      expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
+    });
+
+    test('user custom STT still requests a speech profile on the Omi secondary', () {
+      expect(
+        TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'),
+        isTrue,
+      );
+    });
+
     test('factory applies the persisted forwarding setting', () {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
@@ -158,8 +181,6 @@ class _TestEnvFields implements EnvFields {
   String? get googleClientSecret => null;
 
   @override
-  String? get googleMapsApiKey => null;
-
   @override
   String? get intercomAndroidApiKey => null;
 

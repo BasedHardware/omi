@@ -70,11 +70,17 @@ class FakeStreamingSTTSocket:
         self.finish_calls += 1
 
 
-def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
+def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False, failover_selection=(None, None, None)):
     """Patch the listen receiver provider boundary and return fake sockets.
 
     Deepgram is retired from serving, so the fake now patches the enabled
     provider entry points (Parakeet/Modulate) and returns an enabled service.
+
+    ``die_on_first_send`` kills only the first socket the session creates; a
+    replacement built by a mid-session failover is healthy, mirroring a chain
+    whose next provider serves. ``failover_selection`` is what the receiver's
+    reselection returns after that death — the default ``(None, None, None)``
+    models a chain with no provider left, so a death stays terminal.
     """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
@@ -83,12 +89,12 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
     sockets = []
 
     async def fake_process_audio_parakeet(callback, *args, **kwargs):
-        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
+        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
         sockets.append(socket)
         return socket
 
     async def fake_process_audio_modulate(callback, *args, **kwargs):
-        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
+        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send and not sockets)
         sockets.append(socket)
         return socket
 
@@ -100,6 +106,14 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
         listen_runtime,
         "get_stt_service_for_language",
         lambda *_args, **_kwargs: (STTService.parakeet, "en", "parakeet"),
+    )
+    # The receiver's own namespace drives mid-session failover reselection; left
+    # unpatched it reads the real provider chain and reaches for un-faked
+    # network clients.
+    monkeypatch.setattr(
+        listen_receiver,
+        "get_stt_service_for_language",
+        lambda *_args, **_kwargs: failover_selection,
     )
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)

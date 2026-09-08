@@ -389,9 +389,27 @@ class TestDetectSpeakerFromText:
         ('fr', "Je m'appelle Sophie", "Sophie"),
         ('de', "Ich bin Hans", "Hans"),
         ('de', "Mein Name ist Klaus", "Klaus"),
-        ('zh', "我是李明", None),  # Chinese names — detect_speaker_from_text returns capitalized
-        ('ja', "私は田中", None),  # Japanese — same pattern
-        ('ko', "저는 김철수", None),  # Korean
+        ('zh', "我是李明", "李明"),
+        ('zh', "我叫王芳", "王芳"),
+        ('zh', "我的名字是张伟", "张伟"),
+        ('ja', "私は田中", "田中"),
+        ('ja', "私は田中です", "田中"),
+        ('ja', "私の名前は佐藤です", "佐藤"),
+        ('ja', "私の名前は渡辺", "渡辺"),
+        ('ja', "私は田中と申します", "田中"),
+        ('ja', "私は山田太郎です", "山田太郎"),
+        ('ja', "私は田中。", "田中"),
+        ('ja', "私は田中！", "田中"),
+        ('ja', "私は田中？", "田中"),
+        ('ja', "私は田中、元気です", "田中"),
+        ('ja', "私の名前は今日子です", "今日子"),
+        ('ja', "私は明日香です", "明日香"),
+        ('ja', "私は今井です", "今井"),
+        ('ja', "私は中村です", "中村"),
+        ('ja', "私は小林です", "小林"),
+        ('ko', "저는 김철수", "김철수"),
+        ('ko', "저는 김철수입니다", "김철수"),
+        ('ko', "제 이름은 이영희입니다", "이영희"),
         ('ru', "Меня зовут Иван", "Иван"),
         ('pt', "Eu sou Pedro", "Pedro"),
         ('it', "Mi chiamo Marco", "Marco"),
@@ -425,6 +443,36 @@ class TestDetectSpeakerFromText:
         "a",  # Too short for name match
         "i am",  # No name follows (lowercase)
         "I am",  # No name follows
+        # Japanese ordinary sentences (#12900 reproduction cases):
+        "私はそう思います",
+        "私は行きます",
+        "私はちょっと疲れました",
+        "私はコーヒーが好きです",
+        "わたしはお腹すいた",
+        "私は学生です",
+        "私は日本人です",
+        "私は大丈夫です",
+        "私は会社員です",
+        "私は大学生です",
+        "私は高校生です",
+        "私は公務員です",
+        "私の名前は会社員です",
+        "私はそう思う",
+        "私は行きます。",
+        # Chinese ordinary sentences:
+        "我是中国人",
+        "我是学生",
+        "我是你的朋友",
+        "我是觉得不行",
+        "我是真的不知道",
+        "我们的这个",
+        "我是谁",
+        "我是你",
+        # Korean ordinary sentences:
+        "저는 학생입니다",
+        "저는 생각합니다",
+        "저는 갑니다",
+        "저는 한국인입니다",
     ]
 
     # Run-on / garbled transcripts where the regex captures a pronoun or filler
@@ -468,6 +516,15 @@ class TestDetectSpeakerFromText:
         """Genuine introductions still detect after the stopword guard."""
         assert detect_speaker_from_text("I am John") == "John"
         assert detect_speaker_from_text("My name is Alice") == "Alice"
+
+    def test_language_hint_prioritization_and_fallback(self):
+        """Language hint prioritizes given language but preserves multi-language fallback."""
+        # Prioritizes given language:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="ja") == "佐藤"
+        # Falls back to other languages when hint does not match:
+        assert detect_speaker_from_text("私の名前は佐藤です", language="fr") == "佐藤"
+        assert detect_speaker_from_text("My name is Alice", language="ja") == "Alice"
+        assert detect_speaker_from_text("Me llamo Carlos", language="ja") == "Carlos"
 
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""

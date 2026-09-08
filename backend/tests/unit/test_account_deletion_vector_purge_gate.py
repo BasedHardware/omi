@@ -36,7 +36,14 @@ def _one_row_per_surface(monkeypatch):
     monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', lambda uid: ['screen-1'])
     # Surfaces that are not under test here.
     monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', lambda uid: 0)
-    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', lambda uid: {'vector_ids': []})
+    monkeypatch.setattr(
+        account_deletion, 'purge_canonical_derived_user_data', lambda uid, **_kwargs: {'vector_ids': []}
+    )
+    # Upstream's +1002 made that call take `db_client=get_data_plane_firestore_client()`. The argument
+    # is evaluated BEFORE the stubbed function runs, and building that client reaches the metadata
+    # server — so a hermetic test fails on egress and the failure lands in `required_failures`,
+    # drowning the vector-gate signal this file exists for.
+    monkeypatch.setattr(account_deletion.database_client, 'get_data_plane_firestore_client', lambda: object())
     # The object-store sweeps upstream added to the wipe in the +30 merge. They read Firestore for the
     # id inventories and then talk to the object store, so in a hermetic run they fail on egress and
     # land in `required_failures` — drowning the signal this file exists for. Neutralised, not asserted:

@@ -25,6 +25,7 @@ SAFE_BROWSER_SMOKE_REASONS = frozenset(
         "headless browser could not render the candidate",
         "unknown public-build target",
         "client public-build canary did not become ready",
+        "client public-build sha did not match",
         "no supported headless browser is available",
     }
 )
@@ -81,13 +82,41 @@ def render_candidate(*, browser: str, base_url: str) -> str:
     return result.stdout
 
 
-def smoke(*, target: str, base_url: str, contract_path: Path, environment: dict[str, str] | None = None) -> None:
+def acceptance_document_matches(
+    document: str,
+    *,
+    marker: str,
+    expect_sha: str | None = None,
+) -> bool:
+    """Return whether dumped DOM satisfies the ready marker and optional revision SHA."""
+
+    if f'data-omi-public-build-canary="{marker}"' not in document:
+        return False
+    if expect_sha is not None and f'data-omi-public-build-sha="{expect_sha}"' not in document:
+        return False
+    return True
+
+
+def smoke(
+    *,
+    target: str,
+    base_url: str,
+    contract_path: Path,
+    environment: dict[str, str] | None = None,
+    expect_sha: str | None = None,
+) -> None:
     contract = load_contract(contract_path)
     selected = contract.targets.get(target)
     if selected is None:
         raise BrowserSmokeError("unknown public-build target")
     url = absolute_https_url(base_url)
-    expected = f'data-omi-public-build-canary="{selected.candidate_acceptance.marker}"'
+    marker = selected.candidate_acceptance.marker
+    wants_sha = "{sha}" in selected.candidate_acceptance.command
+    sha = (expect_sha or "").strip() or None
+    if wants_sha and sha is None:
+        raise BrowserSmokeError("client public-build sha did not match")
+    if not wants_sha:
+        sha = None
     errors: list[BrowserSmokeError] = []
     for browser in browser_candidates(environment):
         try:
@@ -95,7 +124,9 @@ def smoke(*, target: str, base_url: str, contract_path: Path, environment: dict[
         except BrowserSmokeError as exc:
             errors.append(exc)
             continue
-        if expected not in document:
+        if not acceptance_document_matches(document, marker=marker, expect_sha=sha):
+            if sha is not None and f'data-omi-public-build-canary="{marker}"' in document:
+                raise BrowserSmokeError("client public-build sha did not match")
             raise BrowserSmokeError("client public-build canary did not become ready")
         return
     if errors:
@@ -107,10 +138,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
     parser.add_argument("--base-url", required=True)
+    parser.add_argument("--expect-sha", default="")
     parser.add_argument("--contract", type=Path, default=ROOT / "config" / "public-build-contract.json")
     args = parser.parse_args(argv)
     try:
-        smoke(target=args.target, base_url=args.base_url, contract_path=args.contract)
+        smoke(
+            target=args.target,
+            base_url=args.base_url,
+            contract_path=args.contract,
+            expect_sha=args.expect_sha,
+        )
     except BrowserSmokeError as exc:
         print(
             f"public-build browser smoke failed: target={args.target} " f"reason={sanitized_browser_smoke_reason(exc)}",

@@ -364,6 +364,35 @@ class BuilderIdempotencyTests(unittest.TestCase):
                          load("omi-tv-mobile"))
 
 
+class RetentionCurveAxisTests(unittest.TestCase):
+    """Day numbers on the 30d curve must not inherit unit=percent
+    (Grafana then labels 0/11/22 as 0%/11%/22%)."""
+
+    def test_day_axis_is_not_percent(self) -> None:
+        for uid in BOARDS:
+            panel = next(
+                p for p in load(uid)["panels"]
+                if build_dashboards.base_title(p).startswith("Retention curve")
+            )
+            self.assertIsNone(
+                panel["fieldConfig"]["defaults"].get("unit"), uid
+            )
+            overrides = {
+                o["matcher"]["options"]: o
+                for o in panel["fieldConfig"]["overrides"]
+            }
+            self.assertEqual(
+                overrides["Day"]["properties"],
+                [{"id": "unit", "value": "none"}],
+                uid,
+            )
+            self.assertEqual(
+                overrides["Retention"]["properties"],
+                [{"id": "unit", "value": "percent"}],
+                uid,
+            )
+
+
 class ApplyPreservesLayoutTests(unittest.TestCase):
     """An apply must never revert layout the user arranged in the Grafana UI
     (#12212 era: three same-day applies stamped checked-in gridPos over

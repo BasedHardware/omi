@@ -26,6 +26,12 @@ _BETA_ADMISSION_FIELDS = frozenset(
         "admission_updated_at",
     }
 )
+_RELEASE_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_SERVING_BACKENDS_REQUIRED = frozenset({"desktop_backend", "api_backend", "captured_at"})
+_DESKTOP_BACKEND_SERVING_REQUIRED = frozenset({"health_url"})
+_DESKTOP_BACKEND_SERVING_ALLOWED = frozenset({"release_sha", "release_channel", "chat_contract_version", "health_url"})
+_API_BACKEND_SERVING_REQUIRED = frozenset({"health_url"})
+_API_BACKEND_SERVING_ALLOWED = frozenset({"release_sha", "health_url"})
 
 
 def _generation(value: object) -> int:
@@ -52,6 +58,82 @@ def _timestamp(value: object) -> datetime:
     if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("beta admission control timestamps are invalid")
     return value
+
+
+def _utc_rfc3339(value: object) -> str:
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, str) and value:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        raise ValueError("captured_at must be ISO-8601 UTC")
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError("captured_at must be ISO-8601 UTC")
+    return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _optional_release_sha(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and _RELEASE_SHA_RE.fullmatch(value):
+        return value
+    raise ValueError("serving backend release_sha must be 40 lowercase hex or null")
+
+
+def _optional_text(value: object, field: str) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    raise ValueError(f"{field} must be a string or null")
+
+
+def _required_text(value: object, field: str) -> str:
+    if isinstance(value, str) and value:
+        return value
+    raise ValueError(f"{field} is required")
+
+
+def _validate_serving_object(
+    value: object, *, required: frozenset[str], allowed: frozenset[str], label: str
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} serving schema is invalid")
+    keys = frozenset(value.keys())
+    if not required <= keys or not keys <= allowed:
+        raise ValueError(f"{label} serving schema is invalid")
+    return cast(dict[str, Any], value)
+
+
+def normalize_serving_backends(value: object) -> dict[str, Any]:
+    """Canonicalize pointer provenance. Unknown keys fail closed; missing SHAs stay null."""
+    if not isinstance(value, dict) or frozenset(value.keys()) != _SERVING_BACKENDS_REQUIRED:
+        raise ValueError("serving_backends schema is invalid")
+    desktop = _validate_serving_object(
+        value.get("desktop_backend"),
+        required=_DESKTOP_BACKEND_SERVING_REQUIRED,
+        allowed=_DESKTOP_BACKEND_SERVING_ALLOWED,
+        label="desktop_backend",
+    )
+    api = _validate_serving_object(
+        value.get("api_backend"),
+        required=_API_BACKEND_SERVING_REQUIRED,
+        allowed=_API_BACKEND_SERVING_ALLOWED,
+        label="api_backend",
+    )
+    return {
+        "desktop_backend": {
+            "release_sha": _optional_release_sha(desktop.get("release_sha")),
+            "release_channel": _optional_text(desktop.get("release_channel"), "release_channel"),
+            "chat_contract_version": _optional_text(desktop.get("chat_contract_version"), "chat_contract_version"),
+            "health_url": _required_text(desktop.get("health_url"), "health_url"),
+        },
+        "api_backend": {
+            "release_sha": _optional_release_sha(api.get("release_sha")),
+            "health_url": _required_text(api.get("health_url"), "health_url"),
+        },
+        "captured_at": _utc_rfc3339(value.get("captured_at")),
+    }
 
 
 def _validate_beta_admission_control(data: object) -> dict[str, Any]:
@@ -257,6 +339,7 @@ def _build_pointer(
     expected_generation: int | None,
     expected_current_release_id: str | None = None,
     updated_at: datetime | None = None,
+    serving_backends: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the next channel pointer under the named transition policy.
 
@@ -307,6 +390,8 @@ def _build_pointer(
         "generation": current_generation + 1,
         "updated_at": updated_at or datetime.now(timezone.utc),
     }
+    if serving_backends is not None:
+        pointer["serving_backends"] = normalize_serving_backends(serving_backends)
     return pointer
 
 
@@ -322,6 +407,7 @@ def _promote_channel_transaction(
     release_id: str,
     expected_generation: int | None,
     expected_current_release_id: str | None = None,
+    serving_backends: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest_snapshot = manifest_ref.get(transaction=transaction)
     if not getattr(manifest_snapshot, "exists", False):
@@ -342,6 +428,7 @@ def _promote_channel_transaction(
         release_id=release_id,
         expected_generation=expected_generation,
         expected_current_release_id=expected_current_release_id,
+        serving_backends=serving_backends,
     )
     if pointer is not current:
         transaction.set(pointer_ref, pointer)
@@ -356,6 +443,7 @@ def promote_channel(
     expected_generation: int | None = None,
     expected_current_release_id: str | None = None,
     operation: str = "promote",
+    serving_backends: dict[str, Any] | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Advance or explicitly repoint a channel pointer to a qualified manifest."""
@@ -389,6 +477,7 @@ def promote_channel(
         release_id=release_id,
         expected_generation=expected_generation,
         expected_current_release_id=expected_current_release_id,
+        serving_backends=serving_backends,
     )
 
 
@@ -483,16 +572,19 @@ def get_channel_release(platform: str, channel: str, *, firestore_client: Any = 
     manifest = normalize_release_manifest(manifest_data)
     if manifest["platform"] != platform:
         raise ValueError("channel pointer references another platform")
+    pointer_view: dict[str, Any] = {
+        "platform": platform,
+        "channel": channel,
+        "release_id": release_id,
+        "version": pointer.get("version"),
+        "build_number": pointer.get("build_number"),
+        "generation": _generation(pointer.get("generation", 0)),
+        "updated_at": pointer.get("updated_at"),
+    }
+    if "serving_backends" in pointer:
+        pointer_view["serving_backends"] = pointer["serving_backends"]
     return {
-        "pointer": {
-            "platform": platform,
-            "channel": channel,
-            "release_id": release_id,
-            "version": pointer.get("version"),
-            "build_number": pointer.get("build_number"),
-            "generation": _generation(pointer.get("generation", 0)),
-            "updated_at": pointer.get("updated_at"),
-        },
+        "pointer": pointer_view,
         "manifest": manifest,
     }
 

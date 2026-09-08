@@ -63,8 +63,16 @@ def _auth_backend_is_firebase(environ: Mapping[str, str] | None = None) -> bool:
 
 def firebase_verify_only_enabled(environ: Mapping[str, str] | None = None) -> bool:
     source = os.environ if environ is None else environ
-    if source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() != "1":
+    # Upstream's condition, widened by them to cover an auth-only QA stack, kept verbatim.
+    upstream_qa_stack = source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() == "1" or (
+        source.get("OMI_JIT_QA_AUTH_ONLY", "").strip().casefold() in {"1", "true", "yes", "on"}
+        and (source.get("OMI_ENV_STAGE") or "").strip().casefold() == "dev"
+        and (source.get("GOOGLE_CLOUD_PROJECT") or "").strip() == "based-hardware-dev"
+    )
+    if not upstream_qa_stack:
         return False
+    # Ours, on top: everything this module does fences the FIREBASE SDK, so it must stay inert when the
+    # auth port is on its OIDC adapter (ADR-0034). Upstream has one provider and needs no such gate.
     return _auth_backend_is_firebase(environ)
 
 
@@ -120,7 +128,11 @@ def install_google_adc_guard(
     host's development ADC.
     """
 
-    if not firebase_verify_only_enabled(environ):
+    source = os.environ if environ is None else environ
+    # The local hermetic stack must deny all ADC discovery because it uses the
+    # loopback Vertex broker. Cloud QA still needs Firestore ADC for its
+    # isolated data plane, so its auth-only fence is intentionally narrower.
+    if source.get("OMI_JIT_QA_LOCAL_STACK", "").strip() != "1":
         return False
     if google_auth_module is None:
         import google.auth as google_auth_module

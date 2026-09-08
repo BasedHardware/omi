@@ -50,17 +50,20 @@ def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
         return CapturePolicyResult('propose_enrichment', 'none')
     if signals.get('refines_task'):
         return CapturePolicyResult('propose_update', 'none')
-    if signals.get('public_broadcast') and not signals.get('direct_mention'):
-        return CapturePolicyResult('ignore', 'none')
-    # Every admitted kind below clears the same floor, because a proposal the
-    # Suggested surface will not show is indistinguishable from a dropped one and
-    # merely accumulates. Admit it and the user sees it, or ignore it outright.
+    # A spoken explicit command is not ambient channel noise. Evaluate it before
+    # public_broadcast so the first producer of that signal cannot drop a command
+    # that already cleared the extractor.
     if signals.get('explicit_command'):
         # A command heard in ambient audio is still a model's reading of speech,
         # not a user gesture against a surface. It proposes; it does not create.
         if _meets_user_capture_floor(signals):
             return CapturePolicyResult('pending_candidate', 'none')
         return CapturePolicyResult('ignore', 'none')
+    if signals.get('public_broadcast') and not signals.get('direct_mention'):
+        return CapturePolicyResult('ignore', 'none')
+    # Every admitted kind below clears the same floor, because a proposal the
+    # Suggested surface will not show is indistinguishable from a dropped one and
+    # merely accumulates. Admit it and the user sees it, or ignore it outright.
     if signals.get('clear_commitment') and signals.get('owner') == 'user':
         if signals.get('concrete_deliverable') is not True:
             return CapturePolicyResult('ignore', 'none')

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from copy import deepcopy
 
 import pytest
@@ -55,6 +56,32 @@ def test_source_scan_covers_production_code_and_ignores_tests_and_docs(tmp_path,
     assert scan_embedded_stripe_ids(load_catalog()) == [
         'service/plans.ts: embedded Stripe price price_1234567890abcdef is absent from plan_catalog.json',
         'worker/Dockerfile: embedded Stripe product prod_1234567890abcd is absent from plan_catalog.json',
+    ]
+
+
+def test_source_scan_skips_gitignored_sibling_worktrees(tmp_path, monkeypatch):
+    """A gitignored sibling worktree is not part of the tree CI checks out.
+
+    `.claude/worktrees/` is a documented multi-worktree pattern, and each entry holds a
+    full copy of the repo. Scanning into them fails `plan-catalog-contract` locally on
+    files that are untracked, absent from the diff, and absent in CI, so the gate reads
+    as broken and the only way past it is a skip hatch (#12476).
+    """
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True, capture_output=True, timeout=60)
+    (tmp_path / '.gitignore').write_text('.claude/\n', encoding='utf-8')
+
+    tracked = tmp_path / 'service' / 'plans.ts'
+    tracked.parent.mkdir()
+    tracked.write_text("const id = 'price_1234567890abcdef';", encoding='utf-8')
+
+    stale = tmp_path / '.claude' / 'worktrees' / 'old-session' / 'backend' / 'charts' / 'values.yaml'
+    stale.parent.mkdir(parents=True)
+    stale.write_text("priceId: price_stale1234567890\nproductId: prod_stale1234567\n", encoding='utf-8')
+
+    monkeypatch.setattr(plan_catalog_compiler, 'ROOT', tmp_path)
+
+    assert scan_embedded_stripe_ids(load_catalog()) == [
+        'service/plans.ts: embedded Stripe price price_1234567890abcdef is absent from plan_catalog.json',
     ]
 
 

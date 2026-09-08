@@ -158,18 +158,6 @@ def should_load_speech_profile(*, use_custom_stt: bool, is_multi_channel: bool, 
     return not use_custom_stt and not is_multi_channel and include_speech_profile
 
 
-def should_skip_custom_stt_postprocessing(*, uses_custom_stt: bool, has_llm_byok_key: bool) -> bool:
-    """Whether Omi-paid LLM post-processing must be skipped for a conversation.
-
-    A custom-STT conversation was transcribed on the user's own provider, so no
-    Omi transcription credits were consumed; its LLM enrichment would still run
-    on Omi's infrastructure. Skip it unless the request carries an LLM BYOK key
-    (the user then pays their own LLM bill). Mirrors the BYOK discriminator in
-    enforce_chat_quota.
-    """
-    return uses_custom_stt and not has_llm_byok_key
-
-
 def should_enable_speaker_identification(
     *,
     use_custom_stt: bool,

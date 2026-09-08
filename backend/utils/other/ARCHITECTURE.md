@@ -1,39 +1,49 @@
-# `utils/other` — what actually lives here
+# `utils/other` architecture map
 
-A package named "other" collects whatever had no better home, so the useful thing a map can give is
-not a file list — that goes stale the week it is written — but the **axis** the modules sit on and
-where the boundaries are.
+This package is a grab bag by name and history, not by design. Nothing new
+should land here because it "fits nowhere else"; new modules belong beside the
+feature that owns them. The map below exists so the package stops growing
+unread. It is required by the architecture guardrail once a package passes 12
+source files.
 
-## The axis: leaves that talk to something outside the process
+## What is here, by concern
 
-Almost everything here is a **leaf**: the last piece of our code before a request leaves for a cloud
-service, a queue, or the caller's browser. Domain logic does not belong here; a module that starts
-making product decisions has outgrown the package.
+| Concern | Module | Owns |
+| --- | --- | --- |
+| Auth and account lifecycle at the HTTP/WS boundary | `endpoints.py` | `get_current_user_uid`, token verification, account-deletion and cutover gates that every router depends on. This is the package's only load-bearing import for request handling. |
+| Object storage | `storage.py` | GCS bucket access, public URL derivation, owner-scoped write gate, per-user deletion sweep, audio decode helpers. |
+| Local dev storage adapter | `local_storage.py` | Filesystem stand-in for `storage.py` used only by the owned local dev harness; never selected in a deployed image. |
+| Chat file attachments | `chat_file.py` | Provider upload/expiry of files attached to chat turns, and the typed errors the chat route maps to user-facing failures. |
+| Daily summary job | `notifications.py` | The scheduled daily-summary job: per-user fan-out, isolation, budgets, checkpoint cursor, FCM send, `day_summary` webhook. |
+| Daily summary bounds | `daily_summary_budget.py` | Bounds the job uses: bounded conversation selection for the generator input (pure) and the resume checkpoint. The cursor helpers do synchronous Redis I/O and must be called through `run_blocking(db_executor, ...)`; every one of them is fail-soft, so losing the checkpoint costs a re-walk and never a summary. |
+| Bounded list reads | `list_budget.py` | Request-scoped time and document budget for list GET reads (`FC-bounded-read-exceeds-request-budget`). |
+| Request timeout | `timeout.py` | `TimeoutMiddleware`, the per-request wall-clock budget. |
+| Background execution primitives | `task.py`, `jobs.py`, `deferred_delete.py`, `backoff.py` | `safe_create_task`, job start helper, single-thread deferred deletion, jittered backoff. Small and dependency-free. |
+| Hume emotion API client | `hume.py` | Typed response models and the client for Hume batch jobs. |
 
-| what it faces | modules |
-|---|---|
-| object storage | `storage.py`, `local_storage.py`, `chat_file.py` |
-| a vendor API | `hume.py`, `hume_callback_token.py` |
-| the user's device | `notifications.py`, `endpoints.py` |
-| our own deferred work | `task.py`, `jobs.py`, `deferred_delete.py` |
-| calling-convention helpers | `backoff.py`, `timeout.py`, `list_budget.py` |
+## Rules that hold across the package
 
-## Two boundaries worth knowing before you edit
+- `endpoints.py`, `storage.py`, and the job in `notifications.py` are imported
+  at module scope by many routers; keep them import-pure (no persistence
+  client at import time, see `backend-import-purity`).
+- The daily-summary job is the only scheduled entry point here. Its bounds live
+  in `daily_summary_budget.py` so they can be unit-tested without the job's
+  Firestore and FCM surface. Fail-open paths report through
+  `utils.observability.fallback.record_fallback` with component
+  `daily_summary`.
+- Anything that grows a new concern should move out rather than add a row
+  here. Candidates already identified: `hume.py` (integration client),
+  `chat_file.py` (chat feature), and the storage pair (a `storage/` package).
 
-**`storage.py` goes through a port, not a client.** Every object read and write resolves through
-`_object_store()` and `_signed_url()`, so the bucket backend is configuration rather than an import
-(ADR-0032). A new call that reaches for a vendor storage client directly is rejected by
-`.github/scripts/check_oss_object_store_boundary.py`, not by review.
+## What this fork adds here
 
-**`hume_callback_token.py` is a security primitive, not a Hume helper.** `POST /v1/agents/hume/callback`
-cannot be authenticated the usual way — Hume calls it, and Hume holds no user token — so the token
-minted here is the only thing binding a callback to a submission of ours. It is a separate module from
-`hume.py` on purpose: it has its own test surface, and folding it into the vendor client would put a
-signing key next to code whose job is to make outbound calls.
+Two modules in this package are not in upstream's map because they do not exist upstream:
 
-## Adding a module
+- `hume_callback_token.py` — mints and verifies the token the Hume prosody callback carries, so an
+  on-prem deployment is not reachable by an unauthenticated third-party callback (ADR-0057).
 
-Ask whether the thing you are adding faces outward. If it does, it belongs here and this table gains a
-row. If it makes a decision about what the product should do, it belongs in the package that owns that
-decision — `utils/conversations`, `utils/memory`, `utils/stt` — and putting it here only makes it
-harder to find.
+And one is upstream's, documented here because a guard of ours reads it:
+
+- `local_storage.py` is the object-store boundary's single baselined exception
+  (`.github/scripts/object_store_boundary_baseline.json`): it IS the local provider, so it is the one
+  place allowed to speak a storage backend directly.

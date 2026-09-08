@@ -29,6 +29,11 @@ import {
   type ContextDeliveryCursor,
 } from "./context-snapshot.js";
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import { renderAttachmentsSection } from "./attachment-prompt.js";
+import {
+  materializeExternalSurfaceRunJournal,
+  type ExternalSurfaceJournalChange,
+} from "./external-surface-journal.js";
 import {
   bindProducingJournalTurn,
   searchJournalConversation,
@@ -73,7 +78,6 @@ import {
   requiresVerifiedContextDispatch,
   bindingMetadata,
   stableHash,
-  stableJsonStringify,
   stableMcpServerConfig,
   stableJsonHash,
   parseJsonObject,
@@ -151,7 +155,14 @@ function runtimeAdapterMetadata(input: ExecuteAgentRunInput, session: AgentSessi
     ...(input.metadata ?? {}),
     executionRole: session.executionRole,
     providerBoundary: session.providerBoundary,
-    surfaceKind: session.surfaceKind,
+    // The run's surface, not the session's. One shell means main Chat and the
+    // floating bar project the same conversation, so a session first registered
+    // by the floating bar keeps `surface_kind = floating_chat` while main-Chat
+    // runs execute on it. Every chat-first gate downstream — the pi-mono env,
+    // `effectiveChatFirstCapability`, the tool projection — admits `main_chat`
+    // only, so stamping the session's surface here told them a main-Chat turn
+    // was a floating one and the model was never offered `render_chat_blocks`.
+    surfaceKind: input.surfaceKind || session.surfaceKind,
     chatFirstUi: input.admittedContextSnapshot?.capabilities.chatFirstUi === true,
     chatFirstControlGeneration:
       input.admittedContextSnapshot?.capabilities.chatFirstControlGeneration ?? null,
@@ -166,6 +177,7 @@ import {
 import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
 import { normalizeOmiToolName } from "./omi-tool-manifest.js";
 import { routeExternalSurfaceTool } from "./external-surface-tool-policy.js";
+import type { ChatFirstCapabilityProjection } from "./chat-first-capability.js";
 import {
   applyExecutionProfileToSession,
   readSessionExecutionProfile,
@@ -198,8 +210,29 @@ export class KernelCore {
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
   protected readonly contextDeliveryByBinding = new Map<string, ContextDeliveryCursor>();
   protected readonly toolCapabilities: RunToolCapabilityBroker;
+  /**
+   * The one immutable server-derived Main Chat sample for this process, keyed
+   * `ownerId:sessionId`. Process-local only: never back this with SQLite or a
+   * user preference.
+   *
+   * It lives on the base class because *run admission* needs it, not only
+   * session resolution. A run that builds its own context snapshot without it
+   * projects a capability-off tool surface, and the adapter metadata derived
+   * from that snapshot is what decides whether the model is offered
+   * `render_chat_blocks` at all.
+   */
+  protected readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
+
+  protected chatFirstCapability(
+    sessionId: string,
+    ownerId: string,
+    surfaceKind?: string
+  ): ChatFirstCapabilityProjection | undefined {
+    if (surfaceKind !== "main_chat") return undefined;
+    return this.chatFirstCapabilities.get(`${ownerId}:${sessionId}`);
+  }
 
   constructor(options: AgentRuntimeKernelOptions) {
     this.store = options.store;
@@ -404,9 +437,14 @@ export class KernelCore {
       const latestAttempt = latestAttemptRow ? attemptFromRow(latestAttemptRow) : undefined;
       if (run.status === "orphaned" || !latestAttempt || TERMINAL_STATUSES.includes(latestAttempt.status)) {
         this.withTransaction(() => {
+          // A recycled run must not carry the previous attempt's answer while it
+          // is queued again: the context snapshot and control list both read
+          // final_text for active runs (#12731).
           this.updateRun(run.runId, {
             status: "queued",
             completedAtMs: null,
+            finalText: null,
+            resultJson: null,
             errorCode: null,
             errorMessage: null,
             updatedAtMs: Date.now(),
@@ -631,7 +669,33 @@ export class KernelCore {
     const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
     if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
       if (run.status === persistedStatus && attempt.status === persistedStatus) {
-        return { ...input, duplicate: true };
+        // Wrapped, like the first-completion path below. Until the missing-user-turn
+        // repair landed this branch made a single write, so atomicity was free; it now
+        // restores the question and updates the answer, and a partial failure between
+        // them would leave a half-repaired exchange until some later replay finished
+        // the job. Re-entrancy makes that recoverable rather than corrupting, but
+        // recoverable-by-retry is a weaker property than the first write already has,
+        // and there is no reason for the two paths to differ. `withTransaction` tracks
+        // nesting depth, so this composes with the transactions the journal helpers
+        // open themselves.
+        const journal = run.status === "succeeded"
+          ? this.withTransaction(() => materializeExternalSurfaceRunJournal(this.store, {
+            ownerId: input.ownerId,
+            run,
+            attempt,
+            finalText: run.finalText,
+          }))
+          : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
+        // First write wins, so a replayed frame's text is deliberately not
+        // stored. Say so rather than letting the surface read ok and assume it
+        // landed — that silence is the shape of #12731 itself.
+        return {
+          ...input,
+          duplicate: true,
+          finalTextPersisted: false,
+          journalMaterialized: journal.materialized,
+          journalChanges: journal.changes,
+        };
       }
       throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
     }
@@ -650,18 +714,44 @@ export class KernelCore {
     if (errorCode && !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
       throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface errorCode is invalid");
     }
-    this.withTransaction(() => {
+    if (input.finalText !== undefined && typeof input.finalText !== "string") {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface finalText must be a string");
+    }
+    // The kernel never observes an external surface's stream, so terminalization is
+    // the only point at which this run's answer can be captured. Persisted for every
+    // terminal status, following the internal adapter path, which likewise stores
+    // whatever text was produced and marks failure through errorCode instead. The
+    // internal path stores "" as-is; here an empty string collapses to null so
+    // "produced no text" reads identically whether the surface omitted the field
+    // or sent "" (#12731).
+    const trimmed = input.finalText?.trim();
+    const finalText = trimmed ? trimmed : null;
+    const journal = this.withTransaction(() => {
       this.finishAttemptAndRun({
         sessionId: input.sessionId,
         runId: input.runId,
         attemptId: input.attemptId,
         status: persistedStatus,
-        finalText: null,
+        finalText,
         errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
         errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
       });
+      return persistedStatus === "succeeded"
+        ? materializeExternalSurfaceRunJournal(this.store, {
+          ownerId: input.ownerId,
+          run: { ...run, status: persistedStatus, finalText },
+          attempt: { ...attempt, status: persistedStatus },
+          finalText,
+        })
+        : { materialized: false, changes: [] as ExternalSurfaceJournalChange[] };
     });
-    return { ...input, duplicate: false };
+    return {
+      ...input,
+      duplicate: false,
+      finalTextPersisted: finalText !== null,
+      journalMaterialized: journal.materialized,
+      journalChanges: journal.changes,
+    };
   }
 
   private assertExternalRunIdentity(
@@ -819,6 +909,12 @@ export class KernelCore {
             session.ownerId,
             Date.now(),
             input.surfaceKind,
+            // Main Chat runs arrive with no client-supplied snapshot, so this
+            // branch builds every one of them. Dropping the capability here
+            // made the run's own snapshot say capability-off however the shell
+            // had resolved it, and that snapshot is what
+            // `runtimeAdapterMetadata` hands the adapter.
+            this.chatFirstCapability(session.sessionId, session.ownerId, input.surfaceKind),
           );
       const expectationCount = [
         input.expectedContextSnapshotVersion,
@@ -865,11 +961,20 @@ export class KernelCore {
           prompt: input.prompt,
           producingTurnId: input.producingTurnId ?? null,
           metadata: input.metadata ?? {},
+          // The surface this run was admitted for, which is not always the one
+          // its session was first registered under: one shell means main Chat
+          // and the floating bar share a session. Recorded here because the
+          // tool-capability broker has to gate on the run, and the session row
+          // is the wrong authority for that.
+          surfaceKind: input.surfaceKind,
           contextSnapshotVersion: contextSnapshot.version,
           contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
           contextRendererFingerprint: contextSnapshot.rendererFingerprint,
           contextCapabilityVersion: contextSnapshot.capabilityVersion,
           admittedContextSnapshot: contextSnapshot,
+          ...(input.jitCostEvidenceProjection
+            ? { jitCostEvidenceProjection: input.jitCostEvidenceProjection }
+            : {}),
         }),
         modelProfile: session.modelProfile,
         requestedModelId: session.modelProfile,
@@ -1091,9 +1196,7 @@ export class KernelCore {
       if (surfaceRef) {
         const snapshot = attemptInput.admittedContextSnapshot;
         if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
-        const attachments = input.attachments?.length
-          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
-          : "";
+        const attachments = renderAttachmentsSection(input.attachments);
         const renderedContext = adapterId === "pi-mono" && handle.bindingId
           ? renderContextSnapshotForBinding(
               snapshot,

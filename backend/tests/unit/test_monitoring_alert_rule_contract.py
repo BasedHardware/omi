@@ -174,6 +174,18 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
+def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-queue-oldest-ready']
+        assert len(rule['uid']) < 40
+        expr = rule['data'][0]['model']['expr']
+        assert 'omi_queue_oldest_ready_age_seconds' in expr
+        assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
+        assert '21600' in expr
+        assert rule['noDataState'] == 'Alerting'
+        assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
+
+
 def test_grafana_alert_rules_have_safe_human_impact_metadata():
     """Every operator notification explains human impact without raw error output."""
     for export_name, rules in _all_rule_exports().items():
@@ -429,6 +441,21 @@ PAGE_CLASS_JOURNEY_RULES = {
 }
 
 
+def test_memory_admission_failure_pages_on_the_first_bounded_runtime_error():
+    """A systemic memory fence/config error has no safe nonzero rate."""
+    uid = "omi-capture-finalization-memory-fence"
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[uid]
+        query = rule["data"][0]["model"]["expr"]
+        assert 'omi_capture_finalization_failures_total{reason=~"memory_fence|memory_config"}' in query, export_name
+        assert "[5m]" in query and "or vector(0)" in query, export_name
+        assert rule["for"] == "0s", export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "user-experience", export_name
+        assert rule["noDataState"] == "Alerting", export_name
+        assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+
+
 def test_page_class_journey_rules_cover_the_capture_outage_fingerprint():
     """Every Core Features journey tile has a page-class rule behind it."""
     for export_name, rules in _all_rule_exports().items():
@@ -597,3 +624,27 @@ def test_no_alert_applies_a_counter_function_to_a_stackdriver_gauge():
         "these UIDs were fixed or removed -- delete them from COUNTER_FN_ON_GAUGE_DEBT so the "
         "ratchet keeps tightening: " + ", ".join(sorted(stale))
     )
+
+
+START_FAIL_RULE = "omi-cr-start-fail"
+
+
+def test_cloud_run_instance_start_fail_alert_is_zero_baseline_logging_count():
+    """2026-09-01: minScale kept /health green while new Cloud Run instances failed to start."""
+    for rules in _all_rule_exports().values():
+        rule = rules[START_FAIL_RULE]
+        assert rule["title"] == "Cloud Run - instance start failures"
+        assert rule["noDataState"] == "OK"
+        assert rule["execErrState"] == "OK"
+        assert rule["for"] == "5m"
+        assert rule["labels"]["severity"] == "critical"
+        assert rule["labels"]["instatus_component"] == "api"
+        assert rule["labels"]["impact"] == "product"
+        query = rule["data"][0]
+        assert query["datasourceUid"] == "deuxlwt1d569sb"
+        text = query["model"]["queryText"]
+        assert "STARTUP TCP probe failed" in text
+        assert "instance could not start successfully" in text
+        assert query["model"]["projectId"] == "based-hardware"
+        threshold = rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"]
+        assert threshold == [0]

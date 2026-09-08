@@ -3,6 +3,66 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
+  func testEmptyMaterializationBatchOmitsNewOutcomeKeysForOldBackends() throws {
+    let data = try ChatFirstMaterializationWire.encodedRequest(
+      ownerID: "owner",
+      controlGeneration: 7,
+      windowForeground: true,
+      receipts: .empty)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+    XCTAssertNil(object["rejections"])
+    XCTAssertNil(object["deferrals"])
+  }
+
+  func testNonEmptyMaterializationBatchIncludesBothOutcomeKeys() throws {
+    let batch = ChatFirstPromptReceiptBatch(
+      materializationReceipts: [],
+      coldStartSequenceTerminalReceipts: [],
+      materializationRejections: [
+        ChatFirstMaterializationRejection(intentID: "rejected", code: "invalid_intent", message: nil)
+      ],
+      materializationDeferrals: [
+        ChatFirstMaterializationDeferral(intentID: "deferred", code: "tail_question")
+      ])
+    let data = try ChatFirstMaterializationWire.encodedRequest(
+      ownerID: "owner",
+      controlGeneration: 7,
+      windowForeground: true,
+      receipts: batch)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+    XCTAssertEqual((object["rejections"] as? [[String: Any]])?.count, 1)
+    XCTAssertEqual((object["deferrals"] as? [[String: Any]])?.count, 1)
+  }
+
+  func testKernelMaterializationRejectionsDecodeWithTypedIdentityAndReason() {
+    let decoded = AgentRuntimeProcess.chatFirstRejections(
+      from: [
+        ["intentId": "intent-poison", "code": "invalid_intent", "message": "Invalid block"],
+        ["intentId": "", "code": "invalid_intent", "message": "Dropped malformed row"],
+      ]
+    )
+
+    XCTAssertEqual(
+      decoded,
+      [ChatFirstMaterializationRejection(intentID: "intent-poison", code: "invalid_intent", message: "Invalid block")]
+    )
+  }
+
+  func testKernelTailDeferralsDecodeSeparatelyFromPermanentRejections() {
+    XCTAssertEqual(
+      AgentRuntimeProcess.chatFirstDeferrals(
+        from: [["intentId": "intent-deferred", "code": "tail_question"]]
+      ),
+      [ChatFirstMaterializationDeferral(intentID: "intent-deferred", code: "tail_question")]
+    )
+  }
+
+  func testRejectionMessageIsTruncatedToTheWireLimit() {
+    XCTAssertEqual(ChatFirstMaterializationWire.rejectionMessage(String(repeating: "x", count: 500)).count, 300)
+  }
+
   func testMaterializationFallsBackOnlyWhenV2RouteIsMissing() {
     XCTAssertTrue(
       ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
@@ -248,6 +308,53 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
       .preserveReadingPosition
     )
   }
+
+  @MainActor
+  func testHTTP422FailureLogIncludesStatusAndBatchSizes() async {
+    let batch = ChatFirstPromptReceiptBatch(
+      materializationReceipts: [ChatFirstMaterializationReceipt(intentID: "receipt", receiptID: "r1")],
+      coldStartSequenceTerminalReceipts: [],
+      materializationRejections: [
+        ChatFirstMaterializationRejection(intentID: "rejected", code: "invalid_intent", message: nil)
+      ],
+      materializationDeferrals: [
+        ChatFirstMaterializationDeferral(intentID: "deferred", code: "tail_question")
+      ])
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: batch,
+      response: ChatFirstMaterializePromptsResponse(intents: []))
+    let serverDetail = "raw pydantic validation body must stay private"
+    driver.fetchError = APIError.httpError(statusCode: 422, detail: serverDetail)
+    var messages: [String] = []
+    let coordinator = ChatFirstPromptMaterializationCoordinator(logger: { messages.append($0) })
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<40 where messages.isEmpty { await Task.yield() }
+
+    XCTAssertTrue(messages.first?.contains("status=422") == true)
+    XCTAssertFalse(messages.first?.contains(serverDetail) == true)
+    XCTAssertTrue(messages.first?.contains("receipts=1 rejections=1 deferrals=1") == true)
+  }
+
+  @MainActor
+  func testURLErrorFailureLogIncludesTypeAndCode() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: []))
+    driver.fetchError = URLError(.timedOut)
+    var messages: [String] = []
+    let coordinator = ChatFirstPromptMaterializationCoordinator(logger: { messages.append($0) })
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<40 where messages.isEmpty { await Task.yield() }
+
+    XCTAssertTrue(messages.first?.contains("error_type=") == true)
+    XCTAssertTrue(messages.first?.contains("url_error_code=\(URLError.Code.timedOut.rawValue)") == true)
+  }
 }
 
 @MainActor
@@ -256,6 +363,7 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
   private var storedPendingReceipts: ChatFirstPromptReceiptBatch
   private let response: ChatFirstMaterializePromptsResponse
   var acknowledgementError: Error?
+  var fetchError: Error?
   var suspendNextFetch = false
   private(set) var isFetchSuspended = false
   private var fetchContinuation: CheckedContinuation<Void, Never>?
@@ -297,6 +405,7 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
         fetchContinuation = $0
       }
     }
+    if let fetchError { throw fetchError }
     return response
   }
 

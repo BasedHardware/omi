@@ -8,10 +8,13 @@ struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
   let appState: AppState
   let viewModelContainer: ViewModelContainer
-  let capability: ChatFirstCapabilityProjection
+  /// Nil until the server-owned control resolves, and permanently nil for an
+  /// account it does not cover. The shell mounts either way; only the
+  /// capability-gated features below wait on it.
+  let capability: ChatFirstCapabilityProjection?
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingID: String?
-  @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
+  @ObservedObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator.shared
   @StateObject private var automationRuntime: ChatFirstAutomationRuntime
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
@@ -21,7 +24,7 @@ struct ChatFirstShell: View {
     navigation: ChatFirstShellNavigation,
     appState: AppState,
     viewModelContainer: ViewModelContainer,
-    capability: ChatFirstCapabilityProjection,
+    capability: ChatFirstCapabilityProjection?,
     selectedSettingsSection: Binding<SettingsContentView.SettingsSection>,
     highlightedSettingID: Binding<String?>
   ) {
@@ -59,6 +62,10 @@ struct ChatFirstShell: View {
       // Home and More pages), leaving the automation contract stale even though
       // the requested route is selected.
       destination
+        // Attached *inside* the identified subtree: a modifier above `.id` keeps
+        // its identity across the replacement and never observes the outgoing
+        // destination's disappearance.
+        .onDisappear { ChatSwitchPerfLog.mark("oldDestinationGone") }
         .id(navigation.route.stableName)
     }
     // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
@@ -66,7 +73,7 @@ struct ChatFirstShell: View {
     .environmentObject(navigation)
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
-      viewModelContainer.canonicalGoalsStore.activate(capability: capability)
+      activateCapabilityGatedFeatures()
       automationRuntime.install()
       syncMemoryDestination(for: navigation.route)
       syncSettingsSection(for: navigation.route)
@@ -75,6 +82,9 @@ struct ChatFirstShell: View {
       )
     }
     .onDisappear { automationRuntime.uninstall() }
+    // The capability resolves after the shell is already on screen, so the
+    // gated features engage here rather than only at mount.
+    .onChange(of: capability) { _, _ in activateCapabilityGatedFeatures() }
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
       syncSettingsSection(for: route)
@@ -114,6 +124,11 @@ struct ChatFirstShell: View {
     }
   }
 
+  private func activateCapabilityGatedFeatures() {
+    guard let capability else { return }
+    viewModelContainer.canonicalGoalsStore.activate(capability: capability)
+  }
+
   private var isMainWindowForeground: Bool {
     guard NSApp.isActive, let window = NSApp.mainWindow else { return false }
     return window.isKeyWindow && window.isVisible
@@ -133,6 +148,7 @@ struct ChatFirstShell: View {
       chatDestination
         .accessibilityIdentifier("chat-first-route-chat")
         .onAppear {
+          ChatSwitchPerfLog.mark("chatRouteAppear")
           navigation.markRouteVisible(navigation.route)
           automationRuntime.registerChatPage(
             requestPromptMaterialization: {
@@ -171,6 +187,10 @@ struct ChatFirstShell: View {
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
         .onAppear { navigation.markRouteVisible(.more(page)) }
+    case .dailyRecap(let ref):
+      DailyRecapPage(ref: ref, navigation: navigation)
+        .accessibilityIdentifier("chat-first-route-daily-recap")
+        .onAppear { navigation.markRouteVisible(navigation.route) }
     }
   }
 
@@ -204,9 +224,7 @@ struct ChatFirstShell: View {
       chatProvider: viewModelContainer.chatProvider,
       memoriesViewModel: viewModelContainer.memoriesViewModel,
       taskChatCoordinator: viewModelContainer.taskChatCoordinator,
-      forceModernPresentation: true,
-      chatFirstRichBlockContext: richBlockContext,
-      selectedIndex: legacySelectionBinding
+      chatFirstRichBlockContext: richBlockContext
     )
   }
 
@@ -266,6 +284,10 @@ struct ChatFirstShell: View {
           navigation.selectPrimary(route)
         case .more(let page):
           navigation.selectMore(page)
+        case .dailyRecap:
+          // Not reachable — `route(forTopBarIndex:)` never returns a recap —
+          // and a recap is not a top-bar destination even if it were.
+          return
         }
       }
     )
@@ -331,36 +353,6 @@ struct ChatFirstShell: View {
     }
   }
 
-  /// Existing Dashboard callbacks still speak in legacy sidebar items. Keep
-  /// that compatibility at this one boundary while the Chat-first shell itself is
-  /// entirely route-typed.
-  private var legacySelectionBinding: Binding<Int> {
-    Binding(
-      get: { legacySidebarItem(for: navigation.route).rawValue },
-      set: { rawValue in
-        guard let item = SidebarNavItem(rawValue: rawValue) else { return }
-        navigation.selectLegacyDestination(item)
-      }
-    )
-  }
-
-  private func legacySidebarItem(for route: ChatFirstRoute) -> SidebarNavItem {
-    switch route {
-    case .chat: return .dashboard
-    case .conversations: return .conversations
-    case .tasks: return .tasks
-    case .memories: return .memories
-    case .goals: return .dashboard
-    case .more(let page):
-      switch page {
-      case .dashboard: return .dashboard
-      case .rewind: return .rewind
-      case .apps: return .apps
-      case .permissions: return .permissions
-      case .settings: return .settings
-      }
-    }
-  }
 }
 
 /// Chat-first passes through every destination that owns search/content panels. Older single-panel
@@ -372,7 +364,7 @@ enum ChatFirstPageGlassLanePolicy {
       return false
     case .tasks, .more(.apps):
       return false
-    case .goals, .more(.permissions), .more(.settings):
+    case .goals, .more(.permissions), .more(.settings), .dailyRecap:
       return true
     }
   }
@@ -679,7 +671,7 @@ private struct ChatFirstRestoredTasksHost: View {
 enum ChatFirstModernNavigationPolicy {
   static func topBarIndex(for route: ChatFirstRoute) -> Int {
     switch route {
-    case .chat, .goals: return SidebarNavItem.dashboard.rawValue
+    case .chat, .goals, .dailyRecap: return SidebarNavItem.dashboard.rawValue
     case .conversations, .memories: return SidebarNavItem.conversations.rawValue
     case .tasks: return SidebarNavItem.tasks.rawValue
     case .more(let page):

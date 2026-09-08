@@ -46,7 +46,10 @@ def test_request_translates_openai_tool_history_and_alias():
             'tool_choice': 'auto',
         }
     )
-    assert public_model == 'omi-sonnet'
+    # Response identity is the SERVED model (OpenAI chat-completions convention:
+    # response.model names the model that generated the response), never the
+    # requested alias — clients attribute answers from it.
+    assert public_model == 'claude-sonnet-4-6'
     assert payload['model'] == 'claude-sonnet-4-6'
     assert payload['max_tokens'] == 16_384
     assert payload['system'] == 'be concise'
@@ -1091,6 +1094,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
     monkeypatch.setattr(
         desktop_chat,
         'get_byok_key',
@@ -1119,6 +1123,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
                     'choices': [{'message': {'content': 'hello'}}],
                     'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
                 },
+                headers={'x-omi-jit-gateway-receipt': 'trusted-receipt'},
                 request=httpx.Request('POST', url),
             )
 
@@ -1131,11 +1136,24 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
         x_app_platform=None,
         x_omi_chat_contract_version=None,
         x_omi_request_id=None,
+        x_omi_jit_contract_version='jit-cloud-qa-v1',
+        x_omi_jit_run_id='jit-relay-run-1',
+        x_omi_jit_max_attempts='3',
+        x_omi_jit_max_output_tokens='2048',
+        x_omi_jit_max_input_tokens='32768',
+        x_omi_jit_max_spend_micro_usd='50000',
     )
 
     assert b'"id":"chat-1"' in response.body
     assert client.calls[0]['url'] == 'http://gateway.test/v1/chat/completions'
     assert client.calls[0]['headers']['X-Omi-Request-ID']
+    assert client.calls[0]['headers']['X-Omi-Jit-Contract-Version'] == 'jit-cloud-qa-v1'
+    assert client.calls[0]['headers']['X-Omi-Jit-Run-Id'] == 'jit-relay-run-1'
+    assert client.calls[0]['headers']['X-Omi-Jit-Max-Attempts'] == '3'
+    assert client.calls[0]['headers']['X-Omi-Jit-Max-Output-Tokens'] == '2048'
+    assert client.calls[0]['headers']['X-Omi-Jit-Max-Input-Tokens'] == '32768'
+    assert client.calls[0]['headers']['X-Omi-Jit-Max-Spend-Micro-Usd'] == '50000'
+    assert response.headers['X-Omi-Jit-Gateway-Receipt'] == 'trusted-receipt'
     assert client.calls[0]['json']['model'] == 'omi:auto:chat-agent'
     assert recorded and recorded[0][0] == 'user-1'
     assert recorded[0][1].input_tokens == 3
@@ -1398,8 +1416,9 @@ def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
         )
 
 
-def test_specialist_haiku_requests_bypass_managed_chat_agent():
-    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+def test_legacy_haiku_aliases_use_structured_lane_not_chat_agent():
+    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
+    assert desktop_chat._managed_lane_id({'model': 'claude-haiku-4-5-20251001'}) == 'omi:auto:chat-structured'
     assert desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
@@ -1411,7 +1430,13 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
 
 
 def test_structured_aliases_route_to_the_structured_lane_not_chat():
-    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
+    for alias in (
+        'omi-structured',
+        'OMI-Structured',
+        'omi:auto:chat-structured',
+        'claude-haiku-4-5',
+        'claude-haiku-4-5-20251001',
+    ):
         assert desktop_chat._uses_managed_chat_agent({'model': alias})
         assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
 
@@ -1456,6 +1481,54 @@ def test_gateway_body_strips_tools_on_the_web_search_lane():
     assert 'tool_choice' not in body
     assert 'omi_web_search' not in body
     assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
+
+
+def test_gateway_body_appends_web_search_retrieval_appendix_on_the_last_user_message():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {'role': 'system', 'content': 'be concise'},
+            {'role': 'user', 'content': 'how long did Whisper Flow take to build v1?'},
+            {'role': 'assistant', 'content': 'earlier turn'},
+            {'role': 'user', 'content': 'news?'},
+        ],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    # The appendix lands on the last user message only, next to the policy
+    # instruction the lane already injects elsewhere in the transcript.
+    assert body['messages'][-1]['content'] == 'news?' + desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX
+    assert body['messages'][1]['content'] == 'how long did Whisper Flow take to build v1?'
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
+    assert 'tools' not in body
+    assert 'tool_choice' not in body
+    # Idempotent: re-building the gateway body never stacks appendices.
+    rebuilt = desktop_chat._gateway_body(
+        {'model': 'omi-sonnet', 'messages': body['messages']}, desktop_chat.WEB_SEARCH_AUTO_LANE_ID
+    )
+    assert rebuilt['messages'][-1]['content'] == body['messages'][-1]['content']
+    # Other lanes keep the client question untouched.
+    chat_body = desktop_chat._gateway_body(request)
+    assert chat_body['messages'][3]['content'] == 'news?'
+
+
+def test_gateway_body_appends_web_search_appendix_as_a_text_block_for_multimodal_turns():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'what is in this screenshot?'},
+                    {'type': 'image_url', 'image_url': {'url': 'https://example.com/a.png'}},
+                ],
+            }
+        ],
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    blocks = body['messages'][-1]['content']
+    assert blocks[0] == {'type': 'text', 'text': 'what is in this screenshot?'}
+    assert blocks[-1] == {'type': 'text', 'text': desktop_chat.WEB_SEARCH_RETRIEVAL_APPENDIX}
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -1636,7 +1709,83 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkeypatch):
+async def test_chat_completions_jit_stays_on_gateway_when_anthropic_byok_exists(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    monkeypatch.setattr(
+        desktop_chat, 'get_byok_key', lambda provider: 'sk-anthropic' if provider == 'anthropic' else None
+    )
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        _fail_direct_anthropic('qualified JIT must not construct a direct Anthropic client'),
+    )
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, headers, json):
+            self.calls.append((url, headers, json))
+            return httpx.Response(
+                200,
+                json={'id': 'jit', 'choices': [{'message': {'content': 'gateway'}}], 'usage': {}},
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    response = await desktop_chat.chat_completions(
+        {'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+        x_omi_jit_contract_version='jit-cloud-qa-v1',
+        x_omi_jit_run_id='jit-byok-run',
+        x_omi_jit_max_attempts='3',
+        x_omi_jit_max_output_tokens='2048',
+        x_omi_jit_max_input_tokens='32768',
+        x_omi_jit_max_spend_micro_usd='50000',
+    )
+
+    assert response.body and b'gateway' in response.body
+    assert len(client.calls) == 1
+    assert client.calls[0][1]['X-Omi-Jit-Run-Id'] == 'jit-byok-run'
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_jit_rejects_direct_mode(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+            x_omi_jit_contract_version='jit-cloud-qa-v1',
+            x_omi_jit_run_id='jit-direct-run',
+            x_omi_jit_max_attempts='3',
+            x_omi_jit_max_output_tokens='2048',
+            x_omi_jit_max_input_tokens='32768',
+            x_omi_jit_max_spend_micro_usd='50000',
+        )
+
+    assert error.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_legacy_haiku_alias_uses_structured_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -1644,36 +1793,37 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert payload['model'] == 'claude-haiku-4-5'
-            return SimpleNamespace(
-                id='msg_haiku',
-                content=[SimpleNamespace(type='text', text='specialist')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('legacy Haiku aliases must not construct a direct Anthropic client'),
     )
 
     class GatewayClient:
-        async def post(self, *args, **kwargs):
-            raise AssertionError('specialist Haiku requests must not use managed gateway lane')
+        def __init__(self):
+            self.calls = []
 
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-haiku',
+                    'choices': [{'message': {'content': 'structured'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
 
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'claude-haiku-4-5-20251001',
             'messages': [{'role': 'user', 'content': 'extract this'}],
             'max_tokens': 16,
+            'omi_web_search': True,
         },
         uid='user-1',
         x_app_platform=None,
@@ -1681,7 +1831,8 @@ async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkey
         x_omi_request_id=None,
     )
 
-    assert b'"content":"specialist"' in response.body
+    assert b'structured' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-structured'
 
 
 @pytest.mark.asyncio
@@ -2106,6 +2257,26 @@ def test_gateway_request_headers_omit_app_platform_when_client_sent_none():
     assert 'X-Omi-App-Platform' not in headers
 
 
+def test_jit_qualification_headers_forward_only_versioned_bounded_contract(monkeypatch):
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    headers = desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, '3', '2048', '32768', '50000')
+    assert headers['X-Omi-Jit-Run-Id'] == 'a' * 64
+    assert headers['X-Omi-Jit-Max-Attempts'] == '3'
+    assert headers['X-Omi-Jit-Max-Output-Tokens'] == '2048'
+    assert headers['X-Omi-Jit-Max-Input-Tokens'] == '32768'
+    assert headers['X-Omi-Jit-Max-Spend-Micro-Usd'] == '50000'
+    for values in (
+        ('4', '2048', '32768', '50000'),
+        ('3', '2049', '32768', '50000'),
+        ('3', '2048', '32769', '50000'),
+        ('3', '2048', '32768', '50001'),
+    ):
+        with pytest.raises(ValueError):
+            desktop_chat._jit_headers_for_forward('jit-cloud-qa-v1', 'a' * 64, *values)
+    monkeypatch.delenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT')
+    assert desktop_chat._jit_headers_for_forward(None, None, None, None, None, None) == {}
+
+
 def _count_cache_control(value):
     """Count cache_control keys in a payload. Nested markers would split or
     duplicate the automatic breakpoint and silently miss the shared prefix."""
@@ -2288,6 +2459,83 @@ def test_gateway_body_drops_client_params_the_gateway_would_reject():
     assert result['stream'] is True
     assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
     assert result['messages'][0]['role'] == 'user'
+
+
+def test_thinking_escalation_routes_managed_and_drops_tools():
+    body = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'high',
+        'tools': [{'type': 'function', 'function': {'name': 'noop', 'parameters': {}}}],
+        'stream': False,
+    }
+
+    assert desktop_chat._uses_managed_chat_agent(body) is True
+    assert desktop_chat._managed_lane_id(body) == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+    assert result['reasoning_effort'] == 'high'
+    # OpenAI rejects function tools combined with a non-none effort on
+    # gpt-5.6-luna, so the escalation lane never carries client tools.
+    assert 'tools' not in result
+    assert 'tool_choice' not in result
+
+
+def test_thinking_escalation_maps_effort_levels_and_rejects_unknown():
+    base = {
+        'model': 'omi-luna-think',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+    }
+
+    # Missing effort defaults to the product `normal` level (Luna high).
+    assert desktop_chat._gateway_body(dict(base))['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'high'})['reasoning_effort'] == 'high'
+    assert desktop_chat._gateway_body({**base, 'reasoning_effort': 'xhigh'})['reasoning_effort'] == 'xhigh'
+
+    for invalid in ('low', 'medium', 'max', 'ultra', 'none', 7):
+        with pytest.raises(ValueError):
+            desktop_chat._gateway_body({**base, 'reasoning_effort': invalid})
+
+
+def test_thinking_escalation_forwards_image_url_parts_to_the_gateway():
+    data_uri = 'data:image/jpeg;base64,' + 'A' * 16
+    body = {
+        'model': 'omi-luna-think',
+        'reasoning_effort': 'xhigh',
+        'messages': [
+            {'role': 'system', 'content': 'speak only the conclusion'},
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'What is on my screen?'},
+                    {'type': 'image_url', 'image_url': {'url': data_uri}},
+                ],
+            },
+        ],
+    }
+
+    result = desktop_chat._gateway_body(body, desktop_chat._managed_lane_id(body))
+    user = result['messages'][1]
+    assert user['content'] == [
+        {'type': 'text', 'text': 'What is on my screen?'},
+        {'type': 'image_url', 'image_url': {'url': data_uri}},
+    ]
+
+
+def test_regular_chat_aliases_still_drop_client_reasoning_effort():
+    """The generic projection must keep dropping SDK-set reasoning_effort.
+
+    Only the validated thinking alias injects a server-authored effort; a
+    regular pi-mono turn with an SDK-set effort still forwards none.
+    """
+    body = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'reasoning_effort': 'low',
+    }
+    result = desktop_chat._gateway_body(body)
+    assert 'reasoning_effort' not in result
 
 
 def _capture_client_journeys(monkeypatch):

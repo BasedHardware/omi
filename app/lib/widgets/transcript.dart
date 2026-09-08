@@ -5,7 +5,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
 import 'package:flutter/services.dart';
-
+import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -145,6 +145,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   bool _isAtBottom = true;
   bool _followAgain = false;
   Future<void>? _activeFollow;
+  // Reader drag tracking: while a programmatic follow owns the scrollable,
+  // the scrollable may ignore pointers or replace its recognizers, orphaning
+  // a pending drag. The ancestor Listener below recovers that gesture.
+  int? _readerDragPointer;
+  Offset? _lastReaderPointerPosition;
+  double _readerDragTravel = 0;
+  bool _readerDragTakenOverByNative = false;
+  bool _readerDragRecovered = false;
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
@@ -309,10 +317,91 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       final wasUserHasScrolled = _userHasScrolled;
       _userHasScrolled = !isAtBottom;
       if (isAtBottom && wasUserHasScrolled) {
+        // The reader is demonstrably back at the live edge: a stale interrupt
+        // from an earlier gesture must not keep blocking follow.
+        _userInterruptedAutoScroll = false;
         widget.scrollState?.update(offset: currentScroll, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
       }
     }
     _setIsAtBottom(isAtBottom);
+  }
+
+  /// Cancels any in-flight follow on behalf of a reader gesture.
+  ///
+  /// Setting the flags alone is not enough: the running `animateTo` keeps
+  /// driving the Scrollable and can yank the reader back to the live edge.
+  /// Stopping at the current offset kills the driven activity immediately, and
+  /// clearing [_activeFollow] lets a later follow (e.g. the jump button) start
+  /// fresh instead of awaiting this cancelled one.
+  void _interruptAutoScroll() {
+    _userInterruptedAutoScroll = true;
+    _followAgain = false;
+    _activeFollow = null;
+    if (_isAutoScrolling && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.offset);
+    }
+    _isAutoScrolling = false;
+  }
+
+  void _onReaderPointerDown(PointerDownEvent event) {
+    if (_readerDragPointer != null) return;
+    _readerDragPointer = event.pointer;
+    _lastReaderPointerPosition = event.position;
+    _readerDragTravel = 0;
+    _readerDragTakenOverByNative = false;
+    _readerDragRecovered = false;
+  }
+
+  void _onReaderPointerMove(PointerMoveEvent event) {
+    if (_readerDragPointer != event.pointer) return;
+    final last = _lastReaderPointerPosition;
+    _lastReaderPointerPosition = event.position;
+    if (last == null || !_scrollController.hasClients) return;
+
+    final dy = event.position.dy - last.dy;
+    if (_readerDragTakenOverByNative) return;
+
+    if (_readerDragRecovered) {
+      // The scrollable never saw this pointer's down event, so it cannot
+      // drive the gesture natively; carry the drag manually.
+      _driveReaderDrag(dy);
+      return;
+    }
+
+    final programmaticScrollActive = _isAutoScrolling || _isRestoringAnchor || _pendingAnchorRestore;
+    _readerDragTravel += dy.abs();
+    if (!programmaticScrollActive || _readerDragTravel <= kTouchSlop) return;
+
+    // A reader drag against a running programmatic scroll must interrupt it:
+    // while a driven activity owns the scrollable this gesture may never be
+    // delivered as a native drag, and the follow would yank the reader back
+    // to the live edge and re-pin.
+    _pendingAnchorRestore = false;
+    _isUserScrolling = true;
+    _userHasScrolled = true;
+    _readerDragRecovered = true;
+    _interruptAutoScroll();
+    _driveReaderDrag(dy);
+  }
+
+  void _driveReaderDrag(double dy) {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    _scrollController.jumpTo((_scrollController.offset - dy).clamp(position.minScrollExtent, position.maxScrollExtent));
+  }
+
+  void _endReaderDrag(int pointer) {
+    if (_readerDragPointer != pointer) return;
+    final recovered = _readerDragRecovered && !_readerDragTakenOverByNative;
+    _readerDragPointer = null;
+    _lastReaderPointerPosition = null;
+    _readerDragTravel = 0;
+    _readerDragTakenOverByNative = false;
+    _readerDragRecovered = false;
+    if (recovered && _isUserScrolling && !_isAutoScrolling && !_isRestoringAnchor) {
+      _captureCurrentPosition();
+      _isUserScrolling = false;
+    }
   }
 
   void _captureCurrentPosition({String? layoutIdentity}) {
@@ -321,6 +410,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final currentScroll = _scrollController.offset;
     final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
     _userHasScrolled = !isAtBottom;
+    if (isAtBottom && !_isUserScrolling) {
+      // Settled at the live edge: resume follow. Do not clear this during an
+      // active drag — a reader who has only moved a few pixels must still win.
+      _userInterruptedAutoScroll = false;
+    }
     final scrollState = widget.scrollState;
     if (scrollState != null) {
       String? anchorId;
@@ -358,6 +452,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Future<void> _restoreAnchor() async {
     if (!_scrollController.hasClients) return;
     final scrollState = widget.scrollState;
+    if (_isUserScrolling) {
+      // The reader's active gesture owns the position; it re-anchors on its
+      // own when the gesture goes idle.
+      _pendingAnchorRestore = false;
+      return;
+    }
     if (scrollState == null || scrollState.isAtBottom || widget.segments.isEmpty) {
       _pendingAnchorRestore = false;
       _captureCurrentPosition();
@@ -374,7 +474,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _isRestoringAnchor = true;
     try {
       for (var attempt = 0; attempt < 20; attempt++) {
-        if (!mounted || !_scrollController.hasClients) return;
+        if (!mounted || !_scrollController.hasClients || _isUserScrolling) return;
         final anchorContext = _segmentKeys[anchorId]?.currentContext;
         final anchor = anchorContext?.findRenderObject();
         if (anchor is RenderBox) {
@@ -460,9 +560,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       if ((maxExtent - _scrollController.offset).abs() > 0.5) {
         _scrollController.jumpTo(maxExtent);
       }
-      _userHasScrolled = false;
-      widget.scrollState?.update(offset: maxExtent, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
-      _setIsAtBottom(true);
+      // Re-pin only when the follow truly finished at the live edge and the
+      // reader never took the gesture back.
+      if (!_userInterruptedAutoScroll &&
+          (_scrollController.position.maxScrollExtent - _scrollController.offset).abs() <= 0.5) {
+        _userHasScrolled = false;
+        widget.scrollState?.update(offset: maxExtent, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
+        _setIsAtBottom(true);
+      }
     } finally {
       _isAutoScrolling = false;
     }
@@ -470,7 +575,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Future<void> _scrollToBottomGently({bool animated = true, bool force = false}) {
     if (!_scrollController.hasClients) return Future.value();
-    if (!force && widget.followLatest && _userHasScrolled) return Future.value();
+    if (!force && widget.followLatest && (_userHasScrolled || _isUserScrolling || _userInterruptedAutoScroll)) {
+      return Future.value();
+    }
     _followAgain = true;
     final activeFollow = _activeFollow;
     if (activeFollow != null) return activeFollow;
@@ -484,44 +591,60 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   bool _onUserScroll(UserScrollNotification notification) {
-    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
     if (notification.direction != ScrollDirection.idle) {
+      // User-directed motion (drag or fling momentum) outranks any follow or
+      // pending anchor restore.
+      _pendingAnchorRestore = false;
       _isUserScrolling = true;
-      if (_isAutoScrolling) {
-        _userInterruptedAutoScroll = true;
-        _followAgain = false;
-        _isAutoScrolling = false;
-      }
+      _userHasScrolled = true;
+      _readerDragTakenOverByNative = true;
+      _readerDragRecovered = false;
+      _interruptAutoScroll();
       _captureCurrentPosition();
-    } else if (_isUserScrolling) {
+    } else if (_isUserScrolling && !_isRestoringAnchor && !_pendingAnchorRestore && !_readerDragRecovered) {
       _captureCurrentPosition();
       _isUserScrolling = false;
     }
     return false;
   }
 
+  bool _onScrollStart(ScrollStartNotification notification) {
+    if (notification.depth != 0 || notification.dragDetails == null) return false;
+
+    // Record intent on the first pixel of a pointer drag, before any live
+    // follow can re-grab the scrollable.
+    _pendingAnchorRestore = false;
+    _isUserScrolling = true;
+    _userHasScrolled = true;
+    _readerDragTakenOverByNative = true;
+    _readerDragRecovered = false;
+    _interruptAutoScroll();
+    return false;
+  }
+
   bool _onScrollUpdate(ScrollUpdateNotification notification) {
     if (notification.depth != 0 || notification.dragDetails == null) return false;
-    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
 
+    // A pointer drag always outranks follow and pending anchor restores.
+    _pendingAnchorRestore = false;
     _isUserScrolling = true;
-    if (_isAutoScrolling) {
-      _userInterruptedAutoScroll = true;
-      _followAgain = false;
-      _isAutoScrolling = false;
-    }
+    _userHasScrolled = true;
+    _readerDragTakenOverByNative = true;
+    _readerDragRecovered = false;
+    _interruptAutoScroll();
     _captureCurrentPosition();
     return false;
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) return _onScrollStart(notification);
     if (notification is ScrollUpdateNotification) return _onScrollUpdate(notification);
     if (notification is UserScrollNotification) return _onUserScroll(notification);
     return false;
   }
 
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
-    if (!widget.followLatest || _isAutoScrolling) return false;
+    if (!widget.followLatest || _isAutoScrolling || _isUserScrolling || _userInterruptedAutoScroll) return false;
     final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -703,46 +826,52 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       onNotification: _onScrollMetrics,
       child: NotificationListener<ScrollNotification>(
         onNotification: _onScrollNotification,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-              widget.onTapWhenSearchEmpty!();
-            }
-          },
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: EdgeInsets.only(top: searchBarHeight),
-            itemCount: widget.leadingItems.length + widget.segments.length + 2,
-            findChildIndexCallback: _findChildIndex,
-            itemBuilder: (context, idx) {
-              if (idx == 0) {
-                return SizedBox(key: const ValueKey('transcript_header'), height: widget.topMargin ? 32 : 0);
+        child: Listener(
+          onPointerDown: _onReaderPointerDown,
+          onPointerMove: _onReaderPointerMove,
+          onPointerUp: (event) => _endReaderDrag(event.pointer),
+          onPointerCancel: (event) => _endReaderDrag(event.pointer),
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+                widget.onTapWhenSearchEmpty!();
               }
-
-              final leadingIndex = idx - 1;
-              if (leadingIndex < widget.leadingItems.length) {
-                return KeyedSubtree(
-                  key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
-                  child: widget.leadingItems[leadingIndex],
-                );
-              }
-
-              final segmentIndex = idx - widget.leadingItems.length - 1;
-              if (segmentIndex == widget.segments.length) {
-                return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
-              }
-
-              final segment = widget.segments[segmentIndex];
-              final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
-              Widget child = customSegment == null
-                  ? _buildSegmentItem(segmentIndex)
-                  : Container(key: _segmentKeys[segment.id], child: customSegment);
-              if (widget.separator && segmentIndex > 0) {
-                child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
-              }
-              return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
             },
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: EdgeInsets.only(top: searchBarHeight),
+              itemCount: widget.leadingItems.length + widget.segments.length + 2,
+              findChildIndexCallback: _findChildIndex,
+              itemBuilder: (context, idx) {
+                if (idx == 0) {
+                  return SizedBox(key: const ValueKey('transcript_header'), height: widget.topMargin ? 32 : 0);
+                }
+
+                final leadingIndex = idx - 1;
+                if (leadingIndex < widget.leadingItems.length) {
+                  return KeyedSubtree(
+                    key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
+                    child: widget.leadingItems[leadingIndex],
+                  );
+                }
+
+                final segmentIndex = idx - widget.leadingItems.length - 1;
+                if (segmentIndex == widget.segments.length) {
+                  return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
+                }
+
+                final segment = widget.segments[segmentIndex];
+                final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
+                Widget child = customSegment == null
+                    ? _buildSegmentItem(segmentIndex)
+                    : Container(key: _segmentKeys[segment.id], child: customSegment);
+                if (widget.separator && segmentIndex > 0) {
+                  child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
+                }
+                return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
+              },
+            ),
           ),
         ),
       ),

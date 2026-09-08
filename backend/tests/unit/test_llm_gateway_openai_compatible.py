@@ -10,10 +10,12 @@ import pytest
 from starlette.requests import Request
 
 from llm_gateway.gateway.auth import ServiceCaller
+from llm_gateway.gateway.accounting import UsageStatus
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.executor import ProviderRegistry, provider_request_for
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure
+from llm_gateway.gateway.request_context import JITBudgetHeaders, jit_budget_headers_for
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef, ProviderRejection
 from llm_gateway.main import app
@@ -94,6 +96,141 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'temperature' not in provider.calls[0].request
     assert provider.calls[0].request['max_completion_tokens'] == 64
     assert 'metadata' not in provider.calls[0].request
+
+
+def test_jit_budget_caps_request_tokens_without_touching_normal_chat_defaults():
+    body = valid_request(max_tokens=9_999, max_completion_tokens=8_000)
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-run-1',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+
+    openai_compatible._apply_jit_request_budget(body, budget)
+
+    assert body['max_tokens'] == 2_048
+    assert body['max_completion_tokens'] == 2_048
+
+    normal_body = valid_request()
+    assert 'max_completion_tokens' not in normal_body
+
+
+@pytest.mark.parametrize(
+    'aliases',
+    [
+        {'max_tokens': None},
+        {'max_completion_tokens': None},
+        {'max_tokens': None, 'max_completion_tokens': None},
+    ],
+)
+def test_jit_budget_null_output_aliases_still_apply_ceiling(aliases):
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-run-null',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+    body = valid_request(**aliases)
+
+    openai_compatible._apply_jit_request_budget(body, budget)
+
+    assert body['max_completion_tokens'] == 2_048
+    assert 'max_tokens' not in body
+
+
+@pytest.mark.parametrize('value', [0, -1, True, False, 1.5, '2048'])
+def test_jit_budget_rejects_malformed_output_alias(value):
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-run-invalid',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='output token budget'):
+        openai_compatible._apply_jit_request_budget(valid_request(max_tokens=value), budget)
+
+
+def test_jit_budget_preflight_rejects_overlarge_input():
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-run-1',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=8,
+        max_spend_micro_usd=50_000,
+    )
+
+    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='input budget exceeded'):
+        openai_compatible._apply_jit_request_budget(valid_request(), budget)
+
+
+def test_jit_budget_preflight_rejects_unpriced_image_or_audio_inputs():
+    budget = JITBudgetHeaders(
+        contract_version='jit-cloud-qa-v1',
+        run_id='jit-run-1',
+        max_attempts=3,
+        max_output_tokens=2_048,
+        max_input_tokens=32_768,
+        max_spend_micro_usd=50_000,
+    )
+    with pytest.raises(openai_compatible.GatewayInvalidRequestError, match='text-only'):
+        openai_compatible._apply_jit_request_budget(
+            valid_request(
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': [{'type': 'input_audio', 'input_audio': {'data': 'AAAA', 'format': 'wav'}}],
+                    }
+                ]
+            ),
+            budget,
+        )
+
+
+def test_jit_budget_header_parser_is_absent_for_normal_chat_and_bounded_for_qa(monkeypatch):
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    normal_request = Request({'type': 'http', 'headers': []})
+    assert jit_budget_headers_for(normal_request) is None
+
+    headers = [
+        (b'x-omi-jit-contract-version', b'jit-cloud-qa-v1'),
+        (b'x-omi-jit-run-id', b'jit-run-1'),
+        (b'x-omi-jit-max-attempts', b'3'),
+        (b'x-omi-jit-max-output-tokens', b'2048'),
+        (b'x-omi-jit-max-input-tokens', b'32768'),
+        (b'x-omi-jit-max-spend-micro-usd', b'50000'),
+    ]
+    qa_request = Request({'type': 'http', 'headers': headers})
+    parsed = jit_budget_headers_for(qa_request)
+    assert parsed is not None
+    assert parsed.run_id == 'jit-run-1'
+    assert parsed.max_spend_micro_usd == 50_000
+
+
+def test_jit_budget_header_parser_fails_closed_when_gateway_capability_is_off(monkeypatch):
+    monkeypatch.delenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', raising=False)
+    request = Request(
+        {
+            'type': 'http',
+            'headers': [
+                (b'x-omi-jit-contract-version', b'jit-cloud-qa-v1'),
+                (b'x-omi-jit-run-id', b'jit-run-1'),
+                (b'x-omi-jit-max-attempts', b'3'),
+                (b'x-omi-jit-max-output-tokens', b'2048'),
+                (b'x-omi-jit-max-input-tokens', b'32768'),
+                (b'x-omi-jit-max-spend-micro-usd', b'50000'),
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match='capability is unavailable'):
+        jit_budget_headers_for(request)
 
 
 @pytest.mark.parametrize(
@@ -614,6 +751,56 @@ class TerminalStreamProvider(FakeChatCompletionProvider):
             yield chunk
 
 
+def test_jit_stream_route_binds_authenticated_owner_to_reservation(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_PROACTIVITY_BUDGET_CONTRACT', 'jit-cloud-qa-v1')
+    provider = TerminalStreamProvider(
+        [
+            b'data: {"choices":[{"delta":{"content":"jit"}}]}\n\n',
+            b'data: {"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}\n\n',
+            b'data: [DONE]\n\n',
+        ]
+    )
+    reservations: list[dict[str, object]] = []
+    settlements: list[dict[str, object]] = []
+
+    async def reserve_jit_attempt(**kwargs):
+        reservations.append(kwargs)
+        return object()
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settlements.append(kwargs)
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'reserve_jit_attempt', reserve_jit_attempt)
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', settle_jit_attempt)
+    app.dependency_overrides[dependencies.get_gateway_config] = _streaming_enabled_gateway_config
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    try:
+        response = TestClient(app).post(
+            '/v1/chat/completions',
+            json=valid_request(stream=True),
+            headers={
+                **auth_headers(),
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': 'jit-owner-route-test',
+                'x-omi-jit-max-attempts': '3',
+                'x-omi-jit-max-output-tokens': '2048',
+                'x-omi-jit-max-input-tokens': '32768',
+                'x-omi-jit-max-spend-micro-usd': '50000',
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.content.endswith(b'data: [DONE]\n\n')
+    assert len(reservations) == 1
+    assert reservations[0]['owner_uid'] == 'user-123'
+    assert reservations[0]['run_id'] == 'jit-owner-route-test'
+    assert settlements and settlements[0]['status'] == 'succeeded'
+
+
 def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     recorded: list[dict] = []
@@ -850,6 +1037,339 @@ async def test_streaming_successful_fallback_is_classified_as_actual_fallback(mo
     assert recorded[0]['fallback_used'] is True
     assert recorded[0]['fallback_reason'] == 'timeout_before_output'
     assert recorded[0]['route_serving_class'] == openai_compatible.RouteServingClass.ACTUAL_FALLBACK
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'chunks',
+    [
+        [
+            b'data: {"id":"jit","choices":[]}',
+            b'\n\ndata: {"id":"jit","choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\ndata: [DONE]\n\n',
+        ],
+        [
+            b'data: {"id":"jit","choices":[]}\n\ndata: {"id":"jit","choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\ndata: [DONE]\n\n',
+        ],
+    ],
+)
+async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, chunks):
+    settled: list[dict[str, object]] = []
+
+    async def settle_jit_attempt(_reservation, **kwargs):
+        settled.append(kwargs)
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', settle_jit_attempt)
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+
+    async def remaining_stream():
+        for chunk in chunks[1:]:
+            yield chunk
+
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-sse-test',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-sse-run',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    prepared = openai_compatible._PreparedStream(
+        first_chunk=chunks[0],
+        stream=remaining_stream(),
+        provider='openai',
+        model='gpt-5.6-luna',
+        fallback_used=False,
+        fallback_reason=None,
+        reservation=object(),
+    )
+    stream = openai_compatible._stream_with_terminal_metrics(
+        prepared,
+        resolved_route=resolved,
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        route=route,
+        started_at=openai_compatible.time_request(),
+        request_id='jit-sse-test',
+        accounting_context=context,
+    )
+
+    output = b''.join([chunk async for chunk in stream])
+    receipt_marker = b'event: omi_jit_receipt\n'
+    assert output.count(receipt_marker) == 1
+    assert output.index(receipt_marker) < output.index(b'data: [DONE]')
+    assert settled and settled[0]['status'] == 'succeeded'
+    assert settled[0]['metadata'] is not None
+
+
+@pytest.mark.asyncio
+async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch):
+    recorded: list[dict[str, object]] = []
+    traces = []
+
+    async def reject_settlement(_reservation, **_kwargs):
+        return False
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', reject_settlement)
+    monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr(openai_compatible, 'schedule_attempt_trace', lambda _context, trace: traces.append(trace))
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+
+    async def remaining_stream():
+        yield b'data: [DONE]\n\n'
+
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-settlement-failure',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-settlement-failure',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\n',
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                    reservation=object(),
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='jit-settlement-failure',
+                accounting_context=context,
+            )
+        ]
+    )
+
+    assert b'data: [DONE]\n\n' in output
+    assert b'event: omi_jit_receipt\n' not in output
+    assert recorded and recorded[0]['outcome'] == 'error'
+    assert recorded[0]['error_class'] == 'jit_budget_settlement_failed'
+    assert traces and traces[0].attempts[0].usage is not None
+    assert traces[0].attempts[0].usage_status == UsageStatus.INDETERMINATE
+
+
+@pytest.mark.asyncio
+async def test_jit_stream_preserves_multiline_crlf_event_and_split_chunks(monkeypatch):
+    async def accept_settlement(_reservation, **_kwargs):
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', accept_settlement)
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-multiline-crlf',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-multiline-crlf',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    raw_chunks = [
+        b'id: event-1\r',
+        b'\ndata: {"choices":[],"usage":{\r',
+        b'\ndata: "prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\r\n',
+        b': keep-alive\r\n\r\n',
+        b'data: [DONE]\r\n\r\n',
+    ]
+
+    async def remaining_stream():
+        for chunk in raw_chunks[1:]:
+            yield chunk
+
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw_chunks[0],
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                    reservation=object(),
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='jit-multiline-crlf',
+                accounting_context=context,
+            )
+        ]
+    )
+
+    receipt_marker = b'event: omi_jit_receipt\n'
+    assert output.count(receipt_marker) == 1
+    receipt_start = output.index(receipt_marker)
+    receipt_end = output.index(b'\n\n', receipt_start) + 2
+    assert output[:receipt_start] + output[receipt_end:] == b''.join(raw_chunks)
+    assert receipt_start > output.index(b'id: event-1')
+    assert receipt_start < output.index(b'data: [DONE]')
+
+
+@pytest.mark.asyncio
+async def test_jit_stream_preserves_crlf_and_flushes_unterminated_frame(monkeypatch):
+    async def accept_settlement(_reservation, **_kwargs):
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', accept_settlement)
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-crlf',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-crlf',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    raw_chunks = [
+        b'data: {"choices":[{"delta":{"content":"hi"}}]}\r',
+        b'\n\r\n',
+        b'data: [DONE]\r\n\r\n',
+    ]
+
+    async def remaining_stream():
+        for chunk in raw_chunks[1:]:
+            yield chunk
+
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw_chunks[0],
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                    reservation=None,
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='jit-crlf',
+                accounting_context=context,
+            )
+        ]
+    )
+
+    assert b'data: {"choices":[{"delta":{"content":"hi"}}]}\r\n\r\n' in output
+    assert b'data: [DONE]\r\n\r\n' in output
+
+
+@pytest.mark.asyncio
+async def test_jit_stream_flushes_final_unterminated_data_frame(monkeypatch):
+    recorded: list[dict[str, object]] = []
+
+    async def accept_settlement(_reservation, **_kwargs):
+        return True
+
+    monkeypatch.setattr(openai_compatible, 'settle_jit_attempt', accept_settlement)
+    monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    context = openai_compatible.AccountingContext.create(
+        request_id='jit-unterminated',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-unterminated',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    raw = b'data: {"choices":[{"delta":{"content":"tail"}}]}'
+
+    async def empty_stream():
+        if False:
+            yield b''
+
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw,
+                    stream=empty_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                    reservation=None,
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='jit-unterminated',
+                accounting_context=context,
+            )
+        ]
+    )
+
+    assert raw in output
+    assert recorded and recorded[0]['error_class'] == 'eof_before_terminal_marker'
+
+
+@pytest.mark.asyncio
+async def test_non_jit_stream_returns_provider_chunks_byte_for_byte():
+    raw_chunks = [b'data: hello\r', b'\n\r\ndata: [DONE]\r\n\r\n']
+
+    async def remaining_stream():
+        yield raw_chunks[1]
+
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+    output = b''.join(
+        [
+            chunk
+            async for chunk in openai_compatible._stream_with_terminal_metrics(
+                openai_compatible._PreparedStream(
+                    first_chunk=raw_chunks[0],
+                    stream=remaining_stream(),
+                    provider='openai',
+                    model='gpt-5.6-luna',
+                    fallback_used=False,
+                    fallback_reason=None,
+                ),
+                resolved_route=resolved,
+                credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+                route=route,
+                started_at=openai_compatible.time_request(),
+                request_id='non-jit-passthrough',
+            )
+        ]
+    )
+
+    assert output == b''.join(raw_chunks)
 
 
 def _streaming_enabled_gateway_config():

@@ -91,9 +91,26 @@ build.
 
 To build and deploy the app to an iPhone so it can run independently from your laptop:
 
+The quick path is the setup wrapper with an AOT build mode:
+```bash
+OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # or release
+```
+A plain `bash setup.sh ios` installs a debug (JIT) build, which iOS only lets run
+while `flutter run` is attached; opened from the Home Screen it shows a notice
+explaining that instead of starting.
+
+Manual equivalent:
+
 1. Build the iOS app with release mode and specific flavor:
    ```bash
-   flutter build ios --flavor dev --release
+   # After the normal setup has seeded the iOS/Firebase files:
+   source setup.sh
+   setup_app_env local_dev "$LOCAL_API_BASE_URL"
+   scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev
+   flutter build ios --flavor dev --release \
+     --dart-define=OMI_APP_PROFILE=local_dev \
+     --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
+     --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
    ```
    This produces an .app bundle at:
    ```

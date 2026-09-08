@@ -3,19 +3,27 @@ from datetime import datetime, timezone, timedelta
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
-from google.api_core.exceptions import AlreadyExists, DeadlineExceeded as FirestoreDeadlineExceeded, NotFound
+from google.api_core.exceptions import (
+    AlreadyExists,
+    DeadlineExceeded as FirestoreDeadlineExceeded,
+    GoogleAPICallError,
+    NotFound,
+)
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.action_items_cache import bump_action_items_list_version
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from database.firestore_index_registry import (
+    ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_CREATED_RANGE_QUERY,
 )
 from ._client import db, get_firestore_client
+from utils.observability.fallback import record_fallback
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
@@ -313,9 +321,9 @@ def create_action_item(
             retry on flaky networks or duplicate event delivery — the previous
             behaviour silently allocated a fresh Firestore id on every call,
             producing user-visible duplicates. The key is stored on the
-            document so future calls can find it. Callers that want
-            content-based idempotency typically pass
-            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
+            document so future calls can find it. Pass a per-attempt client
+            key (for example an ``Idempotency-Key`` header), not a hash of
+            the description: task titles are not unique.
         document_id: Optional caller-reserved Firestore document id. Reusing
             the id returns the existing document without rewriting it, making
             a crash-retried create deterministic.
@@ -383,7 +391,7 @@ def create_action_item(
         return doc_ref.id
 
     try:
-        return cast(
+        created_id = cast(
             str,
             run_with_transaction_contention_retry(
                 db.transaction,
@@ -402,8 +410,13 @@ def create_action_item(
         if idempotency_key:
             existing_id = _live_action_item_id_for_key(uid, idempotency_key)
             if existing_id:
+                # No row was added: the winner's own create already bumped the list version, so
+                # bumping here would invalidate a cache for a list that did not change.
                 return existing_id
         raise
+
+    bump_action_items_list_version(uid)
+    return created_id
 
 
 def _live_action_item_id_for_key(uid: str, idempotency_key: str) -> Optional[str]:
@@ -503,7 +516,7 @@ def create_action_items_batch(
             write_transaction.set(doc_ref, {**item, 'account_generation': account_generation})
         return doc_refs
 
-    return cast(
+    created_ids = cast(
         List[str],
         run_with_transaction_contention_retry(
             db.transaction,
@@ -511,6 +524,8 @@ def create_action_items_batch(
             operation_name="action_item_batch_create",
         ),
     )
+    bump_action_items_list_version(uid)
+    return created_ids
 
 
 # *****************************
@@ -677,6 +692,79 @@ def _apply_action_item_date_filters(
     return query
 
 
+@dataclass(frozen=True)
+class _LegacyCompletionProbe:
+    has_legacy_rows: bool
+    billed_reads: int
+
+
+@dataclass
+class _LegacyCompletionProbeLedger:
+    billed_reads: int = 0
+
+
+def _count_query(
+    query: Any,
+    *,
+    budget: Optional[ListReadBudget],
+    ledger: Optional[_LegacyCompletionProbeLedger] = None,
+) -> tuple[int, int]:
+    """Return an aggregation count and its Firestore read charge.
+
+    Firestore bills count aggregations at one document read per batch of up to
+    1,000 matching index entries, with a one-read minimum. The request budget
+    and the existing family metric must include those reads even though no
+    document snapshot crosses the wire.
+    """
+    aggregation = query.count()
+    if budget is None:
+        rows = aggregation.get()
+    else:
+        rows = aggregation.get(timeout=budget.rpc_timeout())
+    count = int(rows[0][0].value)
+    billed_reads = max(1, (count + 999) // 1000)
+    if ledger is not None:
+        # Record the known Firestore charge before the request budget can raise.
+        # The caller must still attribute this successful aggregation if a later
+        # count fails or this charge exhausts the request allowance.
+        ledger.billed_reads += billed_reads
+    if budget is not None:
+        budget.charge(billed_reads)
+    return count, billed_reads
+
+
+def _probe_legacy_completion_rows(
+    query: Any,
+    *,
+    budget: Optional[ListReadBudget],
+    ledger: Optional[_LegacyCompletionProbeLedger] = None,
+) -> _LegacyCompletionProbe:
+    """Cheaply determine whether the default list needs its compatibility scan.
+
+    Current writers stamp ``completed`` as a concrete bool. Legacy/partial rows
+    may omit it or store null, and Firestore equality filters exclude both. A
+    broad compatibility scan used to run whenever the active bucket did not
+    fill the requested page, even when every row was canonical.
+
+    Count the bool-valued index entries first, then the whole collection. If the
+    counts differ, the old scan remains authoritative. Canonical-first ordering
+    is deliberate: a concurrent insert between the counts can only cause an
+    unnecessary scan, not suppress a pre-existing legacy row.
+    """
+    canonical_query = ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY.build(
+        query,
+        {'canonical_values': [False, True]},
+        field_filter_factory=FieldFilter,
+    )
+    probe_ledger = ledger or _LegacyCompletionProbeLedger()
+    canonical_count, canonical_reads = _count_query(canonical_query, budget=budget, ledger=probe_ledger)
+    total_count, total_reads = _count_query(query, budget=budget, ledger=probe_ledger)
+    return _LegacyCompletionProbe(
+        has_legacy_rows=canonical_count != total_count,
+        billed_reads=canonical_reads + total_reads,
+    )
+
+
 def get_action_items(
     uid: str,
     conversation_id: Optional[str] = None,
@@ -754,22 +842,78 @@ def get_action_items(
         # Legacy/partial docs: completed missing or null. Equality filters exclude them; harvest
         # with a bounded unfiltered scan and keep only those that prepare to active and are new.
         if len(active) < need and not _out_of_budget():
-            # Bound unfiltered scan generously enough to product-sort before capping:
-            # early-stopping mid-stream would freeze Firestore order instead of due-date order.
-            legacy_scan = min(
-                _ACTION_ITEMS_LIST_HARD_MAX,
-                max(need * 8, 128),
+            should_scan_legacy = True
+            # The measured hot path is the unfiltered default list. Scoped date /
+            # conversation queries retain their old single-query shapes rather than
+            # adding new composite-index requirements to a compatibility optimization.
+            can_probe_legacy = (
+                conversation_id is None
+                and start_date is None
+                and end_date is None
+                and due_start_date is None
+                and due_end_date is None
             )
-            raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan, budget=budget)
-            total_docs += docs
-            for item in raw_legacy:
-                if item['id'] in seen:
-                    continue
-                # Only pull true actives from the unfiltered scan into the active bucket.
-                if item.get('completed'):
-                    continue
-                active.append(item)
-                seen.add(item['id'])
+            if can_probe_legacy:
+                probe_ledger = _LegacyCompletionProbeLedger()
+                try:
+                    legacy_probe = _probe_legacy_completion_rows(
+                        _base_query(),
+                        budget=budget,
+                        ledger=probe_ledger,
+                    )
+                    should_scan_legacy = legacy_probe.has_legacy_rows
+                except ListReadBudgetExhausted:
+                    should_scan_legacy = False
+                except FirestoreDeadlineExceeded:
+                    if budget is not None:
+                        budget.mark_exhausted('deadline')
+                        should_scan_legacy = False
+                    else:
+                        # Without a request-derived timeout, an aggregation
+                        # deadline is an optimization failure, not proof that
+                        # legacy rows are absent. Preserve the released scan.
+                        record_fallback(
+                            component='firestore_read',
+                            from_mode='legacy_completion_probe',
+                            to_mode='bounded_legacy_scan',
+                            reason='timeout',
+                            outcome='recovered',
+                            log=logger,
+                        )
+                except (AttributeError, GoogleAPICallError, IndexError, TypeError, ValueError):
+                    # Aggregation is an optimization boundary. If it is unavailable,
+                    # retain the exact released behavior and make that recovery visible.
+                    record_fallback(
+                        component='firestore_read',
+                        from_mode='legacy_completion_probe',
+                        to_mode='bounded_legacy_scan',
+                        reason='other',
+                        outcome='recovered',
+                        log=logger,
+                    )
+                finally:
+                    # A successful first count is billable even if the second
+                    # count fails or a budget charge raises. Keep family
+                    # attribution complete on fallback and truncation paths.
+                    total_docs += probe_ledger.billed_reads
+
+            if should_scan_legacy and not _out_of_budget():
+                # Bound unfiltered scan generously enough to product-sort before capping:
+                # early-stopping mid-stream would freeze Firestore order instead of due-date order.
+                legacy_scan = min(
+                    _ACTION_ITEMS_LIST_HARD_MAX,
+                    max(need * 8, 128),
+                )
+                raw_legacy, docs = _stream_action_items_bounded(_base_query(), max_docs=legacy_scan, budget=budget)
+                total_docs += docs
+                for item in raw_legacy:
+                    if item['id'] in seen:
+                        continue
+                    # Only pull true actives from the unfiltered scan into the active bucket.
+                    if item.get('completed'):
+                        continue
+                    active.append(item)
+                    seen.add(item['id'])
             active.sort(key=_action_item_list_sort_key)
             active = active[:need]
 
@@ -986,13 +1130,16 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             write_transaction.update(action_item_ref, {**update_data, 'updated_at': now})
             return True
 
-        return bool(
+        updated = bool(
             run_with_transaction_contention_retry(
                 db.transaction,
                 update_linked,
                 operation_name="action_item_linked_update",
             )
         )
+        if updated:
+            bump_action_items_list_version(uid)
+        return updated
 
     # Check if exists
     if not action_item_ref.get().exists:
@@ -1003,6 +1150,7 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
 
     # Update the document
     action_item_ref.update(update_data)
+    bump_action_items_list_version(uid)
 
     return True
 
@@ -1041,6 +1189,8 @@ def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> B
             continue
         result.updated_ids.append(item.id)
 
+    if result.updated_ids:
+        bump_action_items_list_version(uid)
     return result
 
 
@@ -1088,6 +1238,7 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
 
     # Delete the document
     action_item_ref.delete()
+    bump_action_items_list_version(uid)
 
     return True
 
@@ -1120,6 +1271,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
+    bump_action_items_list_version(uid)
     return list(action_item_ids)
 
 
@@ -1149,6 +1301,7 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
 
     if count > 0:
         batch.commit()
+        bump_action_items_list_version(uid)
 
     return count
 
@@ -1197,6 +1350,7 @@ def retire_action_items_for_conversation(
         count += 1
     if count:
         batch.commit()
+        bump_action_items_list_version(uid)
     return count
 
 
@@ -1220,6 +1374,7 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
 
     batch.commit()
+    bump_action_items_list_version(uid)
 
 
 def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
@@ -1293,6 +1448,8 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
             continue
         result.updated_ids.append(entry['id'])
 
+    if result.updated_ids:
+        bump_action_items_list_version(uid)
     return result
 
 
@@ -1315,6 +1472,7 @@ def unlock_all_action_items(uid: str) -> None:
             count = 0
     if count > 0:
         batch.commit()
+    bump_action_items_list_version(uid)
     logger.info(f"Unlocked all action items for user {uid}")
 
 

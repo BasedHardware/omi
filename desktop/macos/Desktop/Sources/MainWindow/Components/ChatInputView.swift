@@ -93,6 +93,9 @@ struct ChatInputView: View {
   @Environment(\.fontScale) private var fontScale
   @State private var isDropTargeted = false
   @State private var hasMarkedText = false
+  /// Caret claim for stray typing — a counter, because a flag already `true` cannot re-claim a caret
+  /// AppKit has since given away (`OmiTextEditor.focusRequest`).
+  @State private var caretClaims = 0
 
   private var hasText: Bool {
     !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -104,7 +107,7 @@ struct ChatInputView: View {
   /// Padding used for both the NSTextView (via textContainerInset) and the
   /// placeholder overlay — guaranteeing the cursor and placeholder align.
   private let inputPaddingH: CGFloat = 12
-  private let inputPaddingV: CGFloat = 12
+  private let inputPaddingV: CGFloat = 8
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -123,11 +126,11 @@ struct ChatInputView: View {
         )
       }
 
-      HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      HStack(alignment: .bottom, spacing: OmiSpacing.sm) {
         if attachmentsEnabled {
           Button(action: pickFiles) {
             Image(systemName: "paperclip")
-              .scaledFont(size: OmiType.heading, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(Ink.secondary)
               .frame(width: 32, height: 32)
           }
@@ -137,7 +140,7 @@ struct ChatInputView: View {
         }
 
         if showsPushToTalk {
-          PushToTalkMicButton()
+          PushToTalkMicButton(glyphSize: OmiType.body)
         }
 
         // Input field with floating toggle
@@ -173,15 +176,14 @@ struct ChatInputView: View {
                 textColor: Ink.nsPrimaryOnGlass,
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
-                onMarkedTextChange: { hasMarkedText = $0 }
+                onMarkedTextChange: { hasMarkedText = $0 },
+                focusRequest: caretClaims
               )
+              // Typing with nothing focused means this composer, not the page's search bar behind it.
+              .straysTypingHere(priority: .primary) { caretClaims &+= 1 }
             }
             .frame(maxHeight: 200)
             .clipped()
-            // The well is one step up from the shell it sits in, so the two stay distinguishable
-            // without either painting an opaque ground over the glass.
-            .background(Ink.rowFillHover)
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
 
           // Floating Ask/Act toggle (top-right, inside the input area)
           if askModeEnabled {
@@ -191,29 +193,28 @@ struct ChatInputView: View {
           }
         }
 
-        // Send/Stop button — inline to the right of the input
-        if isSending {
-          if isStopping {
-            ProgressView()
-              .controlSize(.small)
-              .frame(width: 24, height: 24)
-          } else {
-            Button(action: { onStop?() }) {
-              Image(systemName: "stop.circle.fill")
-                .scaledFont(size: 24)
-                .foregroundColor(.red.opacity(0.8))
+        // One stable target keeps the composer still as Send becomes Stop.
+        Button(action: {
+          if isSending { onStop?() } else { handleSubmit() }
+        }) {
+          ZStack {
+            if isStopping {
+              ProgressView()
+                .controlSize(.small)
+                .environment(\.colorScheme, .dark)
+            } else {
+              Image(systemName: isSending ? "stop.fill" : "arrow.up")
+                .scaledFont(size: 14, weight: .semibold)
             }
-            .buttonStyle(.plain)
           }
-        } else {
-          Button(action: handleSubmit) {
-            Image(systemName: "arrow.up.circle.fill")
-              .scaledFont(size: 24)
-              .foregroundColor(canSend ? Ink.accent : Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .disabled(!canSend)
+          .frame(width: 32, height: 32)
+          .contentShape(Circle())
         }
+        .buttonStyle(ChatComposerActionStyle(isBusy: isStopping))
+        .disabled(isStopping || (isSending ? onStop == nil : !canSend))
+        .accessibilityLabel(isStopping ? "Stopping response" : isSending ? "Stop response" : "Send message")
+        .help(isSending ? "Stop response" : "Send message (Return)")
+
       }
     }
     .chatComposerShell(fill: isDropTargeted ? Ink.rowFillHover : Ink.rowFill)
@@ -248,12 +249,13 @@ struct ChatInputView: View {
     }
   }
 
-  /// Send is enabled when there's text OR (when supported) any attachment ready
-  /// to ship — Flutter allows sending attachments without text.
+  /// Send is enabled when there's text OR (when supported) any attachment or
+  /// staged reference ready to ship — the attachment is the message.
   private var canSend: Bool {
     guard !hasMarkedText else { return false }
     if hasText { return true }
     if attachmentsEnabled && !currentAttachments.isEmpty { return true }
+    if !references.isEmpty { return true }
     return false
   }
 
@@ -548,5 +550,18 @@ struct ChatModeToggle: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
     }
     .buttonStyle(.plain)
+  }
+}
+
+/// Neutral, tactile chrome shared by the composer's mutually exclusive actions.
+struct ChatComposerActionStyle: ButtonStyle {
+  var isBusy = false
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .foregroundStyle(Ink.surface)
+      .background(Circle().fill(Ink.primary))
+      .opacity(isEnabled || isBusy ? (configuration.isPressed ? 0.65 : 1) : 0.4)
   }
 }

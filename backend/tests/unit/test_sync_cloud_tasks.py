@@ -23,6 +23,11 @@ import pytest
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
+async def _passthrough_async_resolve_geolocation(geolocation):
+    """Identity stub for utils.conversations.location: the real resolver returns its input on a miss."""
+    return geolocation
+
+
 def _load_module_with_stubs(relative_path, module_name, stubs):
     """Load a backend module with selected imports stubbed in sys.modules."""
     import importlib.util
@@ -842,30 +847,9 @@ class TestVerifyCloudTasksOidc:
         ) as verify:
             assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
                 _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='account_deletion')
+            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0)
 
         assert verify.call_args.kwargs['audience'] == env['ACCOUNT_DELETION_HANDLER_URL']
-
-    def test_account_deletion_oidc_verification_accepts_only_the_legacy_sync_audience_as_compatibility(self):
-        cloud_tasks = _load_cloud_tasks()
-        env = {
-            'SYNC_TASKS_INVOKER_SA': 'invoker@project.iam.gserviceaccount.com',
-            'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync.example.com/v2/sync-jobs/run',
-            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
-        }
-        claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
-
-        with patch.dict(os.environ, env), patch.object(
-            cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
-        ) as verify:
-            assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
-                _request_with({'authorization': 'Bearer t'})
-            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='legacy_sync')
-
-        assert [call.kwargs['audience'] for call in verify.call_args_list] == [
-            env['ACCOUNT_DELETION_HANDLER_URL'],
-            env['SYNC_TASKS_OIDC_AUDIENCE'],
-        ]
 
     def test_account_deletion_dispatch_flag_default_inline(self):
         cloud_tasks = _load_cloud_tasks()
@@ -889,7 +873,8 @@ class TestVerifyCloudTasksOidc:
         }
 
         with patch.dict(os.environ, complete_prod_env, clear=True):
-            cloud_tasks.validate_account_deletion_dispatch_configuration()
+            with patch.object(cloud_tasks, 'assert_account_deletion_queue_exists'):
+                cloud_tasks.validate_account_deletion_dispatch_configuration()
 
         with patch.dict(os.environ, {**complete_prod_env, 'ACCOUNT_DELETION_DISPATCH_MODE': 'inline'}, clear=True):
             with pytest.raises(RuntimeError, match='ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks'):
@@ -1030,6 +1015,7 @@ def _load_sync_router_for_fast_path():
         'utils.conversations',
         'utils.conversations.process_conversation',
         'utils.conversations.factory',
+        'utils.conversations.location',
         'utils.other',
         'utils.other.endpoints',
         'utils.other.storage',
@@ -1063,6 +1049,10 @@ def _load_sync_router_for_fast_path():
         sys.modules[mod_name] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
+    # submodule imports by the sync pipeline must be added to heavy_deps explicitly,
+    # since a MagicMock parent does not resolve submodules by itself.
+    sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_async_resolve_geolocation
     sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(return_value=False)
     sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
     sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

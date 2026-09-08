@@ -5,7 +5,8 @@ L10 — `is_vector_available()` treated any backend that is not `qdrant` as pine
       `get_vector_store()` raises ValueError. The gate and the factory disagreed, so 24 callers that
       degrade politely on `not is_vector_available()` would instead crash mid-request.
 L11 — `upsert_vector` and `upsert_vectors` lacked the gate their immediate neighbours have
-      (`upsert_vector2`, `update_vector_metadata`), so with no vector store they raise from the adapter
+      (`upsert_vector2`, `update_vector_metadata`), so with no vector store they raised from the adapter.
+      Upstream deleted both in the +1002 merge; the invariant now rides on those neighbours
       instead of skipping.
 L38 — `delete_canonical_memory_vectors` logged "skipping" and returned **False** when no store is
       configured. The memory outbox reads False as "delivery failed", so the event burned its five
@@ -83,16 +84,23 @@ def test_the_supported_backends_still_answer_as_before(monkeypatch, env, expecte
     assert vector_db.is_vector_available() is expected
 
 
-# --- L11: the two ungated writers ---------------------------------------------------------------
+# --- L11: a conversation writer must skip, not raise, with no store ------------------------------
+#
+# The two functions this section was written for — `upsert_vector` and `upsert_vectors` — were DELETED
+# upstream in the +1002 merge, with no caller left anywhere. The defect they carried is therefore gone
+# by removal, but the INVARIANT is not: a ns1 conversation writer must degrade politely when no vector
+# store is configured, or an on-prem deployment without one crashes mid-request instead of skipping.
+# Re-pointed at `upsert_vector2`, the surviving neighbour that always had the gate, so the invariant
+# keeps a live subject instead of being deleted along with its old one.
 
 
-def test_upsert_vector_skips_instead_of_raising(store_calls):
-    vector_db.upsert_vector('u1', 'c1', [0.1, 0.2])
+def test_a_conversation_writer_skips_instead_of_raising(store_calls):
+    vector_db.upsert_vector2('u1', 'c1', [0.1, 0.2], {'k': 'v'})
     assert store_calls == [], 'the write reached the store with no store configured'
 
 
-def test_upsert_vectors_skips_instead_of_raising(store_calls):
-    vector_db.upsert_vectors('u1', [[0.1], [0.2]], ['c1', 'c2'])
+def test_metadata_updates_skip_instead_of_raising(store_calls):
+    assert vector_db.update_vector_metadata('u1', 'c1', {'k': 'v'}) == {}
     assert store_calls == []
 
 
@@ -100,9 +108,8 @@ def test_both_still_write_when_a_store_is_configured(monkeypatch, store_calls):
     """Legacy principal: the gate must not disable the feature for a configured deployment."""
     monkeypatch.setenv('VECTOR_STORE_BACKEND', 'qdrant')
     monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')
-    vector_db.upsert_vector('u1', 'c1', [0.1])
-    vector_db.upsert_vectors('u1', [[0.1], [0.2]], ['c1', 'c2'])
-    assert store_calls == ['upsert:ns1:1', 'upsert:ns1:2']
+    vector_db.upsert_vector2('u1', 'c1', [0.1], {'k': 'v'})
+    assert store_calls == ['upsert:ns1:1']
 
 
 # --- L38: absence with no store is confirmed, not failed ----------------------------------------

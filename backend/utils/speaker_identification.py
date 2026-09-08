@@ -128,7 +128,8 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sóc|sóc|Em dic|em dic|El meu nom és|el meu nom és)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'zh': [  # Chinese
-        r"(我是|我叫|我的名字是)\s*([\u4e00-\u9fa5]+)",
+        r"(我的名字是|我叫)\s*([\u4e00-\u9fa5]{2,5}?)(?:[，。！？、,.!?\s]|$)",
+        r"(我是)\s*([\u4e00-\u9fa5]{2,4}?)(?:[，。！？、,.!?\s]|$)",
     ],
     'cs': [  # Czech
         r"\b(Jsem|jsem|Jmenuji se|jmenuji se)\s+([A-Z][a-zA-Z]*)\b",
@@ -173,10 +174,11 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Sono|sono|Mi chiamo|mi chiamo|Il mio nome è|il mio nome è)\s+([A-Z][a-zA-Z]*)\b",
     ],
     'ja': [  # Japanese
-        r"(私は|わたしは|私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+)",
+        r"(私の名前は|わたしのなまえは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
+        r"(私は|わたしは)\s*([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]{2,6}?)(?:です|だ|でーす|だよ|と申します|ともうします|と言います|といいます|[、。，．！？!?\s]|$)",
     ],
     'ko': [  # Korean
-        r"(저는|제 이름은)\s*([\uac00-\ud7a3]+)",
+        r"(저는|제\s*이름은)\s*([\uac00-\ud7a3]{2,5}?)(?:입니다|이에요|예요|이라고\s*합니다|라고\s*합니다|이야|야|[.,!?\s]|$)",
     ],
     'lt': [  # Lithuanian
         r"\b(Aš esu|aš esu|Mano vardas yra|mano vardas yra)\s+([A-Z][a-zA-Z]*)\b",
@@ -227,8 +229,254 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 
 # Check all (multi lang)
 patterns_to_check: List[str] = []
-for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
+PATTERN_TO_LANG: Dict[str, str] = {}
+for lang, lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.items():
     patterns_to_check.extend(lang_patterns)
+    for pat in lang_patterns:
+        PATTERN_TO_LANG[pat] = lang
+
+# CJK stopwords and grammatical elements to avoid false-positive speaker creation
+# from ordinary conversational sentences (#12900).
+JA_NAME_STOPWORDS = frozenset(
+    {
+        'そう',
+        'これ',
+        'それ',
+        'あれ',
+        'どれ',
+        'ここ',
+        'そこ',
+        'あそこ',
+        'どこ',
+        '私',
+        'わたし',
+        'わたくし',
+        '僕',
+        'ぼく',
+        '俺',
+        'おれ',
+        '自分',
+        'じぶん',
+        '日本人',
+        '外国人',
+        '学生',
+        '大学生',
+        '高校生',
+        '中学生',
+        '小学生',
+        '留学生',
+        '大学院生',
+        '生徒',
+        '先生',
+        '医者',
+        '医師',
+        '看護師',
+        '弁護士',
+        '会社員',
+        '公務員',
+        '研究員',
+        '店員',
+        '店長',
+        '社長',
+        '部長',
+        '課長',
+        '社員',
+        '主婦',
+        '無職',
+        '友達',
+        '人間',
+        '大人',
+        '子供',
+        '大丈夫',
+        'ちょっと',
+        'お腹',
+        '元気',
+        '誰',
+        'だれ',
+        '何',
+        'なに',
+        'なん',
+        '本当',
+        'ほんとう',
+        '無理',
+        'むり',
+        '好き',
+        'すき',
+        '嫌い',
+        'きらい',
+        '思う',
+        'おもう',
+        '行く',
+        'いく',
+        '来る',
+        'くる',
+        '見る',
+        'みる',
+        '食べる',
+        '飲む',
+        '知る',
+        'わかる',
+        '今日',
+        'きょう',
+        '明日',
+        'あした',
+        '今',
+        'いま',
+        '日本',
+        '東京',
+        '会社',
+        '仕事',
+        '学校',
+        'そう思う',
+    }
+)
+
+JA_PARTICLES_AND_VERB_ENDINGS = (
+    'が',
+    'を',
+    'に',
+    'へ',
+    'で',
+    'から',
+    'より',
+    'まで',
+    'ます',
+    'ました',
+    'ません',
+    'でした',
+    'たい',
+    'たく',
+    'ている',
+    'てます',
+    'てる',
+    'すいた',
+    'すいて',
+    '思う',
+    'おもう',
+    '思って',
+    '言う',
+    'いう',
+    '言って',
+    '疲れた',
+)
+
+ZH_NAME_STOPWORDS = frozenset(
+    {
+        '这个',
+        '那个',
+        '这些',
+        '那些',
+        '这里',
+        '那里',
+        '我们',
+        '你们',
+        '他们',
+        '她们',
+        '它们',
+        '大家',
+        '自己',
+        '别人',
+        '什么',
+        '谁',
+        '哪',
+        '哪个',
+        '哪里',
+        '怎么',
+        '怎样',
+        '一个',
+        '不是',
+        '就是',
+        '也是',
+        '都是',
+        '只是',
+        '还是',
+        '真的',
+        '觉得',
+        '认为',
+        '以为',
+        '知道',
+        '不知道',
+        '想',
+        '要',
+        '可以',
+        '应该',
+        '能够',
+        '没有',
+        '不行',
+        '中国人',
+        '外国人',
+        '学生',
+        '老师',
+        '医生',
+        '朋友',
+        '同事',
+        '老板',
+        '大人',
+        '小孩',
+        '孩子',
+        '男人',
+        '女人',
+        '人类',
+        '新人',
+        '成员',
+        '今天',
+        '明天',
+        '现在',
+        '中国',
+        '北京',
+        '公司',
+        '工作',
+        '学校',
+        '我们的这个',
+    }
+)
+
+ZH_INVALID_CHARS = frozenset('的了着得地')
+
+KO_NAME_STOPWORDS = frozenset(
+    {
+        '학생',
+        '선생님',
+        '한국인',
+        '외국인',
+        '친구',
+        '사람',
+        '사람들',
+        '이것',
+        '그것',
+        '저것',
+        '여기',
+        '거기',
+        '저기',
+        '우리',
+        '저희',
+        '누구',
+        '무엇',
+        '생각',
+        '진짜',
+        '정말',
+        '오늘',
+        '내일',
+        '지금',
+        '회사',
+        '학교',
+        '일',
+    }
+)
+
+KO_VERB_ENDINGS = (
+    '합니다',
+    '입니다',
+    '갑니다',
+    '옵니다',
+    '습니다',
+    'ㅂ니다',
+    '있습니다',
+    '없습니다',
+    '해요',
+    '가요',
+    '와요',
+)
 
 # Pronouns and filler words the introduction patterns can capture from run-on
 # transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
@@ -309,16 +557,111 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'all',
         'some',
     }
+    | JA_NAME_STOPWORDS
+    | ZH_NAME_STOPWORDS
+    | KO_NAME_STOPWORDS
 )
 
 
-def detect_speaker_from_text(text: str) -> Optional[str]:
-    for pattern in patterns_to_check:
+def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) -> bool:
+    """Validate that candidate CJK name is plausible and not a full sentence or clause."""
+    has_cjk = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name))
+    if not has_cjk:
+        return True
+
+    # CJK names are typically 2-4 characters, rarely 5-6 (compound or transliterated names)
+    if len(name) > 6:
+        return False
+
+    is_all_kanji_or_han = bool(re.search(r'^[\u4E00-\u9FAF]+$', name))
+    has_kana = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF]', name))
+    has_hangul = bool(re.search(r'[\uAC00-\uD7A3]', name))
+
+    # Japanese validation: applied when matched by Japanese pattern, or contains kana,
+    # or is all-kanji without specific non-ja language hint
+    if pattern_lang == 'ja' or has_kana or (is_all_kanji_or_han and pattern_lang != 'zh'):
+        for ending in JA_PARTICLES_AND_VERB_ENDINGS:
+            if ending in name:
+                return False
+        if name in JA_NAME_STOPWORDS:
+            return False
+
+    # Chinese Han characters validation: applied when matched by Chinese pattern,
+    # or is Han characters without specific non-zh language hint
+    if pattern_lang == 'zh' or (is_all_kanji_or_han and pattern_lang != 'ja'):
+        if len(name) > 5:
+            return False
+        if name in ZH_NAME_STOPWORDS:
+            return False
+        for char in ZH_INVALID_CHARS:
+            if char in name:
+                return False
+
+    # Korean Hangul validation: applied when matched by Korean pattern or contains Hangul
+    if pattern_lang == 'ko' or has_hangul:
+        if len(name) > 5:
+            return False
+        if name in KO_NAME_STOPWORDS:
+            return False
+        for ending in KO_VERB_ENDINGS:
+            if name.endswith(ending):
+                return False
+
+    return True
+
+
+def detect_speaker_from_text(text: str, language: Optional[str] = None) -> Optional[str]:
+    if language and language in SPEAKER_IDENTIFICATION_PATTERNS:
+        seen = set()
+        patterns = []
+        for p in SPEAKER_IDENTIFICATION_PATTERNS[language]:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
+        if language != 'en' and 'en' in SPEAKER_IDENTIFICATION_PATTERNS:
+            for p in SPEAKER_IDENTIFICATION_PATTERNS['en']:
+                if p not in seen:
+                    seen.add(p)
+                    patterns.append(p)
+        for p in patterns_to_check:
+            if p not in seen:
+                seen.add(p)
+                patterns.append(p)
+    else:
+        patterns = patterns_to_check
+
+    for pattern in patterns:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name and len(name) >= 2 and name.lower() not in SPEAKER_NAME_STOPWORDS:
-                return name.capitalize()
+            if not name:
+                continue
+
+            matched_lang = PATTERN_TO_LANG.get(pattern)
+
+            # Strip trailing Japanese copulas if captured
+            if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', name):
+                name = re.sub(r'(?:です|だ|でーす|だよ)$', '', name).strip()
+            # Strip trailing Korean copulas if captured
+            if re.search(r'[\uAC00-\uD7A3]', name):
+                name = re.sub(r'(?:입니다|이에요|예요|이야|야)$', '', name).strip()
+
+            name = name.strip(' \t\r\n、。，．！？!?.,')
+
+            if len(name) < 2:
+                continue
+
+            if name.lower() in SPEAKER_NAME_STOPWORDS:
+                continue
+
+            if not _is_valid_cjk_speaker_name(name, pattern_lang=matched_lang):
+                continue
+
+            return (
+                name
+                if re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7A3]', name)
+                else name.capitalize()
+            )
     return None
 
 
@@ -381,6 +724,14 @@ async def extract_speaker_samples(
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
+
+        # Sample extraction runs live, while the conversation is still processing, so
+        # conversation['language'] (only resolved at finalization) is normally empty here.
+        # Fall back to the user's app-level language preference, same as chat/memories/
+        # process_conversation, instead of silently defaulting to English downstream.
+        sample_language = conversation.get('language') or await run_blocking(
+            db_executor, users_db.get_user_language_preference, uid
+        )
 
         started_at = conversation.get('started_at')
         if not started_at:
@@ -530,7 +881,9 @@ async def extract_speaker_samples(
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
             # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text, language=sample_language
+            )
             if not is_valid:
                 logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment

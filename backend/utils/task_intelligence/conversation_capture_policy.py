@@ -58,9 +58,10 @@ def capture_signals_for_action_item(
             if source_segment_ids.intersection(invocation.segment_ids)
         ]
         if capture_kind == 'explicit_command':
-            if not relevant_verdicts or any(
-                verdict not in _ACCEPTED_EXPLICIT_VERDICTS for verdict in relevant_verdicts
-            ):
+            # Only an explicit adverse verdict demotes. An empty adjudication
+            # (timeout, provider blip, or no overlapping invocation) leaves the
+            # extractor's explicit_command intact.
+            if any(verdict not in _ACCEPTED_EXPLICIT_VERDICTS for verdict in relevant_verdicts):
                 capture_kind = 'direct_request'
         elif relevant_verdicts and all(verdict == 'task_command' for verdict in relevant_verdicts):
             capture_kind = 'explicit_command'

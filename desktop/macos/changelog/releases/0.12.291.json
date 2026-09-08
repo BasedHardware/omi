@@ -1,0 +1,8 @@
+{
+  "version": "0.12.291",
+  "date": "2026-09-05",
+  "changes": [
+    "Say \"type\" during push-to-talk to dictate into whatever app you are in. Release the key and the whole dictation is transcribed, cleaned up, and pasted in one piece — and it still works with no network",
+    "The notch dots turn red once a push-to-talk hold is recognized as a dictation, so you can see \"type\" was heard before you let go"
+  ]
+}

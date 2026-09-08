@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-follow-steals-reader-gesture",
+  "violated_contract": "A live auto-following transcript must transfer scroll ownership to the reader at the first user-scroll signal. While a driven follow animation owns the Scrollable, a pending reader drag can be orphaned (the scrollable ignores pointers and swaps drag recognizers while a driven activity runs), so no user-scroll notification ever fires; the follow then completes, clears the unfollowed flag, and the next live tick yanks the reader back to the live edge and re-pins.",
+  "canonical_prevention": "Gate every follow entry point on reader intent (dragging, unfollowed, interrupted); stop the running animateTo at the reader's current offset on any user-scroll signal; and recover gestures the scrollable orphaned via an ancestor pointer Listener so the drag always lands. Cover with a widget test that overlaps an in-flight 500ms follow animation with a reader drag plus a mid-gesture live content tick, asserting the offset stays away from maxScrollExtent, the scroll state does not re-pin, and the jump-to-latest control appears.",
+  "canonical_prevention_artifact": ["app/test/widgets/transcript_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/widgets/transcript.dart"],
+  "status": "open"
+}
