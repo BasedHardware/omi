@@ -15,6 +15,7 @@ holds bearer credentials.
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -195,17 +196,23 @@ def save(config: Config) -> None:
         "profiles": {name: p.to_toml_dict() for name, p in config.profiles.items()},
     }
 
-    tmp_path = config.path.with_suffix(config.path.suffix + ".tmp")
-    # Clamp the umask for POSIX. The Windows helper applies an equivalent DACL.
+    # Unique temp path per invocation: two concurrent save() calls must not
+    # share (and unlink) each other's temp file. O_EXCL still guards against
+    # following an attacker-planted symlink at this path.
+    # On FileExistsError we loop and pick a fresh name; we never unlink the
+    # existing file because it may be another live writer's temp (concurrent
+    # saves share the pid). The loop terminates on success; a pathological
+    # run of collisions only re-rolls a 64-bit name, and the raised error at
+    # exhaustion is the caller's real failure signal.
     old_umask = os.umask(0o077)
     try:
-        # O_EXCL guards against following an attacker-planted symlink at this path.
-        try:
-            fd = open_owner_only(tmp_path)
-        except FileExistsError:
-            # Stale temp from a previous interrupted save — remove and retry once.
-            os.unlink(tmp_path)
-            fd = open_owner_only(tmp_path)
+        while True:
+            tmp_path = config.path.with_suffix(config.path.suffix + f".{os.getpid()}.{secrets.token_hex(8)}.tmp")
+            try:
+                fd = open_owner_only(tmp_path)
+                break
+            except FileExistsError:
+                continue
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)
