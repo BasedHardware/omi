@@ -352,12 +352,16 @@ class LiveConversationController:
         if self.host.client_conversation_id:
             await self.create_new_in_progress_conversation()
             return None
-        if self.host.request.onboarding_mode:
+        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
             # A speech-profile recording (onboarding step or Settings redo) is its
             # own conversation. Attaching to a still-open one from a previous
             # attempt makes combine_segments() merge the new speech into that
             # conversation's last segment, and the client then shows the words
             # from last time as soon as the user starts talking again.
+            # Admission, not the raw request flag, owns this decision: the
+            # runtime refuses onboarding provenance for completed accounts, and
+            # an unadmitted onboarding claim must keep the ordinary session's
+            # existing-conversation behavior instead of dodging it.
             await self.create_new_in_progress_conversation()
             return None
         existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)

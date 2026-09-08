@@ -16,11 +16,12 @@ def anyio_backend():
     return 'asyncio'
 
 
-def _controller(*, onboarding_mode: bool):
+def _controller(*, onboarding_mode: bool, onboarding_admitted: bool = True):
     controller = object.__new__(LiveConversationController)
     controller.host = SimpleNamespace(
         is_multi_channel=False,
         client_conversation_id=None,
+        onboarding_admitted=onboarding_admitted,
         request=SimpleNamespace(uid='user-1', onboarding_mode=onboarding_mode, source='phone'),
         persistence=SimpleNamespace(call=AsyncMock(return_value=None)),
     )
@@ -36,6 +37,19 @@ async def test_speech_profile_session_never_attaches_to_an_existing_conversation
 
     controller.create_new_in_progress_conversation.assert_awaited_once_with()
     controller.host.persistence.call.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_unadmitted_onboarding_claim_still_consults_the_in_progress_pointer():
+    # onboarding=enabled is a client hint: without the runtime's admission the
+    # fresh-conversation shortcut must not fire, or the flag alone would dodge
+    # the existing-conversation behavior of an ordinary session.
+    controller = _controller(onboarding_mode=True, onboarding_admitted=False)
+
+    assert await controller.prepare() is None
+
+    controller.host.persistence.call.assert_awaited_once()
+    controller.create_new_in_progress_conversation.assert_awaited_once_with()
 
 
 @pytest.mark.anyio
