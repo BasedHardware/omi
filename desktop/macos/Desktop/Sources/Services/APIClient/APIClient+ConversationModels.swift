@@ -405,14 +405,38 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     structured.overview
   }
 
-  /// Returns duration in seconds based on start/finish times or transcript
+  /// Returns duration in seconds: the transcript span when the record carries
+  /// transcript segments, the wall window only when it does not.
+  ///
+  /// `started_at` is the live-socket streaming-session origin, not the moment
+  /// this conversation's speech began, so `finished_at - started_at` over-counts
+  /// by however long the socket had already been open — an 8s dictation scrap
+  /// read as 42m45s here while mobile showed 8s (#4056). Mirrors the backend
+  /// helper `utils/conversations/duration.py` and the Flutter
+  /// `ServerConversation.getDurationInSeconds`; the shared vectors live in
+  /// `contracts/parity/conversation_duration.json`.
+  ///
+  /// A list response that omits `transcript_segments` leaves nothing to measure,
+  /// so those rows still report the wall window — the same answer mobile gives.
   var durationInSeconds: Int {
-    if let start = startedAt, let end = finishedAt {
-      return Int(end.timeIntervalSince(start))
+    if let span = transcriptSpanSeconds {
+      return Int(span)
     }
-    // Fallback to transcript duration
-    guard let lastSegment = transcriptSegments.last else { return 0 }
-    return Int(lastSegment.end)
+    guard let start = startedAt, let end = finishedAt else { return 0 }
+    return max(0, Int(end.timeIntervalSince(start)))
+  }
+
+  /// Largest valid segment `end`, or nil when no segment can answer. Segments
+  /// with blank text, non-finite bounds, or `end < start` are ignored.
+  private var transcriptSpanSeconds: Double? {
+    var span: Double?
+    for segment in transcriptSegments {
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      guard segment.start.isFinite, segment.end.isFinite, segment.end >= segment.start else { continue }
+      let end = max(0, segment.end)
+      span = span.map { Swift.max($0, end) } ?? end
+    }
+    return span
   }
 
   /// Formatted duration string (e.g., "5m 30s")
