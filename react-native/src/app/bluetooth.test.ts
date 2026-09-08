@@ -1,4 +1,4 @@
-import {emptyDeviceListHint} from './bluetooth';
+import {bluetoothSessionColor, emptyDeviceListHint} from './bluetooth';
 
 test.each([
   [null, 'poweredOn', 'No Omi device was discovered.'],
@@ -59,3 +59,18 @@ test('emptyDeviceListHint keeps Scanning copy only while a scan is busy', () => 
     emptyDeviceListHint('Scanning for Omi devices', 'poweredOn', true),
   ).toBe('Scanning for Omi devices');
 });
+
+test.each([
+  [null, 'unknown', '#b4ad9f'],
+  ['Bluetooth adapter not checked', 'unknown', '#b4ad9f'],
+  ['Bluetooth is unavailable', 'unknown', '#d9826f'],
+  ['Bluetooth adapter not checked', 'poweredOn', '#45b79b'],
+  ['', 'poweredOff', '#d9826f'],
+] as const)(
+  'bluetoothSessionColor(%j, %s)',
+  (lastEvent, bluetooth, expected) => {
+    expect(
+      bluetoothSessionColor(lastEvent === null ? null : {bluetooth, lastEvent}),
+    ).toBe(expected);
+  },
+);

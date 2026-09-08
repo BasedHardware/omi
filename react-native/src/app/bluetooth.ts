@@ -24,6 +24,18 @@ export function bluetoothSessionLabel(
   return bluetoothStatusLabel(snapshot.bluetooth);
 }
 
+export function bluetoothSessionColor(
+  snapshot: {bluetooth: string; lastEvent?: string | null} | null,
+): string {
+  if (bluetoothSessionLabel(snapshot) === 'Checking Bluetooth…') {
+    return '#b4ad9f';
+  }
+  if (snapshot?.bluetooth === 'poweredOn') {
+    return '#45b79b';
+  }
+  return '#d9826f';
+}
+
 export function bluetoothStatusLabel(state: string): string {
   switch (state) {
     case 'poweredOn':

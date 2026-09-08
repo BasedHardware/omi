@@ -68,6 +68,7 @@ import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
 import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {bluetoothSessionColor} from './bluetooth';
 import {useDesktopReads} from './useDesktopReads';
 import {useTaskMutations} from './useTaskMutations';
 import {useOnboarding} from './useOnboarding';
@@ -821,12 +822,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     label: homeStatus,
     color: homeStatusColor,
   } = homeConnectionStatus(nativeSnapshot);
-  const bluetoothStatusColor =
-    nativeSnapshot === null
-      ? '#b4ad9f'
-      : nativeSnapshot.bluetooth === 'poweredOn'
-      ? '#45b79b'
-      : '#d9826f';
+  const bluetoothStatusColor = bluetoothSessionColor(nativeSnapshot);
   const currentItems = reads.slice(0, 2);
 
   const firstRunOnboarding = (
