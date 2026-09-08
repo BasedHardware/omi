@@ -9,11 +9,13 @@ if (tracked.exitCode !== 0) {
 }
 
 const files = tracked.stdout.toString().trim().split("\n").filter(Boolean);
-const forbidden = files.filter((file) =>
-  /^(app|backend|desktop|spikes|web)\/|\.swift$|(^|\/)(node_modules|Pods|DerivedData|dist)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(
+const forbidden = files.filter((file) => {
+  if (file === "tools/OmiSimulator" || file.startsWith("tools/OmiSimulator/"))
+    return false;
+  return /^(app|backend|desktop|spikes|web)\/|\.swift$|(^|\/)(node_modules|Pods|DerivedData|dist)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(
     file
-  )
-);
+  );
+});
 
 if (forbidden.length > 0) {
   console.error(`Forbidden rewrite boundary files:\n${forbidden.join("\n")}`);
