@@ -19,7 +19,6 @@ import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import House from 'lucide-react-native/icons/house';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Mic from 'lucide-react-native/icons/mic';
 import Phone from 'lucide-react-native/icons/phone';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
@@ -405,9 +404,6 @@ export function MobileAppSurface({
                 ? 'Your Omi is connected. Waiting for audio…'
                 : ''}
             </Text>
-            <View style={styles.microphoneButton}>
-              <Mic color={mobileColor.text} size={18} />
-            </View>
           </View>
         );
       }
@@ -886,15 +882,6 @@ const styles = StyleSheet.create({
   },
   captureDotPaused: {backgroundColor: mobileColor.textSubtle},
   transcript: {...mobileType.body, color: mobileColor.textMuted, flex: 1},
-  microphoneButton: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceRaised,
-    borderRadius: mobileRadius.round,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  microphoneGlyph: {color: mobileColor.text, fontSize: 13},
   section: {gap: mobileSpace.md},
   sectionHeader: {
     alignItems: 'center',

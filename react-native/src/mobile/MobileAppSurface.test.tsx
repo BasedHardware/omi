@@ -749,3 +749,34 @@ test('live capture without a transcript does not claim speech text', () => {
   expect(renderedText(renderer)).not.toContain('Waiting for audio');
   act(() => renderer.unmount());
 });
+
+test('compact Home omits a capture microphone without a start-capture producer', () => {
+  const renderer = render({
+    capture: {active: false, waitingForAudio: false, transcript: ''},
+  });
+  const captureCard = renderer.root.find(
+    node => node.props.style?.minHeight === 74,
+  );
+  expect(
+    captureCard.findAll(
+      node => node.props.size != null || node.props.onPress != null,
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Not capturing');
+  act(() =>
+    renderer.update(
+      <MobileAppSurface
+        {...buildProps({
+          capture: {active: true, waitingForAudio: false, transcript: ''},
+        })}
+      />,
+    ),
+  );
+  expect(
+    renderer.root
+      .find(node => node.props.style?.minHeight === 74)
+      .findAll(node => node.props.size != null || node.props.onPress != null),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Listening');
+  act(() => renderer.unmount());
+});
