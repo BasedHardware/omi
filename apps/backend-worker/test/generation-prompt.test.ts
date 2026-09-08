@@ -1185,6 +1185,68 @@ describe("admit replay attachments", () => {
     expect(admitted.message.chatSessionId).toBe("named-session");
     expect(JSON.parse(stored!.payload).chatSessionId).toBe("named-session");
   });
+
+  test("admit replay of an unreadable stored ChatCreate is conflict instead of throwing", async () => {
+    const create = {
+      op: "create" as const,
+      opId: "op-replay-broken-admit",
+      id: "msg-replay-broken-admit",
+      at: 1,
+      text: "hello",
+      sender: "human" as const,
+      journalRevision: 0,
+      attachmentIds: [] as string[],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(create.id, "acct-a", create.text, 1, JSON.stringify(create))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        create.id,
+        "acct-a",
+        create.opId,
+        "{broken",
+        "gen-replay-broken-admit"
+      )
+      .run();
+    await expect(admitMessage(db, "acct-a", create, null)).resolves.toBe(
+      "conflict"
+    );
+  });
+
+  test("admit replay of a JSON-null stored ChatCreate is conflict instead of throwing", async () => {
+    const create = {
+      op: "create" as const,
+      opId: "op-replay-null-admit",
+      id: "msg-replay-null-admit",
+      at: 1,
+      text: "hello",
+      sender: "human" as const,
+      journalRevision: 0,
+      attachmentIds: [] as string[],
+    };
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, 1, ?)"
+      )
+      .bind(create.id, "acct-a", create.text, 1, JSON.stringify(create))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(create.id, "acct-a", create.opId, "null", "gen-replay-null-admit")
+      .run();
+    await expect(admitMessage(db, "acct-a", create, null)).resolves.toBe(
+      "conflict"
+    );
+  });
 });
 
 describe("pending generation admission", () => {

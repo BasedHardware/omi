@@ -85,8 +85,14 @@ export async function admitMessage(
     .first<{ payload: string; generationId: string }>();
 
   if (prior !== null) {
-    const previous = JSON.parse(prior.payload) as ChatCreate;
-    if (computePayloadHash(previous) !== payloadHash) return "conflict";
+    let previous: unknown;
+    try {
+      previous = JSON.parse(prior.payload);
+    } catch {
+      return "conflict";
+    }
+    if (!isChatCreate(previous) || computePayloadHash(previous) !== payloadHash)
+      return "conflict";
     let message = await readMessage(db, accountId, input.id);
     if (message === null)
       throw new Error("admission references missing message");
