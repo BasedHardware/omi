@@ -54,7 +54,7 @@ async def fetch_osv(client: httpx.AsyncClient, path: str, body: dict[str, Any] |
         raise OSVError("OSV timed out. Try again later; the lookup was not completed.", 504) from exc
     except httpx.HTTPError as exc:
         raise OSVError("Could not reach OSV. Try again later; the lookup was not completed.") from exc
-    except (ValueError, UnicodeError) as exc:
+    except (ValueError, UnicodeError, RecursionError) as exc:
         raise OSVError("OSV returned an invalid response. The lookup was not completed.") from exc
     if not isinstance(data, dict) or "error" in data:
         raise OSVError("OSV returned an invalid response. The lookup was not completed.")

@@ -2,6 +2,7 @@
 
 import copy
 import json
+import sys
 import unittest
 
 import httpx
@@ -235,6 +236,18 @@ class ToolTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 502)
                 self.assertEqual(set(response.json()), {"error"})
                 self.assertNotIn("no matching", response.text)
+
+    def test_deeply_nested_upstream_json_uses_the_error_contract(self):
+        depth = sys.getrecursionlimit() + 100
+        content = b'{"vulns":' + b"[" * depth + b'"provider-canary"' + b"]" * depth + b"}"
+        self.assertLess(len(content), MAX_RESPONSE_BYTES)
+        for path, payload in ((QUERY_PATH, QUERY), (DETAIL_PATH, {"vulnerability_id": ADVISORY["id"]})):
+            with self.subTest(path=path), self.client(lambda request: httpx.Response(200, content=content)) as client:
+                response = client.post(path, json=payload)
+                self.assertEqual(response.status_code, 502)
+                self.assertEqual(set(response.json()), {"error"})
+                self.assertIn("invalid response", response.json()["error"])
+                self.assertNotIn("provider-canary", response.text)
 
 
 if __name__ == "__main__":
