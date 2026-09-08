@@ -37,6 +37,17 @@ final class PeoplePageOverviewTests: XCTestCase {
       lastHeardAt: nil, sampleURLs: (0..<clips).map { URL(fileURLWithPath: "/tmp/clip-\($0).wav") })
   }
 
+  func testSnippetsReadTheirTimestampFromTheFileNameAndCaptionLengthAndAge() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let url = URL(fileURLWithPath: "/tmp/voice-samples/anna/1799996400000.wav")
+    XCTAssertEqual(VoiceSnippet.recordedAt(from: url), Date(timeIntervalSince1970: 1_799_996_400))
+    XCTAssertNil(VoiceSnippet.recordedAt(from: URL(fileURLWithPath: "/tmp/clip.wav")))
+    let caption = VoiceSnippet.caption(durationSeconds: 7.6, recordedAt: VoiceSnippet.recordedAt(from: url), now: now)
+    XCTAssertTrue(caption.hasPrefix("8s · "), caption)
+    XCTAssertEqual(VoiceSnippet.caption(durationSeconds: 0.2, recordedAt: nil), "1s")
+    XCTAssertEqual(VoiceSnippet.load([URL(fileURLWithPath: "/tmp/does-not-exist.wav")]), [])
+  }
+
   func testCaptionsSayWhatOmiKnows() {
     let now = Date()
     XCTAssertEqual(

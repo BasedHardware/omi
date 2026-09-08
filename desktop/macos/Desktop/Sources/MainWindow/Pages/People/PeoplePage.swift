@@ -16,7 +16,6 @@ struct PersonOverview: Identifiable {
   var lastTalkedAt: Date? { activity?.lastTalkedAt }
   var hasVoice: Bool { voice != nil }
   var isFavorite: Bool { voice?.isFavorite ?? false }
-  var sampleURL: URL? { voice?.sampleURLs.first }
 
   /// Favorites first, then most recently talked to; never-heard people by name at the end.
   static func ordered(
@@ -32,7 +31,7 @@ struct PersonOverview: Identifiable {
       .sorted { lhs, rhs in
         if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
         switch (lhs.lastTalkedAt, rhs.lastTalkedAt) {
-        case let (l?, r?) where l != r: return l > r
+        case (let l?, let r?) where l != r: return l > r
         case (.some, .none): return true
         case (.none, .some): return false
         default: return lhs.person.name.localizedCaseInsensitiveCompare(rhs.person.name) == .orderedAscending
@@ -44,7 +43,8 @@ struct PersonOverview: Identifiable {
     guard let voice else { return "No voice yet — name them in a live transcript" }
     let minutes = Int(voice.speechSeconds / 60)
     let amount = minutes >= 1 ? "\(minutes) min heard" : "\(Int(voice.speechSeconds)) s heard"
-    let clips = voice.sampleURLs.isEmpty ? "" : " · \(voice.sampleURLs.count) clip\(voice.sampleURLs.count == 1 ? "" : "s")"
+    let clips =
+      voice.sampleURLs.isEmpty ? "" : " · \(voice.sampleURLs.count) clip\(voice.sampleURLs.count == 1 ? "" : "s")"
     return (voice.isEnrolled ? "Voice known · \(amount)" : "Voice guessed · \(amount)") + clips
   }
 
@@ -54,6 +54,40 @@ struct PersonOverview: Identifiable {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .short
     return "\(count) \(noun) · last \(formatter.localizedString(for: last, relativeTo: now))"
+  }
+}
+
+/// One saved clip of a voice: what the person sounds like.
+struct VoiceSnippet: Identifiable, Equatable {
+  let url: URL
+  let durationSeconds: Double
+  let recordedAt: Date?
+
+  var id: URL { url }
+
+  /// Clip files are named by their millisecond timestamp (`LocalVoiceprintStore.addSample`).
+  static func recordedAt(from url: URL) -> Date? {
+    guard let millis = Double(url.deletingPathExtension().lastPathComponent) else { return nil }
+    return Date(timeIntervalSince1970: millis / 1000)
+  }
+
+  static func caption(durationSeconds: Double, recordedAt: Date?, now: Date = Date()) -> String {
+    let seconds = max(1, Int(durationSeconds.rounded()))
+    guard let recordedAt else { return "\(seconds)s" }
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .short
+    return "\(seconds)s · \(formatter.localizedString(for: recordedAt, relativeTo: now))"
+  }
+
+  /// Read each clip's length; a clip that cannot be opened is left out.
+  static func load(_ urls: [URL]) -> [VoiceSnippet] {
+    urls.compactMap { url in
+      guard let file = try? AVAudioFile(forReading: url), file.fileFormat.sampleRate > 0 else { return nil }
+      return VoiceSnippet(
+        url: url,
+        durationSeconds: Double(file.length) / file.fileFormat.sampleRate,
+        recordedAt: recordedAt(from: url))
+    }
   }
 }
 
@@ -71,6 +105,8 @@ struct PeoplePage: View {
   @State private var activity: [String: PersonActivity] = [:]
   @State private var voices: [LocalSpeakerDiarizer.VoiceSummary] = []
   @State private var personPendingDeletion: Person?
+  /// Clips per voice owner ("user" or the person id), loaded with the summaries.
+  @State private var snippets: [String: [VoiceSnippet]] = [:]
   @StateObject private var samplePlayer = VoiceSamplePlayer()
 
   private var userVoice: LocalSpeakerDiarizer.VoiceSummary? {
@@ -132,11 +168,20 @@ struct PeoplePage: View {
 
   private var youCard: some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
-      avatar(initial: "Y", isUser: true)
+      avatar(initial: userInitial, isUser: true)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("You")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(Ink.primary)
+        HStack(spacing: OmiSpacing.sm) {
+          Text(userName)
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          Text("You")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.surface)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Ink.primary))
+            .accessibilityIdentifier("people-you-capsule")
+        }
         Text(userVoiceCaption)
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
@@ -144,11 +189,9 @@ struct PeoplePage: View {
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.tertiary)
           .fixedSize(horizontal: false, vertical: true)
+        snippetRow(owner: LocalVoiceprintStore.sampleOwner(nil))
       }
       Spacer(minLength: 0)
-      if let url = userVoice?.sampleURLs.first {
-        playButton(url: url, identifier: "people-play-user-voice")
-      }
       if userVoice != nil {
         pillButton(title: "Forget my voice", identifier: "people-forget-user-voice") {
           await LocalSpeakerDiarizer.shared.forgetVoice(personId: nil)
@@ -163,11 +206,23 @@ struct PeoplePage: View {
     .accessibilityIdentifier("people-you-card")
   }
 
+  /// The signed-in name; "You" alone when the account has none.
+  private var userName: String {
+    let name = AuthService.shared.displayName
+    return name.isEmpty ? "You" : name
+  }
+
+  private var userInitial: String {
+    let name = AuthService.shared.displayName
+    return name.isEmpty ? "Y" : String(name.prefix(1)).uppercased()
+  }
+
   private var userVoiceCaption: String {
     guard let userVoice else { return "Voice not learned yet" }
     let minutes = Int(userVoice.speechSeconds / 60)
     let amount = minutes >= 1 ? "\(minutes) min" : "\(Int(userVoice.speechSeconds)) s"
-    return userVoice.isEnrolled ? "Voice known · \(amount) heard" : "Voice guessed from who talks most · \(amount) heard"
+    return userVoice.isEnrolled
+      ? "Voice known · \(amount) heard" : "Voice guessed from who talks most · \(amount) heard"
   }
 
   // MARK: - People
@@ -209,6 +264,7 @@ struct PeoplePage: View {
         Text(PersonOverview.voiceCaption(row.voice))
           .scaledFont(size: OmiType.caption)
           .foregroundColor(row.hasVoice ? Ink.secondary : Ink.tertiary)
+        snippetRow(owner: LocalVoiceprintStore.sampleOwner(row.id))
       }
       Spacer(minLength: 0)
       if row.hasVoice {
@@ -224,11 +280,10 @@ struct PeoplePage: View {
             .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
-        .help(row.isFavorite ? "Unpin — this voice can be forgotten when space runs out" : "Pin — never forget this voice")
+        .help(
+          row.isFavorite ? "Unpin — this voice can be forgotten when space runs out" : "Pin — never forget this voice"
+        )
         .accessibilityIdentifier("people-favorite-\(row.id)")
-      }
-      if let url = row.sampleURL {
-        playButton(url: url, identifier: "people-play-\(row.id)")
       }
       if row.hasVoice {
         pillButton(title: "Forget voice", identifier: "people-forget-voice-\(row.id)") {
@@ -266,19 +321,40 @@ struct PeoplePage: View {
       )
   }
 
-  private func playButton(url: URL, identifier: String) -> some View {
-    let isPlaying = samplePlayer.playingURL == url
+  /// What this voice sounds like: one chip per saved clip, newest first.
+  @ViewBuilder
+  private func snippetRow(owner: String) -> some View {
+    if let clips = snippets[owner], !clips.isEmpty {
+      FlowLayout(spacing: OmiSpacing.xs) {
+        ForEach(clips) { clip in
+          snippetChip(clip, owner: owner)
+        }
+      }
+      .padding(.top, OmiSpacing.xxs)
+      .accessibilityIdentifier("people-snippets-\(owner)")
+    }
+  }
+
+  private func snippetChip(_ clip: VoiceSnippet, owner: String) -> some View {
+    let isPlaying = samplePlayer.playingURL == clip.url
     return Button {
-      samplePlayer.toggle(url)
+      samplePlayer.toggle(clip.url)
     } label: {
-      Image(systemName: isPlaying ? "stop.circle" : "play.circle")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 24, height: 24)
+      HStack(spacing: 4) {
+        Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+        Text(VoiceSnippet.caption(durationSeconds: clip.durationSeconds, recordedAt: clip.recordedAt))
+          .scaledFont(size: OmiType.micro, weight: .medium)
+          .monospacedDigit()
+      }
+      .foregroundColor(isPlaying ? Ink.surface : Ink.secondary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, 3)
+      .background(Capsule().fill(isPlaying ? Ink.primary : Ink.rowFillHover))
     }
     .buttonStyle(.plain)
-    .help(isPlaying ? "Stop" : "Play a clip of this voice")
-    .accessibilityIdentifier(identifier)
+    .help(isPlaying ? "Stop" : "Hear what this voice sounds like")
+    .accessibilityIdentifier("people-snippet-\(owner)-\(clip.url.lastPathComponent)")
   }
 
   private func pillButton(title: String, identifier: String, action: @escaping () async -> Void) -> some View {
@@ -303,6 +379,11 @@ struct PeoplePage: View {
     await appState.fetchPeople()
     voices = await LocalSpeakerDiarizer.shared.voiceSummaries()
     activity = (try? await TranscriptionStorage.shared.personActivity()) ?? [:]
+    var loaded: [String: [VoiceSnippet]] = [:]
+    for voice in voices {
+      loaded[LocalVoiceprintStore.sampleOwner(voice.personId)] = VoiceSnippet.load(voice.sampleURLs)
+    }
+    snippets = loaded
   }
 }
 
