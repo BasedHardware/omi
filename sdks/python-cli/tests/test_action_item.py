@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+import httpx
+import pytest
+
 from omi_cli.main import app
 
 
@@ -56,3 +59,33 @@ def test_action_item_get_missing_returns_not_found_exit_code(authed_profile, res
     result = cli_runner.invoke(app, ["action-item", "get", "missing"])
     assert result.exit_code == 5  # EXIT_NOT_FOUND
     assert "not found" in result.stderr.lower()
+
+
+@pytest.mark.parametrize("target_index", [999, 1000, 1200])
+def test_action_item_get_finds_items_beyond_five_pages(authed_profile, respx_mock, cli_runner, target_index) -> None:
+    items = [{"id": f"a{i}", "description": "task", "completed": False} for i in range(target_index + 1)]
+
+    def list_page(request):
+        offset = int(request.url.params["offset"])
+        limit = int(request.url.params["limit"])
+        return httpx.Response(200, json=items[offset : offset + limit])
+
+    route = respx_mock.get("/v1/dev/user/action-items").mock(side_effect=list_page)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", f"a{target_index}"])
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == items[target_index]
+    assert [int(call.request.url.params["offset"]) for call in route.calls] == list(range(0, target_index + 1, 200))
+
+
+def test_action_item_get_exhausts_full_pages_before_reporting_missing(authed_profile, respx_mock, cli_runner) -> None:
+    items = [{"id": f"a{i}", "description": "task", "completed": False} for i in range(1200)]
+
+    def list_page(request):
+        offset = int(request.url.params["offset"])
+        limit = int(request.url.params["limit"])
+        return httpx.Response(200, json=items[offset : offset + limit])
+
+    route = respx_mock.get("/v1/dev/user/action-items").mock(side_effect=list_page)
+    result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
+    assert result.exit_code == 5
+    assert [int(call.request.url.params["offset"]) for call in route.calls] == list(range(0, 1201, 200))
