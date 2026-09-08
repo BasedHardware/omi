@@ -1,0 +1,613 @@
+#!/usr/bin/env bash
+# omi-e2e-pool — a fixed pool of pre-authorized named bundles for headless
+# end-to-end testing, with a lease per slot so parallel lanes never build into
+# each other's app.
+#
+# WHY THIS EXISTS
+#
+# macOS binds every TCC grant (Microphone, Screen Recording, Accessibility,
+# Notifications, Automation, folders) to a bundle ID plus the signing
+# certificate. A named bundle therefore has to be granted BY A HUMAN, once, and
+# then keeps its grants across every rebuild — as long as the bundle ID and the
+# identity never change. Deriving a fresh `omi-<worktree>` bundle per task (the
+# run.sh default) means every task starts with zero grants and a headless agent
+# stops dead at the first system dialog it cannot click. Measured on one host:
+# 12 named bundles installed, ~30 bundle IDs in TCC, 78 signing stamps — every
+# one of them granted by hand, once, then abandoned.
+#
+# A pool inverts that: `omi-e2e-1` … `omi-e2e-N` are granted once, and a task
+# LEASES a slot instead of minting a bundle. The lease is what makes it safe:
+# `/Applications/<slot>.app` is machine-global and run.sh does not cross-lock
+# explicit OMI_APP_NAME values, so two lanes building into the same slot would
+# clobber each other's app mid-test. run.sh refuses to build a pool slot unless
+# the caller holds its lease (see `verify`).
+#
+# LIVENESS, from bin/omi-lease's rule: liveness is decidable, timeouts are
+# heuristic. A lease belongs to a WORKTREE. It is defunct when that worktree is
+# gone, when a recorded holder pid has died, or — only as a backstop — when no
+# pool command has touched it for OMI_E2E_POOL_STALE seconds. A live holder is
+# never evicted; `acquire` names it and stops.
+#
+# Usage:
+#   omi-e2e-pool acquire [--slot N] [--worktree PATH] [--holder NAME] [--pid PID]
+#                        [--auth shared|isolated]
+#   omi-e2e-pool env     [--slot N] [--worktree PATH]      export lines; eval them
+#   omi-e2e-pool run     [--slot N] -- <command...>        acquire, export, run
+#   omi-e2e-pool verify  <app-slug>                        run.sh guard; 0 = allowed
+#   omi-e2e-pool release [--slot N | --worktree PATH]
+#   omi-e2e-pool check   [--slot N]                        permissions preflight
+#   omi-e2e-pool setup   [--slot N]                        the one-time human checklist
+#   omi-e2e-pool status / reap / slots
+#
+# Configuration (environment):
+#   OMI_E2E_POOL_SIZE           number of slots (default 3; any positive integer)
+#   OMI_E2E_POOL_PREFIX         slot N is "<prefix>-N" (default omi-e2e)
+#   OMI_E2E_POOL_DIR            lease/config directory
+#                               (default ~/Library/Application Support/Omi Dev Bundles/.e2e-pool)
+#   OMI_E2E_POOL_STALE          heartbeat backstop in seconds (default 21600 = 6h)
+#   OMI_E2E_POOL_SIGN_IDENTITY  identity pinned at slot creation
+#                               (default "Omi Local Dev Signing": stable, works from a
+#                               Background/ssh session with no keychain prompt)
+#   OMI_E2E_POOL_AUTOMATION_BASE / _BACKEND_BASE / _PYTHON_BASE
+#                               port bases; slot N gets base+N (defaults 47700 / 10100 / 8300,
+#                               all below the per-worktree ranges dev-instance.sh derives)
+#   OMI_E2E_POOL_REQUIRED       comma list `check` insists on
+#                               (default microphone,screen_recording,accessibility)
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+POOL_SIZE="${OMI_E2E_POOL_SIZE:-3}"
+POOL_PREFIX="${OMI_E2E_POOL_PREFIX:-omi-e2e}"
+POOL_DIR="${OMI_E2E_POOL_DIR:-$HOME/Library/Application Support/Omi Dev Bundles/.e2e-pool}"
+STALE_SECONDS="${OMI_E2E_POOL_STALE:-21600}"
+DEFAULT_IDENTITY="${OMI_E2E_POOL_SIGN_IDENTITY:-Omi Local Dev Signing}"
+AUTOMATION_BASE="${OMI_E2E_POOL_AUTOMATION_BASE:-47700}"
+BACKEND_BASE="${OMI_E2E_POOL_BACKEND_BASE:-10100}"
+PYTHON_BASE="${OMI_E2E_POOL_PYTHON_BASE:-8300}"
+REQUIRED_PERMISSIONS="${OMI_E2E_POOL_REQUIRED:-microphone,screen_recording,accessibility}"
+APPLICATIONS_DIR="${OMI_E2E_POOL_APPLICATIONS_DIR:-/Applications}"
+
+say() { printf '%s\n' "$*"; }
+die() { printf 'omi-e2e-pool: %s\n' "$*" >&2; exit 1; }
+now() { date +%s; }
+
+case "$POOL_SIZE" in
+  ''|*[!0-9]*|0) die "OMI_E2E_POOL_SIZE must be a positive integer (got '$POOL_SIZE')" ;;
+esac
+case "$POOL_PREFIX" in
+  omi-*) ;;
+  *) die "OMI_E2E_POOL_PREFIX must start with omi- so run.sh accepts it as a named bundle (got '$POOL_PREFIX')" ;;
+esac
+
+# ── slot naming ─────────────────────────────────────────────────────────────
+slot_name()      { printf '%s-%s' "$POOL_PREFIX" "$1"; }
+slot_bundle_id() { printf 'com.omi.%s' "$(slot_name "$1")"; }
+slot_dir()       { printf '%s/slots/%s' "$POOL_DIR" "$1"; }
+lease_file()     { printf '%s/lease' "$(slot_dir "$1")"; }
+slot_app_path()  { printf '%s/%s.app' "$APPLICATIONS_DIR" "$(slot_name "$1")"; }
+automation_port() { printf '%s' "$((AUTOMATION_BASE + $1))"; }
+backend_port()    { printf '%s' "$((BACKEND_BASE + $1))"; }
+python_port()     { printf '%s' "$((PYTHON_BASE + $1))"; }
+
+# The slot number an app slug names, or nothing when the slug is not a pool slot.
+slug_slot() {
+  local slug="$1" n
+  case "$slug" in
+    "$POOL_PREFIX"-*) n="${slug#"$POOL_PREFIX"-}" ;;
+    *) return 0 ;;
+  esac
+  case "$n" in ''|*[!0-9]*) return 0 ;; esac
+  printf '%s' "$((10#$n))"
+}
+
+valid_slot() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ] && [ "$1" -le "$POOL_SIZE" ]
+}
+
+# ── per-slot persisted config ───────────────────────────────────────────────
+slot_config_get() {
+  local f; f="$(slot_dir "$1")/$2"
+  [ -f "$f" ] && cat "$f" || printf '%s' "${3:-}"
+}
+slot_config_set() {
+  mkdir -p "$(slot_dir "$1")"
+  printf '%s' "$3" > "$(slot_dir "$1")/$2"
+}
+slot_identity() { slot_config_get "$1" identity "$DEFAULT_IDENTITY"; }
+slot_auth()     { slot_config_get "$1" auth shared; }
+
+# ── lease records ───────────────────────────────────────────────────────────
+# Format, one key=value per line: holder, worktree, pid, token, acquired, touched.
+read_lease() {
+  local f; f="$(lease_file "$1")"
+  L_HOLDER="" L_WORKTREE="" L_PID="" L_TOKEN="" L_ACQUIRED="" L_TOUCHED=""
+  [ -f "$f" ] || return 1
+  local key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+      holder) L_HOLDER="$value" ;;
+      worktree) L_WORKTREE="$value" ;;
+      pid) L_PID="$value" ;;
+      token) L_TOKEN="$value" ;;
+      acquired) L_ACQUIRED="$value" ;;
+      touched) L_TOUCHED="$value" ;;
+    esac
+  done < "$f"
+  [ -n "$L_HOLDER" ]
+}
+
+write_lease() {
+  local slot="$1"
+  mkdir -p "$(slot_dir "$slot")"
+  {
+    printf 'holder=%s\n' "$L_HOLDER"
+    printf 'worktree=%s\n' "$L_WORKTREE"
+    printf 'pid=%s\n' "$L_PID"
+    printf 'token=%s\n' "$L_TOKEN"
+    printf 'acquired=%s\n' "$L_ACQUIRED"
+    printf 'touched=%s\n' "$L_TOUCHED"
+  } > "$(lease_file "$slot").tmp"
+  mv -f "$(lease_file "$slot").tmp" "$(lease_file "$slot")"
+}
+
+touch_lease() {
+  read_lease "$1" || return 0
+  L_TOUCHED="$(now)"
+  write_lease "$1"
+}
+
+pid_alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
+
+# Why a lease is not in force. Empty output = genuinely held.
+lease_defunct_reason() {
+  if [ -n "$L_WORKTREE" ] && [ ! -d "$L_WORKTREE" ]; then
+    printf 'worktree %s is gone' "$L_WORKTREE"; return 0
+  fi
+  if [ -n "$L_WORKTREE" ] && [ -d "$L_WORKTREE" ] && [ -n "$L_TOKEN" ]; then
+    # The holder's own env file carries the token. omi-lane finish removes the
+    # worktree; a lane that merely deleted .dev/ has given the slot up too.
+    local env_file="$L_WORKTREE/.dev/e2e-pool.env"
+    if [ -f "$env_file" ] && ! grep -q "OMI_E2E_POOL_TOKEN='$L_TOKEN'" "$env_file"; then
+      printf 'worktree %s now holds a different lease' "$L_WORKTREE"; return 0
+    fi
+  fi
+  if [ -n "$L_PID" ] && ! pid_alive "$L_PID"; then
+    printf 'holder pid %s is gone' "$L_PID"; return 0
+  fi
+  local age=$(( $(now) - ${L_TOUCHED:-0} ))
+  if [ "$age" -ge "$STALE_SECONDS" ]; then
+    printf 'untouched for %ss, past the %ss backstop' "$age" "$STALE_SECONDS"; return 0
+  fi
+  printf ''
+}
+
+# ── caller identity ─────────────────────────────────────────────────────────
+# A lease belongs to a worktree. The current one is the git toplevel of the cwd,
+# or OMI_E2E_POOL_WORKTREE when a harness wants to be explicit.
+current_worktree() {
+  if [ -n "${OMI_E2E_POOL_WORKTREE:-}" ]; then
+    printf '%s' "$OMI_E2E_POOL_WORKTREE"; return 0
+  fi
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
+random_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16
+  else
+    printf '%s%s' "$(now)" "$RANDOM" | shasum | cut -c1-32
+  fi
+}
+
+# The slot this worktree already holds, if any. Matched on the path alone: a
+# lease naming the asking worktree is that worktree's, however old — the
+# heartbeat backstop exists to reclaim slots from lanes that vanished, not to
+# lock a live holder out of its own slot.
+worktree_slot() {
+  local wt="$1" n
+  for ((n = 1; n <= POOL_SIZE; n++)); do
+    read_lease "$n" || continue
+    [ "$L_WORKTREE" = "$wt" ] && { printf '%s' "$n"; return 0; }
+  done
+  return 1
+}
+
+# ── argument parsing shared by most commands ────────────────────────────────
+ARG_SLOT="" ARG_WORKTREE="" ARG_HOLDER="" ARG_PID="" ARG_AUTH="" ARG_QUIET=0
+parse_common() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --slot) ARG_SLOT="${2:?--slot needs a number}"; shift 2 ;;
+      --slot=*) ARG_SLOT="${1#--slot=}"; shift ;;
+      --worktree) ARG_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+      --worktree=*) ARG_WORKTREE="${1#--worktree=}"; shift ;;
+      --holder) ARG_HOLDER="${2:?--holder needs a name}"; shift 2 ;;
+      --holder=*) ARG_HOLDER="${1#--holder=}"; shift ;;
+      --pid) ARG_PID="${2:?--pid needs a pid}"; shift 2 ;;
+      --pid=*) ARG_PID="${1#--pid=}"; shift ;;
+      --auth) ARG_AUTH="${2:?--auth needs shared or isolated}"; shift 2 ;;
+      --auth=*) ARG_AUTH="${1#--auth=}"; shift ;;
+      --quiet|-q) ARG_QUIET=1; shift ;;
+      --) shift; REST=("$@"); return 0 ;;
+      -*) die "unknown option: $1" ;;
+      *) REST=("$@"); return 0 ;;
+    esac
+  done
+  REST=()
+}
+REST=()
+
+resolve_slot_for_worktree() {
+  # $1 = worktree. Prints slot from --slot, else the slot the worktree holds.
+  if [ -n "$ARG_SLOT" ]; then
+    valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool (OMI_E2E_POOL_SIZE=$POOL_SIZE)"
+    printf '%s' "$ARG_SLOT"; return 0
+  fi
+  worktree_slot "$1" || die "worktree $1 holds no slot. Run: omi-e2e-pool acquire"
+}
+
+# ── commands ────────────────────────────────────────────────────────────────
+cmd_acquire() {
+  parse_common "$@"
+  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  local holder="${ARG_HOLDER:-$(basename "$wt")}"
+  case "${ARG_AUTH:-}" in
+    ''|shared|isolated) ;;
+    *) die "--auth must be shared or isolated (got '$ARG_AUTH')" ;;
+  esac
+
+  # Already ours? Refresh rather than take a second slot.
+  local held
+  if held="$(worktree_slot "$wt")"; then
+    if [ -n "$ARG_SLOT" ] && [ "$ARG_SLOT" != "$held" ]; then
+      die "worktree $wt already holds slot $held; release it before taking slot $ARG_SLOT"
+    fi
+    read_lease "$held"
+    [ -n "$ARG_PID" ] && L_PID="$ARG_PID"
+    [ -n "$ARG_AUTH" ] && slot_config_set "$held" auth "$ARG_AUTH"
+    L_TOUCHED="$(now)"
+    write_lease "$held"
+    write_env_file "$held" "$wt"
+    [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $held ($(slot_name "$held")) already held by $wt — refreshed"
+    printf '%s\n' "$held"
+    return 0
+  fi
+
+  local candidates=() n
+  if [ -n "$ARG_SLOT" ]; then
+    valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool (OMI_E2E_POOL_SIZE=$POOL_SIZE)"
+    candidates=("$ARG_SLOT")
+  else
+    for ((n = 1; n <= POOL_SIZE; n++)); do candidates+=("$n"); done
+  fi
+
+  local live_holders=()
+  for n in "${candidates[@]}"; do
+    if read_lease "$n"; then
+      local reason; reason="$(lease_defunct_reason)"
+      if [ -z "$reason" ]; then
+        live_holders+=("slot $n: $L_HOLDER ($L_WORKTREE, touched $(( $(now) - L_TOUCHED ))s ago)")
+        continue
+      fi
+      [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: reclaiming slot $n from '$L_HOLDER' — $reason"
+    fi
+    if [ ! -f "$(slot_dir "$n")/identity" ]; then
+      slot_config_set "$n" identity "$DEFAULT_IDENTITY"
+    elif [ -n "${OMI_E2E_POOL_SIGN_IDENTITY:-}" ] && [ "$(slot_identity "$n")" != "$OMI_E2E_POOL_SIGN_IDENTITY" ]; then
+      say "omi-e2e-pool: WARNING slot $n is pinned to \"$(slot_identity "$n")\"; ignoring OMI_E2E_POOL_SIGN_IDENTITY." >&2
+      say "  Changing a slot's identity resets every TCC grant it has. Delete $(slot_dir "$n")/identity to re-pin deliberately." >&2
+    fi
+    [ -n "$ARG_AUTH" ] && slot_config_set "$n" auth "$ARG_AUTH"
+    L_HOLDER="$holder"; L_WORKTREE="$wt"; L_PID="${ARG_PID:-}"
+    L_TOKEN="$(random_token)"; L_ACQUIRED="$(now)"; L_TOUCHED="$L_ACQUIRED"
+    write_lease "$n"
+    write_env_file "$n" "$wt"
+    [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $n ($(slot_name "$n")) acquired by $holder for $wt"
+    printf '%s\n' "$n"
+    return 0
+  done
+
+  {
+    say "omi-e2e-pool: no free slot in a pool of $POOL_SIZE. Live holders:"
+    local h; for h in "${live_holders[@]}"; do say "  $h"; done
+    say "  Wait, finish a lane (omi-e2e-pool release), or grow the pool: OMI_E2E_POOL_SIZE=$((POOL_SIZE + 1))"
+    say "  A larger pool needs its new slot granted once by a human: omi-e2e-pool setup --slot $((POOL_SIZE + 1))"
+    say "  Do NOT build into a held slot by hand; that is another lane's app, mid-test."
+  } >&2
+  return 1
+}
+
+# The exports a launcher needs. Written beside the worktree's other per-instance
+# state so any later shell in that worktree finds its slot without re-acquiring.
+env_lines() {
+  local slot="$1"
+  printf "export OMI_APP_NAME='%s'\n" "$(slot_name "$slot")"
+  printf "export OMI_E2E_POOL_SLOT='%s'\n" "$slot"
+  printf "export OMI_E2E_POOL_TOKEN='%s'\n" "$L_TOKEN"
+  printf "export OMI_AUTOMATION_PORT='%s'\n" "$(automation_port "$slot")"
+  printf "export PORT='%s'\n" "$(backend_port "$slot")"
+  printf "export PYTHON_PORT='%s'\n" "$(python_port "$slot")"
+  printf "export OMI_SIGN_IDENTITY='%s'\n" "$(slot_identity "$slot")"
+  if [ "$(slot_auth "$slot")" = isolated ]; then
+    # An isolated slot keeps the session it was signed into once; nothing is
+    # cloned from Omi Dev, and the operator's Rewind history stays out of it.
+    printf "export OMI_SKIP_AUTH_SEED='1'\n"
+    printf "export OMI_SKIP_REWIND_SEED='1'\n"
+  fi
+}
+
+write_env_file() {
+  local slot="$1" wt="$2" dir="$2/.dev"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  env_lines "$slot" > "$dir/e2e-pool.env.tmp" && mv -f "$dir/e2e-pool.env.tmp" "$dir/e2e-pool.env"
+}
+
+cmd_env() {
+  parse_common "$@"
+  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  slot="$(resolve_slot_for_worktree "$wt")"
+  read_lease "$slot" || die "slot $slot is not leased"
+  if [ "$L_WORKTREE" != "$wt" ]; then
+    die "slot $slot is held by $L_HOLDER ($L_WORKTREE), not by $wt"
+  fi
+  touch_lease "$slot"
+  env_lines "$slot"
+}
+
+cmd_run() {
+  parse_common "$@"
+  [ "${#REST[@]}" -gt 0 ] || die "usage: omi-e2e-pool run [--slot N] -- <command...>"
+  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  local acquire_args=(--quiet --worktree "$wt")
+  [ -n "$ARG_SLOT" ] && acquire_args+=(--slot "$ARG_SLOT")
+  [ -n "$ARG_AUTH" ] && acquire_args+=(--auth "$ARG_AUTH")
+  [ -n "$ARG_PID" ] && acquire_args+=(--pid "$ARG_PID")
+  slot="$(cmd_acquire "${acquire_args[@]}")" || exit 1
+  read_lease "$slot"
+  eval "$(env_lines "$slot")"
+  exec "${REST[@]}"
+}
+
+# run.sh calls this with the derived app slug before it touches /Applications.
+# Non-pool names pass straight through, so the guard costs nothing elsewhere.
+cmd_verify() {
+  parse_common "$@"
+  local slug="${REST[0]:-}"; [ -n "$slug" ] || die "usage: omi-e2e-pool verify <app-slug>"
+  local slot; slot="$(slug_slot "$slug")"
+  [ -n "$slot" ] || return 0
+  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  if ! read_lease "$slot" || [ -n "$(lease_defunct_reason)" ]; then
+    {
+      say "omi-e2e-pool: '$slug' is pool slot $slot and nobody holds its lease."
+      say "  Acquire it first so no other lane builds into the same app:"
+      say "    eval \"\$(./scripts/omi-e2e-pool env)\" after ./scripts/omi-e2e-pool acquire"
+      say "  or: ./scripts/omi-e2e-pool run -- ./run.sh --yolo"
+    } >&2
+    return 1
+  fi
+  if [ -n "${OMI_E2E_POOL_TOKEN:-}" ] && [ "$OMI_E2E_POOL_TOKEN" = "$L_TOKEN" ]; then
+    touch_lease "$slot"; return 0
+  fi
+  if [ "$L_WORKTREE" = "$wt" ]; then
+    touch_lease "$slot"; return 0
+  fi
+  {
+    say "omi-e2e-pool: REFUSING to build '$slug' — slot $slot is held by '$L_HOLDER'"
+    say "  worktree: $L_WORKTREE"
+    say "  acquired: $(( $(now) - L_ACQUIRED ))s ago, last touched $(( $(now) - L_TOUCHED ))s ago"
+    say "  That lane is alive. Acquire a different slot; do NOT build over its app."
+    say "  If you believe it is wedged: omi-e2e-pool status, then STOP AND REPORT."
+  } >&2
+  return 1
+}
+
+cmd_release() {
+  parse_common "$@"
+
+  local slot
+  if [ -n "$ARG_SLOT" ]; then
+    valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"
+    slot="$ARG_SLOT"
+  else
+    local wt="${ARG_WORKTREE:-$(current_worktree)}"
+    if ! slot="$(worktree_slot "$wt")"; then
+      [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: $wt holds no slot — nothing to release"
+      return 0
+    fi
+  fi
+  if ! read_lease "$slot"; then
+    [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $slot was not leased — nothing to release"
+    return 0
+  fi
+  if [ -n "$ARG_WORKTREE" ] && [ "$L_WORKTREE" != "$ARG_WORKTREE" ] && [ -z "$(lease_defunct_reason)" ]; then
+    die "slot $slot is held by '$L_HOLDER' ($L_WORKTREE), not by $ARG_WORKTREE. Refusing to release someone else's lease."
+  fi
+  [ -f "$L_WORKTREE/.dev/e2e-pool.env" ] && rm -f "$L_WORKTREE/.dev/e2e-pool.env"
+  rm -f "$(lease_file "$slot")"
+  [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: slot $slot ($(slot_name "$slot")) released (was $L_HOLDER)"
+
+}
+
+app_pid() {
+  pgrep -f "$(slot_app_path "$1")/Contents/MacOS/" 2>/dev/null | head -1 || true
+}
+
+port_pid() {
+  lsof -ti:"$1" -sTCP:LISTEN 2>/dev/null | head -1 || true
+}
+
+cmd_status() {
+  local n
+  say "pool: $POOL_SIZE slot(s), prefix $POOL_PREFIX, leases in $POOL_DIR"
+  for ((n = 1; n <= POOL_SIZE; n++)); do
+    local name; name="$(slot_name "$n")"
+    local installed="not installed"
+    [ -d "$(slot_app_path "$n")" ] && installed="installed"
+    local running=""; local pid; pid="$(app_pid "$n")"
+    [ -n "$pid" ] && running=", app running (pid $pid)"
+    local bound=""; local bp; bp="$(port_pid "$(automation_port "$n")")"
+    [ -n "$bp" ] && bound=", bridge port $(automation_port "$n") bound by pid $bp"
+    printf '  %-14s %s auth=%-8s %s%s%s\n' "$name" "slot $n" "$(slot_auth "$n")" "$installed" "$running" "$bound"
+    if read_lease "$n"; then
+      local reason; reason="$(lease_defunct_reason)"
+      if [ -n "$reason" ]; then
+        printf '      DEFUNCT  %s (%s) — %s\n' "$L_HOLDER" "$L_WORKTREE" "$reason"
+      else
+        printf '      held     %s (%s, pid %s, touched %ss ago)\n' "$L_HOLDER" "$L_WORKTREE" "${L_PID:-none}" "$(( $(now) - L_TOUCHED ))"
+      fi
+    else
+      printf '      free\n'
+    fi
+  done
+}
+
+cmd_reap() {
+  local n reaped=0
+  for ((n = 1; n <= POOL_SIZE; n++)); do
+    read_lease "$n" || continue
+    local reason; reason="$(lease_defunct_reason)"
+    [ -n "$reason" ] || continue
+    say "omi-e2e-pool: reaping slot $n — $reason (was $L_HOLDER)"
+    rm -f "$(lease_file "$n")"
+    reaped=1
+    # The app of a defunct lane is the slot's app, not a stranger's; report it,
+    # do not kill it. run.sh restarts it on the next launch anyway.
+    local pid; pid="$(app_pid "$n")"
+    [ -n "$pid" ] && say "    $(slot_name "$n").app still running (pid $pid); the next launch replaces it"
+  done
+  [ "$reaped" -eq 1 ] || say "omi-e2e-pool: nothing to reap"
+}
+
+cmd_slots() {
+  local n
+  for ((n = 1; n <= POOL_SIZE; n++)); do
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$(slot_name "$n")" "$(slot_bundle_id "$n")" \
+      "$(automation_port "$n")" "$(backend_port "$n")" "$(python_port "$n")"
+  done
+}
+
+# Permissions preflight. Asks the RUNNING slot app, through its bridge, for the
+# same rows the Permissions page shows, and refuses with the human action list
+# when a required one is missing — instead of a flow timing out 30s later inside
+# a route that reads like a product bug.
+cmd_check() {
+  parse_common "$@"
+  local slot
+  if [ -n "$ARG_SLOT" ]; then
+    valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"; slot="$ARG_SLOT"
+  else
+    slot="$(resolve_slot_for_worktree "${ARG_WORKTREE:-$(current_worktree)}")"
+  fi
+  local port; port="$(automation_port "$slot")"
+  local ctl="$SCRIPT_DIR/omi-ctl"
+  [ -x "$ctl" ] || die "missing $ctl"
+  # omi-ctl appends an echo after curl, so its exit status is not the bridge's;
+  # an empty body is the failure signal.
+  local snapshot
+  snapshot="$(OMI_AUTOMATION_PORT="$port" "$ctl" action permissions_snapshot 2>/dev/null || true)"
+  if ! printf '%s' "$snapshot" | grep -q '"permissions_snapshot"'; then
+    die "$(slot_name "$slot") is not answering on bridge port $port. Launch it first (omi-e2e-pool run -- ./run.sh --yolo)."
+  fi
+  # The heredoc owns stdin, so the snapshot travels in the environment.
+  OMI_E2E_POOL_SNAPSHOT="$snapshot" OMI_E2E_POOL_REQUIRED="$REQUIRED_PERMISSIONS" SLOT_NAME="$(slot_name "$slot")" python3 - <<'PY'
+import json, os, sys
+envelope = json.loads(os.environ["OMI_E2E_POOL_SNAPSHOT"])
+result = envelope.get("result", envelope)
+rows = result.get("detail", result)
+state = result.get("state", {})
+required = [r for r in os.environ["OMI_E2E_POOL_REQUIRED"].split(",") if r]
+name = os.environ["SLOT_NAME"]
+missing = []
+for key in required:
+    value = rows.get(key, "absent")
+    ok = value == "granted"
+    print(f"  {key:18} {value}{'' if ok else '   <- REQUIRED'}")
+    if not ok:
+        missing.append((key, value))
+for key, value in sorted(rows.items()):
+    if key not in required:
+        print(f"  {key:18} {value}")
+signed_in = state.get("isSignedIn")
+if signed_in is not None:
+    print(f"  {'signed_in':18} {'true' if signed_in else 'false'}{'' if signed_in else '   <- sign in once, or seed auth'}")
+if missing:
+    print(f"\nomi-e2e-pool: {name} is missing {len(missing)} required grant(s). A human must grant them once:", file=sys.stderr)
+    for key, value in missing:
+        print(f"  - {key} ({value})", file=sys.stderr)
+    print(f"  run: omi-e2e-pool setup --slot {name.rsplit('-', 1)[-1]}", file=sys.stderr)
+    sys.exit(2)
+print(f"\nomi-e2e-pool: {name} has every required grant ({', '.join(required)})")
+PY
+}
+
+cmd_setup() {
+  parse_common "$@"
+  local slots=() n
+  if [ -n "$ARG_SLOT" ]; then
+    valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"; slots=("$ARG_SLOT")
+  else
+    for ((n = 1; n <= POOL_SIZE; n++)); do slots+=("$n"); done
+  fi
+  cat <<EOF
+omi-e2e-pool: one-time setup. Each slot is granted BY A HUMAN once; after that
+every rebuild from any worktree keeps the grants, because the bundle ID and the
+signing identity never change. Do these steps on the machine, in its GUI session.
+
+EOF
+  for n in "${slots[@]}"; do
+    local name; name="$(slot_name "$n")"
+    cat <<EOF
+Slot $n — $name  (bundle id $(slot_bundle_id "$n"), identity "$(slot_identity "$n")", auth=$(slot_auth "$n"))
+  1. Build and launch it once from any checkout:
+       cd desktop/macos && ./scripts/omi-e2e-pool run --slot $n -- ./run.sh --yolo --no-wait
+  2. Open its Permissions page and grant each row when macOS asks:
+       OMI_AUTOMATION_PORT=$(automation_port "$n") ./scripts/omi-ctl navigate settings permissions --show
+     Microphone · Screen Recording · Accessibility · System Audio · Notifications · Automation
+     (Screen Recording and Accessibility land in System Settings > Privacy & Security;
+      the app may ask to Quit & Reopen — let it.)
+EOF
+    if [ "$(slot_auth "$n")" = isolated ]; then
+      cat <<EOF
+  3. Sign in ONCE inside $name with the dedicated test account. The session
+     persists in this slot's own keychain item across rebuilds.
+EOF
+    else
+      cat <<EOF
+  3. If the app shows the sign-in screen, sign in once as yourself. A launch
+     from a GUI shell clones the Omi Dev session automatically; a launch from
+     a background agent shell cannot read the keychain, launches cold, and
+     leaves whatever session the slot already has.
+EOF
+    fi
+    cat <<EOF
+  4. Prove it:  ./scripts/omi-e2e-pool check --slot $n
+  5. Release:   ./scripts/omi-e2e-pool release --slot $n
+
+EOF
+  done
+  cat <<'EOF'
+Recurring: macOS 15+ periodically re-asks whether an app may keep recording the
+screen. `check` reports that as screen_recording=stale; a human clicks once.
+Never change a slot's signing identity or bundle name — either resets every grant.
+EOF
+}
+
+usage() { sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+case "${1:-help}" in
+  acquire) shift; cmd_acquire "$@" ;;
+  env)     shift; cmd_env "$@" ;;
+  run)     shift; cmd_run "$@" ;;
+  verify)  shift; cmd_verify "$@" ;;
+  release) shift; cmd_release "$@" ;;
+  status)  shift; cmd_status "$@" ;;
+  reap)    shift; cmd_reap "$@" ;;
+  slots)   shift; cmd_slots "$@" ;;
+  check)   shift; cmd_check "$@" ;;
+  setup)   shift; cmd_setup "$@" ;;
+  help|-h|--help) usage ;;
+  *) die "unknown command: $1 (try: omi-e2e-pool help)" ;;
+esac

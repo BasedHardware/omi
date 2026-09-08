@@ -236,6 +236,12 @@ trap 'omi_run_sh_release_build_lock' EXIT INT TERM
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 source "$SCRIPT_DIR/scripts/app-config.sh"
 derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
+# A pre-authorized E2E pool slot is machine-global and shared by every worktree;
+# building one without holding its lease clobbers another lane's app mid-test.
+# Non-pool names pass through untouched. See docs/e2e-bundle-pool.md.
+if [ "$IS_NAMED_BUNDLE" = true ]; then
+    "$SCRIPT_DIR/scripts/omi-e2e-pool" verify "$APP_SLUG" || exit 1
+fi
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 
