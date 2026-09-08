@@ -1051,17 +1051,13 @@ struct PinnedReduceMotion: ViewModifier {
 }
 
 extension View {
-  /// One environment write, expressed for both toolchains this package builds
-  /// with: the macOS 26 SDK made the public key path read-only, and its
-  /// underscored twin is the same environment entry (verified to propagate to
-  /// readers of the public one), while the Xcode 16 SDK CI pins still takes
-  /// the public setter.
-  @ViewBuilder func pinnedReduceMotion(_ pin: Bool) -> some View {
-    #if compiler(>=6.2)
-      environment(\._accessibilityReduceMotion, pin)
-    #else
-      environment(\.accessibilityReduceMotion, pin)
-    #endif
+  /// One environment write that compiles identically on every toolchain this
+  /// package builds with: the public `\.accessibilityReduceMotion` key path is
+  /// read-only in both the Xcode 16 and macOS 26 SDKs, so the underscored
+  /// `WritableKeyPath` twin is the only setter. It targets the same environment
+  /// entry and propagates to readers of the public key path.
+  func pinnedReduceMotion(_ pin: Bool) -> some View {
+    environment(\._accessibilityReduceMotion, pin)
   }
 }
 
