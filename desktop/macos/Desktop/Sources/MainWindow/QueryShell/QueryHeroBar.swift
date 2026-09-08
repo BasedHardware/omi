@@ -88,6 +88,14 @@ struct QueryHeroBar: View {
   var onStop: () -> Void = {}
   var onAttachmentsAdded: ([URL]) -> Void = { _ in }
   var onAttachmentRemoved: (String) -> Void = { _ in }
+  /// ⌘V with attachable content on the pasteboard: the host stages it the way
+  /// the paperclip stages picks. Any text riding along still reaches the field.
+  var onPasteAttachments: () -> Void = {}
+  /// Recent Rewind frames offered as one-click image attachments — the
+  /// "paste past screenshots" capability riding the same staging path as the
+  /// paperclip. Metadata only; the host owns the loader and the staging.
+  var recentScreenFrames: [RecentScreenFrameRow] = []
+  var onStageRecentFrame: (RecentScreenFrameRow) -> Void = { _ in }
   /// Sources staged from a page action (for example, “Discuss in Chat”).
   /// These are rendered as removable chips and never submit on their own.
   var references: [ChatComposerReference] = []
@@ -373,6 +381,7 @@ struct QueryHeroBar: View {
       focusOnAppear: false,
       onMarkedTextChange: { hasMarkedText = $0 },
       focusRequest: caretClaim,
+      onPasteAttachments: onPasteAttachments,
       minHeight: minEditorHeight,
       maxHeight: maxEditorHeight
     )
@@ -408,17 +417,36 @@ struct QueryHeroBar: View {
 
   /// A quiet `Ink` glyph in both placements — the paperclip has never been a primary. In the panel
   /// it is the *leading* one, sized and tinted exactly like the mic across the field from it.
+  ///
+  /// **One affordance, two vocabularies.** A plain click still opens the file
+  /// picker (the `primaryAction`), so the common path stays one click; a
+  /// long-press or right-click opens the menu, whose rows stage recent screen
+  /// frames through the same `ChatProvider.addAttachments` path the picker
+  /// lands in. The rows are the composer's own — staging from the notch, a
+  /// drop, or the automation bridge arrives the same way, so nothing here can
+  /// fork a second attachment list.
   private func attachButton(diameter: CGFloat, glyphSize: CGFloat) -> some View {
-    Button(action: pickFiles) {
+    Menu {
+      ForEach(recentScreenFrames) { frame in
+        Button(frame.menuTitle()) { onStageRecentFrame(frame) }
+      }
+      if !recentScreenFrames.isEmpty {
+        Divider()
+      }
+      Button("Attach Files…") { pickFiles() }
+    } label: {
       Image(systemName: "paperclip")
         .scaledFont(size: glyphSize, weight: .medium)
         .foregroundStyle(Ink.secondary)
         .frame(width: diameter, height: diameter)
         .contentShape(Rectangle())
+    } primaryAction: {
+      pickFiles()
     }
-    .buttonStyle(.plain)
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
     .disabled(attachments.count >= kMaxChatAttachments)
-    .help("Attach files")
+    .help("Attach files or a recent screen frame")
     .accessibilityLabel("Attach files")
     .accessibilityIdentifier("query-shell-attach")
   }
