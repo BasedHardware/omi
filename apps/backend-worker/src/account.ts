@@ -19,7 +19,10 @@ import {
   terminalEvent,
   type Admission,
 } from "./chat";
-import { composeGenerationPrompt } from "./generation-prompt";
+import {
+  composeGenerationPrompt,
+  isVisibleGenerationText,
+} from "./generation-prompt";
 import type { ChatCreate, GenerationEvent } from "./wire";
 
 export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
@@ -198,7 +201,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         generationId,
         composed.history
       );
-      if (result.kind === "error") {
+      if (result.kind === "error" || !isVisibleGenerationText(result.text)) {
         const event = await failGeneration(
           this.env.DB,
           accountId,
@@ -233,10 +236,7 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
         }
       );
       const response = result as { response?: unknown };
-      if (
-        typeof response.response !== "string" ||
-        response.response.length === 0
-      ) {
+      if (!isVisibleGenerationText(response.response)) {
         const event = await failGeneration(
           this.env.DB,
           accountId,

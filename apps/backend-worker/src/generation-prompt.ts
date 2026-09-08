@@ -22,6 +22,10 @@ export function isGenerationTextMimeType(mimeType: string): boolean {
   );
 }
 
+export function isVisibleGenerationText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 export async function composeGenerationPrompt(
   db: D1Database,
   r2: R2Bucket | undefined,

@@ -315,4 +315,48 @@ describe("AccountBackend D1-backed coordination", () => {
       "second completed",
     ]);
   });
+
+  test("whitespace-only Workers AI text fails the generation instead of completing a blank assistant", async () => {
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: { run: async () => ({ response: " \t\n" }) },
+        },
+      });
+    });
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ ...create("blank-reply"), text: "hello" }),
+    });
+    expect(admitted.status).toBe(201);
+    const body = (await admitted.json()) as { generation: { id: string } };
+    await runInDurableObject(stub, (instance) => instance.alarm());
+    const events = await stub.fetch(
+      `https://account.internal/events?generationId=${body.generation.id}`
+    );
+    expect(await events.text()).toContain("event: failed");
+    const terminal = await terminalEvent(
+      env.DB,
+      "test-account",
+      body.generation.id
+    );
+    expect(terminal).toEqual({
+      id: "2",
+      kind: "failed",
+      error: { code: "generation_failed", retryable: true },
+    });
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    const historyBody = (await history.json()) as {
+      messages: Array<{ sender: string; text: string }>;
+    };
+    expect(historyBody.messages).toEqual([
+      expect.objectContaining({ sender: "human", text: "hello" }),
+    ]);
+  });
 });

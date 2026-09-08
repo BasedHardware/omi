@@ -6,6 +6,7 @@ import {
   GENERATION_HISTORY_TEXT_BUDGET,
   GENERATION_HISTORY_MESSAGE_LIMIT,
   isGenerationTextMimeType,
+  isVisibleGenerationText,
 } from "../src/generation-prompt";
 import { failGeneration } from "../src/chat";
 import { CHAT_CAPABILITIES } from "../src/wire";
@@ -495,6 +496,20 @@ describe("composeGenerationPrompt", () => {
       console.error = error;
     }
     expect(lines.join("\n")).not.toContain(SECRET_TEXT);
+  });
+});
+
+describe("isVisibleGenerationText", () => {
+  test("rejects empty and whitespace-only provider text", () => {
+    expect(isVisibleGenerationText("")).toBe(false);
+    expect(isVisibleGenerationText(" \t\n")).toBe(false);
+    expect(isVisibleGenerationText(null)).toBe(false);
+    expect(isVisibleGenerationText(undefined)).toBe(false);
+  });
+
+  test("accepts provider text that still has visible characters", () => {
+    expect(isVisibleGenerationText("ok")).toBe(true);
+    expect(isVisibleGenerationText("  ok  ")).toBe(true);
   });
 });
 
