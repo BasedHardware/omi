@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  clockLabel,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationDayLabel,
@@ -29,12 +30,8 @@ function formatConversationDate(value: string | null): string {
   if (value === null) {
     return 'Time unavailable';
   }
-  return new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-  }).format(new Date(value));
+  const label = clockLabel(Date.parse(value), Date.now());
+  return label === '' ? 'Time unavailable' : label;
 }
 
 function formatConversationDuration(

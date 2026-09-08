@@ -3,6 +3,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import {ConversationsPage} from './Conversations';
 import {
+  clockLabel,
   desktopBackendUnavailableCopy,
   type ConversationProjection,
 } from '../desktopReadClient';
@@ -395,4 +396,68 @@ test('a requested conversation id opens compact conversation detail', () => {
   } finally {
     dimensions.mockRestore();
   }
+});
+
+test('conversation list and detail date older days instead of month and day only', () => {
+  const older = new Date(2025, 7, 10, 12, 0);
+  const expected = clockLabel(older.getTime(), Date.now());
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:older-one',
+    title: 'Product review',
+    summary: 'Talked through the release.',
+    searchableText: 'Product review\nTalked through the release.',
+    createdAt: older.toISOString(),
+    updatedAt: older.toISOString(),
+    startedAt: older.toISOString(),
+    finishedAt: older.toISOString(),
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain(expected);
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Product review',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Started ·');
+  expect(copy).toContain('Finished ·');
+  expect(copy).toContain(expected);
+  expect(expected).toContain(
+    older.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+  );
 });
