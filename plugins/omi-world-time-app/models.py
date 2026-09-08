@@ -1,11 +1,14 @@
 """Pydantic models for Omi World Time & Solar Ephemeris Integration App."""
 
+from datetime import date as dt_date
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ChatToolResponse(BaseModel):
     """Standard response model for Omi chat tool endpoints."""
+
+    model_config = ConfigDict(extra="ignore")
 
     result: Optional[str] = None
     error: Optional[str] = None
@@ -19,6 +22,8 @@ class ChatToolResponse(BaseModel):
 
 class GetCurrentTimeRequest(BaseModel):
     """Request model for getting current time in a city or timezone."""
+
+    model_config = ConfigDict(extra="ignore")
 
     location: str = Field(
         ...,
@@ -39,6 +44,8 @@ class GetCurrentTimeRequest(BaseModel):
 class CalculateTimeDifferenceRequest(BaseModel):
     """Request model for converting time or calculating difference between two locations."""
 
+    model_config = ConfigDict(extra="ignore")
+
     source_location: str = Field(
         ...,
         min_length=1,
@@ -53,6 +60,7 @@ class CalculateTimeDifferenceRequest(BaseModel):
     )
     source_time: Optional[str] = Field(
         default=None,
+        max_length=30,
         description="Optional time in HH:MM or YYYY-MM-DD HH:MM format (e.g. '14:30' or '2026-09-08 14:30'). Defaults to current time if omitted.",
     )
 
@@ -68,6 +76,8 @@ class CalculateTimeDifferenceRequest(BaseModel):
 class GetSolarTimesRequest(BaseModel):
     """Request model for getting sunrise, sunset, and solar ephemeris for a location."""
 
+    model_config = ConfigDict(extra="ignore")
+
     location: str = Field(
         ...,
         min_length=1,
@@ -76,6 +86,7 @@ class GetSolarTimesRequest(BaseModel):
     )
     date: Optional[str] = Field(
         default=None,
+        max_length=10,
         description="Optional date in YYYY-MM-DD format (e.g. '2026-09-08'). Defaults to today if omitted.",
     )
 
@@ -86,3 +97,18 @@ class GetSolarTimesRequest(BaseModel):
         if not cleaned:
             raise ValueError("Location must not be empty.")
         return cleaned
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        try:
+            parsed = dt_date.fromisoformat(v)
+            return parsed.isoformat()
+        except ValueError:
+            raise ValueError("Date must be in YYYY-MM-DD format (e.g. '2026-09-08').")
+

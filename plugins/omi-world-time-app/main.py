@@ -7,7 +7,7 @@ Requires zero external authentication or API keys.
 
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from datetime import date as dt_date, datetime, time as dt_time, timedelta
+from datetime import date as dt_date, datetime, time as dt_time, timedelta, timezone
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -180,7 +180,7 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
     message = first_error.get("msg", "invalid request")
     detail = f"{location}: {message}" if location else message
     response = ChatToolResponse(error=f"Invalid tool request: {detail}")
-    return JSONResponse(status_code=200, content=response.model_dump())
+    return JSONResponse(status_code=200, content=response.model_dump(exclude_none=True))
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +316,10 @@ def _parse_source_time(time_str: str, base_date: dt_date) -> Tuple[dt_time, dt_d
     if date_match:
         d_str, h_str, m_str, s_str = date_match.groups()
         parsed_date = datetime.strptime(d_str, "%Y-%m-%d").date()
-        parsed_time = dt_time(int(h_str), int(m_str), int(s_str or 0))
+        hours, minutes, seconds = int(h_str), int(m_str), int(s_str or 0)
+        if not (0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59):
+            raise ValueError(f"Invalid time values in '{cleaned}'.")
+        parsed_time = dt_time(hours, minutes, seconds)
         return parsed_time, parsed_date
 
     # Format 2: 12-hour AM/PM (e.g. "2:30 PM", "02:30pm")
@@ -324,25 +327,58 @@ def _parse_source_time(time_str: str, base_date: dt_date) -> Tuple[dt_time, dt_d
     if am_pm_match:
         h, m, s, meridian = am_pm_match.groups()
         hours = int(h)
+        minutes = int(m)
+        seconds = int(s or 0)
+        if not (1 <= hours <= 12):
+            raise ValueError(f"12-hour time format requires hours between 1 and 12, got '{hours}'.")
+        if not (0 <= minutes <= 59 and 0 <= seconds <= 59):
+            raise ValueError(f"Invalid minutes or seconds in time '{cleaned}'.")
         if meridian.lower() == "pm" and hours < 12:
             hours += 12
         elif meridian.lower() == "am" and hours == 12:
             hours = 0
-        return dt_time(hours, int(m), int(s or 0)), base_date
+        return dt_time(hours, minutes, seconds), base_date
 
     # Format 3: 24-hour HH:MM[:SS] (e.g. "14:30", "09:00:00")
     h24_match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$", cleaned)
     if h24_match:
         h, m, s = h24_match.groups()
-        return dt_time(int(h), int(m), int(s or 0)), base_date
+        hours, minutes, seconds = int(h), int(m), int(s or 0)
+        if not (0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59):
+            raise ValueError(f"Invalid 24-hour time values in '{cleaned}'.")
+        return dt_time(hours, minutes, seconds), base_date
 
     raise ValueError(f"Invalid time format: '{time_str}'. Please use HH:MM, HH:MM AM/PM, or YYYY-MM-DD HH:MM.")
+
+
+def _resolve_aware_datetime(parsed_date: dt_date, parsed_time: dt_time, tz: ZoneInfo, loc_name: str) -> datetime:
+    """Construct a timezone-aware datetime, rejecting DST gaps (nonexistent) and folds (ambiguous)."""
+    dt0 = datetime.combine(parsed_date, parsed_time, tzinfo=tz).replace(fold=0)
+    dt1 = datetime.combine(parsed_date, parsed_time, tzinfo=tz).replace(fold=1)
+
+    # Check for nonexistent time (DST gap / spring forward, e.g. 2:30 AM skipped)
+    dt_utc = dt0.astimezone(timezone.utc)
+    dt_rt = dt_utc.astimezone(tz)
+    if (dt_rt.date(), dt_rt.time()) != (parsed_date, parsed_time):
+        raise ValueError(
+            f"The local time {parsed_time.strftime('%H:%M')} on {parsed_date} does not exist in {loc_name} "
+            f"due to daylight saving time transition (clocks spring forward)."
+        )
+
+    # Check for ambiguous time (DST fold / fall back, e.g. 1:30 AM occurs twice)
+    if dt0.utcoffset() != dt1.utcoffset():
+        raise ValueError(
+            f"The local time {parsed_time.strftime('%H:%M')} on {parsed_date} is ambiguous in {loc_name} "
+            f"due to daylight saving time transition (occurs twice)."
+        )
+
+    return dt0
 
 
 # ---------------------------------------------------------------------------
 # Tool Endpoints
 # ---------------------------------------------------------------------------
-@app.post("/tools/get_current_time", response_model=ChatToolResponse)
+@app.post("/tools/get_current_time", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def get_current_time(request: GetCurrentTimeRequest) -> ChatToolResponse:
     """Get the current time, date, timezone abbreviation, and UTC offset for any location."""
     try:
@@ -369,7 +405,7 @@ async def get_current_time(request: GetCurrentTimeRequest) -> ChatToolResponse:
         return ChatToolResponse(error=f"Failed to get time for '{request.location}': {exc}")
 
 
-@app.post("/tools/calculate_time_difference", response_model=ChatToolResponse)
+@app.post("/tools/calculate_time_difference", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def calculate_time_difference(request: CalculateTimeDifferenceRequest) -> ChatToolResponse:
     """Convert time or calculate the exact time difference between two locations."""
     try:
@@ -382,7 +418,7 @@ async def calculate_time_difference(request: CalculateTimeDifferenceRequest) -> 
         now_src = datetime.now(src_tz)
         if request.source_time:
             parsed_time, parsed_date = _parse_source_time(request.source_time, now_src.date())
-            src_dt = datetime.combine(parsed_date, parsed_time, tzinfo=src_tz)
+            src_dt = _resolve_aware_datetime(parsed_date, parsed_time, src_tz, src_name)
         else:
             src_dt = now_src
 
@@ -404,10 +440,14 @@ async def calculate_time_difference(request: CalculateTimeDifferenceRequest) -> 
 
         # Calendar day difference
         day_diff = (tgt_dt.date() - src_dt.date()).days
-        if day_diff > 0:
-            day_note = f" (+{day_diff} day{'s' if day_diff > 1 else ''}, tomorrow)"
-        elif day_diff < 0:
-            day_note = f" ({day_diff} day{'s' if abs(day_diff) > 1 else ''}, yesterday)"
+        if day_diff == 1:
+            day_note = " (+1 day, tomorrow)"
+        elif day_diff > 1:
+            day_note = f" (+{day_diff} days, in {day_diff} days)"
+        elif day_diff == -1:
+            day_note = " (-1 day, yesterday)"
+        elif day_diff < -1:
+            day_note = f" ({day_diff} days, {abs(day_diff)} days earlier)"
         else:
             day_note = " (same calendar day)"
 
@@ -424,7 +464,7 @@ async def calculate_time_difference(request: CalculateTimeDifferenceRequest) -> 
         )
 
 
-@app.post("/tools/get_solar_times", response_model=ChatToolResponse)
+@app.post("/tools/get_solar_times", response_model=ChatToolResponse, response_model_exclude_none=True)
 async def get_solar_times(request: GetSolarTimesRequest) -> ChatToolResponse:
     """Get sunrise, sunset, solar noon, day length, and twilight times for any location."""
     client: httpx.AsyncClient = app.state.http_client
@@ -504,6 +544,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "get_current_time",
                 "description": "Get the current time, date, day of week, UTC offset, and timezone for any city, country, or timezone.",
+                "endpoint": "/tools/get_current_time",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -518,6 +561,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "calculate_time_difference",
                 "description": "Convert time between two cities/timezones or calculate the exact time difference in hours and minutes.",
+                "endpoint": "/tools/calculate_time_difference",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -540,6 +586,9 @@ async def omi_tools() -> Dict[str, Any]:
             {
                 "name": "get_solar_times",
                 "description": "Get sunrise, sunset, solar noon, day length, and twilight (first light / last light) for any location and date.",
+                "endpoint": "/tools/get_solar_times",
+                "method": "POST",
+                "auth_required": False,
                 "parameters": {
                     "type": "object",
                     "properties": {

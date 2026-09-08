@@ -221,18 +221,57 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(resp.result)
         self.assertIn("same time zone", resp.result)
 
+    def test_parse_source_time_validation(self):
+        base_date = datetime(2026, 9, 8).date()
+        # Invalid 12-hour values
+        with self.assertRaises(ValueError):
+            _parse_source_time("13:30 PM", base_date)
+        with self.assertRaises(ValueError):
+            _parse_source_time("00:30 AM", base_date)
+        # Invalid 24-hour values
+        with self.assertRaises(ValueError):
+            _parse_source_time("25:00", base_date)
+        with self.assertRaises(ValueError):
+            _parse_source_time("12:65", base_date)
+        # Valid values
+        t, d = _parse_source_time("12:30 PM", base_date)
+        self.assertEqual(t.hour, 12)
+        t2, d2 = _parse_source_time("12:30 AM", base_date)
+        self.assertEqual(t2.hour, 0)
+
+    async def test_dst_gap_and_fold_detection(self):
+        # US Eastern spring forward: March 10, 2024 2:30 AM does not exist
+        req_gap = CalculateTimeDifferenceRequest(
+            source_location="America/New_York",
+            target_location="UTC",
+            source_time="2024-03-10 02:30",
+        )
+        resp_gap = await calculate_time_difference(req_gap)
+        self.assertIsNotNone(resp_gap.error)
+        self.assertIn("does not exist", resp_gap.error)
+
+        # US Eastern fall back: November 3, 2024 1:30 AM is ambiguous
+        req_fold = CalculateTimeDifferenceRequest(
+            source_location="America/New_York",
+            target_location="UTC",
+            source_time="2024-11-03 01:30",
+        )
+        resp_fold = await calculate_time_difference(req_fold)
+        self.assertIsNotNone(resp_fold.error)
+        self.assertIn("ambiguous", resp_fold.error)
+
     async def test_get_solar_times_mocked(self):
-        # Mock geocoding for Paris
+        # Mock geocoding for Kyoto (not in presets, forcing geocoding call)
         mock_geo_resp = MagicMock()
         mock_geo_resp.status_code = 200
         mock_geo_resp.json.return_value = {
             "results": [
                 {
-                    "name": "Paris",
-                    "latitude": 48.8566,
-                    "longitude": 2.3522,
-                    "country": "France",
-                    "timezone": "Europe/Paris",
+                    "name": "Kyoto",
+                    "latitude": 35.0116,
+                    "longitude": 135.7681,
+                    "country": "Japan",
+                    "timezone": "Asia/Tokyo",
                 }
             ]
         }
@@ -259,15 +298,17 @@ class TestEndpointsHermetic(unittest.IsolatedAsyncioTestCase):
 
         self.mock_client.get.side_effect = side_effect
 
-        req = GetSolarTimesRequest(location="Paris", date="2026-09-08")
+        req = GetSolarTimesRequest(location="Kyoto", date="2026-09-08")
         resp = await get_solar_times(req)
         self.assertIsNone(resp.error)
         self.assertIsNotNone(resp.result)
-        self.assertIn("Solar Ephemeris for Paris", resp.result)
+        self.assertIn("Solar Ephemeris for Kyoto, Japan", resp.result)
         self.assertIn("Sunrise:", resp.result)
         self.assertIn("Sunset:", resp.result)
+        self.assertIn("Solar Noon:", resp.result)
         self.assertIn("Day Length:", resp.result)
-        self.assertIn("13h 05m", resp.result)
+        self.assertIn("Dawn (First Light):", resp.result)
+        self.assertIn("Dusk (Last Light):", resp.result)
 
 
 class TestFastAPIHttp(unittest.TestCase):
@@ -293,6 +334,11 @@ class TestFastAPIHttp(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["schema_version"], "1.0")
+        self.assertEqual(len(data["tools"]), 3)
+        for t in data["tools"]:
+            self.assertIn("endpoint", t)
+            self.assertEqual(t["method"], "POST")
+            self.assertFalse(t["auth_required"])
 
     def test_validation_exception_handler_returns_200_with_error(self):
         # Missing required field 'location'
@@ -300,8 +346,24 @@ class TestFastAPIHttp(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("error", data)
-        self.assertIsNone(data.get("result"))
+        self.assertNotIn("result", data)
         self.assertIn("Invalid tool request", data["error"])
+
+    def test_solar_date_validation_via_http(self):
+        # Invalid date format (10 chars, but invalid calendar date)
+        resp = self.client.post("/tools/get_solar_times", json={"location": "Paris", "date": "2026-99-99"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("error", data)
+        self.assertNotIn("result", data)
+        self.assertIn("YYYY-MM-DD", data["error"])
+
+        # Oversized date string
+        resp_long = self.client.post("/tools/get_solar_times", json={"location": "Paris", "date": "2026-09-08-extra-text"})
+        self.assertEqual(resp_long.status_code, 200)
+        data_long = resp_long.json()
+        self.assertIn("error", data_long)
+        self.assertNotIn("result", data_long)
 
 
 if __name__ == "__main__":
