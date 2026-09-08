@@ -14,6 +14,7 @@ import {
 import {
   dataProtectionCopy,
   desktopReadErrorCopy,
+  developerWebhookTypeCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
 } from '../desktopReadClient';
@@ -736,7 +737,7 @@ export function DesktopSettings({
               .filter(item => item !== null)
               .join(' · ')}
             key={webhook.type}
-            title={webhook.type}
+            title={developerWebhookTypeCopy(webhook.type)}
           />
         ))
       )}

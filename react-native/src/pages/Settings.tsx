@@ -27,6 +27,7 @@ import {
   desktopBackendUnauthorizedCopy,
   desktopReadErrorCopy,
   dataProtectionCopy,
+  developerWebhookTypeCopy,
   subscriptionPlanCopy,
   subscriptionStatusCopy,
 } from '../desktopReadClient';
@@ -535,7 +536,7 @@ export function SettingsPage({
               .filter(item => item !== null)
               .join(' · ')}
             key={webhook.type}
-            title={webhook.type}
+            title={developerWebhookTypeCopy(webhook.type)}
           />
         ))}
       </>

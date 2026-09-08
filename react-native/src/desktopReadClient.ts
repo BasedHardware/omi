@@ -100,6 +100,22 @@ export function dataProtectionCopy(level: string): string {
   return accountWireCopy(level, 'Data protection unavailable');
 }
 
+export function developerWebhookTypeCopy(type: string): string {
+  if (type === 'memory_created') {
+    return 'Conversation Events';
+  }
+  if (type === 'realtime_transcript') {
+    return 'Real-time Transcript';
+  }
+  if (type === 'audio_bytes') {
+    return 'Audio Bytes';
+  }
+  if (type === 'day_summary') {
+    return 'Day Summary';
+  }
+  return accountWireCopy(type, 'Webhook unavailable');
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

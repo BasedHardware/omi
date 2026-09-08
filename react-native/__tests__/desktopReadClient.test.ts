@@ -7,6 +7,7 @@ import {
   conversationGroupLabel,
   conversationStatusCopy,
   dataProtectionCopy,
+  developerWebhookTypeCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -613,6 +614,19 @@ test('account subscription copy is not a raw wire token', () => {
   expect(subscriptionStatusCopy('')).toBe('Plan unavailable');
   expect(dataProtectionCopy('standard')).toBe('Standard');
   expect(dataProtectionCopy('')).toBe('Data protection unavailable');
+});
+
+test('developer webhook titles are not raw API keys', () => {
+  expect(developerWebhookTypeCopy('memory_created')).toBe(
+    'Conversation Events',
+  );
+  expect(developerWebhookTypeCopy('realtime_transcript')).toBe(
+    'Real-time Transcript',
+  );
+  expect(developerWebhookTypeCopy('audio_bytes')).toBe('Audio Bytes');
+  expect(developerWebhookTypeCopy('day_summary')).toBe('Day Summary');
+  expect(developerWebhookTypeCopy('button_event')).toBe('Button event');
+  expect(developerWebhookTypeCopy('')).toBe('Webhook unavailable');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

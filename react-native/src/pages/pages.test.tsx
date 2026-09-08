@@ -872,3 +872,40 @@ test('older browser Settings response cannot overwrite a newer response', async 
     });
   }
 });
+
+test('Settings developer webhook titles are not raw API keys', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/users/developer/webhooks/status') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          memory_created: {
+            enabled: true,
+            url: 'https://example.test/conversation',
+          },
+          realtime_transcript: false,
+          audio_bytes: {enabled: true, url: 'https://example.test/audio'},
+          day_summary: {enabled: false, url: null},
+        }),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(SettingsPage);
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Developer settings')
+      .props.onPress();
+  });
+  const tree = textOf(renderer);
+  expect(tree).toContain('Conversation Events');
+  expect(tree).toContain('Real-time Transcript');
+  expect(tree).toContain('Audio Bytes');
+  expect(tree).toContain('Day Summary');
+  expect(tree).not.toContain('memory_created');
+  expect(tree).not.toContain('realtime_transcript');
+  expect(tree).not.toContain('audio_bytes');
+  expect(tree).not.toContain('day_summary');
+});
