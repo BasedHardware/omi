@@ -42,8 +42,18 @@ function formatConversationDuration(
   if (startedAt === null || finishedAt === null) {
     return 'Duration unavailable';
   }
-  const duration = Date.parse(finishedAt) - Date.parse(startedAt);
-  if (!Number.isFinite(duration) || duration < 0) {
+  const startedAtMs = Date.parse(startedAt);
+  const finishedAtMs = Date.parse(finishedAt);
+  if (
+    !Number.isFinite(startedAtMs) ||
+    startedAtMs <= 0 ||
+    !Number.isFinite(finishedAtMs) ||
+    finishedAtMs <= 0
+  ) {
+    return 'Duration unavailable';
+  }
+  const duration = finishedAtMs - startedAtMs;
+  if (duration < 0) {
     return 'Duration unavailable';
   }
   if (duration < 60_000) {

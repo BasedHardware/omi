@@ -518,6 +518,62 @@ test('conversation durations under a minute do not claim 0 min', () => {
   expect(copy).not.toContain('0 min');
 });
 
+test('a zero conversation start time does not invent a duration', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:epoch-duration',
+    title: 'Missing start',
+    summary: 'Finished without a real start time.',
+    searchableText: 'Missing start\nFinished without a real start time.',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: '2026-09-07T12:00:00.000Z',
+    startedAt: new Date(0).toISOString(),
+    finishedAt: '2026-09-07T12:00:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain('Duration unavailable');
+  expect(textOf(renderer)).not.toContain('hr');
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Missing start',
+      )
+      .props.onPress();
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Duration ·');
+  expect(copy).toContain('Duration unavailable');
+  expect(copy).not.toContain('hr');
+});
+
 test('conversation capture time uses the same clock as Started and not 1970', () => {
   const older = new Date(2025, 7, 10, 12, 0);
   const expected = clockLabel(older.getTime(), Date.now());
