@@ -515,6 +515,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get doubleTap => 'לחץ כפול';
 
   @override
+  String get singleTap => 'לחיצה בודדת';
+
+  @override
   String get ledBrightness => 'בהיקות LED';
 
   @override
@@ -585,6 +588,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'פעולת לחיצה כפולה';
+
+  @override
+  String get singleTapAction => 'פעולת לחיצה בודדת';
 
   @override
   String get endAndProcess => 'סיים ועבד שיחה';

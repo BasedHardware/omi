@@ -523,6 +523,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTap => 'Doppeltippen';
 
   @override
+  String get singleTap => 'Einfachtippen';
+
+  @override
   String get ledBrightness => 'LED-Helligkeit';
 
   @override
@@ -594,6 +597,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Doppeltippen-Aktion';
+
+  @override
+  String get singleTapAction => 'Einfachtippen-Aktion';
 
   @override
   String get endAndProcess => 'Beenden & Verarbeiten';

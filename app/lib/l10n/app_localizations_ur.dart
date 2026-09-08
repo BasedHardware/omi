@@ -518,6 +518,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTap => 'دوگنا تھپتھپائیں';
 
   @override
+  String get singleTap => 'ایک بار تھپتھپائیں';
+
+  @override
   String get ledBrightness => 'LED روشنی';
 
   @override
@@ -589,6 +592,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'دوگنا تھپتھپانے کا عمل';
+
+  @override
+  String get singleTapAction => 'ایک بار تھپتھپانے کا عمل';
 
   @override
   String get endAndProcess => 'بات چیت ختم اور پروسیس کریں';

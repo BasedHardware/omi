@@ -521,6 +521,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get doubleTap => 'Doppio Tocco';
 
   @override
+  String get singleTap => 'Tocco Singolo';
+
+  @override
   String get ledBrightness => 'Luminosità LED';
 
   @override
@@ -592,6 +595,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Azione Doppio Tocco';
+
+  @override
+  String get singleTapAction => 'Azione Tocco Singolo';
 
   @override
   String get endAndProcess => 'Termina ed Elabora Conversazione';

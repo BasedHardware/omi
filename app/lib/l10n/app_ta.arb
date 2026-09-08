@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "இரட்டை தட்டு",
+    "singleTap": "ஒற்றை தட்டு",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "இரட்டை தட்டு நடவடிக்கை",
+    "singleTapAction": "ஒற்றை தட்டு நடவடிக்கை",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

@@ -520,6 +520,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get doubleTap => 'Dubbel tikken';
 
   @override
+  String get singleTap => 'Enkel tikken';
+
+  @override
   String get ledBrightness => 'LED-helderheid';
 
   @override
@@ -591,6 +594,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dubbel tikken actie';
+
+  @override
+  String get singleTapAction => 'Enkel tikken actie';
 
   @override
   String get endAndProcess => 'Gesprek beëindigen en verwerken';

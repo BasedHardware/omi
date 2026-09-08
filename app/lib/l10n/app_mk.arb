@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Двојно допирање",
+    "singleTap": "Единечно допирање",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Акција при двојно допирање",
+    "singleTapAction": "Акција при единечно допирање",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

@@ -518,6 +518,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get doubleTap => 'Podwójne dotknięcie';
 
   @override
+  String get singleTap => 'Pojedyncze dotknięcie';
+
+  @override
   String get ledBrightness => 'Jasność LED';
 
   @override
@@ -589,6 +592,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Akcja podwójnego dotknięcia';
+
+  @override
+  String get singleTapAction => 'Akcja pojedynczego dotknięcia';
 
   @override
   String get endAndProcess => 'Zakończ i przetwórz rozmowę';

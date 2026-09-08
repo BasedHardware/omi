@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "לחץ כפול",
+    "singleTap": "לחיצה בודדת",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "פעולת לחיצה כפולה",
+    "singleTapAction": "פעולת לחיצה בודדת",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

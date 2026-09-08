@@ -520,6 +520,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTap => 'Çift Dokunma';
 
   @override
+  String get singleTap => 'Tek Dokunma';
+
+  @override
   String get ledBrightness => 'LED Parlaklığı';
 
   @override
@@ -590,6 +593,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Çift Dokunma İşlemi';
+
+  @override
+  String get singleTapAction => 'Tek Dokunma İşlemi';
 
   @override
   String get endAndProcess => 'Konuşmayı Sonlandır ve İşle';

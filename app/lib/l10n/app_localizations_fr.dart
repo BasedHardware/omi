@@ -522,6 +522,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTap => 'Double appui';
 
   @override
+  String get singleTap => 'Appui simple';
+
+  @override
   String get ledBrightness => 'Luminosité LED';
 
   @override
@@ -593,6 +596,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Action double appui';
+
+  @override
+  String get singleTapAction => 'Action appui simple';
 
   @override
   String get endAndProcess => 'Terminer et traiter la conversation';

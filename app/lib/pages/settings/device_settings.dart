@@ -390,6 +390,69 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
   }
 
+  String _getSingleTapActionLabel(int action) {
+    switch (action) {
+      case 1:
+        return context.l10n.endConversation;
+      case 2:
+        return context.l10n.deviceOnboardingMuteUnmute;
+      case 3:
+        return context.l10n.starConversation;
+      default:
+        return context.l10n.deviceOnboardingAskQuestionTitle;
+    }
+  }
+
+  void _showSingleTapActionSheet() {
+    int currentAction = SharedPreferencesUtil().singleTapAction;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Widget option(String label, int value) {
+              return ListTile(
+                title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400)),
+                trailing: currentAction == value ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                onTap: () {
+                  setState(() => SharedPreferencesUtil().singleTapAction = value);
+                  Navigator.pop(sheetContext);
+                },
+              );
+            }
+
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 16),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+                  ),
+                  Text(
+                    context.l10n.singleTapAction,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  option(context.l10n.deviceOnboardingAskQuestionTitle, 0),
+                  option(context.l10n.endAndProcess, 1),
+                  option(context.l10n.deviceOnboardingMuteUnmute, 2),
+                  option(context.l10n.starOngoing, 3),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showDoubleTapActionSheet() {
     int currentAction = SharedPreferencesUtil().doubleTapAction;
 
@@ -734,6 +797,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Widget _buildCustomizationSection(BtDevice? device, DeviceProvider provider) {
     final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+    final singleTapAction = SharedPreferencesUtil().singleTapAction;
     final supportsFind = device?.type == DeviceType.omi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
 
     return Container(
@@ -757,6 +821,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
+          // Single Tap
+          _buildProfileStyleItem(
+            key: const Key('single_tap_row'),
+            icon: FontAwesomeIcons.handPointer,
+            title: context.l10n.singleTap,
+            chipValue: _getSingleTapActionLabel(singleTapAction),
+            onTap: _showSingleTapActionSheet,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
           // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,

@@ -520,6 +520,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTap => 'ಗುಣ ಟ್ಯಾಪ್';
 
   @override
+  String get singleTap => 'ಒಂದು ಟ್ಯಾಪ್';
+
+  @override
   String get ledBrightness => 'LED ಝಗಬೆಳಗುವುದು';
 
   @override
@@ -590,6 +593,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
+  String get singleTapAction => 'ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 
   @override
   String get endAndProcess => 'ಸಂವಾದ ಆತೊಡೆತು ಮತ್ತು ಪ್ರಕ್ರಿಯೆ';

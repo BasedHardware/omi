@@ -676,6 +676,10 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Double Tap",
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Single tap row title"
+    },
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -770,6 +774,10 @@
     "doubleTapAction": "Double Tap Action",
     "@doubleTapAction": {
         "description": "Double tap action setting"
+    },
+    "singleTapAction": "Single Tap Action",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
     },
     "endAndProcess": "End & Process Conversation",
     "@endAndProcess": {

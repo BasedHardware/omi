@@ -518,6 +518,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTap => 'Двайны дотык';
 
   @override
+  String get singleTap => 'Адзінарны дотык';
+
+  @override
   String get ledBrightness => 'Яркасць LED';
 
   @override
@@ -589,6 +592,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Дзеянне двойнага дотыку';
+
+  @override
+  String get singleTapAction => 'Дзеянне адзінарнага дотыку';
 
   @override
   String get endAndProcess => 'Завяршыць і перапрацаваць размову';

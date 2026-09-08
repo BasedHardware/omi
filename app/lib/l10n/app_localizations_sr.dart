@@ -518,6 +518,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get doubleTap => 'Дупло додирни';
 
   @override
+  String get singleTap => 'Један додир';
+
+  @override
   String get ledBrightness => 'Сјајност LED';
 
   @override
@@ -588,6 +591,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Акција дуплог додира';
+
+  @override
+  String get singleTapAction => 'Акција једног додира';
 
   @override
   String get endAndProcess => 'Заврши и обради разговор';

@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "দ্বিগুণ ট্যাপ",
+    "singleTap": "একক ট্যাপ",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "দ্বিগুণ ট্যাপ ক্রিয়া",
+    "singleTapAction": "একক ট্যাপ ক্রিয়া",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

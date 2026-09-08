@@ -661,6 +661,7 @@
         "description": "Label for manufacturer field"
     },
     "doubleTap": "Dvostruki dodir",
+    "singleTap": "Jednostruki dodir",
     "@doubleTap": {
         "description": "Double tap action label"
     },
@@ -753,6 +754,7 @@
         "description": "Star conversation action"
     },
     "doubleTapAction": "Radnja dvostrukog dodira",
+    "singleTapAction": "Radnja jednostrukog dodira",
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },

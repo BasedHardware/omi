@@ -26,6 +26,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/button_action.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
@@ -932,6 +933,56 @@ class CaptureController extends ChangeNotifier
     _processVoiceCommandBytes(deviceId, data);
   }
 
+  void _runButtonAction(ButtonAction action, {required bool trackDoubleTap}) {
+    switch (action) {
+      case ButtonAction.toggleMute:
+        // Pause/resume recording
+        Logger.debug("Button action: toggling pause/mute");
+        _isProcessingButtonEvent = true;
+        if (_isPaused) {
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+          resumeDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error resuming device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        } else {
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+          pauseDeviceRecording().then((_) {
+            _isProcessingButtonEvent = false;
+          }).catchError((e) {
+            Logger.debug("Error pausing device recording: $e");
+            _isProcessingButtonEvent = false;
+          });
+        }
+        break;
+      case ButtonAction.starConversation:
+        // Star ongoing conversation (doesn't end it)
+        Logger.debug("Button action: marking conversation for starring");
+        if (!_starOngoingConversation) {
+          markConversationForStarring();
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          // Haptic feedback to confirm
+          HapticFeedback.mediumImpact();
+        } else {
+          // Toggle off if already marked
+          unmarkConversationForStarring();
+          if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          HapticFeedback.lightImpact();
+        }
+        break;
+      case ButtonAction.endConversation:
+        // End conversation and process (default)
+        Logger.debug("Button action: processing conversation");
+        if (trackDoubleTap) PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        forceProcessingCurrentConversation();
+        break;
+      case ButtonAction.askQuestion:
+        break;
+    }
+  }
+
   Future streamButton(String deviceId) async {
     Logger.debug('streamButton in capture_provider');
     _bleButtonStream?.cancel();
@@ -966,55 +1017,22 @@ class CaptureController extends ChangeNotifier
             return;
           }
 
-          int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
-          if (doubleTapAction == 1) {
-            // Pause/resume recording
-            Logger.debug("Double tap: toggling pause/mute");
-            _isProcessingButtonEvent = true;
-            if (_isPaused) {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            } else {
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
-            }
-          } else if (doubleTapAction == 2) {
-            // Star ongoing conversation (doesn't end it)
-            Logger.debug("Double tap: marking conversation for starring");
-            if (!_starOngoingConversation) {
-              markConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-              // Haptic feedback to confirm
-              HapticFeedback.mediumImpact();
-            } else {
-              // Toggle off if already marked
-              unmarkConversationForStarring();
-              PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-              HapticFeedback.lightImpact();
-            }
-          } else {
-            // End conversation and process (default)
-            Logger.debug("Double tap: processing conversation");
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-            forceProcessingCurrentConversation();
-          }
+          _runButtonAction(resolveDoubleTapAction(SharedPreferencesUtil().doubleTapAction), trackDoubleTap: true);
           return;
         }
 
         // Single tap (buttonState == 1) - toggle voice question mode
         // Tap once to start, tap again to end
         if (buttonState == 1) {
+          final singleTapAction = resolveSingleTapAction(SharedPreferencesUtil().singleTapAction);
+          if (singleTapAction != ButtonAction.askQuestion) {
+            if (_isProcessingButtonEvent) {
+              Logger.debug("Single tap: already processing, ignoring");
+              return;
+            }
+            _runButtonAction(singleTapAction, trackDoubleTap: false);
+            return;
+          }
           debugPrint("Single tap detected");
           if (_voiceCommandSession == null) {
             // Start voice question session (new toggle mode)

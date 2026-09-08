@@ -520,6 +520,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTap => 'Nhấn đúp';
 
   @override
+  String get singleTap => 'Nhấn đơn';
+
+  @override
   String get ledBrightness => 'Độ sáng đèn LED';
 
   @override
@@ -590,6 +593,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Hành động nhấn đúp';
+
+  @override
+  String get singleTapAction => 'Hành động nhấn đơn';
 
   @override
   String get endAndProcess => 'Kết thúc & Xử lý cuộc trò chuyện';

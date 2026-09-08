@@ -519,6 +519,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get doubleTap => 'Dubbeltryck';
 
   @override
+  String get singleTap => 'Enkeltryck';
+
+  @override
   String get ledBrightness => 'LED-ljusstyrka';
 
   @override
@@ -590,6 +593,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get doubleTapAction => 'Dubbeltrycksåtgärd';
+
+  @override
+  String get singleTapAction => 'Enkeltrycksåtgärd';
 
   @override
   String get endAndProcess => 'Avsluta och bearbeta konversation';

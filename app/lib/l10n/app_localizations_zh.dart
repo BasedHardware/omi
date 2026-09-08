@@ -509,6 +509,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTap => '双击';
 
   @override
+  String get singleTap => '单击';
+
+  @override
   String get ledBrightness => 'LED 亮度';
 
   @override
@@ -576,6 +579,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get doubleTapAction => '双击操作';
+
+  @override
+  String get singleTapAction => '单击操作';
 
   @override
   String get endAndProcess => '结束并处理';
