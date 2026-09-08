@@ -268,6 +268,8 @@ The CLI is built so an LLM can use it without a wrapper:
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
+* Successful resource `delete --yes` commands preserve the API response in
+  JSON mode. A successful response without a body is emitted as JSON `null`.
 * Rate-limit errors include a `Retry-After` window in the message and surface
   the policy name (`dev:conversations`, etc.) so an agent can back off
   intelligently.
