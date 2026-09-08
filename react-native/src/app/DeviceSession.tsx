@@ -88,9 +88,10 @@ export function DeviceSession({
   variant: DeviceSessionVariant;
 }): React.JSX.Element {
   const connectedLabel =
-    nativeSnapshot?.capture === 'recording' &&
-    nativeSnapshot.audioStatus === 'waiting'
-      ? 'Waiting for audio'
+    nativeSnapshot?.capture === 'recording'
+      ? nativeSnapshot.audioStatus === 'waiting'
+        ? 'Waiting for audio'
+        : 'Listening'
       : 'Connected';
   const scanUnavailable = !isBluetoothScanAvailable(nativeSnapshot?.bluetooth);
   const scanDisabled = deviceBusy || scanUnavailable;

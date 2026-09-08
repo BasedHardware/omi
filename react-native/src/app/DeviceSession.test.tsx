@@ -254,6 +254,39 @@ test.each(['compact', 'overview', 'affordance'] as const)(
   },
 );
 
+test.each(['compact', 'overview', 'affordance'] as const)(
+  '%s live capture row says Listening instead of Connected',
+  async variant => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          variant={variant}
+          deviceBusy={false}
+          deviceScanMessage={null}
+          onScan={() => {}}
+          onToggle={() => {}}
+          nativeSnapshot={{
+            bluetooth: 'poweredOn',
+            phase: 'connected',
+            capture: 'recording',
+            audioStatus: 'active',
+            connectedDeviceId: 'omi',
+            devices: [{id: 'omi', name: 'Omi', connected: true}],
+            lastEvent: '',
+            microphone: 'unknown',
+            notifications: 'unknown',
+          }}
+        />,
+      );
+    });
+    const output = JSON.stringify(renderer.toJSON());
+    expect(output).toContain('Listening');
+    expect(output).not.toContain('Connected');
+    await act(async () => renderer.unmount());
+  },
+);
+
 test.each([
   ['Bluetooth is poweredOn', 'No Omi device was discovered.', 'poweredOn'],
   ['Bluetooth is powered on', 'No Omi device was discovered.', 'poweredOn'],
