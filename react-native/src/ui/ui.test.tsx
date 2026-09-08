@@ -1011,6 +1011,78 @@ test('a zero chat timestamp says Time unavailable instead of 1970', () => {
   expect(tree).not.toContain('1970');
 });
 
+test('a cancelled empty chat message says Response stopped instead of a blank bubble', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled',
+        text: '',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Response stopped');
+  expect(copies).not.toContain('');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
+test('a cancelled chat message with text still says Response stopped', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-cancelled-text',
+        text: 'Partial answer',
+        sender: 'ai',
+        createdAt: Date.now(),
+        generationOutcome: 'cancelled',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Partial answer');
+  expect(copies).toContain('Response stopped');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('wide Home search rows keep untitled processing conversations visible', () => {
   const renderer = render(
     <ProjectionRow

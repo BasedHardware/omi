@@ -72,11 +72,14 @@ const ChatMessageRow = memo(function ChatMessageRow({
                 ? 'Response failed. Try again.'
                 : 'Response failed.'}
             </Text>
+          ) : message.generationOutcome === 'cancelled' &&
+            message.text === '' ? (
+            <Text style={styles.message}>Response stopped</Text>
           ) : (
             <Text style={styles.message}>{message.text}</Text>
           )}
         </View>
-        {message.generationOutcome === 'cancelled' && (
+        {message.generationOutcome === 'cancelled' && message.text !== '' && (
           <Text style={styles.cancelledLabel}>Response stopped</Text>
         )}
         <Text
