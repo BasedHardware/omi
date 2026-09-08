@@ -7,7 +7,7 @@ import {
 import type {Device} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
-import {bluetoothStatusLabel} from './bluetooth';
+import {bluetoothStatusLabel, emptyDeviceListHint} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
@@ -103,7 +103,7 @@ export function DeviceSession({
   const hint =
     deviceScanMessage ??
     (nativeSnapshot !== null && devices.length === 0
-      ? nativeSnapshot.lastEvent ?? 'No Omi device was discovered.'
+      ? emptyDeviceListHint(nativeSnapshot.lastEvent, nativeSnapshot.bluetooth)
       : null);
 
   const remembered =

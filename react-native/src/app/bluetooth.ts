@@ -1,3 +1,10 @@
+const bluetoothWireEventTokens = new Set([
+  'poweredOn',
+  'poweredOff',
+  'unauthorized',
+  'unknown',
+]);
+
 export function bluetoothStatusLabel(state: string): string {
   switch (state) {
     case 'poweredOn':
@@ -19,4 +26,25 @@ export function bluetoothStatusLabel(state: string): string {
     default:
       return 'Bluetooth status unknown';
   }
+}
+
+export function emptyDeviceListHint(
+  event: string | null | undefined,
+  bluetooth: string,
+): string {
+  const trimmed = event?.trim() ?? '';
+  const match = /^Bluetooth is ([A-Za-z]+)$/.exec(trimmed);
+  const wireToken =
+    match !== null && bluetoothWireEventTokens.has(match[1]) ? match[1] : null;
+  if (
+    trimmed === 'Bluetooth is powered on' ||
+    wireToken === 'poweredOn' ||
+    (trimmed === '' && bluetooth === 'poweredOn')
+  ) {
+    return 'No Omi device was discovered.';
+  }
+  if (trimmed === '' || wireToken !== null) {
+    return bluetoothStatusLabel(wireToken ?? bluetooth);
+  }
+  return trimmed;
 }

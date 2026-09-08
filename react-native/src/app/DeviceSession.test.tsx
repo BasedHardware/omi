@@ -231,3 +231,69 @@ test.each(['compact', 'overview', 'affordance'] as const)(
     await act(async () => renderer.unmount());
   },
 );
+
+test.each([
+  ['Bluetooth is poweredOn', 'No Omi device was discovered.', 'poweredOn'],
+  ['Bluetooth is powered on', 'No Omi device was discovered.', 'poweredOn'],
+  ['Bluetooth is poweredOff', 'Bluetooth off', 'poweredOff'],
+  ['Bluetooth is unauthorized', 'Bluetooth permission needed', 'unauthorized'],
+] as const)(
+  'empty device list does not show Bluetooth wire token %s',
+  async (lastEvent, expected, bluetooth) => {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = ReactTestRenderer.create(
+        <DeviceSession
+          nativeSnapshot={
+            {
+              bluetooth,
+              devices: [],
+              connectedDeviceId: null,
+              capture: 'idle',
+              lastEvent,
+            } as PlatformNativeSnapshot
+          }
+          deviceBusy={false}
+          deviceScanMessage={null}
+          variant="compact"
+          onScan={() => {}}
+          onToggle={() => {}}
+        />,
+      );
+    });
+    const output = JSON.stringify(renderer.toJSON());
+    expect(output).toContain(expected);
+    expect(output).not.toContain('poweredOn');
+    expect(output).not.toContain('poweredOff');
+    expect(output).not.toContain('unauthorized');
+    await act(async () => renderer.unmount());
+  },
+);
+
+test('empty device list keeps an already-human Bluetooth last event', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(
+      <DeviceSession
+        nativeSnapshot={
+          {
+            bluetooth: 'poweredOn',
+            devices: [],
+            connectedDeviceId: null,
+            capture: 'idle',
+            lastEvent: 'No Omi devices found',
+          } as PlatformNativeSnapshot
+        }
+        deviceBusy={false}
+        deviceScanMessage={null}
+        variant="overview"
+        onScan={() => {}}
+        onToggle={() => {}}
+      />,
+    );
+  });
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('No Omi devices found');
+  expect(output).not.toContain('poweredOn');
+  await act(async () => renderer.unmount());
+});

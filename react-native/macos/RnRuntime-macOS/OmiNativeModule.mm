@@ -332,7 +332,7 @@ RCT_REMAP_METHOD(disconnectDevice,
     self.scanGeneration += 1;
     if (self.scanResolve != nil) { self.scanResolve([self deviceList]); self.scanResolve = nil; }
   }
-  self.lastEvent = [NSString stringWithFormat:@"Bluetooth is %@", [self bluetoothState]];
+  self.lastEvent = [self bluetoothLastEvent];
   [self emitSnapshot];
   if (!self.awaitingAdapterForScan || self.scanResolve == nil) {
     return;
@@ -903,6 +903,18 @@ RCT_REMAP_METHOD(setDeviceSetting,
 - (void)cancelReconnect {
   OmiBleReconnectCancel(&_reconnectState);
   self.reconnectPeripheral = nil;
+}
+
+- (NSString *)bluetoothLastEvent {
+  if (self.central == nil) {
+    return @"Bluetooth adapter not checked";
+  }
+  switch (self.central.state) {
+    case CBManagerStatePoweredOn: return @"Bluetooth is powered on";
+    case CBManagerStatePoweredOff: return @"Bluetooth is not powered on";
+    case CBManagerStateUnauthorized: return @"Bluetooth permission is required";
+    default: return @"Bluetooth is unavailable";
+  }
 }
 
 - (NSString *)bluetoothState {

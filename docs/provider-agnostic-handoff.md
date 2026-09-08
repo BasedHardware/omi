@@ -256,7 +256,9 @@ Cloud Linux after `ed2cac9659`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `02d67c1424`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Mobile Apps and the macOS Apps gallery humanize category tokens such as productivity instead of showing the raw enum. Empty categories stay omitted. This does not invent an Apps catalogue producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the conversation star display slice: conversation list rows show a star only when the backend marked the conversation starred, matching wide Home search. Unstarred rows no longer show an empty star that looks like a toggle this connection cannot perform. This does not invent a conversation metadata mutation. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `5b88f56820`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Conversation list rows show a star only when the backend marked the conversation starred, matching wide Home search. Unstarred rows no longer show an empty star that looks like a toggle this connection cannot perform. This does not invent a conversation metadata mutation. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the Bluetooth empty-list hint slice: an empty Devices list no longer shows Apple CoreBluetooth wire tokens such as poweredOn. Bluetooth on with no devices, including Android and Apple lastEvent copy "Bluetooth is powered on", says No Omi device was discovered; off and permission-needed wire tokens use the same human labels as the Devices header. Apple lastEvent copy matches Android instead of interpolating bluetoothState. This does not invent a BLE producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

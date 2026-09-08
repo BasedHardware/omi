@@ -730,6 +730,14 @@ test('does not construct CBCentralManager until an explicit scan or connect', ()
   expect(source).toMatch(
     /bluetoothState \{[^]*if \(self\.central == nil\) \{[^]*return @"unknown"/,
   );
+  expect(source).not.toContain('Bluetooth is %@');
+  expect(source).toContain('bluetoothLastEvent');
+  const iosSource = readFileSync(
+    resolve(__dirname, '../ios/RnRuntime/OmiNativeModule.mm'),
+    'utf8',
+  );
+  expect(iosSource).not.toContain('Bluetooth is %@');
+  expect(iosSource).toContain('bluetoothLastEvent');
 });
 
 test('static tripwire: OmiNative wires CoreBluetooth and tested connection policy', () => {
