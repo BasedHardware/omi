@@ -26,6 +26,7 @@ import {
   memoryDisplayBody,
   memoryDisplayTitle,
   parseMemoryText,
+  projectionClockLabel,
   projectionTimestamp,
   taskGroup,
   timelineGroups,
@@ -673,6 +674,77 @@ test('conversation day labels prefer startedAt and keep Today/Yesterday/date', (
       year: 'numeric',
     }),
   );
+});
+
+test('clock labels keep Today as time and date older days', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const conversation = (
+    startedAt: string | null,
+    createdAt: string,
+  ): DesktopReadProjection => ({
+    kind: 'conversation',
+    id: 'conversation-1',
+    title: 'Product review',
+    summary: '',
+    searchableText: '',
+    createdAt,
+    updatedAt: createdAt,
+    startedAt,
+    finishedAt: null,
+    starred: false,
+    status: 'completed',
+    source: 'desktop',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  });
+  const time = (value: Date) =>
+    value.toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  const today = new Date(2026, 7, 14, 8, 0);
+  expect(
+    projectionClockLabel(conversation(null, today.toISOString()), now),
+  ).toBe(time(today));
+  const yesterday = new Date(2026, 7, 13, 23, 0);
+  expect(
+    projectionClockLabel(
+      conversation(yesterday.toISOString(), today.toISOString()),
+      now,
+    ),
+  ).toBe(`Yesterday · ${time(yesterday)}`);
+  const older = new Date(2026, 7, 10, 12, 0);
+  expect(
+    projectionClockLabel(conversation(null, older.toISOString()), now),
+  ).toBe(
+    `${older.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })} · ${time(older)}`,
+  );
+  expect(
+    projectionClockLabel(
+      {
+        kind: 'memory',
+        id: 'memory-1',
+        title: 'Undated',
+        summary: '',
+        searchableText: '',
+        citations: [],
+        timestamp: null,
+        provenance: {
+          label: null,
+          synthesisVersion: null,
+          inputDigest: null,
+          outputDigest: null,
+        },
+      },
+      now,
+    ),
+  ).toBe('');
 });
 
 test('groups timeline rows through one canonical timestamp policy', () => {

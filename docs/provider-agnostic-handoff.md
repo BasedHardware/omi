@@ -206,7 +206,9 @@ Cloud Linux after `f25a1e7b6e`: GitHub `Validate backend worker` passed, includi
 
 Cloud Linux after `fba3e2150f`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. Compact Home Daily Recaps no longer show weekday-only dates. They use the same Today/Yesterday/date grouping as Conversations, preferring startedAt then createdAt. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
-Cloud Linux after the macOS Tasks Complete-label slice: macOS Tasks no longer labels a disabled read-only task control Complete or Reopen. Incomplete read-only rows stay Task; completed read-only rows stay Completed; Complete/Reopen stay when writes are available. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+Cloud Linux after `e45def0560`: GitHub `Validate backend worker` passed, including Portable PostgreSQL 18.4. macOS Tasks no longer labels a disabled read-only task control Complete or Reopen. Incomplete read-only rows stay Task; completed read-only rows stay Completed; Complete/Reopen stay when writes are available. This does not invent a task-write producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
+Cloud Linux after the macOS Home clock-label slice: macOS Home and Conversations rows no longer show only a clock time for older days. Today stays time-only; Yesterday and older days use the same Today/Yesterday/date grouping as compact Daily Recaps. This does not invent a conversation producer. Chat writes, Settings identity producers, Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 ## Verified and pushed
 

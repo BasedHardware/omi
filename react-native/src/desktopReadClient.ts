@@ -175,6 +175,25 @@ export function projectionTimestamp(
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
 }
 
+export function projectionClockLabel(
+  item: DesktopReadProjection,
+  nowEpochMilliseconds: number,
+): string {
+  const timestamp = projectionTimestamp(item);
+  if (timestamp === null || timestamp <= 0) {
+    return '';
+  }
+  const day = conversationGroupLabel(
+    new Date(timestamp).toISOString(),
+    nowEpochMilliseconds,
+  );
+  const time = new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return day === 'Today' ? time : `${day} · ${time}`;
+}
+
 export function homeSearchItems(
   reads: DesktopReadProjection[],
   tasks: readonly TaskProjection[] | null,

@@ -8,7 +8,7 @@ import {
   conversationDisplayTitle,
   memoryDisplayBody,
   memoryDisplayTitle,
-  projectionTimestamp,
+  projectionClockLabel,
   type ConversationProjection,
   type DesktopReadProjection,
   type MemoryProjection,
@@ -17,14 +17,7 @@ import {
 import {desktopTokens as token} from './tokens';
 
 function timeLabel(item: DesktopReadProjection): string {
-  const timestamp = projectionTimestamp(item);
-  if (timestamp === null || timestamp <= 0) {
-    return '';
-  }
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return projectionClockLabel(item, Date.now());
 }
 
 function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
