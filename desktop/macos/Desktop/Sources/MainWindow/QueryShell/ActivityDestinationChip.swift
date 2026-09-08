@@ -27,8 +27,8 @@ enum ActivityDestinationChip: String, CaseIterable, Identifiable {
   case conversations
   case memories
   case rewind
-  case brainMap
   case people
+  case brainMap
 
   var id: String { rawValue }
 

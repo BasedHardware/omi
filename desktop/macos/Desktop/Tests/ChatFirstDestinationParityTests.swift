@@ -70,7 +70,7 @@ final class ChatFirstDestinationParityTests: XCTestCase {
   func testTheActivityChipRowOffersEveryHubPageAndNothingElse() {
     XCTAssertEqual(
       ActivityDestinationChip.allCases.map(\.title),
-      ["Activity", "Conversations", "Memories", "Rewind", "Brain Map"])
+      ["Activity", "Conversations", "Memories", "Rewind", "People", "Brain Map"])
 
     XCTAssertEqual(
       Set(ActivityDestinationChip.reachableHubDestinations), Set(MemoryHubDestination.allCases),
