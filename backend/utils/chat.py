@@ -16,7 +16,7 @@ from utils.conversations.factory import deserialize_conversation
 from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
 from utils.conversation_helpers import extract_memory_ids
-from utils.notifications import send_client_displayed_notification, send_notification
+from utils.chat_answer_notifications import send_client_displayed_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
