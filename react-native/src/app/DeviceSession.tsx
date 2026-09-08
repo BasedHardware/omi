@@ -42,7 +42,7 @@ export function homeConnectionStatus(snapshot: PlatformNativeSnapshot | null): {
       connectedDevice: null,
       label:
         snapshot.bluetooth === 'poweredOn'
-          ? 'Omi disconnected'
+          ? 'Omi not connected'
           : bluetoothStatusLabel(snapshot.bluetooth),
       color: '#d9826f',
     };

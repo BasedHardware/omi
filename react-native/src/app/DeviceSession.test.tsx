@@ -177,6 +177,28 @@ test.each(['compact', 'overview'] as const)(
   },
 );
 
+test('powered-on Home status does not claim a dropped Omi session', () => {
+  const snapshot = {
+    bluetooth: 'poweredOn',
+    phase: 'disconnected',
+    capture: 'idle',
+    connectedDeviceId: null,
+    devices: [{id: 'omi', name: 'Omi', connected: false, rssi: -40}],
+    lastEvent: '',
+    microphone: 'unknown',
+    notifications: 'unknown',
+  } as PlatformNativeSnapshot;
+  expect(homeConnectionStatus(snapshot).label).toBe('Omi not connected');
+  expect(homeConnectionStatus(snapshot).label).not.toBe('Omi disconnected');
+  expect(
+    homeConnectionStatus({
+      ...snapshot,
+      bluetooth: 'poweredOff',
+      devices: [],
+    }).label,
+  ).toBe('Bluetooth off');
+});
+
 test('connected audio status waits for an actual packet without changing capture ownership', () => {
   const base: PlatformNativeSnapshot = {
     bluetooth: 'poweredOn',

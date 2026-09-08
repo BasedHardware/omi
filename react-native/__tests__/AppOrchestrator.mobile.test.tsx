@@ -93,6 +93,13 @@ test('mobile Ask Omi stays unavailable without a backend', async () => {
   expect(ask.props.onSubmitEditing).toBeUndefined();
 });
 
+test('compact Home does not claim Omi disconnected when nothing is connected', async () => {
+  const renderer = await renderApp();
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Omi not connected');
+  expect(tree).not.toContain('Omi disconnected');
+});
+
 test('mobile device panel exposes the existing scan and connection controls', async () => {
   mockNative.startScan.mockClear();
   mockNative.connectDevice.mockClear();
