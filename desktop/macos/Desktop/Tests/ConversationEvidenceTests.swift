@@ -1,3 +1,4 @@
+import CoreGraphics
 import VoiceTurnDomain
 import XCTest
 
@@ -5,7 +6,7 @@ import XCTest
 
 final class ConversationEvidenceTests: XCTestCase {
   func testNativeOCRUsesRuntimeEvidenceEnvelopeAndPreservesMetadata() throws {
-    let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
+    let turnID = VoiceTurnID(try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001")))
     let evidence = ConversationEvidence.nativeScreenOCR(
       evidenceID: "screen-1",
       capturedAt: Date(timeIntervalSince1970: 123),
@@ -30,7 +31,7 @@ final class ConversationEvidenceTests: XCTestCase {
     XCTAssertNil(evidence.artifactId)
   }
 
-  func testUTF8BodyIsBoundedAndMarkedPartial() {
+  func testUTF8BodyIsBoundedAndMarkedPartial() throws {
     let evidence = ConversationEvidence(
       id: "oversized",
       kind: .document,
@@ -40,8 +41,8 @@ final class ConversationEvidenceTests: XCTestCase {
       extractionCompleteness: .complete,
       bodyText: String(repeating: "é", count: 100_000))
 
-    XCTAssertNotNil(evidence.bodyText)
-    XCTAssertLessThanOrEqual(evidence.bodyText!.utf8.count, ConversationEvidence.maxBodyBytes)
+    let bodyText = try XCTUnwrap(evidence.bodyText)
+    XCTAssertLessThanOrEqual(bodyText.utf8.count, ConversationEvidence.maxBodyBytes)
     XCTAssertEqual(evidence.extractionCompleteness, .partial)
     XCTAssertTrue(evidence.digest?.hasPrefix("sha256:") == true)
   }
@@ -59,8 +60,8 @@ final class ConversationEvidenceTests: XCTestCase {
     XCTAssertNil(evidence.artifactId)
   }
 
-  func testPendingNativeOCRCarriesStableSourceWithoutPretendingExtraction() {
-    let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
+  func testPendingNativeOCRCarriesStableSourceWithoutPretendingExtraction() throws {
+    let turnID = VoiceTurnID(try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000002")))
     let evidence = ConversationEvidence.pendingNativeScreenOCR(
       evidenceID: "ptt-ocr:00000000-0000-0000-0000-000000000002",
       capturedAt: Date(timeIntervalSince1970: 20),
@@ -132,4 +133,98 @@ final class ConversationEvidenceTests: XCTestCase {
     XCTAssertEqual(snapshot.evidenceText?.utf8.count, ConversationEvidence.maxBodyBytes)
     XCTAssertTrue(snapshot.evidenceTextWasTruncated)
   }
+
+  func testPreferredCaptureEmptyOCRDoesNotRecaptureFrontmost() async throws {
+    XCTAssertEqual(
+      PTTContextVocabularyProvider.immediateScreenTextSource(intent: .frozen(nil)),
+      .preferredImage)
+    XCTAssertEqual(
+      PTTContextVocabularyProvider.immediateScreenTextSource(intent: .liveFrontmost),
+      .liveFrontmostCapture)
+
+    let spy = CaptureSelectionSpy()
+    let failedFrozen = await PTTContextVocabularyProvider.captureImmediateScreenText(
+      intent: .frozen(nil),
+      extractFromPreferredImage: { _ in
+        spy.preferred += 1
+        return "should-not-run"
+      },
+      captureFrontmost: {
+        spy.live += 1
+        return "overlay-surface"
+      })
+    XCTAssertNil(failedFrozen)
+    XCTAssertEqual(spy.preferred, 0)
+    XCTAssertEqual(spy.live, 0)
+
+    let image = try makeTestImage()
+    spy.preferred = 0
+    spy.live = 0
+    let emptyPreferred = await PTTContextVocabularyProvider.captureImmediateScreenText(
+      intent: .frozen(image),
+      extractFromPreferredImage: { _ in
+        spy.preferred += 1
+        return nil
+      },
+      captureFrontmost: {
+        spy.live += 1
+        return "overlay-surface"
+      })
+    XCTAssertNil(emptyPreferred)
+    XCTAssertEqual(spy.preferred, 1)
+    XCTAssertEqual(spy.live, 0)
+
+    spy.preferred = 0
+    spy.live = 0
+    let live = await PTTContextVocabularyProvider.captureImmediateScreenText(
+      intent: .liveFrontmost,
+      extractFromPreferredImage: { _ in
+        spy.preferred += 1
+        return "preferred"
+      },
+      captureFrontmost: {
+        spy.live += 1
+        return "frontmost"
+      })
+    XCTAssertEqual(live, "frontmost")
+    XCTAssertEqual(spy.preferred, 0)
+    XCTAssertEqual(spy.live, 1)
+
+    let turnID = VoiceTurnID()
+    let capturedAt = Date(timeIntervalSince1970: 9)
+    let snapshot = PTTContextVocabularyProvider.snapshot(
+      capturedAt: capturedAt,
+      settingsVocabulary: [],
+      immediateOCRText: "")
+    XCTAssertNil(snapshot.evidenceText)
+    XCTAssertEqual(snapshot.sourceCount, 0)
+
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      text: snapshot.evidenceText,
+      turnID: turnID,
+      frontmostApp: "Codex",
+      frontmostBundleID: "com.openai.codex")
+    XCTAssertEqual(evidence.availability, .unavailable)
+    XCTAssertEqual(evidence.extractionCompleteness, .none)
+    XCTAssertNil(evidence.bodyText)
+    XCTAssertEqual(evidence.provenance?["frontmost_app"], "Codex")
+    XCTAssertEqual(evidence.capturedAtMs, 9_000)
+  }
+
+  private func makeTestImage() throws -> CGImage {
+    let context = try XCTUnwrap(
+      CGContext(
+        data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+          | CGBitmapInfo.byteOrder32Little.rawValue))
+    return try XCTUnwrap(context.makeImage())
+  }
+}
+
+private final class CaptureSelectionSpy: @unchecked Sendable {
+  var preferred = 0
+  var live = 0
 }

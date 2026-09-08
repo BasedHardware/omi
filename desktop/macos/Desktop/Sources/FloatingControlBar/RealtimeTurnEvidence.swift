@@ -82,6 +82,11 @@ final class RealtimeTurnEvidenceLedger {
     turnID: String
   ) -> Bool {
     guard var entry = entries[key], !turnID.isEmpty else { return false }
+    // A cancelled or owner-stale callback cannot invent a producing row after
+    // this reservation has already been told no late write is licensed.
+    guard !entry.terminal || entry.allowsLateEvidence || entry.journalUserTurnID != nil else {
+      return false
+    }
     entry.journalUserTurnID = turnID
     entries[key] = entry
     return true
@@ -161,6 +166,20 @@ final class RealtimeTurnEvidenceLedger {
     return true
   }
 
+  /// The native terminal boundary for a reserved source. In-flight writes and
+  /// admitted producing rows keep the obligation until their persistence fence;
+  /// every other terminal fences immediately so cancelled/too-short/non-hub
+  /// reservations cannot fill the bounded ledger.
+  @discardableResult
+  func finishTerminal(key: Key, allowsLateEvidence: Bool) -> Bool {
+    guard markTerminal(key: key, allowsLateEvidence: allowsLateEvidence) else { return false }
+    guard
+      RealtimeTurnEvidenceTerminalPolicy.shouldFenceAtTerminal(
+        allowsLateEvidence: allowsLateEvidence)
+    else { return true }
+    return markPersistenceFence(key: key)
+  }
+
   /// Called after the existing `RealtimeTurnPersistenceLedger` receipt is
   /// consumed. Evidence survives ordinary reducer cleanup until this point.
   @discardableResult
@@ -214,5 +233,51 @@ final class RealtimeTurnEvidenceLedger {
       .sorted { $0.createdAt < $1.createdAt }
     guard let oldest = removable.first else { return }
     entries.removeValue(forKey: oldest.key)
+  }
+}
+
+/// Native evidence retirement at a voice-turn terminal. Late OCR is only kept
+/// when a journal write is still allowed to finish; otherwise the reservation
+/// must release its ledger slot at this boundary.
+enum RealtimeTurnEvidenceTerminalPolicy {
+  /// Success alone is not a license. A non-hub turn with no producing row and
+  /// no in-flight write must release its slot rather than leak until prune.
+  static func allowsLateEvidence(
+    persistPending: Bool,
+    producingRowAdmitted: Bool
+  ) -> Bool {
+    persistPending || producingRowAdmitted
+  }
+
+  static func shouldFenceAtTerminal(allowsLateEvidence: Bool) -> Bool {
+    !allowsLateEvidence
+  }
+
+  /// Apply the native terminal policy to an existing reservation using the
+  /// persistence ledgers `voiceTurnDidTerminate` already consults.
+  @discardableResult
+  @MainActor
+  static func finish(
+    ledger: RealtimeTurnEvidenceLedger,
+    key: RealtimeTurnEvidenceLedger.Key,
+    persistPending: Bool
+  ) -> Bool {
+    let producingRowAdmitted = ledger.entry(for: key)?.journalUserTurnID != nil
+    return ledger.finishTerminal(
+      key: key,
+      allowsLateEvidence: allowsLateEvidence(
+        persistPending: persistPending,
+        producingRowAdmitted: producingRowAdmitted))
+  }
+
+  /// The allowed write settled as a rejection: drop the reservation so a later
+  /// cancelled callback cannot attach a row that was never admitted.
+  @discardableResult
+  @MainActor
+  static func retireRejectedWrite(
+    ledger: RealtimeTurnEvidenceLedger,
+    key: RealtimeTurnEvidenceLedger.Key
+  ) -> Bool {
+    ledger.finishTerminal(key: key, allowsLateEvidence: false)
   }
 }

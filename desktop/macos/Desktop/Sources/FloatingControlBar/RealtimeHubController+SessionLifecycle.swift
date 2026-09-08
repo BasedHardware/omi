@@ -283,12 +283,15 @@ extension RealtimeHubController {
     let terminal = VoiceTurnCoordinator.shared.model.lastTerminal
     let terminalForTurn = terminal?.turnID == turnID ? terminal : nil
     if let key = turnEvidenceLedger.key(turnID: turnID, continuityKey: continuityKey) {
-      // A successful turn may still be waiting for its final fallback journal
-      // admission. Keep its late OCR obligation alive until that row exists;
-      // explicit cancellation and failed turns remain fail-closed.
-      _ = turnEvidenceLedger.markTerminal(
+      // In-flight journal writes and already-admitted producing rows may still
+      // receive the same-ID OCR result. Success without either is not a license.
+      let persistPending =
+        turnPersistenceLedger.pendingContinuityKeys.contains(continuityKey)
+        || streamingJournalWriteLedger.contains(continuityKey: continuityKey)
+      _ = RealtimeTurnEvidenceTerminalPolicy.finish(
+        ledger: turnEvidenceLedger,
         key: key,
-        allowsLateEvidence: terminalForTurn?.reason == .success)
+        persistPending: persistPending)
     }
     if admittedInputTurnID == turnID { admittedInputTurnID = nil }
     if let terminal = terminalForTurn {
@@ -1016,7 +1019,7 @@ extension RealtimeHubController {
     if acceptedSpawnOwnerID == ownerID
       || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
     {
-      return await RealtimeTurnJournalAuthority.persist(
+      let accepted = await RealtimeTurnJournalAuthority.persist(
         turnOwnerID: ownerID,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
         kernelOwnsExchange: kernelOwnsExchange,
@@ -1028,6 +1031,8 @@ extension RealtimeHubController {
             ownerID: ownerID, continuityKey: idempotencyKey)
         },
         recordProviderExchange: { false })
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+      return accepted
     }
 
     switch await finalizeStreamingRealtimeProjection(
@@ -1039,6 +1044,7 @@ extension RealtimeHubController {
       terminalReason: terminalReason
     ) {
     case .completed(let accepted):
+      fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
       return accepted
     case .absent, .recordRejected:
       break
@@ -1092,8 +1098,10 @@ extension RealtimeHubController {
                 _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
               }
             }
-            return await self.persistNativeEvidenceAfterJournalAdmission(
+            let persisted = await self.persistNativeEvidenceAfterJournalAdmission(
               ownerID: ownerID, continuityKey: idempotencyKey)
+            self.fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: idempotencyKey)
+            return persisted
           }
           if attempt == 0 { try? await Task.sleep(nanoseconds: 250_000_000) }
         }

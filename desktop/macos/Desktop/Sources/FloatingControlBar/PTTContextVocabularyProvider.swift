@@ -21,12 +21,46 @@ struct PTTContextSnapshot {
   let evidenceTextWasTruncated: Bool
 }
 
+enum PTTImmediateScreenCaptureIntent: Sendable {
+  /// Native PTT already attempted a freeze, including failed/no-pixels.
+  /// Empty or failed OCR stays on this capture; never recapture a later surface.
+  case frozen(CGImage?)
+  /// Presses that never captured before the overlay may live-capture frontmost.
+  case liveFrontmost
+}
+
+enum PTTImmediateScreenTextSource: Equatable, Sendable {
+  /// Pixels frozen before the Omi overlay appeared. Empty or failed OCR stays
+  /// on this capture; a later frontmost recapture would be a different surface.
+  case preferredImage
+  case liveFrontmostCapture
+}
+
 enum PTTContextVocabularyProvider {
   private static let maxKeywords = 100
   private static let maxImmediateOCRLength = 2_000
 
-  static func capture(at date: Date = Date(), preOverlayImage: CGImage? = nil) async -> PTTContextSnapshot {
-    async let immediateOCRText = captureImmediateScreenText(preferredImage: preOverlayImage)
+  /// Preferred pre-overlay pixels are the only legal source for that turn's
+  /// OCR. Recapture is only for presses that never attempted a freeze.
+  static func immediateScreenTextSource(
+    intent: PTTImmediateScreenCaptureIntent
+  ) -> PTTImmediateScreenTextSource {
+    switch intent {
+    case .frozen:
+      return .preferredImage
+    case .liveFrontmost:
+      return .liveFrontmostCapture
+    }
+  }
+
+  static func capture(
+    at date: Date = Date(),
+    intent: PTTImmediateScreenCaptureIntent = .liveFrontmost
+  ) async -> PTTContextSnapshot {
+    async let immediateOCRText = captureImmediateScreenText(
+      intent: intent,
+      extractFromPreferredImage: extractVisibleText(from:),
+      captureFrontmost: captureFrontmostScreenText)
     let settingsVocabulary = await MainActor.run {
       AssistantSettings.shared.effectiveVocabulary
     }
@@ -34,6 +68,22 @@ enum PTTContextVocabularyProvider {
       capturedAt: date,
       settingsVocabulary: settingsVocabulary,
       immediateOCRText: await immediateOCRText)
+  }
+
+  /// Production-seam capture selection. Injected extractors let tests prove a
+  /// failed/empty freeze never falls through to a later frontmost surface.
+  static func captureImmediateScreenText(
+    intent: PTTImmediateScreenCaptureIntent,
+    extractFromPreferredImage: (CGImage) async -> String?,
+    captureFrontmost: () async -> String?
+  ) async -> String? {
+    switch immediateScreenTextSource(intent: intent) {
+    case .preferredImage:
+      guard case .frozen(let preferredImage) = intent, let preferredImage else { return nil }
+      return await extractFromPreferredImage(preferredImage)
+    case .liveFrontmostCapture:
+      return await captureFrontmost()
+    }
   }
 
   /// The final transcript can be rewritten only from explicit user vocabulary and pixels captured
@@ -77,14 +127,7 @@ enum PTTContextVocabularyProvider {
     )
   }
 
-  private static func captureImmediateScreenText(preferredImage: CGImage?) async -> String? {
-    if let preferredImage,
-      let text = await extractVisibleText(from: preferredImage)
-    {
-      log("PTTContextVocabulary: immediate OCR used pre-overlay display image")
-      return text
-    }
-
+  private static func captureFrontmostScreenText() async -> String? {
     let screenCaptureService = ScreenCaptureService()
     let activeWindowInfo = await ScreenCaptureService.getActiveWindowInfoAsync()
     let activeAppName = activeWindowInfo.appName?.lowercased() ?? ""
