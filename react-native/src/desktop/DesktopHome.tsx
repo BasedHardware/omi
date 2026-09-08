@@ -15,6 +15,7 @@ import {
   chatSenderCopy,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
+  visibleDisplayText,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
 } from '../desktopReadClient';
@@ -170,7 +171,7 @@ export function DesktopHome({
       shouldFollowChat.current = true;
     }
   }, [chatBusy]);
-  const query = draft.trim();
+  const query = visibleDisplayText(draft);
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
     return reads.filter(item => {

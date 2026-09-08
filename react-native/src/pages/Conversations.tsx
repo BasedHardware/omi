@@ -17,6 +17,7 @@ import {
   conversationDayLabel,
   conversationStatusCopy,
   desktopBackendUnavailableCopy,
+  visibleDisplayText,
   type ConversationProjection,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -161,7 +162,7 @@ export function ConversationsPage({
   }, [onRequestedConversationConsumed, requestedConversationId]);
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return conversations.filter(
       item =>
         (!starredOnly || item.starred) &&
@@ -202,7 +203,7 @@ export function ConversationsPage({
       ),
     [filtered, nowEpochMilliseconds],
   );
-  const filtering = query.trim() !== '' || starredOnly;
+  const filtering = visibleDisplayText(query) !== '' || starredOnly;
 
   return (
     <View

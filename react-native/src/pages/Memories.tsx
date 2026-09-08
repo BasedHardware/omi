@@ -15,6 +15,7 @@ import {
   memoryDisplayTitle,
   memoryCitationCopy,
   memorySynthesisCopy,
+  visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type MemoryProjection,
@@ -78,7 +79,7 @@ export function MemoriesPage({
     };
   }, [loaded, outcome]);
   const results = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return normalized === ''
       ? items
       : items.filter(item =>
@@ -156,7 +157,7 @@ export function MemoriesPage({
     );
   }, []);
   const error = outcome?.status === 'error' ? outcome.error : null;
-  const filtering = query.trim() !== '';
+  const filtering = visibleDisplayText(query) !== '';
   return (
     <View style={styles.memoryPage}>
       <Text

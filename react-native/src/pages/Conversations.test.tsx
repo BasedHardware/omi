@@ -166,6 +166,59 @@ test('untitled processing conversations stay visible instead of a blank row', ()
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
+test('a NEXT LINE-only conversation search keeps rows instead of claiming a miss', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:processing-one',
+    title: '',
+    summary: '',
+    searchableText:
+      'Processing conversation…\nConversation summary is not ready yet.',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'processing',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('\u0085');
+  });
+  expect(textOf(renderer)).toContain('Processing conversation…');
+  expect(textOf(renderer)).not.toContain('No loaded conversations match.');
+  expect(textOf(renderer)).not.toContain('\u0085');
+});
+
 test('listen conversations do not present a blank detail as a transcript', async () => {
   const native = require('react-native') as typeof import('react-native');
   const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({

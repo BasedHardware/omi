@@ -371,6 +371,21 @@ test('an incomplete empty search does not claim a complete miss', async () => {
   expect(label(view, 'Load more history')).toBeDefined();
 });
 
+test('a NEXT LINE-only Rewind search does not claim a complete miss', async () => {
+  mockRewind.listFrames.mockResolvedValue({
+    frames: [frame('one')],
+    nextCursor: null,
+  });
+  const view = await render();
+  await act(async () =>
+    label(view, 'Search screen history').props.onChangeText('\u0085'),
+  );
+  await press(view, 'Search history');
+  expect(content(view)).toContain('Preview app');
+  expect(content(view)).not.toContain('No captures match this search.');
+  expect(content(view)).not.toContain('\u0085');
+});
+
 test.each(['rejected', 'wrong-id'])(
   'image %s cannot display unrelated bytes',
   async mode => {

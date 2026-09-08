@@ -466,7 +466,7 @@ export function homeSearchItems(
   tasks: readonly TaskProjection[] | null,
   query: string,
 ): DesktopReadProjection[] {
-  const normalized = query.trim().toLocaleLowerCase();
+  const normalized = visibleDisplayText(query).toLocaleLowerCase();
   const matches = (item: DesktopReadProjection): boolean =>
     normalized === '' ||
     item.searchableText.toLocaleLowerCase().includes(normalized);

@@ -886,6 +886,16 @@ test('searches real projections instead of a fake timeline', () => {
   expect(tree).not.toContain('🧠');
 });
 
+test('a NEXT LINE-only Home search does not claim a search miss', () => {
+  const renderer = renderDesktop({draft: '\u0085'});
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).not.toContain('Nothing captured matches this search.');
+  expect(tree).not.toContain('No tasks match this search.');
+  expect(tree).not.toContain('\u0085');
+});
+
 test('Home renders real memories alongside conversations', () => {
   const memory = {
     kind: 'memory' as const,

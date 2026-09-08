@@ -456,6 +456,38 @@ test('an incomplete empty task search does not claim a complete miss', () => {
   expect(copy).not.toContain('No loaded tasks match.');
 });
 
+test('a NEXT LINE-only task search keeps rows instead of claiming a miss', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [{...task, title: 'Prepare product demo'}],
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('\u0085');
+  });
+  const copy = renderer.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .flat()
+    .join(' ');
+  expect(copy).toContain('Prepare product demo');
+  expect(copy).not.toContain('No loaded tasks match.');
+  expect(copy).not.toContain('\u0085');
+  act(() => renderer.unmount());
+});
+
 test('task pagination stays available when loaded task search has no matches', () => {
   const onLoadMore = jest.fn();
   let renderer!: ReactTestRenderer.ReactTestRenderer;

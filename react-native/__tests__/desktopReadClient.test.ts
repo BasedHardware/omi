@@ -432,6 +432,15 @@ describe('homeSearchItems', () => {
   test('omits tasks when the task page did not load', () => {
     expect(homeSearchItems([conversation], null, 'desktop chrome')).toEqual([]);
   });
+
+  test('a NEXT LINE-only query keeps rows instead of claiming a miss', () => {
+    expect(
+      homeSearchItems([conversation], [task], '\u0085').map(item => item.id),
+    ).toEqual(['task-search', 'conversation-search']);
+    expect(
+      homeSearchItems([conversation], [task], '').map(item => item.id),
+    ).toEqual(['task-search', 'conversation-search']);
+  });
 });
 
 describe('desktopReadsCanRetry', () => {

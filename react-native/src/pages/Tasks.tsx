@@ -14,6 +14,7 @@ import {
   formatTaskDue,
   taskDisplayTitle,
   taskGroup,
+  visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
   type TaskGroup,
@@ -63,7 +64,7 @@ export function TasksPage({
     [outcome],
   );
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
+    const normalized = visibleDisplayText(query).toLocaleLowerCase();
     return normalized === ''
       ? tasks
       : tasks.filter(task =>
@@ -81,7 +82,7 @@ export function TasksPage({
     [filtered, nowMs],
   );
   const error = outcome?.status === 'error' ? outcome.error : null;
-  const filtering = query.trim() !== '';
+  const filtering = visibleDisplayText(query) !== '';
   return (
     <View style={styles.tasksPage}>
       <Text

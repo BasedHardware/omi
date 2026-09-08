@@ -385,7 +385,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       searchQuery,
     );
   }, [readOutcomes, reads, searchQuery]);
-  const homeSearching = searchQuery.trim() !== '';
+  const homeSearching = visibleDisplayText(searchQuery) !== '';
   const homeSearchEmptyTitle = savedDataEmptyTitle(
     readOutcomes !== null && readOutcomes.conversations.status === 'success'
       ? readOutcomes.conversations.value.page

@@ -183,7 +183,7 @@ export function DesktopRewind({
     }
   };
   const search = () => {
-    setQuery(draft.trim());
+    setQuery(visibleDisplayText(draft));
     setRevision(value => value + 1);
   };
   return (
