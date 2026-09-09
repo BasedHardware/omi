@@ -1,8 +1,9 @@
 import React, {memo, useEffect, useRef} from 'react';
-import {Animated, Easing, Text, View} from 'react-native';
+import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {styles} from './styles';
+import {desktopTokens as token} from '../desktop/tokens';
 
 function formatChatTime(createdAt: number): string {
   const milliseconds =
@@ -16,11 +17,13 @@ function formatChatTime(createdAt: number): string {
 const ChatMessageRow = memo(function ChatMessageRow({
   animate,
   compact,
+  desktop = false,
   message,
   reduceMotion,
 }: {
   animate: boolean;
   compact: boolean;
+  desktop?: boolean;
   message: ChatMessage;
   reduceMotion: boolean;
 }) {
@@ -30,9 +33,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
   ).current;
   useEffect(() => {
     if (!animate) {
+      opacity.setValue(1);
+      translateY.setValue(0);
       return;
     }
-    Animated.parallel([
+    const animation = Animated.parallel([
       Animated.timing(opacity, {
         duration: reduceMotion ? 1 : 200,
         easing: Easing.out(Easing.cubic),
@@ -45,7 +50,9 @@ const ChatMessageRow = memo(function ChatMessageRow({
         toValue: 0,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    animation.start();
+    return () => animation.stop();
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
   return (
@@ -58,7 +65,12 @@ const ChatMessageRow = memo(function ChatMessageRow({
         human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
         {opacity, transform: [{translateY}]},
       ]}>
-      {!human && <OmiAvatar />}
+      {!human && (
+        <OmiAvatar
+          tone={desktop ? 'ink' : 'identity'}
+          inkColor={desktop ? token.color.ink : undefined}
+        />
+      )}
       <View
         style={[
           styles.chatMessageColumn,
@@ -66,29 +78,41 @@ const ChatMessageRow = memo(function ChatMessageRow({
             ? styles.chatMessageColumnCompact
             : styles.chatMessageColumnDesktop,
           human && styles.chatMessageColumnHuman,
+          desktop && desktopStyles.column,
         ]}>
         <View
           style={[
             styles.chatBubble,
             human ? styles.chatBubbleHuman : styles.chatBubbleAi,
+            desktop && (human ? desktopStyles.human : desktopStyles.ai),
             message.generationOutcome === 'cancelled' &&
               styles.cancelledMessage,
           ]}>
           {message.generationOutcome === 'failed' ? (
-            <Text style={styles.failedLabel}>
+            <Text
+              selectable
+              style={[styles.failedLabel, desktop && desktopStyles.text]}>
               {message.generationRetryable === true
                 ? 'Response failed. Try again.'
                 : 'Response failed.'}
             </Text>
           ) : (
-            <Text style={styles.message}>{message.text}</Text>
+            <Text
+              selectable
+              style={[styles.message, desktop && desktopStyles.text]}>
+              {message.text}
+            </Text>
           )}
         </View>
         {message.generationOutcome === 'cancelled' && (
           <Text style={styles.cancelledLabel}>Response stopped</Text>
         )}
         <Text
-          style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
+          style={[
+            styles.chatTimestamp,
+            human && styles.chatTimestampHuman,
+            desktop && desktopStyles.time,
+          ]}>
           {formatChatTime(message.createdAt)}
         </Text>
       </View>
@@ -152,3 +176,11 @@ function ChatThinking({reduceMotion}: {reduceMotion: boolean}) {
 }
 
 export {ChatMessageRow, ChatThinking};
+
+const desktopStyles = StyleSheet.create({
+  column: {maxWidth: '82%'},
+  human: {backgroundColor: token.color.glassSelected},
+  ai: {backgroundColor: 'transparent', borderWidth: 0, paddingLeft: 4},
+  text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
+  time: {color: token.color.inkFaint, fontSize: 11},
+});

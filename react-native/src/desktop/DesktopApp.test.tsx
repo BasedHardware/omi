@@ -2,9 +2,14 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {ScrollView, Text, TextInput} from 'react-native';
+import {NativeModules, ScrollView, Switch, Text, TextInput} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
+import {subscribeDesktopSearchCommand} from '../desktopCommands';
+
+jest.mock('../desktopCommands', () => ({
+  subscribeDesktopSearchCommand: jest.fn(() => ({remove: jest.fn()})),
+}));
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -267,7 +272,7 @@ test('renders the shipping search-first desktop hierarchy', () => {
   const placeholders = renderer.root
     .findAllByType(TextInput)
     .map(node => node.props.placeholder);
-  expect(placeholders).toContain("Search what you've seen and heard…");
+  expect(placeholders).toContain('Ask about your day…');
   expect(placeholders).not.toContain('Ask a follow-up…');
   expect(tree).toContain('Home');
   expect(tree).toContain('Conversations');
@@ -283,6 +288,318 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
 });
 
+test.each(['tasks', 'conversations'] as const)(
+  'Home limits both previews to three and opens the full %s list',
+  section => {
+    const tasks = Array.from({length: 5}, (_, index) => ({
+      ...outcomes.tasks.value.items[0],
+      id: `preview-task-${index}`,
+      title: `Preview task ${index}`,
+    }));
+    const conversations = Array.from({length: 5}, (_, index) => ({
+      ...outcomes.conversations.value.items[0],
+      id: `preview-conversation-${index}`,
+      title: `Preview conversation ${index}`,
+    }));
+    const renderer = renderDesktop({
+      reads: [...conversations, ...tasks],
+      outcomes: {
+        ...outcomes,
+        tasks: {
+          ...outcomes.tasks,
+          value: {...outcomes.tasks.value, items: tasks},
+        },
+        conversations: {
+          ...outcomes.conversations,
+          value: {...outcomes.conversations.value, items: conversations},
+        },
+      },
+    });
+    const home = renderedText(renderer);
+    for (const prefix of ['Preview task', 'Preview conversation']) {
+      for (let index = 0; index < 5; index++) {
+        if (index < 3) {
+          expect(home).toContain(`${prefix} ${index}`);
+        } else {
+          expect(home).not.toContain(`${prefix} ${index}`);
+        }
+      }
+    }
+    expect(home).toContain('Open Recall');
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Open Recall',
+      ).length,
+    ).toBeGreaterThan(0);
+    act(() => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === `Show more ${section}`)
+        .props.onPress();
+    });
+    const page = renderedText(renderer);
+    const prefix =
+      section === 'tasks' ? 'Preview task' : 'Preview conversation';
+    for (let index = 0; index < 5; index++) {
+      expect(page).toContain(`${prefix} ${index}`);
+    }
+    expect(page).not.toContain('Open Recall');
+  },
+);
+
+test('persistent capture toggle uses the existing owner across Home, Recall and Chat', async () => {
+  const capture = {
+    available: true,
+    capturing: false,
+    busy: false,
+    error: null,
+    start: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
+  };
+  const hook = jest
+    .spyOn(require('../app/useRewindCapture'), 'useRewindCapture')
+    .mockReturnValue(capture);
+  try {
+    const renderer = renderDesktop();
+    const toggle = () =>
+      renderer.root
+        .findAllByType(Switch)
+        .find(node => node.props.accessibilityLabel === 'Screen capture')!;
+    expect(toggle().props.value).toBe(false);
+    await act(async () => toggle().props.onValueChange(true));
+    expect(capture.start).toHaveBeenCalledTimes(1);
+    capture.capturing = true;
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+        .props.onPress(),
+    );
+    expect(toggle().props.value).toBe(true);
+    expect(
+      renderer.root
+        .findAllByType(Switch)
+        .filter(node => node.props.accessibilityLabel === 'Screen capture'),
+    ).toHaveLength(1);
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+        .props.onPress(),
+    );
+    await act(async () => toggle().props.onValueChange(false));
+    expect(capture.stop).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    hook.mockRestore();
+  }
+});
+
+test('keyboard search from Chat focuses the newly mounted omnibar', () => {
+  const focus = jest.mocked(TextInput.prototype.focus);
+  focus.mockClear();
+  const renderer = renderDesktop();
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Message Omi',
+  );
+  const command = jest
+    .mocked(subscribeDesktopSearchCommand)
+    .mock.calls.at(-1)![0];
+  act(() => command());
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Search history',
+  );
+  expect(focus).toHaveBeenCalledTimes(1);
+  act(() => command());
+  expect(focus).toHaveBeenCalledTimes(2);
+});
+
+test.each(['Search', 'Recall'])(
+  '%s click remains a search while a chat generation is active',
+  async mode => {
+    const onSend = jest.fn();
+    const onStop = jest.fn();
+    const renderer = renderDesktop({
+      activeGenerationId: 'active',
+      draft: 'query',
+      onSend,
+      onStop,
+    });
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === `Use ${mode} mode`)
+        .props.onPress(),
+    );
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Search')
+        .props.onPress(),
+    );
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onStop).not.toHaveBeenCalled();
+  },
+);
+
+test('Chat shows disabled Sending until there is an actual cancellable request', () => {
+  const onStop = jest.fn();
+  const onSend = jest.fn();
+  const renderer = renderDesktop({
+    chatBusy: true,
+    draft: 'pending',
+    onStop,
+    onSend,
+  });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  const pending = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sending…',
+  );
+  expect(pending.props.disabled).toBe(true);
+  act(() => pending.props.onPress());
+  expect(onStop).not.toHaveBeenCalled();
+  expect(onSend).not.toHaveBeenCalled();
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  act(() =>
+    renderer.update(<DesktopApp {...props} activeGenerationId="admitted" />),
+  );
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress(),
+  );
+  expect(onStop).toHaveBeenCalledTimes(1);
+});
+
+test('a task search with no matches does not claim there are no tasks', () => {
+  const renderer = renderDesktop({draft: 'unmatched query'});
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('No tasks match this search.');
+  expect(renderedText(renderer)).not.toContain('No tasks yet');
+});
+
+test('empty Ask is disabled and Enter cannot send, while its mode icon still opens Chat', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '   ', onSend});
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  act(() => send.props.onPress());
+  expect(onSend).not.toHaveBeenCalled();
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Message Omi',
+  );
+});
+
+test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
+  'Home hides more actions during %s',
+  readsPhase => {
+    const renderer = renderDesktop({
+      readsPhase,
+      ...(readsPhase === 'unavailable' ? {outcomes: null, reads: []} : {}),
+    });
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'Show more tasks' ||
+          node.props.accessibilityLabel === 'Show more conversations',
+      ),
+    ).toHaveLength(0);
+  },
+);
+
+test('Home empty results have no more action and matching searches explicitly open the unfiltered page', () => {
+  const renderer = renderDesktop({draft: 'product'});
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Show more tasks' ||
+        node.props.accessibilityLabel === 'Show more conversations' ||
+        node.props.accessibilityLabel === 'Open tasks',
+    ),
+  ).toHaveLength(0);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open conversations')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('Product review');
+  const empty = renderDesktop({
+    reads: [],
+    outcomes: {
+      ...outcomes,
+      tasks: {...outcomes.tasks, value: {...outcomes.tasks.value, items: []}},
+      conversations: {
+        ...outcomes.conversations,
+        value: {...outcomes.conversations.value, items: []},
+      },
+    },
+  });
+  expect(
+    empty.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Show more tasks' ||
+        node.props.accessibilityLabel === 'Show more conversations',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Home pre-admission sending disables Ask while Search remains usable', () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({
+    chatBusy: true,
+    draft: 'pending request',
+    onSend,
+    onStop,
+  });
+  const sending = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sending…',
+  );
+  expect(sending.props.disabled).toBe(true);
+  act(() => sending.props.onPress());
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  const search = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search',
+  );
+  expect(search.props.disabled).toBe(false);
+  act(() => search.props.onPress());
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+});
+
 test('omnibar send uses the existing chat send path', () => {
   const onSend = jest.fn();
   const onDraftChange = jest.fn();
@@ -293,9 +610,7 @@ test('omnibar send uses the existing chat send path', () => {
   });
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
-    );
+    .find(node => node.props.placeholder === 'Ask about your day…');
   expect(omnibar).toBeDefined();
   expect(omnibar!.props.value).toBe('What did we decide?');
   act(() => {
@@ -314,10 +629,10 @@ test('omnibar send uses the existing chat send path', () => {
   expect(onSend).toHaveBeenCalledTimes(2);
 });
 
-test('sending from another page returns to Home and an active response can stop', async () => {
+test('sending from another page opens Chat and an active response can stop', async () => {
   const onSend = jest.fn();
   const onStop = jest.fn();
-  const renderer = renderDesktop({onSend, onStop});
+  const renderer = renderDesktop({onSend, onStop, draft: 'Send from Tasks'});
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Tasks')
@@ -330,7 +645,9 @@ test('sending from another page returns to Home and an active response can stop'
       .props.onPress();
   });
   expect(onSend).toHaveBeenCalledTimes(1);
-  expect(renderedText(renderer)).toContain('Screen history');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Message Omi…']);
 
   await act(async () => {
     renderer.update(
@@ -380,6 +697,7 @@ test('desktop chat renders a truthful failed terminal state', () => {
       },
     ],
   });
+  act(() => pressText(renderer, 'Continue chat'));
   expect(renderedText(renderer)).toContain('Response failed. Try again.');
   expect(
     renderer.root.findAll(
@@ -391,12 +709,100 @@ test('desktop chat renders a truthful failed terminal state', () => {
 test('desktop chat can load earlier messages', () => {
   const onLoadOlderChat = jest.fn();
   const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')
       .props.onPress();
   });
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+});
+
+test('Continue chat opens full loaded history with one bottom composer', () => {
+  const messages = Array.from({length: 5}, (_, index) => ({
+    id: `chat-${index}`,
+    text: `Loaded message ${index}`,
+    sender: 'human' as const,
+    generationOutcome: null,
+    createdAt: index,
+  }));
+  const renderer = renderDesktop({messages});
+  expect(renderedText(renderer)).not.toContain('Loaded message');
+  act(() => pressText(renderer, 'Continue chat'));
+  for (const message of messages) {
+    expect(renderedText(renderer)).toContain(message.text);
+  }
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Message Omi…']);
+});
+
+test.each(['Search', 'Recall'])(
+  '%s submits without sending chat',
+  async mode => {
+    const onSend = jest.fn();
+    const renderer = renderDesktop({draft: 'a saved moment', onSend});
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === `Use ${mode} mode`)
+        .props.onPress(),
+    );
+    expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+    await act(async () =>
+      renderer.root.findByType(TextInput).props.onSubmitEditing(),
+    );
+    expect(onSend).not.toHaveBeenCalled();
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Chat with Omi',
+      ),
+    ).toHaveLength(0);
+  },
+);
+
+test('Recall typing debounces the shared input into actual timeline reads', async () => {
+  jest.useFakeTimers();
+  const previous = NativeModules.OmiRewind;
+  const listFrames = jest.fn(async () => ({frames: [], nextCursor: null}));
+  NativeModules.OmiRewind = {listFrames};
+  try {
+    const onDraftChange = jest.fn();
+    const renderer = renderDesktop({onDraftChange});
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+        .props.onPress(),
+    );
+    listFrames.mockClear();
+    act(() =>
+      renderer.root.findByType(TextInput).props.onChangeText('project notes'),
+    );
+    expect(onDraftChange).toHaveBeenCalledWith('project notes');
+    const props = renderer.root.findByType(DesktopApp)
+      .props as React.ComponentProps<typeof DesktopApp>;
+    await act(async () =>
+      renderer.update(<DesktopApp {...props} draft="project notes" />),
+    );
+    await act(async () => jest.advanceTimersByTime(199));
+    expect(listFrames).not.toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(listFrames).toHaveBeenCalledWith(
+      expect.objectContaining({query: 'project notes', source: 'captured'}),
+    );
+    expect(listFrames).toHaveBeenCalledWith(
+      expect.objectContaining({query: 'project notes', source: 'shipping'}),
+    );
+    expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    NativeModules.OmiRewind = previous;
+    jest.useRealTimers();
+  }
 });
 
 test('signed-out Mac sees only the Welcome, never product chrome', () => {
@@ -410,12 +816,12 @@ test('signed-out Mac sees only the Welcome, never product chrome', () => {
   });
   const tree = renderedText(renderer);
   expect(tree).toContain('Welcome to Omi');
-  expect(tree).toContain('Sign in');
-  expect(tree).toContain('Sign in to access your conversations and memories.');
+  expect(tree).toContain('Get started');
+  expect(tree).not.toContain('Sign in');
   // No nav pills, no omnibar, no Home currents, no Settings.
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).not.toContain("Search what you've seen and heard…");
+  ).not.toContain('Ask about your day…');
   for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps']) {
     expect(
       renderer.root.findAll(node => node.props.accessibilityLabel === nav),
@@ -432,6 +838,9 @@ test('signed-out Mac sees only the Welcome, never product chrome', () => {
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Omi disconnected');
   expect(tree).not.toContain('Devices');
+  act(() => pressText(renderer, 'Get started'));
+  expect(renderedText(renderer)).toContain('Cloud AI services');
+  act(() => pressText(renderer, 'Continue'));
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -460,7 +869,7 @@ test('the session probe holds an empty window with no product copy', () => {
   const tree = renderedText(renderer);
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).not.toContain("Search what you've seen and heard…");
+  ).not.toContain('Ask about your day…');
   for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps', 'Settings']) {
     expect(
       renderer.root.findAll(node => node.props.accessibilityLabel === nav),
@@ -499,7 +908,7 @@ test('keeps an unavailable read as an inline shell state', () => {
   expect(tree).toContain('Try again');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain("Search what you've seen and heard…");
+  ).toContain('Ask about your day…');
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Sign in to Omi cloud');
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
@@ -567,30 +976,30 @@ test('signed-out first paint shows no chat transport error and no shell', () => 
   ).toHaveLength(0);
 });
 
-test('ready chat transport error stays in the chrome and off the Home stage', () => {
+test('chat transport errors appear only in the dedicated Chat page', () => {
   const renderer = renderDesktop({
     chatError: 'Chat is temporarily unavailable.',
-    session: 'ready',
   });
-  const notices = renderer.root
-    .findAllByType(Text)
-    .filter(node => node.props.accessibilityLabel === 'Chat transport notice');
-  expect(notices).toHaveLength(1);
-  expect(String(notices[0].props.children)).toBe(
+  expect(renderedText(renderer)).not.toContain(
     'Chat is temporarily unavailable.',
   );
-  expect(notices[0].props.numberOfLines).toBe(1);
-  expect(renderedText(renderer)).toContain('Tasks');
-  expect(renderedText(renderer)).toContain('Product review');
-  for (const scroll of renderer.root.findAllByType(ScrollView)) {
-    expect(
-      scroll
-        .findAllByType(Text)
-        .filter(
-          node => node.props.accessibilityLabel === 'Chat transport notice',
-        ),
-    ).toHaveLength(0);
-  }
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Message Omi…']);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Home')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Chat is temporarily unavailable.',
+  );
 });
 
 test('Settings opens the shipping multi-pane IA including Advanced', async () => {
@@ -633,6 +1042,11 @@ test('searches real projections instead of a fake timeline', () => {
   const renderer = renderDesktop({
     draft: 'product',
   });
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
   const tree = renderedText(renderer);
   expect(tree).toContain('Product review');
   expect(tree).not.toContain('Ship the desktop chrome');
@@ -676,16 +1090,16 @@ test('Home renders real memories alongside conversations', () => {
 
 test('Home opens the real Rewind destination', async () => {
   const renderer = renderDesktop();
-  expect(renderedText(renderer)).toContain('Browse screen history');
+  expect(renderedText(renderer)).toContain('Open Recall');
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Open Rewind')
+      .find(node => node.props.accessibilityLabel === 'Open Recall')
       .props.onPress();
     await Promise.resolve();
   });
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Search screen history',
+      node => node.props.accessibilityLabel === 'Recall screen history',
     ).length,
   ).toBeGreaterThan(0);
   expect(renderedText(renderer)).not.toContain(
@@ -741,7 +1155,7 @@ test('chrome keeps a sliding nav pill, structured home cards, and a field omniba
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(home).toMatch(/section:\s*\{[^}]*borderRadius:\s*16/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
-  expect(home).toContain('chatScrollRef.current?.scrollToEnd');
+  expect(home).not.toContain('chatScrollRef');
   expect(settings).toContain('const PANE_ITEM_GAP = 12');
   expect(settings).toMatch(/paneItem:\s*\{[^}]*alignItems:\s*'flex-start'/);
   expect(settings).toMatch(/paneText:\s*\{[^}]*textAlign:\s*'left'/);
@@ -1239,7 +1653,9 @@ test('Settings does not inherit unrelated chat and history failures', async () =
     chatError: 'This request cannot be completed.',
     readsPhase: 'unavailable',
   });
-  expect(renderedText(renderer)).toContain('This request cannot be completed.');
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Settings')
@@ -1258,5 +1674,7 @@ test('Settings does not inherit unrelated chat and history failures', async () =
       .find(node => node.props.accessibilityLabel === 'Home')
       .props.onPress(),
   );
-  expect(renderedText(renderer)).toContain('This request cannot be completed.');
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
 });

@@ -1,10 +1,19 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Animated, StyleSheet, Text, TextInput, View} from 'react-native';
+import {
+  Animated,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import Search from 'lucide-react-native/icons/search';
+import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import Square from 'lucide-react-native/icons/square';
 import House from 'lucide-react-native/icons/house';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import Puzzle from 'lucide-react-native/icons/puzzle';
-import Search from 'lucide-react-native/icons/search';
 import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
@@ -25,9 +34,9 @@ import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
 import {desktopTokens as token} from './tokens';
 
-export type DesktopRoute = DesktopNavItem | 'Settings';
+export type DesktopRoute = DesktopNavItem | 'Settings' | 'Chat';
 
-const navIcons: Record<DesktopNavItem, typeof Search> = {
+const navIcons: Record<DesktopNavItem, typeof House> = {
   Home: House,
   Conversations: MessageCircle,
   Rewind: History,
@@ -35,7 +44,15 @@ const navIcons: Record<DesktopNavItem, typeof Search> = {
   Apps: Puzzle,
 };
 
+export type OmnibarMode = 'Ask' | 'Search' | 'Recall';
+
 type Props = {
+  chatBusy?: boolean;
+  capture?: ReturnType<
+    typeof import('../app/useRewindCapture').useRewindCapture
+  >;
+  mode?: OmnibarMode;
+  onModeChange?: (mode: OmnibarMode) => void;
   activeGenerationId: string | null;
   route: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
@@ -48,6 +65,10 @@ type Props = {
 };
 
 export function DesktopChrome({
+  chatBusy = false,
+  capture,
+  mode = 'Ask',
+  onModeChange,
   activeGenerationId,
   chatNotice,
   draft,
@@ -59,6 +80,8 @@ export function DesktopChrome({
   route,
 }: Props) {
   const reduceMotion = useReduceMotion();
+  const canStop = mode === 'Ask' && activeGenerationId !== null;
+  const sending = mode === 'Ask' && chatBusy && !canStop;
   const [frames, setFrames] = useState<
     Partial<Record<DesktopNavItem, DesktopNavFrame>>
   >({});
@@ -68,7 +91,7 @@ export function DesktopChrome({
   const placed = useRef(false);
   const animating = useRef(false);
   const lastTarget = useRef({x: -1, width: -1});
-  const activeNav = route === 'Settings' ? null : route;
+  const activeNav = route === 'Settings' || route === 'Chat' ? null : route;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
@@ -97,7 +120,7 @@ export function DesktopChrome({
     }
     animating.current = true;
     const ease = desktopEaseSmoothOut();
-    Animated.parallel([
+    const animation = Animated.parallel([
       Animated.timing(pillX, {
         duration: desktopMotion.navMs,
         easing: ease,
@@ -116,9 +139,14 @@ export function DesktopChrome({
         toValue: 1,
         useNativeDriver: false,
       }),
-    ]).start(() => {
+    ]);
+    animation.start(() => {
       animating.current = false;
     });
+    return () => {
+      animation.stop();
+      animating.current = false;
+    };
   }, [
     activeNav,
     activeWidth,
@@ -173,7 +201,7 @@ export function DesktopChrome({
                   index < desktopNavItems.length - 1 && styles.navItemFollow,
                 ]}>
                 <FocusPressable
-                  accessibilityLabel={label}
+                  accessibilityLabel={label === 'Rewind' ? 'Recall' : label}
                   accessibilityRole="button"
                   accessibilityState={{selected: active}}
                   onPress={() => onNavigate(label)}
@@ -186,13 +214,41 @@ export function DesktopChrome({
                   </View>
                   <Text
                     style={[styles.navText, active && styles.navTextActive]}>
-                    {label}
+                    {label === 'Rewind' ? 'Recall' : label}
                   </Text>
                 </FocusPressable>
               </View>
             );
           })}
         </View>
+        {capture ? (
+          <View style={styles.captureControl}>
+            <Text style={styles.captureLabel}>
+              {capture.busy ? 'Waiting…' : 'Capture'}
+            </Text>
+            <Switch
+              accessibilityLabel="Screen capture"
+              accessibilityHint={
+                capture.available
+                  ? 'Start or stop screen capture on this Mac'
+                  : 'Capture is available in the native Mac app'
+              }
+              disabled={!capture.available}
+              value={capture.capturing || capture.busy}
+              onValueChange={value => {
+                if (value) {
+                  capture.start();
+                } else {
+                  capture.stop();
+                }
+              }}
+              trackColor={{
+                false: token.color.glassSelected,
+                true: token.color.inkMuted,
+              }}
+            />
+          </View>
+        ) : null}
         <ShippingPressable
           accessibilityLabel="Settings"
           accessibilityRole="button"
@@ -203,29 +259,99 @@ export function DesktopChrome({
           <Settings color={token.color.ink} size={15} />
         </ShippingPressable>
       </View>
-      <View style={styles.omnibar}>
-        <Search color={token.color.inkMuted} size={15} />
-        <TextInput
-          accessibilityLabel="Search what you have seen and heard"
-          blurOnSubmit={false}
-          onChangeText={onDraftChange}
-          onSubmitEditing={onSend}
-          placeholder={desktopSearchPlaceholder}
-          placeholderTextColor={token.color.inkMuted}
-          ref={omnibarRef}
-          style={styles.omnibarInput}
-          value={draft}
-        />
-        <FocusPressable
-          accessibilityLabel={activeGenerationId === null ? 'Send' : 'Stop'}
-          accessibilityRole="button"
-          onPress={activeGenerationId === null ? onSend : onStop}
-          style={({pressed}) => [styles.send, pressed && styles.pressed]}>
-          <Text style={styles.sendText}>
-            {activeGenerationId === null ? 'Ask' : 'Stop'}
-          </Text>
-        </FocusPressable>
-      </View>
+      {capture?.error ? (
+        <Text accessibilityRole="alert" style={styles.notice}>
+          {capture.error}
+        </Text>
+      ) : null}
+      {route !== 'Chat' ? (
+        <View style={styles.omnibar}>
+          <View style={styles.modes}>
+            {(['Ask', 'Search', 'Recall'] as const).map(value => {
+              const Icon =
+                value === 'Ask'
+                  ? MessageCircle
+                  : value === 'Search'
+                  ? Search
+                  : History;
+              return (
+                <FocusPressable
+                  key={value}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${value} mode`}
+                  accessibilityState={{selected: mode === value}}
+                  onPress={() => onModeChange?.(value)}
+                  style={[
+                    styles.modeButton,
+                    mode === value && styles.modeActive,
+                  ]}>
+                  <Icon
+                    size={15}
+                    color={
+                      mode === value ? token.color.ink : token.color.inkMuted
+                    }
+                  />
+                </FocusPressable>
+              );
+            })}
+          </View>
+          <TextInput
+            accessibilityLabel={
+              mode === 'Ask'
+                ? 'Ask Omi'
+                : mode === 'Recall'
+                ? 'Search Recall'
+                : 'Search history'
+            }
+            blurOnSubmit={false}
+            onChangeText={onDraftChange}
+            onSubmitEditing={() => {
+              if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                onSend();
+              }
+            }}
+            placeholder={
+              mode === 'Recall'
+                ? 'Find a moment on your screen…'
+                : mode === 'Ask'
+                ? 'Ask about your day…'
+                : desktopSearchPlaceholder
+            }
+            placeholderTextColor={token.color.inkMuted}
+            ref={omnibarRef}
+            style={styles.omnibarInput}
+            value={draft}
+          />
+          <FocusPressable
+            accessibilityLabel={
+              canStop
+                ? 'Stop'
+                : sending
+                ? 'Sending…'
+                : mode === 'Ask'
+                ? 'Send'
+                : 'Search'
+            }
+            accessibilityRole="button"
+            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
+            onPress={() => {
+              if (canStop) {
+                onStop();
+              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                onSend();
+              }
+            }}
+            style={({pressed}) => [styles.send, pressed && styles.pressed]}>
+            {canStop ? (
+              <Square size={15} color={token.color.ink} />
+            ) : mode === 'Ask' ? (
+              <ArrowUp size={17} color={token.color.ink} />
+            ) : (
+              <Search size={16} color={token.color.ink} />
+            )}
+          </FocusPressable>
+        </View>
+      ) : null}
       {chatNotice === null ? null : (
         <Text
           accessibilityLabel="Chat transport notice"
@@ -239,6 +365,22 @@ export function DesktopChrome({
 }
 
 const styles = StyleSheet.create({
+  captureControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 8,
+  },
+  captureLabel: {fontSize: 12, color: token.color.inkMuted},
+  modes: {flexDirection: 'row', alignItems: 'center', gap: 2},
+  modeButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  modeActive: {backgroundColor: token.color.glassSelected},
   chrome: {
     gap: 10,
     marginBottom: 8,
