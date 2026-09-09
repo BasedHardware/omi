@@ -16,12 +16,14 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
   conversationDisplayTitle,
+  taskDisplayTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
+import {TaskMutationStatus, type TaskMutationProps} from '../ui/TaskEditor';
 import {
   ReadStatus,
   coverageStatusCopy,
@@ -31,7 +33,7 @@ import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
-type Props = {
+type Props = TaskMutationProps & {
   chatBusy: boolean;
   conversationNotice?: string | null;
   draft: string;
@@ -166,6 +168,12 @@ export function DesktopHome({
   reads,
   readsPhase,
   taskNotice = null,
+  onTaskToggle,
+  busyTaskId = null,
+  writesAvailable,
+  taskMutationError = null,
+  onRetryTaskMutation,
+  onDismissTaskMutation,
 }: Props) {
   const chatScrollRef = useRef<ScrollView>(null);
   const shouldFollowChat = useRef(true);
@@ -283,12 +291,56 @@ export function DesktopHome({
           accessibilityLabel="Home tasks"
           style={[styles.section, styles.sectionSpaced]}>
           <SectionTitle>Tasks</SectionTitle>
+          <TaskMutationStatus
+            writesAvailable={writesAvailable}
+            taskMutationError={taskMutationError}
+            onRetryTaskMutation={onRetryTaskMutation}
+            onDismissTaskMutation={onDismissTaskMutation}
+          />
           {visibleTasks.length > 0 ? (
-            visibleTasks.map(item => (
-              <ShippingListInsert itemKey={item.id} key={item.id}>
-                <TaskRow item={item} />
-              </ShippingListInsert>
-            ))
+            visibleTasks.map(item => {
+              const editable =
+                tasksOutcome?.status === 'success' &&
+                (tasksOutcome.value.apiContract === 'omi' ||
+                  item.revision !== null);
+              return (
+                <ShippingListInsert itemKey={item.id} key={item.id}>
+                  <FocusPressable
+                    accessibilityRole={
+                      writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                    }
+                    accessibilityLabel={
+                      writesAvailable
+                        ? `${
+                            item.completed ? 'Reopen' : 'Complete'
+                          } task: ${taskDisplayTitle(item)}`
+                        : item.completed
+                        ? `Completed task: ${taskDisplayTitle(item)}`
+                        : `Task: ${taskDisplayTitle(item)}`
+                    }
+                    accessibilityState={{
+                      checked: item.completed,
+                      disabled:
+                        !writesAvailable ||
+                        !onTaskToggle ||
+                        !editable ||
+                        busyTaskId !== null,
+                      busy:
+                        busyTaskId === item.id && taskMutationError === null,
+                    }}
+                    disabled={
+                      !writesAvailable ||
+                      !onTaskToggle ||
+                      !editable ||
+                      busyTaskId !== null
+                    }
+                    onPress={() => onTaskToggle?.(item.id)}
+                    style={styles.taskToggle}>
+                    <TaskRow item={item} />
+                  </FocusPressable>
+                </ShippingListInsert>
+              );
+            })
           ) : (
             <EmptyCopy>{tasksEmptyCopy}</EmptyCopy>
           )}
@@ -441,4 +493,5 @@ const styles = StyleSheet.create({
     fontSize: token.type.title,
   },
   pageAction: {minHeight: 44, justifyContent: 'center'},
+  taskToggle: {minHeight: 44},
 });

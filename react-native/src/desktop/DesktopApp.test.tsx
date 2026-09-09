@@ -344,6 +344,105 @@ test('Home conversation rows open shared Conversations details', () => {
   ).toBeDefined();
 });
 
+test('Home task rows complete through shared mutation callbacks', () => {
+  const onTaskToggle = jest.fn();
+  const renderer = renderDesktop({
+    writesAvailable: true,
+    onTaskToggle,
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          apiContract: 'omi' as const,
+        },
+      },
+    },
+  });
+  const toggle = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel ===
+      'Complete task: Ship the desktop chrome',
+  );
+  expect(toggle.props.accessibilityRole).toBe('checkbox');
+  expect(toggle.props.disabled).toBe(false);
+  act(() => {
+    toggle.props.onPress();
+  });
+  expect(onTaskToggle).toHaveBeenCalledWith('task-1');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Edit task: Ship the desktop chrome',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Home canonical tasks without revisions stay disabled', () => {
+  const renderer = renderDesktop({
+    writesAvailable: true,
+    onTaskToggle: jest.fn(),
+  });
+  expect(
+    renderer.root.find(
+      node =>
+        node.props.accessibilityLabel ===
+        'Complete task: Ship the desktop chrome',
+    ).props.disabled,
+  ).toBe(true);
+});
+
+test('Home canonical tasks with revisions complete through shared mutation callbacks', () => {
+  const onTaskToggle = jest.fn();
+  const renderer = renderDesktop({
+    writesAvailable: true,
+    onTaskToggle,
+    outcomes: {
+      ...outcomes,
+      tasks: {
+        ...outcomes.tasks,
+        value: {
+          ...outcomes.tasks.value,
+          items: outcomes.tasks.value.items.map(item => ({
+            ...item,
+            revision: 'a'.repeat(64),
+          })),
+        },
+      },
+    },
+  });
+  const toggle = renderer.root.find(
+    node =>
+      node.props.accessibilityLabel ===
+      'Complete task: Ship the desktop chrome',
+  );
+  expect(toggle.props.disabled).toBe(false);
+  act(() => {
+    toggle.props.onPress();
+  });
+  expect(onTaskToggle).toHaveBeenCalledWith('task-1');
+});
+
+test('Home reports a closed write door without labeling tasks Complete', () => {
+  const renderer = renderDesktop({writesAvailable: false});
+  expect(renderedText(renderer)).toContain(
+    'Task editing is unavailable for this connection.',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Task: Ship the desktop chrome',
+    ).props.disabled,
+  ).toBe(true);
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel ===
+        'Complete task: Ship the desktop chrome',
+    ),
+  ).toHaveLength(0);
+});
+
 test('Home memory rows stay display-only', () => {
   const memory = {
     kind: 'memory' as const,

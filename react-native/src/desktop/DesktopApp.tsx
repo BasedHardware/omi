@@ -205,6 +205,7 @@ export function DesktopApp({
             outcomes={outcomes}
             reads={reads}
             readsPhase={readsPhase}
+            {...taskMutations}
           />
         ) : route === 'Conversations' ? (
           <LibraryPage
