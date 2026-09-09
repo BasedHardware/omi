@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the notch collapsing to its narrow idle width while a notification card, a voice status message, or the thinking indicator was still showing in it"
+}
