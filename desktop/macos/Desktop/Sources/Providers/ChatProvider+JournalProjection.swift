@@ -387,7 +387,12 @@ extension ChatProvider {
       || ChatContentBlockCodec.comparisonData(projected.contentBlocks)
         != ChatContentBlockCodec.comparisonData(existing.contentBlocks)
       || projected.attachments != existing.attachments
-      || projected.resources != existing.resources
+      // Resource `imageData` never comes from the journal, so the comparison
+      // is against what the replace would actually publish: the projection
+      // with local bytes carried back. Otherwise every echo of a row holding
+      // attachment bytes reported a divergence that changed nothing.
+      || ChatResource.carryingImageData(projected.resources, from: existing.resources)
+        != existing.resources
   }
 }
 
@@ -399,13 +404,16 @@ extension ChatProvider {
   /// reconstruct them and a journal projection can never be their authority:
   /// `rating` (user-set), `metadata` (model/token/cost stats attached at
   /// completion, rendered in the message footer), `notificationScreenshot`,
-  /// and in-memory kind-only citation rewrites until the journal catches up.
+  /// per-resource `imageData` (attachment thumbnails the tile renders from
+  /// memory once the picked file — often a temp export — disappears), and
+  /// in-memory kind-only citation rewrites until the journal catches up.
   /// Replacing a row wholesale with the projection would drop them, so carry
   /// them forward from the row being replaced. A field the projection *does*
   /// carry (non-nil) wins, so this stays correct if the journal schema later
   /// starts persisting one of them.
   static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
     var merged = projected
+    merged.resources = ChatResource.carryingImageData(merged.resources, from: existing.resources)
     // A journal echo of a row this client is still streaming is the snapshot
     // it wrote a round trip ago; the live projection has moved on since. Taking
     // the echo's text put the visible answer a few words back on every write

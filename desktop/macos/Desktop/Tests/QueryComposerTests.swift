@@ -317,6 +317,74 @@ final class QueryComposerTests: XCTestCase {
     }
   }
 
+  // MARK: - The row's width is the field's
+
+  /// **Nothing the paperclip's menu carries can buy the field's width.**
+  ///
+  /// A live session was measured with the attach `Menu`'s backing control at 381 pt — half the
+  /// lane — so the row split its width evenly between the paperclip and the field, and the caret
+  /// landed mid-lane ("the input chat box UI got messed up"). The control's slot is pinned to one
+  /// disc in `QueryHeroBar.attachButton`; this asserts the observable contract through the editor
+  /// the composer actually puts on screen: the field spans the lane minus the row's fixed controls,
+  /// and what the menu offers — twelve rows, one longer than the lane itself is wide — changes
+  /// nothing. Without the pin this fails even on a fresh mount — the menu's backing chrome alone
+  /// takes a second disc — which is the same mechanism the live session amplified.
+  func testTheFieldKeepsTheLaneWhateverThePaperclipsMenuOffers() throws {
+    let lane: CGFloat = 842
+    let bare = try Composer(width: lane, mode: .answer)
+    defer { bare.tearDown() }
+    let stocked = try Composer(width: lane, mode: .answer, recentScreenFrames: Self.menuRows)
+    defer { stocked.tearDown() }
+
+    let expectedField =
+      lane
+      - QueryShellLayout.panelComposerEdgeInset * 2
+      - QueryShellLayout.panelComposerShellInset * 2
+      - QueryShellLayout.panelComposerControlDiameter * 3
+      - OmiSpacing.sm * 3
+
+    XCTAssertEqual(
+      bare.editorWidth, expectedField, accuracy: 2,
+      "the field does not span the lane the row owes it — some control is taking width it was never given")
+    XCTAssertEqual(
+      stocked.editorWidth, bare.editorWidth, accuracy: 1,
+      "the paperclip's menu content changed the field's width — a menu's rows are picker content, "
+        + "never a claim on the composer's lane")
+  }
+
+  /// The failure was seen as a field squeezed to half its lane. A floor in the field's own terms,
+  /// independent of the row's insets: whatever the controls negotiate, the typing surface keeps at
+  /// least three quarters of the lane it is mounted in.
+  func testTheFieldHoldsMostOfTheLaneEvenWhenTheRowIsContested() throws {
+    let lane: CGFloat = 842
+    let composer = try Composer(width: lane, mode: .answer, recentScreenFrames: Self.menuRows)
+    defer { composer.tearDown() }
+
+    XCTAssertGreaterThan(
+      composer.editorWidth, lane * 0.75,
+      "the field was squeezed below three quarters of the lane — the row's fixed controls are "
+        + "three 28 pt discs; anything larger is a control taking the reader's typing space")
+  }
+
+  /// Rows the paperclip's menu can offer: a full picker — several frames, one with a title wider
+  /// than any disc, and the trailing divider the real menu draws.
+  private static var menuRows: [RecentScreenFrameRow] {
+    (0..<12).compactMap { index in menuRow(index) }
+  }
+
+  private static func menuRow(_ index: Int) -> RecentScreenFrameRow? {
+    let appName: String
+    if index == 0 {
+      appName = "Some Extremely Long Enterprise Application Name With Suffix Edition"
+    } else {
+      appName = "App \(index)"
+    }
+    let timestamp = Date().addingTimeInterval(TimeInterval(-3600 * (index + 1)))
+    return RecentScreenFrameRow(
+      screenshot: Screenshot(
+        id: Int64(index), timestamp: timestamp, appName: appName, windowTitle: nil, imagePath: nil))
+  }
+
   // MARK: - Harness
 
   /// The real `QueryHeroBar` over the real `ChatComposerDraft`, in a window, with the `NSTextView`
@@ -330,9 +398,16 @@ final class QueryComposerTests: XCTestCase {
 
     let surface = Surface()
 
-    init(width: CGFloat = 768, height: CGFloat = 400, mode: QueryShellMode = .results) throws {
+    init(
+      width: CGFloat = 768,
+      height: CGFloat = 400,
+      mode: QueryShellMode = .results,
+      recentScreenFrames: [RecentScreenFrameRow] = []
+    ) throws {
       provider = ChatProvider()
-      host = NSHostingView(rootView: Host(provider: provider, surface: surface, mode: mode))
+      host = NSHostingView(
+        rootView: Host(
+          provider: provider, surface: surface, mode: mode, recentScreenFrames: recentScreenFrames))
       host.frame = NSRect(x: 0, y: 0, width: width, height: height)
       window = NSWindow(
         contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -387,6 +462,14 @@ final class QueryComposerTests: XCTestCase {
     var composerHeight: CGFloat {
       settle()
       return textView.enclosingScrollView?.frame.height ?? 0
+    }
+
+    /// The editor's laid-out width in the bar the composer actually mounted — the number the row
+    /// gives the field after every control in it has taken what it claims. Read off the scroll
+    /// view's frame in its own superview, the same surface the reader types into.
+    var editorWidth: CGFloat {
+      settle()
+      return textView.enclosingScrollView?.frame.width ?? 0
     }
 
     /// The bar's own laid-out height in a surface-shaped host, not its `fittingSize` — the failure
@@ -471,6 +554,7 @@ final class QueryComposerTests: XCTestCase {
     @ObservedObject var provider: ChatProvider
     @ObservedObject var surface: Surface
     let mode: QueryShellMode
+    var recentScreenFrames: [RecentScreenFrameRow] = []
     let probe = HeightProbe()
 
     var body: some View {
@@ -491,7 +575,8 @@ final class QueryComposerTests: XCTestCase {
           isWorking: surface.isWorking,
           isStopping: surface.isStopping,
           mode: mode,
-          onAsk: { surface.asks += 1 }
+          onAsk: { surface.asks += 1 },
+          recentScreenFrames: recentScreenFrames
         )
         .background {
           GeometryReader { bar in

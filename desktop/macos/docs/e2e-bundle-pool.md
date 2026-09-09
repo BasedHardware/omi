@@ -35,14 +35,16 @@ cd desktop/macos
 
 For each slot:
 
-1. Build and launch it once from any checkout. The pool pins the signing
-   identity for the slot on first use (default `Omi Local Dev Signing`, the
-   stable self-signed identity `run.sh` creates without a GUI; see
+1. Build and launch it once from any checkout — with `--full`, because a slot's
+   first build has nothing to reuse (later launches take the `--fast-only`
+   default). The pool pins the signing identity for the slot on first use
+   (default `Omi Local Dev Signing`, the stable self-signed identity `run.sh`
+   creates without a GUI; see
    [`local-code-signing.md`](local-code-signing.md)). Set
    `OMI_E2E_POOL_SIGN_IDENTITY` *before* the first acquire to pin an Apple
    identity instead; changing it later resets every grant the slot holds.
    ```bash
-   ./scripts/omi-e2e-pool run --slot 1 -- ./run.sh --yolo --no-wait
+   ./scripts/omi-e2e-pool run --slot 1 -- ./run.sh --yolo --full --no-wait
    ```
 2. Open the slot's Permissions page and grant every row when macOS asks. Screen
    Recording and Accessibility land in System Settings › Privacy & Security; let
@@ -60,15 +62,15 @@ Recurring: macOS 15 and later periodically re-ask whether an app may keep
 recording the screen. `check` reports that as `screen_recording=stale`; one
 click clears it.
 
-### Auth: shared (default) or isolated
+### Auth: shared (default in a GUI session) or isolated
 
 - **shared** — a full launch clones the Omi Dev session before start, exactly
   as any named bundle does, **when the launcher can read the keychain**: a GUI
-  shell can, a background agent shell (launchd `Background` session, ssh)
-  cannot and launches the slot cold, leaving whatever session it already has.
-  So sign in once during the grant pass; the session persists in the slot's
-  own keychain item across rebuilds. Tests then run as the developer's account
-  against the dev backend, so their writes are real.
+  shell can; a background agent shell (launchd `Background` session, ssh)
+  cannot — the dump comes back empty and the slot keeps whatever session it
+  already has. So sign in once during the grant pass; the session persists in
+  the slot's own keychain item across rebuilds. Tests then run as the
+  developer's account against the dev backend, so their writes are real.
 - **isolated** — the slot keeps its own session. Sign in **once** inside the
   slot app with a dedicated test account; the session persists in the slot's
   own keychain item across rebuilds. The Rewind history is not cloned either.
@@ -78,6 +80,12 @@ click clears it.
   The mode sticks to the slot, not to the lane that set it, and `status` shows
   it.
 
+**Headless default.** An `acquire` from a non-GUI session (`launchctl
+managername` is anything but `Aqua`) defaults the slot to **isolated** instead
+of shared, because a shared slot launched from there can never be seeded — the
+same keychain wall blocks the dump. An explicit `--auth` always wins. GUI
+acquires keep the shared default.
+
 ## Using a slot from a task
 
 ```bash
@@ -85,17 +93,44 @@ cd desktop/macos
 ./scripts/omi-e2e-pool acquire            # first free slot; prints its number
 eval "$(./scripts/omi-e2e-pool env)"      # OMI_APP_NAME, ports, identity, auth mode
 ./run.sh --yolo --fast-only --no-wait     # builds into the leased slot
-./scripts/omi-e2e-pool check              # fail fast if a grant is missing
+./scripts/omi-e2e-pool check              # fail closed on a missing grant OR a signed-out slot
 ./scripts/omi-ctl wait-ready && ./scripts/omi-ctl navigate rewind
 …
 ./scripts/omi-e2e-pool release            # when the lane is done
 ```
 
-Or in one step: `./scripts/omi-e2e-pool run -- ./run.sh --yolo --fast-only`.
+Or in one step: `./scripts/omi-e2e-pool run -- ./run.sh --yolo` — the wrapper
+injects `--fast-only` when no lane was chosen.
 
 `acquire` also writes `<worktree>/.dev/e2e-pool.env`, so any later shell in the
 same worktree finds its slot with `env` and never needs to re-acquire. Every
 `env`, `verify`, `check`, and `run` refreshes the lease's heartbeat.
+
+### Launch policy: fail closed, not fail cold
+
+The launch path enforces the headless rules that used to live only in this
+document:
+
+- **`--fast-only` is the pool default.** `omi-e2e-pool run` injects it into a
+  bare `./run.sh` invocation, and `run.sh` performs the full rebuild on its own
+  whenever the fast-bundle fingerprint says one is required (first build,
+  changed inputs, incomplete runtime payload).
+- **An explicit `--full` / `OMI_FORCE_FULL_BUNDLE=1` on a leased slot is
+  refused while the installed bundle is fast-reusable** (exit 2). You never
+  need it: rebuilds that are genuinely required are not blocked. A rewind
+  reseed (`OMI_FORCE_REWIND_SEED=1`) still forces the full lane deliberately.
+- **An empty auth dump never wipes anything.** When seeding cannot run (a
+  background session cannot read the source keychain), the slot keeps its
+  existing session and the log says so — there is no "Launching cold" for pool
+  slots.
+- **Never reset a pool slot's Keychain.** `omi-local-profile-keychain-reset.sh`
+  refuses `com.omi.omi-e2e-*` (any pool size and any configured
+  `OMI_E2E_POOL_PREFIX`) outright: pool slots are not local-emulator profiles,
+  and their keychain item is the persisted session a human signed in for.
+- **A signed-out slot is a hard fail.** `check` exits 2 — the same class as a
+  missing TCC grant — and points at the one-time human fix. Health-only is not
+  ready: the ready gate is `omi-e2e-pool check` for grants/sign-in, then
+  `omi-ctl wait-ready` for the live signed-in owner-ready snapshot.
 
 Each slot has fixed ports, so nothing needs to be threaded through by hand:
 
