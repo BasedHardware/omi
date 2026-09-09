@@ -5,12 +5,44 @@ import json
 import os
 from asyncio import Queue
 from typing import Callable, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def parakeet_ws_url(api_url: str, sample_rate: int = 16000) -> str:
-    base = api_url.strip().rstrip("/")
-    base = base.replace("https://", "wss://").replace("http://", "ws://")
-    return f"{base}/v3/stream?sample_rate={sample_rate}"
+    """Build Parakeet WebSocket URL with proper path and query composition."""
+    api_url = api_url.strip()
+    parsed = urlsplit(api_url)
+
+    # Scheme mapping: http -> ws, https -> wss
+    scheme = parsed.scheme.lower()
+    if scheme == "http":
+        new_scheme = "ws"
+    elif scheme in ("https", "wss", "ws"):
+        new_scheme = "wss" if scheme == "https" else scheme
+    else:
+        new_scheme = "wss"
+
+    # Path composition: append /v3/stream
+    path = parsed.path.rstrip("/")
+    new_path = f"{path}/v3/stream" if path else "/v3/stream"
+
+    # Query parameters: preserve repeated and blank values, update sample_rate
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    updated_pairs = []
+    found_sample_rate = False
+    for k, v in query_pairs:
+        if k == "sample_rate":
+            updated_pairs.append((k, str(sample_rate)))
+            found_sample_rate = True
+        else:
+            updated_pairs.append((k, v))
+    if not found_sample_rate:
+        updated_pairs.append(("sample_rate", str(sample_rate)))
+
+    new_query = urlencode(updated_pairs)
+
+    # Omit fragment
+    return urlunsplit((new_scheme, parsed.netloc, new_path, new_query, ""))
 
 
 class ParakeetTranscriber:
