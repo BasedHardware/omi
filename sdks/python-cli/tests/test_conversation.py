@@ -133,4 +133,3 @@ def test_conversation_create_rejects_invalid_utf8_stdin(authed_profile, respx_mo
     assert result.exit_code == 1
     assert "UTF-8" in result.stderr
     assert not respx_mock.calls
-
