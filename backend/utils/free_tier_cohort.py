@@ -23,12 +23,17 @@ Stops (both revoke admission for everyone, including listed uids):
 
 * ``FREE_TIER_EMERGENCY_STOP=true`` — environment; needs a redeploy.
 * PostHog flag ``free-tier-kill-switch-v1`` — remote, honoured without a
-  redeploy, read through the same bounded provider the JIT rollout uses
-  (``utils.jit_rollout.PostHogJITFlagProvider``). Only a **definitively
-  enabled** kill switch stops; unknown / absent / PostHog down never blocks
-  by itself, matching the JIT precedent, so an outage cannot re-light or
-  un-light a cohort. The remote read happens only after the environment
-  cohort admits the account, so a dark fleet makes no provider calls.
+  redeploy, read with the same client configuration and tri-state mapping
+  as the JIT rollout (``utils.jit_rollout``) but on this module's own small
+  executor, so a stall here cannot occupy the JIT admission bulkhead and vice
+  versa. Only a **definitively enabled** kill switch stops; unknown / absent
+  / PostHog down never blocks by itself, matching the JIT precedent, so an
+  outage cannot re-light or un-light a cohort. The remote read happens only
+  after the environment cohort admits the account, so a dark fleet makes no
+  provider calls; after any provider failure the reader backs off for
+  ``_PROVIDER_BACKOFF_SECONDS`` process-wide, so a sweep over hundreds of
+  admitted accounts pays one timeout, not one per account. Failures are
+  logged once per class.
 
 Callers that cannot name the account are never admitted: the policy modules
 answer ``False`` for a lit flag when given no uid and log once. That is the
@@ -40,31 +45,38 @@ nobody.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
+import importlib
 import logging
 import os
 import threading
 import time
 from collections import OrderedDict
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
+from typing import Any
 
-from utils.jit_rollout import JITFlagEvaluation, PostHogJITFlagProvider, TriState
+from utils.jit_rollout import TriState
 
 logger = logging.getLogger(__name__)
 
 COHORT_ENV_SUFFIX = '_COHORT'
 EMERGENCY_STOP_ENV_VAR = 'FREE_TIER_EMERGENCY_STOP'
-# Remote stop. The exposure key is required by the provider and is read but
-# never used for admission: the environment cohort is the only admission
-# source today. Do not turn it into one without a rollout record.
+# Remote stop. Reserved exposure key: read by nothing, listed so nobody
+# reuses the name for a different meaning. The environment cohort is the only
+# admission source today; do not make PostHog one without a rollout record.
 FREE_TIER_COHORT_FLAG_KEY = 'free-tier-cohort-v1'
 FREE_TIER_KILL_SWITCH_FLAG_KEY = 'free-tier-kill-switch-v1'
 _HASH_SALT = b'free-tier-cohort:'
 _KILL_SWITCH_CACHE_SECONDS = 20.0
-_KILL_SWITCH_RESULT_TIMEOUT_SECONDS = 5.0
+_KILL_SWITCH_UNKNOWN_CACHE_SECONDS = 5.0
 _KILL_SWITCH_CACHE_ENTRIES = 4096
+_POSTHOG_TIMEOUT_SECONDS = 2.0
+_POSTHOG_RESULT_TIMEOUT_SECONDS = 2.5
+_PROVIDER_BACKOFF_SECONDS = 30.0
+_PROVIDER_MAX_WORKERS = 2
+_PROVIDER_MAX_IN_FLIGHT = 4
 
 # Closed vocabulary; low cardinality so it can be logged and counted.
 COHORT_REASONS: frozenset[str] = frozenset(
@@ -134,7 +146,9 @@ def parse_cohort(raw: str | None) -> _ParsedCohort | None:
         if kind == 'uid':
             uids.add(value)
         elif kind == 'pct':
-            if not value.isdigit():
+            # ``str.isdigit`` accepts superscripts and non-ASCII digits that
+            # ``int`` then rejects or silently converts; ASCII only.
+            if not (value.isascii() and value.isdigit()):
                 return None
             parsed = int(value)
             if parsed < 0 or parsed > 100 or pct is not None:
@@ -159,43 +173,88 @@ def emergency_stop_engaged() -> bool:
 
 # --- remote kill switch ---------------------------------------------------
 
-_provider: PostHogJITFlagProvider | None = None
-_provider_lock = threading.Lock()
-_control_loop: asyncio.AbstractEventLoop | None = None
-_control_loop_lock = threading.Lock()
+_client: Any | None = None
+_client_lock = threading.Lock()
+_executor: ThreadPoolExecutor | None = None
+_executor_lock = threading.Lock()
+_in_flight = threading.BoundedSemaphore(_PROVIDER_MAX_IN_FLIGHT)
+_backoff_lock = threading.Lock()
+_backoff_until = 0.0
 _cache_lock = threading.Lock()
 _cache: OrderedDict[str, tuple[TriState, float]] = OrderedDict()
 
 
-def _get_provider() -> PostHogJITFlagProvider:
-    global _provider
-    with _provider_lock:
-        if _provider is None:
-            _provider = PostHogJITFlagProvider(
-                rollout_flag_key=FREE_TIER_COHORT_FLAG_KEY,
-                kill_switch_flag_key=FREE_TIER_KILL_SWITCH_FLAG_KEY,
-            )
-        return _provider
+def _build_posthog_client() -> Any | None:
+    # Same configuration as utils.jit_rollout.PostHogJITFlagProvider._build_client.
+    api_key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
+    if not api_key:
+        return None
+    module = importlib.import_module('posthog')
+    client_class = getattr(module, 'Posthog')
+    return client_class(
+        project_api_key=api_key,
+        host=os.getenv('POSTHOG_HOST', 'https://app.posthog.com'),
+        send=False,
+        sync_mode=True,
+        feature_flags_request_timeout_seconds=_POSTHOG_TIMEOUT_SECONDS,
+    )
 
 
-def _get_control_loop() -> asyncio.AbstractEventLoop:
-    # Same confinement rule as utils.jit_rollout: sync callers (finalization
-    # threads, the FastAPI sync pool, the sweep) never touch the server loop.
-    global _control_loop
-    with _control_loop_lock:
-        if _control_loop is None or _control_loop.is_closed():
-            loop = asyncio.new_event_loop()
-            thread = threading.Thread(target=loop.run_forever, name='free-tier-cohort-control-loop', daemon=True)
-            thread.start()
-            _control_loop = loop
-        return _control_loop
+def _get_client() -> Any:
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = _build_posthog_client()
+    if _client is None:
+        raise LookupError('posthog_unconfigured')
+    return _client
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            _executor = ThreadPoolExecutor(max_workers=_PROVIDER_MAX_WORKERS, thread_name_prefix='free-tier-kill')
+        return _executor
+
+
+def _tri_state(flags: Mapping[str, Any], key: str) -> TriState:
+    value = flags.get(key)
+    if value is True:
+        return TriState.ENABLED
+    if value is False:
+        return TriState.DISABLED
+    return TriState.UNKNOWN
+
+
+def _fetch_kill_switch(uid: str) -> TriState:
+    """One bounded decide call; raises on any provider problem."""
+    variants = _get_client().get_feature_variants(uid)
+    if not isinstance(variants, Mapping):
+        raise TypeError('malformed_feature_flags')
+    return _tri_state(variants, FREE_TIER_KILL_SWITCH_FLAG_KEY)
+
+
+def _note_provider_failure(error_class: str) -> None:
+    global _backoff_until
+    with _backoff_lock:
+        _backoff_until = time.monotonic() + _PROVIDER_BACKOFF_SECONDS
+    _warn_once(
+        f'kill_switch:{error_class}',
+        'free-tier cohort: remote kill switch unavailable (%s); treating as unknown and backing off %ss',
+        error_class,
+        int(_PROVIDER_BACKOFF_SECONDS),
+    )
 
 
 def _kill_switch_state(uid: str) -> TriState:
     """Definitive remote kill state for one account; UNKNOWN on any failure.
 
-    Tests monkeypatch this. The evaluation's exposure flag is ignored on
-    purpose (see module docstring).
+    Tests monkeypatch this (or ``_fetch_kill_switch`` / ``_get_client``).
+    Never raises. Bounded: one in-process cache, a small executor, an
+    in-flight cap, a result timeout, and a process-wide backoff after any
+    failure so a provider stall costs one wait, not one per account.
     """
     now = time.monotonic()
     with _cache_lock:
@@ -203,17 +262,34 @@ def _kill_switch_state(uid: str) -> TriState:
         if entry is not None and entry[1] > now:
             _cache.move_to_end(uid)
             return entry[0]
-    try:
-        future = asyncio.run_coroutine_threadsafe(_get_provider()(uid), _get_control_loop())
-        evaluation: JITFlagEvaluation = future.result(timeout=_KILL_SWITCH_RESULT_TIMEOUT_SECONDS)
-        state = evaluation.kill_switch
-    except FuturesTimeoutError:
-        state = TriState.UNKNOWN
-    except Exception:
-        state = TriState.UNKNOWN
-    # Unknown answers cache briefly (an outage must not pin a stale answer for
-    # the full TTL); definitive answers cache for the full TTL.
-    ttl = _KILL_SWITCH_CACHE_SECONDS if state != TriState.UNKNOWN else 5.0
+    with _backoff_lock:
+        backing_off = now < _backoff_until
+    state = TriState.UNKNOWN
+    if not backing_off:
+        if not _in_flight.acquire(blocking=False):
+            _note_provider_failure('saturated')
+        else:
+            future: Future[TriState] | None = None
+            try:
+                future = _get_executor().submit(_fetch_kill_switch, uid)
+                state = future.result(timeout=_POSTHOG_RESULT_TIMEOUT_SECONDS)
+            except FuturesTimeoutError:
+                if future is not None:
+                    future.cancel()
+                _note_provider_failure('timeout')
+            except LookupError:
+                _note_provider_failure('unconfigured')
+            except TypeError:
+                _note_provider_failure('malformed')
+            except Exception as exc:
+                _note_provider_failure(type(exc).__name__)
+            finally:
+                if future is None or future.done() or future.cancel():
+                    _in_flight.release()
+                else:
+                    # A still-running fetch keeps its slot until it finishes.
+                    future.add_done_callback(lambda _f: _in_flight.release())
+    ttl = _KILL_SWITCH_CACHE_SECONDS if state != TriState.UNKNOWN else _KILL_SWITCH_UNKNOWN_CACHE_SECONDS
     with _cache_lock:
         _cache[uid] = (state, time.monotonic() + ttl)
         _cache.move_to_end(uid)
@@ -223,8 +299,11 @@ def _kill_switch_state(uid: str) -> TriState:
 
 
 def reset_kill_switch_cache_for_tests() -> None:
+    global _backoff_until
     with _cache_lock:
         _cache.clear()
+    with _backoff_lock:
+        _backoff_until = 0.0
 
 
 # --- the decision ---------------------------------------------------------
@@ -248,7 +327,12 @@ def cohort_decision(flag: str, uid: str | None) -> CohortDecision:
         return CohortDecision(admitted=False, reason='emergency_stop_env')
     env_name = cohort_env_name(flag)
     raw = os.getenv(env_name)
-    parsed = parse_cohort(raw)
+    try:
+        parsed = parse_cohort(raw)
+    except Exception:
+        # The grammar is total, but a lit flag must never raise into a
+        # finalization or the sweep: anything unexpected is "malformed".
+        parsed = None
     if parsed is None:
         if raw is not None and raw.strip():
             _warn_once(f'{env_name}:malformed', 'free-tier cohort: %s is malformed; admitting nobody', env_name)

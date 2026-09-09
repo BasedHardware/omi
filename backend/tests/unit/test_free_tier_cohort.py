@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -159,49 +160,123 @@ def test_remote_kill_switch_is_not_consulted_for_a_non_admitted_account(monkeypa
     assert calls == [UID]
 
 
-def test_remote_kill_switch_failures_are_unknown_and_never_block(monkeypatch) -> None:
-    """The real reader: provider raising, timing out, or unconfigured is UNKNOWN."""
-    cohort.reset_kill_switch_cache_for_tests()
-    monkeypatch.undo()  # restore the real _kill_switch_state
-    cohort.reset_kill_switch_cache_for_tests()
-
-    class _Boom:
-        async def __call__(self, uid: str):
-            raise RuntimeError('provider down')
-
-    monkeypatch.setattr(cohort, '_get_provider', lambda: _Boom())
-    assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
-    monkeypatch.setenv(cohort.cohort_env_name(FLAG), f'uid:{UID}')
+def test_remote_kill_switch_failures_are_unknown_never_block_and_back_off(monkeypatch, caplog) -> None:
+    """The real reader: provider raising, timing out, or unconfigured is UNKNOWN,
+    warned once per class, and followed by a process-wide backoff."""
+    monkeypatch.undo()
+    monkeypatch.delenv(cohort.cohort_env_name(FLAG), raising=False)
     monkeypatch.delenv(cohort.EMERGENCY_STOP_ENV_VAR, raising=False)
+    cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+    calls: list[str] = []
+
+    def boom(uid: str):
+        calls.append(uid)
+        raise RuntimeError('provider down')
+
+    monkeypatch.setattr(cohort, '_fetch_kill_switch', boom)
+    with caplog.at_level(logging.WARNING, logger=cohort.__name__):
+        assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
+        assert cohort._kill_switch_state(OTHER) is TriState.UNKNOWN  # backoff: no second call
+        assert cohort._kill_switch_state('third') is TriState.UNKNOWN
+    assert calls == [UID]
+    assert sum('remote kill switch unavailable' in record.message for record in caplog.records) == 1
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), f'uid:{UID}')
     assert cohort.cohort_decision(FLAG, UID).admitted is True
 
 
-def test_remote_kill_switch_reads_the_kill_flag_not_the_exposure_flag(monkeypatch) -> None:
-    from utils.jit_rollout import JITDecisionReason, JITFlagEvaluation
+def test_remote_kill_switch_unconfigured_is_unknown(monkeypatch) -> None:
+    monkeypatch.undo()
+    cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+    monkeypatch.delenv('POSTHOG_PROJECT_API_KEY', raising=False)
+    monkeypatch.delenv('POSTHOG_API_KEY', raising=False)
+    monkeypatch.setattr(cohort, '_client', None)
+    assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
+    assert 'kill_switch:unconfigured' in cohort._warned
+
+
+def test_remote_kill_switch_timeout_is_bounded_and_backs_off(monkeypatch) -> None:
+    import threading
 
     monkeypatch.undo()
     cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+    monkeypatch.setattr(cohort, '_POSTHOG_RESULT_TIMEOUT_SECONDS', 0.05)
+    release = threading.Event()
+    started: list[str] = []
 
-    class _Provider:
+    def slow(uid: str):
+        started.append(uid)
+        release.wait(5)
+        return TriState.DISABLED
+
+    monkeypatch.setattr(cohort, '_fetch_kill_switch', slow)
+    try:
+        t0 = time.monotonic()
+        assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
+        assert time.monotonic() - t0 < 1.0
+        assert cohort._kill_switch_state(OTHER) is TriState.UNKNOWN  # backoff, not a second wait
+        assert started == [UID]
+    finally:
+        release.set()
+
+
+def test_remote_kill_switch_reads_the_kill_flag_not_the_exposure_flag(monkeypatch) -> None:
+    monkeypatch.undo()
+    cohort.reset_kill_switch_cache_for_tests()
+
+    class _Client:
         def __init__(self) -> None:
             self.calls = 0
 
-        async def __call__(self, uid: str) -> JITFlagEvaluation:
+        def get_feature_variants(self, uid: str):
             self.calls += 1
             # Exposure enabled must not admit; kill enabled must stop.
-            return JITFlagEvaluation(
-                rollout=TriState.ENABLED, kill_switch=TriState.ENABLED, reason=JITDecisionReason.EVALUATED
-            )
+            return {cohort.FREE_TIER_COHORT_FLAG_KEY: True, cohort.FREE_TIER_KILL_SWITCH_FLAG_KEY: True}
 
-    provider = _Provider()
-    monkeypatch.setattr(cohort, '_get_provider', lambda: provider)
+    client = _Client()
+    monkeypatch.setattr(cohort, '_get_client', lambda: client)
     assert cohort._kill_switch_state(UID) is TriState.ENABLED
     assert cohort._kill_switch_state(UID) is TriState.ENABLED  # cached
-    assert provider.calls == 1
+    assert client.calls == 1
     monkeypatch.delenv(cohort.cohort_env_name(FLAG), raising=False)
     monkeypatch.delenv(cohort.EMERGENCY_STOP_ENV_VAR, raising=False)
     # Exposure flag alone never admits: cohort unset stays unset.
     assert cohort.cohort_decision(FLAG, UID).reason == 'cohort_unset'
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), f'uid:{UID}')
+    assert cohort.cohort_decision(FLAG, UID) == cohort.CohortDecision(False, 'kill_switch_remote')
+
+
+def test_remote_kill_switch_malformed_response_is_unknown(monkeypatch) -> None:
+    monkeypatch.undo()
+    cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+
+    class _Client:
+        def get_feature_variants(self, uid: str):
+            return ['not', 'a', 'mapping']
+
+    monkeypatch.setattr(cohort, '_get_client', lambda: _Client())
+    assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
+    assert 'kill_switch:malformed' in cohort._warned
+
+
+@pytest.mark.parametrize('raw', ['pct:²', 'pct:³', 'pct:١٢', 'pct:１２'])
+def test_non_ascii_digits_are_malformed_not_raised(raw, monkeypatch) -> None:
+    assert cohort.parse_cohort(raw) is None
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), raw)
+    assert cohort.cohort_decision(FLAG, UID) == cohort.CohortDecision(False, 'cohort_malformed')
+
+
+def test_a_raising_parser_is_malformed_not_raised(monkeypatch) -> None:
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), f'uid:{UID}')
+
+    def boom(_raw):
+        raise ValueError('unexpected')
+
+    monkeypatch.setattr(cohort, 'parse_cohort', boom)
+    assert cohort.cohort_decision(FLAG, UID) == cohort.CohortDecision(False, 'cohort_malformed')
 
 
 def test_reasons_are_a_closed_vocabulary() -> None:
