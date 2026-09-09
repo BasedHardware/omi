@@ -65,6 +65,22 @@ int main(void) {
     require([store read:page[@"frames"][1][@"id"] error:nil] == nil);
     NSDictionary *literal = [store list:@{@"query":@"%",@"limit":@50} error:nil];
     require([literal[@"frames"] count] == 1);
+    require(sqlite3_open(dbPath.UTF8String, &db) == SQLITE_OK);
+    NSMutableString *nelTitle = [NSMutableString string];
+    for (NSUInteger i = 0; i < 1024; i++) [nelTitle appendString:@"\u0085"];
+    [nelTitle appendString:@"Visible later"];
+    sqlite3_stmt *insert = NULL;
+    require(sqlite3_prepare_v2(db, "INSERT INTO screenshots VALUES(6,'2026-09-07 03:00:00.000','Studio',?,'frame.jpg',NULL,NULL,NULL)", -1, &insert, NULL) == SQLITE_OK);
+    sqlite3_bind_text(insert, 1, nelTitle.UTF8String, -1, SQLITE_TRANSIENT);
+    require(sqlite3_step(insert) == SQLITE_DONE);
+    sqlite3_finalize(insert);
+    sqlite3_close(db);
+    NSDictionary *visibleTitle = [store list:@{@"query":@"",@"limit":@50} error:nil];
+    NSString *listedTitle = nil;
+    for (NSDictionary *frame in visibleTitle[@"frames"]) {
+      if ([frame[@"id"] hasSuffix:@":6"]) listedTitle = frame[@"windowTitle"];
+    }
+    require([listedTitle isEqual:@"Visible later"]);
     require([store list:@{@"query":@"changed",@"limit":@2,@"cursor":page[@"nextCursor"]} error:nil] == nil);
     identity = @{@"uid":@"owner-b",@"login":@"login-b"};
     require([store read:identifier error:nil] == nil);

@@ -1,3 +1,4 @@
+import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 
@@ -823,4 +824,30 @@ test('treats a generation transport failure with no HTTP response as an error', 
   expect(methodSource).toContain(
     'Native generation transport failed before an HTTP response',
   );
+});
+
+test('Rewind list visible-trims window titles before the 1024-character bound', () => {
+  const source = readNativeSource('OmiRewindStore.h');
+  const sqlStart = source.indexOf('const char *sql = "SELECT');
+  expect(sqlStart).toBeGreaterThan(-1);
+  const sqlEnd = source.indexOf('";', sqlStart);
+  const sql = source.slice(sqlStart, sqlEnd);
+  expect(sql).toContain(
+    "substr(trim(coalesce(windowTitle,''), char(9,10,11,12,13,32,133,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)),1,1024)",
+  );
+  expect(sql).toContain(
+    'substr(trim(appName, char(9,10,11,12,13,32,133,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)),1,256)',
+  );
+  expect(sql).not.toContain("substr(coalesce(windowTitle,''),1,1024)");
+  expect(sql).not.toContain('substr(appName,1,256)');
+  expect(sql).toContain('instr(lower(windowTitle),lower(?3))');
+  const listed = execFileSync(
+    'sqlite3',
+    [
+      ':memory:',
+      "SELECT substr(trim(replace(hex(zeroblob(1024)),'00',char(133))||'Visible later', char(9,10,11,12,13,32,133,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279)),1,1024);",
+    ],
+    {encoding: 'utf8'},
+  ).trim();
+  expect(listed).toBe('Visible later');
 });
