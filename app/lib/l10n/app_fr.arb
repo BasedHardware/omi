@@ -3291,5 +3291,6 @@
     "speechProfileTopicGoal": "Quel est votre objectif à long terme ?",
     "speechToTextUnavailableDesc": "La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.",
     "memoryHistoryPartial": "Une partie de l’historique des souvenirs est indisponible. L’historique reçu jusqu’à présent est affiché.",
-    "tapPlusToStartRecording": "Appuyez sur + pour commencer l’enregistrement"
+    "tapPlusToStartRecording": "Appuyez sur + pour commencer l’enregistrement",
+    "processingTakingLonger": "Toujours en cours — cela prend plus de temps que d’habitude."
 }

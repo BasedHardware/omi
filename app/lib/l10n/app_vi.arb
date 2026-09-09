@@ -3261,5 +3261,6 @@
     "speechProfileTopicGoal": "Mục tiêu dài hạn của bạn là gì?",
     "speechToTextUnavailableDesc": "Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.",
     "memoryHistoryPartial": "Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.",
-    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm"
+    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
+    "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường."
 }

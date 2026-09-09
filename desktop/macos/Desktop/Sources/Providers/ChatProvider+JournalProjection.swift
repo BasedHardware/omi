@@ -72,6 +72,15 @@ extension ChatProvider {
         && projected.contentBlocks.isEmpty
         && projected.resources.isEmpty
       func replace(at index: Int) {
+        // A streaming echo is the snapshot a write carried a round trip ago. A
+        // row that has already settled — the terminal answer landed and
+        // `isStreaming` flipped, the frame the transcript folds its tool chips
+        // and commentary away on — is newer than any such snapshot by
+        // construction. Taking the echo whole put the shorter text and the
+        // chips back on screen until the terminal replay flipped them away a
+        // second time: the answer visibly started over. The terminal replay
+        // is not streaming and still lands below.
+        if Self.isStaleStreamingEcho(projected, for: updatedMessages[index]) { return }
         let merged = Self.carryingLocalOnlyFields(projected, from: updatedMessages[index])
         guard !merged.isProjectionEquivalent(to: updatedMessages[index]) else { return }
         updatedMessages[index] = merged
@@ -100,7 +109,9 @@ extension ChatProvider {
     // it read unchanged and still owe a restored follow-up the chips it
     // borrows from an earlier turn. The publication gate therefore sits
     // behind the citation projection, and what inheritance bound counts as a
-    // change worth publishing.
+    // change worth publishing. This pass runs on every journal refresh — one
+    // per coalesced streaming write — so it must cost the transcript's
+    // length in lookups, not in regex scans (`ChatCitationMarkup.ordinals`).
     let orderBeforeCanonicalSort = updatedMessages.map(\.id)
     updatedMessages.sort {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
@@ -148,7 +159,7 @@ extension ChatProvider {
       let inherited = ChatCitationMarkup.inheritedReferences(
         citedIn: messages[index],
         resolved: messages[index].inlineCitationReferences,
-        earlierTurns: Array(messages[..<index]))
+        earlierTurns: messages[..<index])
       guard !inherited.isEmpty else { continue }
       messages[index].persistCitedReferences(from: inherited)
     }
@@ -229,7 +240,7 @@ extension ChatProvider {
     let inheritedReferences = ChatCitationMarkup.inheritedReferences(
       citedIn: messages[index],
       resolved: turnReferences,
-      earlierTurns: Array(messages[..<index]))
+      earlierTurns: messages[..<index])
     let bindableReferences = turnReferences + inheritedReferences
     let bindBase: [ChatCitationReference]
     if messages[index].hasKindOnlyCitationMarkers {
@@ -397,6 +408,14 @@ extension ChatProvider {
 }
 
 extension ChatProvider {
+  /// A journal row still marked streaming, arriving for an assistant row this
+  /// client has already settled. The write it echoes was queued before the
+  /// terminal mutation (`supersededByTerminalization` gates the ones queued
+  /// after), so its content is older than the row on screen.
+  static func isStaleStreamingEcho(_ projected: ChatMessage, for existing: ChatMessage) -> Bool {
+    projected.isStreaming && !existing.isStreaming && existing.sender == .ai
+  }
+
   /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
   /// two identical messages with distinct turn IDs are distinct journal rows.
   /// Some `ChatMessage` fields live only in the in-memory row and are never

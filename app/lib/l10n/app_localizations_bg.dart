@@ -10016,4 +10016,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.';
+
+  @override
+  String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
 }

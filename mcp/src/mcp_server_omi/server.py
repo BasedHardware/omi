@@ -133,6 +133,18 @@ class SearchConversations(BaseModel):
     end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd).", default=None)
 
 
+def _parse_categories(categories, category_cls: type, logger: logging.Logger) -> list:
+    if not isinstance(categories, list):
+        raise ValueError(f"categories must be a list, got {type(categories)}")
+    parsed = []
+    for category in categories:
+        try:
+            parsed.append(category_cls(category))
+        except ValueError:
+            logger.warning(f"Could not parse category: {category}")
+    return parsed
+
+
 def get_memories(
     logger: logging.Logger,
     api_key: str,
@@ -328,15 +340,7 @@ async def serve(uid: str | None) -> None:
 
         if name == OmiTools.GET_MEMORIES:
             # return [TextContent(type="text", text=json.dumps(arguments, indent=2))]
-            categories: List[str] = arguments.get("categories", [])
-            if not isinstance(categories, list):
-                raise ValueError(f"categories must be a list, got {type(categories)}")
-            categories_enum = []
-            for category in categories:
-                try:
-                    categories_enum.append(MemoryCategory(category))
-                except ValueError:
-                    logger.warning(f"Could not parse category: {category}")
+            categories_enum = _parse_categories(arguments.get("categories", []), MemoryCategory, logger)
 
             result = get_memories(
                 logger,
@@ -381,12 +385,14 @@ async def serve(uid: str | None) -> None:
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         elif name == OmiTools.GET_CONVERSATIONS:
+            categories_enum = _parse_categories(arguments.get("categories", []), ConversationCategory, logger)
+
             result = get_conversations(
                 logger,
                 api_key,
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
-                categories=arguments.get("categories", []),
+                categories=categories_enum,
                 limit=arguments.get("limit", 20),
                 offset=arguments.get("offset", 0),
             )

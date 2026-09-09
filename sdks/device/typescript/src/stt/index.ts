@@ -6,9 +6,23 @@ export interface StreamingTranscriber {
 }
 
 export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
-  let base = apiUrl.trim().replace(/\/+$/, '');
-  base = base.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-  return `${base}/v3/stream?sample_rate=${sampleRate}`;
+  const trimmed = apiUrl.trim();
+  const rawUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  const parsed = new URL(rawUrl);
+  if (parsed.protocol === 'http:' || parsed.protocol === 'ws:') {
+    parsed.protocol = 'ws:';
+  } else if (parsed.protocol === 'https:' || parsed.protocol === 'wss:') {
+    parsed.protocol = 'wss:';
+  } else {
+    throw new TypeError(`Unsupported Parakeet API URL protocol: ${parsed.protocol}`);
+  }
+  const cleanPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = `${cleanPath}/v3/stream`.replace(/^\/+/, '/');
+  parsed.searchParams.set('sample_rate', sampleRate.toString());
+  parsed.hash = '';
+  return parsed.toString();
 }
 
 export function deepgramWsUrl(sampleRate = 16000): string {
