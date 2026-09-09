@@ -287,6 +287,9 @@ The CLI is built so an LLM can use it without a wrapper:
 
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
+* Use `omi --json version` for a machine-readable version object
+  (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
+  retain their plain-text output.
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
 * Successful resource `delete --yes` commands preserve the API response in
