@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Iterable
 from urllib.parse import quote
@@ -7,6 +8,9 @@ from urllib.parse import quote
 
 UBER_WEB_BASE_URL = "https://m.uber.com/ul/"
 UBER_APP_BASE_URL = "uber://"
+
+_LAT_MIN, _LAT_MAX = -90.0, 90.0
+_LNG_MIN, _LNG_MAX = -180.0, 180.0
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,26 @@ def _normalize_float(value: float | int | str | None) -> float | None:
     return float(value)
 
 
+def _validate_coordinate(lat: float | None, lng: float | None) -> None:
+    """Raise ValueError if either coordinate is non-finite or out of geographic range."""
+    if lat is None and lng is None:
+        return
+    if lat is None or lng is None:
+        raise ValueError("latitude and longitude must be provided together")
+    if not math.isfinite(lat):
+        raise ValueError(f"latitude must be a finite number, got {lat!r}")
+    if not math.isfinite(lng):
+        raise ValueError(f"longitude must be a finite number, got {lng!r}")
+    if not (_LAT_MIN <= lat <= _LAT_MAX):
+        raise ValueError(
+            f"latitude {lat!r} is out of range [{_LAT_MIN}, {_LAT_MAX}]"
+        )
+    if not (_LNG_MIN <= lng <= _LNG_MAX):
+        raise ValueError(
+            f"longitude {lng!r} is out of range [{_LNG_MIN}, {_LNG_MAX}]"
+        )
+
+
 def build_location(
     *,
     latitude: float | int | str | None = None,
@@ -51,6 +75,7 @@ def build_location(
 ) -> UberLocation:
     lat = _normalize_float(latitude)
     lng = _normalize_float(longitude)
+    _validate_coordinate(lat, lng)
     return UberLocation(
         latitude=lat,
         longitude=lng,
@@ -113,4 +138,3 @@ def build_uber_deep_links(
         web_link=f"{UBER_WEB_BASE_URL}?{query}",
         app_link=f"{UBER_APP_BASE_URL}?{query}",
     )
-
