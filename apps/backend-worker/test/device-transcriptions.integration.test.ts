@@ -168,6 +168,29 @@ test("recording titles keep visible words after a NEXT LINE prefix longer than t
   });
 });
 
+test("recording titles keep later speech stored on segments when text is empty", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ?, segments = ? WHERE session_id = ?"
+  )
+    .bind(
+      "",
+      JSON.stringify([{ start: 0, end: 1, text: "Recorded words" }]),
+      session.id
+    )
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "Recorded words",
+    overview: "Recorded words",
+    source: "omi",
+    status: "completed",
+  });
+});
+
 test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", async () => {
   const session = await recording();
   await completeDeviceSession(env.DB, "record-owner", session.id, 102);

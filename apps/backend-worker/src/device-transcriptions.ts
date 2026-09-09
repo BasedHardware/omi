@@ -215,6 +215,54 @@ export type DeviceTranscriptionProjection = {
   updatedAt: number;
 };
 
+function visibleTranscriptText(value: string): string {
+  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, "");
+}
+
+function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
+  if (segments.length === 0) return null;
+  const parts: string[] = [];
+  for (const segment of segments) {
+    if (
+      segment === null ||
+      typeof segment !== "object" ||
+      Array.isArray(segment)
+    ) {
+      return null;
+    }
+    const text = (segment as { text?: unknown }).text;
+    if (typeof text !== "string") return null;
+    parts.push(text);
+  }
+  return parts.join(" ");
+}
+
+export function recordingTranscriptSpeech(
+  storedText: string | null,
+  segments: unknown[]
+): string | null {
+  const joined = joinWellFormedSegmentTexts(segments);
+  if (joined === null) return storedText;
+  const storedVisible =
+    storedText === null ? "" : visibleTranscriptText(storedText);
+  if (storedVisible === "" && visibleTranscriptText(joined) !== "") {
+    return joined;
+  }
+  return storedText;
+}
+
+export function parseStoredTranscriptSegments(
+  value: string | null
+): unknown[] | null {
+  if (value === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function projectDeviceTranscription(
   row: DeviceTranscriptionRow | null
 ): DeviceTranscriptionProjection | null {
@@ -236,20 +284,12 @@ export function projectDeviceTranscription(
   ) {
     return null;
   }
-  let segments: unknown = [];
-  if (row.segments !== null) {
-    if (typeof row.segments !== "string") return null;
-    try {
-      segments = JSON.parse(row.segments);
-    } catch {
-      return null;
-    }
-  }
-  if (!Array.isArray(segments)) return null;
+  const segments = parseStoredTranscriptSegments(row.segments);
+  if (segments === null) return null;
   return {
     sessionId: row.sessionId,
     state: row.state,
-    text: row.text,
+    text: recordingTranscriptSpeech(row.text, segments),
     segments,
     language: row.language,
     discardedLeadingPackets: row.discardedLeadingPackets,

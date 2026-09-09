@@ -44,4 +44,48 @@ describe("device transcription client projection", () => {
     ).toBeNull();
     expect(projectDeviceTranscription(null)).toBeNull();
   });
+
+  test("completed empty text keeps later speech stored on segments", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "",
+        segments: JSON.stringify([
+          { start: 0, end: 0.1, text: "Recorded speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "Recorded speech",
+    });
+  });
+
+  test("completed NEXT LINE-only text keeps later speech stored on segments", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "\u0085",
+        segments: JSON.stringify([
+          { start: 0, end: 0.2, text: "\u0085" },
+          { start: 0.2, end: 0.4, text: "Recorded speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "\u0085 Recorded speech",
+    });
+  });
+
+  test("completed stored text stays when segments are empty", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "Stored speech",
+        segments: JSON.stringify([]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "Stored speech",
+    });
+  });
 });

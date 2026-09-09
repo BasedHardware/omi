@@ -10,6 +10,48 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function visibleTranscriptText(value: string): string {
+  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
+}
+
+function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
+  if (segments.length === 0) {
+    return null;
+  }
+  const parts: string[] = [];
+  for (const segment of segments) {
+    if (
+      segment === null ||
+      typeof segment !== 'object' ||
+      Array.isArray(segment)
+    ) {
+      return null;
+    }
+    const text = (segment as {text?: unknown}).text;
+    if (typeof text !== 'string') {
+      return null;
+    }
+    parts.push(text);
+  }
+  return parts.join(' ');
+}
+
+function recordingTranscriptSpeech(
+  storedText: string | null,
+  segments: unknown[],
+): string | null {
+  const joined = joinWellFormedSegmentTexts(segments);
+  if (joined === null) {
+    return storedText;
+  }
+  const storedVisible =
+    storedText === null ? '' : visibleTranscriptText(storedText);
+  if (storedVisible === '' && visibleTranscriptText(joined) !== '') {
+    return joined;
+  }
+  return storedText;
+}
+
 export function parseRecordingTranscript(
   body: string | null,
   sessionId: string,
@@ -43,7 +85,10 @@ export function parseRecordingTranscript(
     return {
       sessionId,
       state: value.state as RecordingTranscript['state'],
-      text: value.text as string | null,
+      text: recordingTranscriptSpeech(
+        value.text as string | null,
+        value.segments,
+      ),
       errorCode: value.errorCode as string | null,
       discardedLeadingPackets: value.discardedLeadingPackets as number,
     };

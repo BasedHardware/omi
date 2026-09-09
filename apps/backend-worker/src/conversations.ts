@@ -1,4 +1,8 @@
 import {
+  parseStoredTranscriptSegments,
+  recordingTranscriptSpeech,
+} from "./device-transcriptions";
+import {
   recoveredPayloadTextKeySql,
   visibleGenerationTrim,
   visibleStoredTextTrimSql,
@@ -126,7 +130,9 @@ export async function readConversations(
     .prepare(
       `SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(${visibleStoredTextTrimSql(
         "t.text"
-      )}, 1, 241) AS text, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
+      )}, 1, 241) AS text, CASE WHEN length(${visibleStoredTextTrimSql(
+        "t.text"
+      )}) > 0 THEN NULL ELSE t.segments END AS segments, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
     )
     .bind(accountId)
     .all<{
@@ -136,13 +142,19 @@ export async function readConversations(
       captured_at_ms: number | null;
       state: string;
       text: string | null;
+      segments: string | null;
       updated_at: number;
     }>();
   for (const recording of recordings.results) {
+    const segments = parseStoredTranscriptSegments(recording.segments) ?? [];
+    const speech =
+      recordingTranscriptSpeech(recording.text, segments) ??
+      recording.text ??
+      "";
     conversations.push({
       id: `recording:${recording.id}`,
-      title: recordingExcerpt(recording.text ?? "").slice(0, 80),
-      overview: recordingExcerpt(recording.text ?? ""),
+      title: recordingExcerpt(speech).slice(0, 80),
+      overview: recordingExcerpt(speech),
       createdAt: recording.started_at,
       updatedAt: recording.updated_at,
       startedAt: recording.started_at,

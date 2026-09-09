@@ -29,6 +29,7 @@ function response(
   sessionId: string,
   state: string,
   text: string | null = null,
+  segments: unknown[] = [],
 ): NativeHttpResponse {
   return {
     id: 'test',
@@ -38,7 +39,7 @@ function response(
         sessionId,
         state,
         text,
-        segments: [],
+        segments,
         language: null,
         errorCode: null,
         updatedAt: 123,
@@ -104,6 +105,30 @@ test('a completed NEXT LINE-only transcript says empty instead of a blank body',
 test('a completed NEXT LINE-prefixed transcript keeps later speech', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', '\u0085Recorded words'),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Recorded words');
+  expect(textOf(renderer)).not.toContain('\u0085');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
+test('a completed empty text keeps later speech stored on segments', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 1, text: 'Recorded words'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Recorded words');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
+test('a completed NEXT LINE-only text keeps later speech stored on segments', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '\u0085', [
+      {start: 0, end: 0.2, text: '\u0085'},
+      {start: 0.2, end: 0.4, text: 'Recorded words'},
+    ]),
   );
   const renderer = await render('session-one');
   expect(textOf(renderer)).toContain('Recorded words');
