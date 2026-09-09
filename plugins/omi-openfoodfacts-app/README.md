@@ -65,3 +65,19 @@ http://localhost:8080/.well-known/omi-tools.json
 Open Food Facts is a community-contributed database. A missing allergen, nutrition field, or ingredient list does not prove the product is safe or complete. The app includes that caveat in tool responses so Omi does not present incomplete food data as a guarantee.
 
 The search tool caps `page_size` at 10 to avoid turning chat use into a high-volume search client.
+
+### Nutrition contract and regression tests
+
+`nutrition_per_100g` uses only Open Food Facts' normalized `_100g` fields.
+Missing normalized nutrients remain `null`; unsuffixed values may describe
+a serving and are not substituted. Explicit normalized zero values are retained.
+
+Run the hermetic handler tests from the repository root:
+
+```bash
+python3 plugins/omi-openfoodfacts-app/test_main.py
+```
+
+The tests import the full production module and exercise lookup, search,
+comparison and allergen handlers with framework and HTTP doubles. They do
+not exercise FastAPI routing, Pydantic serialization or threadpool scheduling.
