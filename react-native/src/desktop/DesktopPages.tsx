@@ -9,9 +9,11 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   taskDisplayTitle,
+  conversationDisplayTitle,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
+import {ConversationDetail} from '../ui/ConversationDetail';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {FocusPressable} from '../ui/Pressable';
 import {
@@ -35,9 +37,16 @@ export function LibraryPage({
   onLoadMoreConversations?: () => void;
   outcomes: DesktopReadOutcomes | null;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const outcome = outcomes?.conversations ?? null;
   const conversations =
     outcome?.status === 'success' ? outcome.value.items : [];
+  const selected = conversations.find(item => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (selectedId !== null && selected === null) {
+      setSelectedId(null);
+    }
+  }, [selected, selectedId]);
   // A failed or unsettled read must never claim "nothing captured": only a
   // successful empty page is an empty library.
   const emptyCopy =
@@ -54,50 +63,82 @@ export function LibraryPage({
         );
   return (
     <View style={styles.page}>
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        style={styles.list}>
-        {conversations.length > 0 ? (
-          conversations.map(item => (
-            <ShippingListInsert itemKey={item.id} key={item.id}>
-              <ConversationRow item={item} />
-            </ShippingListInsert>
-          ))
-        ) : (
-          <EmptyCopy>{emptyCopy}</EmptyCopy>
-        )}
-        {conversationNotice !== null ? (
-          <Text accessibilityRole="alert" style={styles.rowMeta}>
-            {conversationNotice}
-          </Text>
-        ) : null}
-        {outcome?.status === 'success' &&
-        outcome.value.page.hasMore &&
-        onLoadMoreConversations ? (
+      {selected !== null ? (
+        <ScrollView
+          accessibilityLabel="Selected conversation details"
+          contentContainerStyle={styles.listContent}
+          style={styles.list}>
           <FocusPressable
-            accessibilityLabel="Load more conversations"
+            accessibilityLabel="Back to conversations"
             accessibilityRole="button"
-            disabled={conversationsLoadingMore}
-            onPress={onLoadMoreConversations}
-            style={styles.pageAction}>
-            <Text style={styles.rowMeta}>
-              {conversationsLoadingMore
-                ? 'Loading…'
-                : 'Load more conversations'}
-            </Text>
+            onPress={() => setSelectedId(null)}
+            style={[styles.taskEdit, styles.backAction]}>
+            <Text style={styles.rowMeta}>Back to conversations</Text>
           </FocusPressable>
-        ) : null}
-        {outcome?.status === 'success' && conversations.length > 0 ? (
-          <ReadStatus
-            continueUnavailable={
-              conversationNotice === desktopBackendUnavailableCopy
+          <ConversationDetail
+            apiContract={
+              outcome?.status === 'success'
+                ? outcome.value.apiContract
+                : undefined
             }
-            label="Conversations"
-            mac
-            page={outcome.value.page}
+            conversation={selected}
+            desktop
           />
-        ) : null}
-      </ScrollView>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          style={styles.list}>
+          {conversations.length > 0 ? (
+            conversations.map(item => (
+              <ShippingListInsert itemKey={item.id} key={item.id}>
+                <FocusPressable
+                  accessibilityLabel={`Open conversation ${conversationDisplayTitle(
+                    item,
+                  )}`}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedId(item.id)}
+                  style={styles.pageAction}>
+                  <ConversationRow item={item} />
+                </FocusPressable>
+              </ShippingListInsert>
+            ))
+          ) : (
+            <EmptyCopy>{emptyCopy}</EmptyCopy>
+          )}
+          {conversationNotice !== null ? (
+            <Text accessibilityRole="alert" style={styles.rowMeta}>
+              {conversationNotice}
+            </Text>
+          ) : null}
+          {outcome?.status === 'success' &&
+          outcome.value.page.hasMore &&
+          onLoadMoreConversations ? (
+            <FocusPressable
+              accessibilityLabel="Load more conversations"
+              accessibilityRole="button"
+              disabled={conversationsLoadingMore}
+              onPress={onLoadMoreConversations}
+              style={styles.pageAction}>
+              <Text style={styles.rowMeta}>
+                {conversationsLoadingMore
+                  ? 'Loading…'
+                  : 'Load more conversations'}
+              </Text>
+            </FocusPressable>
+          ) : null}
+          {outcome?.status === 'success' && conversations.length > 0 ? (
+            <ReadStatus
+              continueUnavailable={
+                conversationNotice === desktopBackendUnavailableCopy
+              }
+              label="Conversations"
+              mac
+              page={outcome.value.page}
+            />
+          ) : null}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -367,6 +408,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backAction: {alignSelf: 'flex-start'},
   hubRow: {
     alignItems: 'center',
     flexDirection: 'row',

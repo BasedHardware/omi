@@ -8,31 +8,39 @@ import {
   chatSenderCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
+import {desktopTokens} from '../desktop/tokens';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
 export function ChatConversationHistory({
   conversationId,
+  desktop = false,
 }: {
   conversationId: string;
+  desktop?: boolean;
 }) {
   const {result, reload, loadingOlder, loadOlder, olderNotice, olderRetryable} =
     useChatConversationHistory(true, conversationId);
+  const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
   return (
     <View style={styles.conversationDetailFields}>
-      <Text accessibilityRole="header" style={styles.resultTitle}>
+      <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
         Messages
       </Text>
       {result.status === 'loading' || result.status === 'idle' ? (
         <View accessibilityLiveRegion="polite">
-          <ActivityIndicator color="#aaaaaa" />
-          <Text style={styles.conversationDetailSummary}>Loading chat…</Text>
+          <ActivityIndicator
+            color={desktop ? desktopTokens.color.inkMuted : '#aaaaaa'}
+          />
+          <Text style={[styles.conversationDetailSummary, ink]}>
+            Loading chat…
+          </Text>
         </View>
       ) : result.status === 'error' ? (
         <>
           <Text
             accessibilityRole="alert"
-            style={styles.conversationDetailSummary}>
+            style={[styles.conversationDetailSummary, ink]}>
             {result.error}
           </Text>
           {result.canReload && (
@@ -41,7 +49,9 @@ export function ChatConversationHistory({
               accessibilityLabel="Reload chat messages"
               onPress={reload}
               style={styles.conversationTranscriptAction}>
-              <Text style={styles.conversationDetailField}>Check again</Text>
+              <Text style={[styles.conversationDetailField, ink]}>
+                Check again
+              </Text>
             </FocusPressable>
           )}
         </>
@@ -50,7 +60,7 @@ export function ChatConversationHistory({
           {olderNotice !== null && (
             <Text
               accessibilityRole="alert"
-              style={styles.conversationDetailSummary}>
+              style={[styles.conversationDetailSummary, ink]}>
               {olderNotice}
             </Text>
           )}
@@ -64,14 +74,14 @@ export function ChatConversationHistory({
                   void loadOlder();
                 }}
                 style={styles.conversationTranscriptAction}>
-                <Text style={styles.conversationDetailField}>
+                <Text style={[styles.conversationDetailField, ink]}>
                   {loadingOlder ? 'Loading older…' : 'Load older messages'}
                 </Text>
               </FocusPressable>
             )}
           {result.messages.length === 0 ? (
             result.hasOlder ? null : (
-              <Text style={styles.conversationDetailSummary}>
+              <Text style={[styles.conversationDetailSummary, ink]}>
                 No messages in this chat yet.
               </Text>
             )
@@ -81,16 +91,18 @@ export function ChatConversationHistory({
               const body = chatMessageDisplayText(message);
               return (
                 <View key={message.id}>
-                  <Text selectable style={styles.conversationTranscriptText}>
+                  <Text
+                    selectable
+                    style={[styles.conversationTranscriptText, ink]}>
                     {`${sender} · ${body}`}
                   </Text>
                   {message.generationOutcome === 'cancelled' &&
                   visibleDisplayText(message.text) !== '' ? (
-                    <Text style={styles.conversationDetailField}>
+                    <Text style={[styles.conversationDetailField, ink]}>
                       Response stopped
                     </Text>
                   ) : null}
-                  <Text style={styles.conversationDetailField}>
+                  <Text style={[styles.conversationDetailField, ink]}>
                     {chatClockLabel(message.createdAt, Date.now()) ||
                       'Time unavailable'}
                   </Text>

@@ -150,7 +150,7 @@ export async function loadOmiConversations(
       discarded: bool(row.discarded),
     };
   });
-  return {items, page: page(start, items.length)};
+  return {apiContract: 'omi', items, page: page(start, items.length)};
 }
 export async function loadOmiMemories(
   read: Read,
@@ -181,7 +181,7 @@ export async function loadOmiMemories(
       },
     };
   });
-  return {items, page: page(start, items.length)};
+  return {apiContract: 'omi', items, page: page(start, items.length)};
 }
 export async function loadOmiTasks(
   read: Read,

@@ -521,12 +521,12 @@ export type ReadPageState = {
 };
 
 export type DomainRead<T extends DesktopReadProjection> = {
+  apiContract?: 'omi';
   items: T[];
   page: ReadPageState;
 };
 
 export type TaskRead = DomainRead<TaskProjection> & {
-  apiContract?: 'omi';
   accountEpoch: number | null;
 };
 
@@ -1018,6 +1018,7 @@ export async function loadMemories(
       cursor,
     );
     return {
+      apiContract: result.apiContract,
       page: result.page,
       items: result.items.map(item => {
         const parsed = parseMemoryText(

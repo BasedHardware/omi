@@ -11,11 +11,9 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
-  clockLabel,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationDayLabel,
-  conversationStatusCopy,
   desktopBackendUnavailableCopy,
   visibleDisplayText,
   type ConversationProjection,
@@ -23,53 +21,13 @@ import {
   type DomainReadOutcome,
 } from '../desktopReadClient';
 import {FocusPressable} from '../ui/Pressable';
-import {RecordingTranscript} from '../ui/RecordingTranscript';
-import {ChatConversationHistory} from '../ui/ChatConversationHistory';
+import {
+  ConversationDetail,
+  formatConversationDate,
+  formatConversationDuration,
+} from '../ui/ConversationDetail';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
-
-function formatConversationDate(value: string | null): string {
-  if (value === null) {
-    return 'Time unavailable';
-  }
-  const label = clockLabel(Date.parse(value), Date.now());
-  return label === '' ? 'Time unavailable' : label;
-}
-
-function formatConversationDuration(
-  startedAt: string | null,
-  finishedAt: string | null,
-): string {
-  if (startedAt === null || finishedAt === null) {
-    return 'Duration unavailable';
-  }
-  const startedAtMs = Date.parse(startedAt);
-  const finishedAtMs = Date.parse(finishedAt);
-  if (
-    !Number.isFinite(startedAtMs) ||
-    startedAtMs <= 0 ||
-    !Number.isFinite(finishedAtMs) ||
-    finishedAtMs <= 0
-  ) {
-    return 'Duration unavailable';
-  }
-  const duration = finishedAtMs - startedAtMs;
-  if (duration < 0) {
-    return 'Duration unavailable';
-  }
-  if (duration < 60_000) {
-    return '< 1 min';
-  }
-  const minutes = Math.round(duration / 60_000);
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0
-    ? `${hours} hr`
-    : `${hours} hr ${remainingMinutes} min`;
-}
 
 const ConversationRow = memo(function ConversationRow({
   item,
@@ -383,83 +341,14 @@ export function ConversationsPage({
                     </Text>
                   </FocusPressable>
                 )}
-                <Text style={styles.conversationDetailTitle}>
-                  {conversationDisplayTitle(selected)}
-                </Text>
-                <Text style={styles.conversationDetailSummary}>
-                  {conversationDisplaySummary(selected)}
-                </Text>
-                <View style={styles.conversationDetailFields}>
-                  {selected.capturedAtMs !== undefined && (
-                    <Text style={styles.conversationDetailField}>
-                      Captured (device time) ·{' '}
-                      {formatConversationDate(
-                        new Date(selected.capturedAtMs).toISOString(),
-                      )}
-                    </Text>
-                  )}
-                  <Text style={styles.conversationDetailField}>
-                    Started · {formatConversationDate(selected.startedAt)}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Finished · {formatConversationDate(selected.finishedAt)}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Duration ·{' '}
-                    {formatConversationDuration(
-                      selected.startedAt,
-                      selected.finishedAt,
-                    )}
-                  </Text>
-                  <Text style={styles.conversationDetailField}>
-                    Status · {conversationStatusCopy(selected.status)}
-                  </Text>
-                  {selected.locked && (
-                    <Text style={styles.conversationDetailField}>Locked</Text>
-                  )}
-                  {selected.discarded && (
-                    <Text style={styles.conversationDetailField}>
-                      Discarded
-                    </Text>
-                  )}
-                </View>
-                {selected.source === 'omi' &&
-                  selected.id.startsWith('recording:') &&
-                  selected.id.length > 'recording:'.length && (
-                    <RecordingTranscript
-                      key={selected.id}
-                      sessionId={selected.id.slice('recording:'.length)}
-                      revision={selected.updatedAt ?? undefined}
-                    />
-                  )}
-                {selected.source === 'chat' &&
-                  selected.id.startsWith('chat:') &&
-                  selected.id.length > 'chat:'.length && (
-                    <ChatConversationHistory
-                      key={selected.id}
-                      conversationId={selected.id}
-                    />
-                  )}
-                {selected.source === 'chat' &&
-                  !(
-                    selected.id.startsWith('chat:') &&
-                    selected.id.length > 'chat:'.length
-                  ) && (
-                    <Text style={styles.conversationDetailSummary}>
-                      Chat history for this conversation is not available here.
-                    </Text>
-                  )}
-                {selected.source !== 'chat' &&
-                  !(
-                    selected.source === 'omi' &&
-                    selected.id.startsWith('recording:') &&
-                    selected.id.length > 'recording:'.length
-                  ) && (
-                    <Text style={styles.conversationDetailSummary}>
-                      A full transcript is not available for this conversation
-                      yet.
-                    </Text>
-                  )}
+                <ConversationDetail
+                  apiContract={
+                    outcome?.status === 'success'
+                      ? outcome.value.apiContract
+                      : undefined
+                  }
+                  conversation={selected}
+                />
               </>
             )}
           </ScrollView>

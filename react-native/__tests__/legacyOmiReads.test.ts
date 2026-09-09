@@ -44,6 +44,7 @@ test('old bare conversation array preserves nullable metadata and offset paginat
     updatedAt: null,
     startedAt: null,
   });
+  expect(first.apiContract).toBe('omi');
   expect(first.page).toMatchObject({
     complete: false,
     nextCursor: 'omi-offset:50',
@@ -66,6 +67,7 @@ test('old memories strip namespaced entity prefixes without inventing provenance
     },
   ]);
   const result = await loadMemories(api);
+  expect(result.apiContract).toBe('omi');
   expect(result.items[0]).toMatchObject({
     title: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
     summary: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
