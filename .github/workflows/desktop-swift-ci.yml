@@ -256,10 +256,11 @@ jobs:
                 t="$1"
                 log_dir="$2"
                 log="$log_dir/$(basename "$t").log"
+                started=$SECONDS
                 if bash "$t" >"$log" 2>&1; then
-                  echo "== PASS $t"
+                  echo "== PASS $t ($((SECONDS - started))s)"
                 else
-                  echo "== FAIL $t"
+                  echo "== FAIL $t ($((SECONDS - started))s)"
                   touch "$log.failed"
                 fi
               ' _ {} "$log_dir"

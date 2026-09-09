@@ -1,41 +1,45 @@
 {
-  "max_slow_suite_count": 9,
+  "max_slow_suite_count": 10,
   "slow_suites": {
     "MemoryAtlasPerformanceHarnessTests": {
       "reason": "Performance harness: XCTest measure blocks run ten iterations; occupies a solo worker for minutes and is the dominant batch-timeout risk.",
-      "evidence": "~245s isolated on CI Xcode 16.4 (run 33553052046 era, pre-deferral timing), 80s under the 2026-09-08 local Xcode 26.6 harvest"
+      "evidence": "122s isolated on CI run 34297065235 (Xcode 16.4, 3 cores); ~245s in earlier cold-cache runs"
     },
     "ChatTranscriptGestureHarnessTests": {
       "reason": "Gesture harness with long-running tests; occupied a worker for over 1.5 min on CI and forced batch fallbacks.",
-      "evidence": "97s isolated on CI run 34239811380; 74s in the 2026-09-08 local harvest"
+      "evidence": "90s on CI run 34297065235; 97s isolated on CI run 34239811380"
+    },
+    "ChatProseRenderCacheTests": {
+      "reason": "Measure-block suite: solo invocation cost, not just test time, lands on the PR critical path.",
+      "evidence": "61s solo invocation on CI run 34297065235 (measure blocks run ten iterations)"
     },
     "ChatStreamingRenderBudgetTests": {
       "reason": "Render-budget measurement suite; 4th-slowest measured suite.",
-      "evidence": "9.0s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "11.9s on CI run 34297065235"
     },
     "MemoryBankConnectorTests": {
       "reason": "Slowest non-render integration suite after the harness pair.",
-      "evidence": "8.9s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "8.9s on CI run 34297065235"
     },
     "MemoryAtlasForceLayoutTests": {
       "reason": "Force-layout simulation suite adjacent to the deferred performance harness.",
-      "evidence": "5.2s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "10.9s on CI run 34297065235"
     },
     "ShellModalScrimTests": {
       "reason": "Render-adjacent suite in the measured slow tail.",
-      "evidence": "4.3s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "7.6s on CI run 34297065235"
     },
     "ShellStatusIconLegibilityTests": {
       "reason": "Render-adjacent suite in the measured slow tail.",
-      "evidence": "3.1s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "below the top-25 cutoff on CI run 34297065235; 3.1s in the 2026-09-08 local harvest"
     },
     "OnboardingGlassGroundRenderTests": {
       "reason": "Render-adjacent suite in the measured slow tail.",
-      "evidence": "2.5s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "below the top-25 cutoff on CI run 34297065235; 2.5s in the 2026-09-08 local harvest"
     },
     "TranscriptionFinalizationStateMachineTests": {
       "reason": "State-machine suite at the measured slow-tail cutoff.",
-      "evidence": "2.3s in the 2026-09-08 local harvest (Xcode 26.6); slower on the 3-core CI runner"
+      "evidence": "2.7s on CI run 34297065235"
     }
   }
 }
