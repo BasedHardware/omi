@@ -31,7 +31,7 @@ def clean(text: Any) -> str:
 class AbstractTextParser(HTMLParser):
     """Read JATS/HTML character data without interpreting escaped literal tags."""
 
-    BLOCKS = {"p", "title", "sec", "div", "br", "li"}
+    BLOCKS = {"p", "title", "sec", "div", "br", "break", "li"}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -47,6 +47,11 @@ class AbstractTextParser(HTMLParser):
 
     def handle_data(self, data):
         self.parts.append(data)
+
+    def unknown_decl(self, data):
+        # CDATA is literal XML text; neither tags nor entities are interpreted.
+        if data.startswith("CDATA["):
+            self.parts.append(data[len("CDATA["):])
 
 
 def clean_abstract(text: Any) -> str:

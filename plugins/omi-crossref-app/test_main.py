@@ -57,6 +57,22 @@ class CrossrefAbstractTests(unittest.TestCase):
             with self.subTest(abstract=abstract):
                 self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], expected)
 
+    def test_jats_break_preserves_word_boundary(self):
+        for tag in ("break", "jats:break"):
+            with self.subTest(tag=tag):
+                abstract = f"<jats:p>one<{tag}/>two</jats:p>"
+                self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], "one\ntwo")
+
+    def test_cdata_preserves_literal_payload_before_truncation(self):
+        cases = [
+            ("<jats:p><![CDATA[A <sample> &amp; B]]></jats:p>", "A <sample> &amp; B"),
+            ("<p>before <![CDATA[x < 2]]> after &amp; end</p>", "before x < 2 after & end"),
+            ("<p><![CDATA[" + "x" * 1300 + "]]></p>", "x" * 1200),
+        ]
+        for abstract, expected in cases:
+            with self.subTest(abstract=abstract[:80]):
+                self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], expected)
+
     def test_cap_counts_visible_text_not_markup(self):
         abstract = "<p>" + "<i>a</i>" * 1300 + "</p>"
         self.assertEqual(self.result(abstract).split("Abstract: ", 1)[1], "a" * 1200)
