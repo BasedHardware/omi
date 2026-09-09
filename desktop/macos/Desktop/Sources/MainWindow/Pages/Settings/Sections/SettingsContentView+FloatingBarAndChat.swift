@@ -322,6 +322,12 @@ extension SettingsContentView {
         await MainActor.run {
           self.localModelOptions = models
           self.isFetchingLocalModels = false
+          // No model configured yet: there's no hardcoded default to fall
+          // back to, so pick the first id the server actually reports
+          // instead of leaving the Picker's selection unmatched.
+          if currentModelId.isEmpty, let firstModel = models.first {
+            self.localLLMModelID = firstModel
+          }
         }
       } catch {
         await MainActor.run {
