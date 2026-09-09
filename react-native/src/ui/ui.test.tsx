@@ -1595,6 +1595,59 @@ test('wide Home search memory rows keep GET timestamps instead of citation-only'
   expect(tree).not.toContain('Time unavailable');
 });
 
+test('wide Home search memory rows keep GET synthesized-memory chrome instead of citation-only', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'memory',
+        id: 'memory-synthesized-home-search',
+        title: 'A walk.',
+        summary: 'A walk.',
+        searchableText: 'A walk.',
+        citations: ['citation-v1:launch'],
+        timestamp: 1_788_492_408,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('A walk.');
+  expect(tree).toContain('1 citation');
+  expect(tree).toContain('Synthesized memory');
+});
+
+test('compact Home current memory rows omit synthesized-memory chrome', () => {
+  const renderer = render(
+    <ProjectionRow
+      home
+      item={{
+        kind: 'memory',
+        id: 'memory-synthesized-home-current',
+        title: 'A walk.',
+        summary: 'A walk.',
+        searchableText: 'A walk.',
+        citations: ['citation-v1:launch'],
+        timestamp: 1_788_492_408,
+        provenance: {
+          label: null,
+          synthesisVersion: '1',
+          inputDigest: null,
+          outputDigest: null,
+        },
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('A walk.');
+  expect(tree).toContain('1 citation');
+  expect(tree).not.toContain('Synthesized memory');
+});
+
 test('a zero wide Home search conversation timestamp says Time unavailable', () => {
   const item = {
     kind: 'conversation' as const,

@@ -15,6 +15,7 @@ import {
   formatConversationDuration,
   memoryCitationCopy,
   memoryDisplayTitle,
+  memorySynthesisCopy,
   taskDisplaySummary,
   taskDisplayTitle,
   projectionClockLabel,
@@ -56,6 +57,8 @@ export const ProjectionRow = memo(function ProjectionRow({
   const conversation = item.kind === 'conversation' ? item : null;
   const listenOverview =
     conversation !== null && conversationListUsesListenOverview(conversation);
+  const synthesis =
+    !home && item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   return (
     <View
       style={[
@@ -130,6 +133,11 @@ export const ProjectionRow = memo(function ProjectionRow({
       {item.kind !== 'task' ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {projectionClockLabel(item, Date.now())}
+        </Text>
+      ) : null}
+      {synthesis !== null ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {synthesis}
         </Text>
       ) : null}
       {conversation !== null && conversationHasFinishClock(conversation) ? (
