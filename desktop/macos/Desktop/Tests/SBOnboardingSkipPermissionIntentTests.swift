@@ -20,12 +20,16 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
       AssistantSettings.audioRecordingModeDefaultsKey,
       DefaultsKey.screenAnalysisEnabled.rawValue,
       DefaultsKey.onboardingAccessibilitySkipped.rawValue,
+      DefaultsKey.onboardingSystemAudioSkipped.rawValue,
+      DefaultsKey.disableSystemAudioCapture.rawValue,
     ] {
       savedDefaults[key] = defaults.object(forKey: key)
     }
     defaults.removeObject(forKey: AssistantSettings.audioRecordingModeDefaultsKey)
     defaults.removeObject(forKey: DefaultsKey.screenAnalysisEnabled.rawValue)
     defaults.removeObject(forKey: DefaultsKey.onboardingAccessibilitySkipped.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.onboardingSystemAudioSkipped.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.disableSystemAudioCapture.rawValue)
   }
 
   override func tearDown() async throws {
@@ -106,10 +110,76 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
 
   func testCompletionNeverForcesScreenAnalysisOnForASkippedGrant() {
     XCTAssertEqual(
-      SBOnboardingModel.screenAnalysisIntentAtCompletion(screenRecordingGranted: false), false,
-      "Completion must not force-enable screen analysis after a skip or denial")
+      SBOnboardingModel.screenAnalysisIntentAtCompletion(
+        intentEnabled: false, screenRecordingGranted: true),
+      false,
+      "A pre-existing TCC grant must not overwrite the user's explicit skip")
     XCTAssertEqual(
-      SBOnboardingModel.screenAnalysisIntentAtCompletion(screenRecordingGranted: true), true)
+      SBOnboardingModel.screenAnalysisIntentAtCompletion(
+        intentEnabled: true, screenRecordingGranted: false),
+      false,
+      "Intent alone cannot start capture without a live grant")
+    XCTAssertEqual(
+      SBOnboardingModel.screenAnalysisIntentAtCompletion(
+        intentEnabled: true, screenRecordingGranted: true),
+      true)
+  }
+
+  // MARK: - System audio skip
+
+  func testExistingInstallWithoutSystemAudioSkipKeepsCaptureAvailable() {
+    XCTAssertNil(UserDefaults.standard.object(forKey: DefaultsKey.onboardingSystemAudioSkipped.rawValue))
+    XCTAssertTrue(appState.shouldCaptureSystemAudio)
+    UserDefaults.standard.set(true, forKey: .disableSystemAudioCapture)
+    XCTAssertFalse(appState.shouldCaptureSystemAudio)
+  }
+
+  func testSkipSystemAudioDisablesLaterAutomaticTapAttempts() {
+    let model = makeModel()
+    model.step = .systemAudio
+    model.sysState = .ask
+
+    model.answerSystemAudio()
+
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: .onboardingSystemAudioSkipped))
+    XCTAssertFalse(appState.shouldCaptureSystemAudio)
+  }
+
+  func testAllowSystemAudioClearsAnEarlierSkip() {
+    let model = makeModel()
+    UserDefaults.standard.set(true, forKey: .onboardingSystemAudioSkipped)
+    model.step = .systemAudio
+    model.sysState = .on
+
+    model.answerSystemAudio()
+
+    XCTAssertFalse(UserDefaults.standard.bool(forKey: .onboardingSystemAudioSkipped))
+    XCTAssertTrue(appState.shouldCaptureSystemAudio)
+  }
+
+  // MARK: - Files skip
+
+  func testSkipFilesDoesNotStartAProtectedFolderScan() {
+    var scanCalls = 0
+    let model = SBOnboardingModel(
+      appState: appState,
+      chatProvider: ChatProvider(),
+      fileScanRunner: { _ in
+        scanCalls += 1
+        return .complete(fileCount: 1, memoryCount: 1, deniedFolders: [])
+      },
+      onComplete: nil)
+    model.step = .files
+    model.fdaState = .ask
+
+    model.answerFiles()
+
+    XCTAssertEqual(scanCalls, 0)
+    XCTAssertNil(model.localFileScanTask)
+    // answerFiles guards on fdaState == .on and otherwise advances to .accessibility.
+    // Asserting only that the step changed would pass on a wrong destination, or on a
+    // restart back at .promise.
+    XCTAssertEqual(model.step, .accessibility)
   }
 
   // MARK: - Accessibility skip marker

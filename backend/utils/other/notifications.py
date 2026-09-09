@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from time import monotonic
 from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 import pytz
 
 import database.conversations as conversations_db
 from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
+import database.redis_db as redis_db
 from database.redis_db import release_daily_summary_lock, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
@@ -285,6 +287,30 @@ DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', su
 # once enough threads are abandoned that the pool would starve the rest.
 DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
 
+# --- Recipient selection for the hourly daily-summary tick (#13210) --------
+# Each execution used to read every user with a time_zone and filter preferences
+# in Python. After the backfill, Firestore can return only recipients. The
+# env knob stages that cutover; unknown values fall back to today's behaviour.
+#   legacy  — current full-pass query (default until the backfill has run)
+#   shadow  — legacy result is authoritative for sending; the indexed query also
+#             runs and one log line per hour group reports set diffs
+#   indexed — indexed query only
+_DAILY_SUMMARY_SELECTION_MODES = frozenset({'legacy', 'shadow', 'indexed'})
+
+
+def _selection_mode_from_env() -> str:
+    raw = os.getenv('DAILY_SUMMARY_SELECTION_MODE')
+    if raw is None:
+        return 'legacy'
+    mode = raw.strip().lower()
+    if mode in _DAILY_SUMMARY_SELECTION_MODES:
+        return mode
+    logger.warning('daily_summary_selection_mode_unknown value=%r falling_back=legacy', raw)
+    return 'legacy'
+
+
+DAILY_SUMMARY_SELECTION_MODE = _selection_mode_from_env()
+
 _BATCH_SIZE = 8
 
 _FALLBACK_COMPONENT = 'daily_summary'
@@ -350,10 +376,33 @@ async def start_cron_job() -> None:
     Main cron job entry point. Runs at the top of every UTC hour.
     """
     logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
-    await send_daily_notification()
-    summary_outcome = await send_daily_summary_notification()
-    if not summary_outcome.ok:
-        logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
+    token = uuid4().hex
+    acquired = False
+    try:
+        try:
+            acquired = await run_blocking(db_executor, redis_db.try_acquire_notifications_job_run_lock, token)
+        except Exception as error:
+            # Fail open: a Redis outage must not silence every recap for the hour. The cost
+            # is a possible duplicate pass, which the per-user day locks already bound.
+            logger.warning('notifications_job_run_lock_acquire_failed error=%s', error)
+            _record_daily_summary_fallback(
+                from_mode='run_locked', to_mode='run_unlocked', reason='other', outcome='degraded'
+            )
+        else:
+            if not acquired:
+                logger.warning(
+                    'notifications_job_run_skipped reason=overlap utc_hour=%s',
+                    datetime.now(pytz.utc).hour,
+                )
+                return
+
+        await send_daily_notification()
+        summary_outcome = await send_daily_summary_notification()
+        if not summary_outcome.ok:
+            logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
+    finally:
+        if acquired:
+            await run_blocking(db_executor, redis_db.release_notifications_job_run_lock, token)
 
 
 async def send_daily_summary_notification() -> DailySummaryCronOutcome:
@@ -506,6 +555,52 @@ async def _checkpoint(cursor_key: str, target_hour: Optional[int], uid: Optional
     )
 
 
+async def _query_daily_summary_chunks(selector: Any, timezone_chunks: List[List[str]], target_hour: int):
+    return await asyncio.gather(
+        *[run_blocking(db_executor, selector, chunk, target_hour) for chunk in timezone_chunks],
+        return_exceptions=True,
+    )
+
+
+def _reduce_daily_summary_chunks(
+    chunk_results: List[Any], target_hour: int
+) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
+    users: List[Tuple[str, List[str], Any]] = []
+    chunk_errors: List[BaseException] = []
+    every_chunk_read = True
+    for chunk_index, chunk in enumerate(chunk_results):
+        if isinstance(chunk, BaseException):
+            every_chunk_read = False
+            logger.error(
+                'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
+            )
+            chunk_errors.append(chunk)
+            continue
+        users.extend(chunk)
+    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
+
+
+def _log_daily_summary_selection_shadow(
+    target_hour: int,
+    legacy_users: List[Tuple[str, List[str], Any]],
+    indexed_users: List[Tuple[str, List[str], Any]],
+) -> None:
+    legacy_uids = {uid for uid, _tokens, _tz in legacy_users}
+    indexed_uids = {uid for uid, _tokens, _tz in indexed_users}
+    only_legacy = sorted(legacy_uids - indexed_uids)
+    only_indexed = sorted(indexed_uids - legacy_uids)
+    logger.info(
+        'daily_summary_selection_shadow hour=%s legacy=%d indexed=%d only_legacy=%d only_indexed=%d sample_only_legacy=%s sample_only_indexed=%s',
+        target_hour,
+        len(legacy_uids),
+        len(indexed_uids),
+        len(only_legacy),
+        len(only_indexed),
+        only_legacy[:5],
+        only_indexed[:5],
+    )
+
+
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
@@ -521,26 +616,32 @@ async def _get_users_for_daily_summary(
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
-    chunk_results = await asyncio.gather(
-        *[
-            run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
-            for chunk in timezone_chunks
-        ],
-        return_exceptions=True,
-    )
-    users: List[Tuple[str, List[str], Any]] = []
-    chunk_errors: List[BaseException] = []
-    every_chunk_read = True
-    for chunk_index, chunk in enumerate(chunk_results):
-        if isinstance(chunk, BaseException):
-            every_chunk_read = False
-            logger.error(
-                'daily_summary_user_query_chunk_failed hour=%s chunk=%d error=%s', target_hour, chunk_index, chunk
+    selector = notification_db.get_users_for_daily_summary
+    if DAILY_SUMMARY_SELECTION_MODE == 'indexed':
+        selector = notification_db.get_users_for_daily_summary_indexed
+    chunk_results = await _query_daily_summary_chunks(selector, timezone_chunks, target_hour)
+    users, query_error, every_chunk_read = _reduce_daily_summary_chunks(chunk_results, target_hour)
+
+    if DAILY_SUMMARY_SELECTION_MODE == 'shadow':
+        try:
+            indexed_results = await _query_daily_summary_chunks(
+                notification_db.get_users_for_daily_summary_indexed, timezone_chunks, target_hour
             )
-            chunk_errors.append(chunk)
-            continue
-        users.extend(chunk)
-    return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
+            indexed_users: List[Tuple[str, List[str], Any]] = []
+            indexed_error: Optional[BaseException] = None
+            for indexed_chunk in indexed_results:
+                if isinstance(indexed_chunk, BaseException):
+                    indexed_error = indexed_chunk
+                    break
+                indexed_users.extend(indexed_chunk)
+            if indexed_error is not None:
+                logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, indexed_error)
+            else:
+                _log_daily_summary_selection_shadow(target_hour, users, indexed_users)
+        except Exception as error:
+            logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, error)
+
+    return users, query_error, every_chunk_read
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
