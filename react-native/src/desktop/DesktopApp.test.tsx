@@ -1836,6 +1836,33 @@ test('Settings names denied notification access instead of asking macOS again', 
   expect(tree).not.toContain('Ask macOS for notification permission.');
 });
 
+test('Settings names denied Screen Recording access in System Settings', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    loadPermissionStatus: jest.Mock;
+  };
+  settings.loadPermissionStatus.mockResolvedValueOnce({
+    microphone: 'unknown',
+    notifications: 'unknown',
+    screen: 'denied',
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(
+    'Screen Recording access is denied in System Settings.',
+  );
+  expect(tree).not.toContain(
+    'Omi needs Screen Recording to keep what you see.',
+  );
+  expect(tree).toContain('Screen Capture');
+});
+
 test('Settings audio recording labels are not raw mode tokens', async () => {
   const settings = jest.requireMock('../desktopSettingsClient') as {
     requestDesktopPermission: jest.Mock;

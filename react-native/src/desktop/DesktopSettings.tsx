@@ -370,6 +370,8 @@ export function DesktopSettings({
                 : 'Start or stop saving screen history on this Mac.')
             : permissions.screen === 'granted'
             ? 'Screen capture is allowed on this Mac.'
+            : permissions.screen === 'denied'
+            ? 'Screen Recording access is denied in System Settings.'
             : 'Omi needs Screen Recording to keep what you see.'
         }
         title="Screen Capture"
