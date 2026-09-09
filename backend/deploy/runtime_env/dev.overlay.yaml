@@ -362,6 +362,15 @@ overlay:
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:

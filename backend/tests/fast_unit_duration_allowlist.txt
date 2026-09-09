@@ -337,6 +337,11 @@ tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_nativ
 # File-level: red-proof AST walks of production sources exceed 0.30s CPU per
 # test under saturated pre-push once this file is in the changed set.
 tests/unit/test_client_processing_trust_boundary.py
+# Walks composed runtime_env.yaml (and, for the chart test, four Helm values
+# files) so backend-sync cannot silently omit the summary-pipeline flags.
+# Hermetic, but the YAML load sits on the 0.30s file-isolation CPU boundary.
+tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service
+tests/unit/test_conversation_notes_v2_beta_rollout.py::test_the_deployed_chart_values_match_the_composed_manifest
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path

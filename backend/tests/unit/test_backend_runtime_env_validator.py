@@ -97,16 +97,28 @@ def with_backend_pusher_env(payload: str) -> str:
 
 
 def with_conversation_notes_v2_env(payload: str) -> str:
-    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+    """The summary rollout flags are declared on every Cloud Run process_conversation host.
 
-    Only that service is asserted: `process_conversation` runs inline there for reprocess,
-    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    `backend` runs reprocess inline; `backend-sync` is the Cloud Tasks
+    conversation-finalization writer. A deploy that carries the flags on
+    backend-listen alone (or on backend but not backend-sync) is the drift
+    this catches.
     """
-    return re.sub(
-        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+    flags = (
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
-        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
         payload,
         count=1,
         flags=re.DOTALL,
@@ -379,6 +391,37 @@ def test_conversation_finalization_capability_contract_rejects_non_writable_memo
         and error.message.startswith(
             'capability memory.canonical.mutate requires the runtime memory fence to permit writes'
         )
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/cloud_run/backend-sync',
+            'summary-pipeline flag CONVERSATION_NOTES_V2_ENABLED must be a literal on every conversation-finalization host',
+        )
+        in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and 'prod/cloud_run/backend-sync' in error.message
         for error in errors
     )
 

@@ -305,6 +305,11 @@ overlay:
             category: rollout
           MEMORY_ENABLED:
             value: 'on'
+          # Notes v2 prod-on (2026-09-01) to match Cloud Run backend. Calendar/OCR
+          # stay off via _base; do not promote them here.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
       backend-sync-backfill:
         env:
           LISTEN_FINALIZATION_DISPATCH_MODE:
