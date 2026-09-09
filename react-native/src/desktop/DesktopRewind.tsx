@@ -44,6 +44,8 @@ function errorCopy(error: unknown) {
   const code = errorCode(error);
   if (code === 'OMI_REWIND_UNAVAILABLE')
     return 'No local Rewind history is available for this account on this Mac.';
+  if (code === 'OMI_REWIND_STORAGE')
+    return 'Screen history on this Mac could not be read.';
   if (code === 'OMI_REWIND_AUTH')
     return 'Sign in again to open your screen history.';
   return 'Screen history could not be loaded. Try again.';
@@ -60,7 +62,11 @@ function rewindAppName(appName: string): string {
 
 export function rewindLaterPageCanRetry(error: unknown): boolean {
   const code = errorCode(error);
-  return code !== 'OMI_REWIND_UNAVAILABLE' && code !== 'OMI_REWIND_AUTH';
+  return (
+    code !== 'OMI_REWIND_UNAVAILABLE' &&
+    code !== 'OMI_REWIND_STORAGE' &&
+    code !== 'OMI_REWIND_AUTH'
+  );
 }
 
 export function DesktopRewind({

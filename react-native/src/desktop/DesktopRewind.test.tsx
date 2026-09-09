@@ -154,6 +154,10 @@ test.each([
     {code: 'OMI_REWIND_UNAVAILABLE'},
     'No local Rewind history is available for this account on this Mac.',
   ],
+  [
+    {code: 'OMI_REWIND_STORAGE'},
+    'Screen history on this Mac could not be read.',
+  ],
   [{code: 'OMI_REWIND_AUTH'}, 'Sign in again to open your screen history.'],
   [
     new Error('private filesystem path'),
@@ -264,6 +268,18 @@ test('empty Rewind app and window names stay visible without a blank row', async
   );
 });
 
+test('unreadable Rewind storage does not claim history is missing', async () => {
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_STORAGE'});
+  const view = await render();
+  expect(content(view)).toContain(
+    'Screen history on this Mac could not be read.',
+  );
+  expect(content(view)).not.toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
+  expect(content(view)).not.toContain('No captures saved yet.');
+});
+
 test('later-page Rewind unavailability keeps frames and omits Load more', async () => {
   mockRewind.listFrames.mockResolvedValueOnce({
     frames: [frame('one')],
@@ -277,6 +293,28 @@ test('later-page Rewind unavailability keeps frames and omits Load more', async 
     'No local Rewind history is available for this account on this Mac.',
   );
   expect(content(view)).not.toContain('Screen history could not be loaded.');
+  expect(label(view, 'View capture one')).toBeDefined();
+  expect(
+    view.root.findAll(
+      node => node.props.accessibilityLabel === 'Load more history',
+    ),
+  ).toHaveLength(0);
+});
+
+test('later-page Rewind storage failures keep frames and omit Load more', async () => {
+  mockRewind.listFrames.mockResolvedValueOnce({
+    frames: [frame('one')],
+    nextCursor: 'page-two',
+  });
+  const view = await render();
+  mockRewind.listFrames.mockRejectedValueOnce({code: 'OMI_REWIND_STORAGE'});
+  await press(view, 'Load more history');
+  expect(content(view)).toContain(
+    'Screen history on this Mac could not be read.',
+  );
+  expect(content(view)).not.toContain(
+    'No local Rewind history is available for this account on this Mac.',
+  );
   expect(label(view, 'View capture one')).toBeDefined();
   expect(
     view.root.findAll(
