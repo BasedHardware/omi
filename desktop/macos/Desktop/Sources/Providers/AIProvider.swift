@@ -95,10 +95,10 @@ struct AIProvider: Identifiable {
   /// normal cloud/dev resolution", same opt-in framing as the two keys above.
   static let localBackendURLKey = "localBackendURL"
 
-  /// Default local endpoint — Tawsif's Mac Studio over Tailscale. Only used
-  /// as the initial value of an editable Settings field, never hardcoded
-  /// into a request path.
-  static let defaultLocalBaseURL = "http://100.85.206.120:1234/v1"
+  /// Default local endpoint — localhost, matching LM Studio's default port.
+  /// Only used as the initial value of an editable Settings field, never
+  /// hardcoded into a request path.
+  static let defaultLocalBaseURL = "http://localhost:1234/v1"
   static let defaultLocalModelID = "qwen3.8-27b-optiq"
 
   /// UserDefaults key for which provider is selected. Mirrors

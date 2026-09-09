@@ -3086,7 +3086,7 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
 test("omiProvider: registers omi-local when both env vars are present", () => {
   withEnv(
     {
-      OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1",
+      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
       // The "omi" cloud provider only registers when an API key is present
       // (see the if (apiKey) gate) — set one so this test's unrelated
@@ -3101,7 +3101,7 @@ test("omiProvider: registers omi-local when both env vars are present", () => {
       const local = pi.registered.find((r) => r.name === "omi-local");
       assert.ok(omi, "existing omi provider must still register");
       assert.ok(local, "omi-local must register when both env vars are present");
-      assert.equal(local!.config.baseUrl, "http://100.85.206.120:1234/v1");
+      assert.equal(local!.config.baseUrl, "http://100.100.100.100:1234/v1");
       assert.equal(local!.config.models[0].id, "qwen3.8-27b-mlx");
       assert.equal(local!.config.models[0].cost.input, 0);
       // pi-ai only recognizes a handful of hosts as needing "max_tokens";
@@ -3116,7 +3116,7 @@ test("omiProvider: registers omi-local when both env vars are present", () => {
 test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", () => {
   withEnv(
     {
-      OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1",
+      OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1",
       OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx",
       OMI_LOCAL_API_KEY: undefined,
     },
@@ -3132,7 +3132,7 @@ test("omiProvider: falls back to a non-empty apiKey placeholder for omi-local", 
 
 test("omiProvider: does not register omi-local when OMI_LOCAL_MODEL_ID is missing", () => {
   withEnv(
-    { OMI_LOCAL_BASE_URL: "http://100.85.206.120:1234/v1", OMI_LOCAL_MODEL_ID: undefined },
+    { OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1", OMI_LOCAL_MODEL_ID: undefined },
     () => {
       const pi = fakePi();
       omiProvider(pi as any);
