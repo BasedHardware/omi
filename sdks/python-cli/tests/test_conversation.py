@@ -106,3 +106,31 @@ def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_m
     assert result.exit_code == 1
     assert "Invalid JSON" in result.stderr
     assert not respx_mock.calls
+
+
+def test_conversation_create_reads_utf8_stdin(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/conversations").respond(
+        json={"id": "c1", "status": "completed", "discarded": False}
+    )
+    raw_text = "Caf\u00e9, \u65e5\u672c\u8a9e \U0001f642"
+    result = cli_runner.invoke(
+        app,
+        ["--json", "conversation", "create", "--text", "-", "--language", "ja"],
+        input=raw_text.encode("utf-8"),
+    )
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["text"] == raw_text
+    assert body["language"] == "ja"
+
+
+def test_conversation_create_rejects_invalid_utf8_stdin(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "conversation", "create", "--text", "-"],
+        input=b"invalid \xff\xfe bytes",
+    )
+    assert result.exit_code == 1
+    assert "UTF-8" in result.stderr
+    assert not respx_mock.calls
+

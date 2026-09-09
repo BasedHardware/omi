@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -96,7 +95,7 @@ def get_conversation(
 @app.command("create", help="Create a conversation from raw text.")
 def create_conversation(
     typer_ctx: typer.Context,
-    text: Optional[str] = typer.Option(None, "--text", help="Text body. Use '-' to read from stdin."),
+    text: Optional[str] = typer.Option(None, "--text", help="Text body. Use '-' to read UTF-8 from stdin."),
     text_source: ConversationTextSource = typer.Option(
         ConversationTextSource.other_text,
         "--text-source",
@@ -119,7 +118,17 @@ def create_conversation(
                 message="No --text provided",
                 detail="Pass --text 'your text' or pipe content via stdin and use --text -.",
             )
-        text = sys.stdin.read()
+        buffer = getattr(sys.stdin, "buffer", None)
+        try:
+            if buffer is not None:
+                text = buffer.read().decode("utf-8")
+            else:
+                text = sys.stdin.read()
+        except UnicodeDecodeError as exc:
+            raise UsageError(
+                message="Invalid UTF-8 in piped input",
+                detail=f"Piped conversation text must be valid UTF-8: {exc}",
+            ) from exc
 
     body: dict[str, object] = {
         "text": text,
