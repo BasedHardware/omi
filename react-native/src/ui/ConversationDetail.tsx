@@ -23,6 +23,17 @@ export function formatConversationDate(value: string | null): string {
   return label === '' ? 'Time unavailable' : label;
 }
 
+export function conversationHasFinishClock(conversation: {
+  finishedAt: string | null;
+  status: string;
+}): boolean {
+  if (conversation.finishedAt !== null) {
+    return true;
+  }
+  const status = visibleDisplayText(conversation.status);
+  return status === 'completed' || status === 'failed';
+}
+
 export function formatConversationDuration(
   startedAt: string | null,
   finishedAt: string | null,
@@ -97,16 +108,20 @@ export function ConversationDetail({
         <Text style={[styles.conversationDetailField, ink]}>
           Started · {formatConversationDate(conversation.startedAt)}
         </Text>
-        <Text style={[styles.conversationDetailField, ink]}>
-          Finished · {formatConversationDate(conversation.finishedAt)}
-        </Text>
-        <Text style={[styles.conversationDetailField, ink]}>
-          Duration ·{' '}
-          {formatConversationDuration(
-            conversation.startedAt,
-            conversation.finishedAt,
-          )}
-        </Text>
+        {conversationHasFinishClock(conversation) ? (
+          <Text style={[styles.conversationDetailField, ink]}>
+            Finished · {formatConversationDate(conversation.finishedAt)}
+          </Text>
+        ) : null}
+        {conversationHasFinishClock(conversation) ? (
+          <Text style={[styles.conversationDetailField, ink]}>
+            Duration ·{' '}
+            {formatConversationDuration(
+              conversation.startedAt,
+              conversation.finishedAt,
+            )}
+          </Text>
+        ) : null}
         <Text style={[styles.conversationDetailField, ink]}>
           Status · {conversationStatusCopy(conversation.status)}
         </Text>

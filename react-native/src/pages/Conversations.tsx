@@ -23,6 +23,7 @@ import {
 import {FocusPressable} from '../ui/Pressable';
 import {
   ConversationDetail,
+  conversationHasFinishClock,
   formatConversationDate,
   formatConversationDuration,
 } from '../ui/ConversationDetail';
@@ -67,9 +68,11 @@ const ConversationRow = memo(function ConversationRow({
       <Text numberOfLines={2} style={styles.resultSummary}>
         {conversationDisplaySummary(item)}
       </Text>
-      <Text style={styles.conversationRowDuration}>
-        {formatConversationDuration(item.startedAt, item.finishedAt)}
-      </Text>
+      {conversationHasFinishClock(item) ? (
+        <Text style={styles.conversationRowDuration}>
+          {formatConversationDuration(item.startedAt, item.finishedAt)}
+        </Text>
+      ) : null}
     </FocusPressable>
   );
 });

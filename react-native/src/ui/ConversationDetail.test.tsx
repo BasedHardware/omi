@@ -328,6 +328,26 @@ test('legacy load failure offers retry without inventing an empty transcript', (
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
+test('an in-progress chat does not invent a Finished clock', () => {
+  const copy = text(
+    render({
+      conversation: {
+        ...conversation,
+        id: 'chat:chat-main',
+        source: 'chat',
+        status: 'in_progress',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: null,
+      },
+    }),
+  );
+  expect(copy).toContain('Started ·');
+  expect(copy).toContain('In progress');
+  expect(copy).not.toContain('Finished ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('Duration unavailable');
+});
+
 test('conversation details name starred conversations without an empty star toggle', () => {
   const starred = render({
     conversation: {...conversation, starred: true},

@@ -791,6 +791,7 @@ test('conversation detail status is not a raw wire token', () => {
       />,
     );
   });
+  expect(textOf(renderer)).not.toContain('Duration unavailable');
   act(() => {
     renderer.root
       .find(
@@ -803,6 +804,9 @@ test('conversation detail status is not a raw wire token', () => {
   expect(copy).toContain('Status ·');
   expect(copy).toContain(conversationStatusCopy('in_progress'));
   expect(copy).not.toContain('in_progress');
+  expect(copy).not.toContain('Finished ·');
+  expect(copy).not.toContain('Duration ·');
+  expect(copy).not.toContain('Duration unavailable');
 });
 
 test('whitespace conversation detail status is not a blank row', () => {
