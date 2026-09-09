@@ -178,8 +178,9 @@ final class FloatingBarPTTAnalyticsTests: XCTestCase {
   func testVoiceTypingLifecycleTerminateIsDictation() throws {
     // omi-test-quality: source-inspection -- static contract: terminateVoiceTypingLifecycle is the single voice_typing lifecycle emit and defaults to .dictation; the recorder field itself is covered behaviorally in PTTAttemptLifecycleRecorderTests.
     let source = try pushToTalkManagerSource()
+    // Default lives on the signature, which `functionBody` strips at `{`.
+    XCTAssertTrue(source.contains("TurnKind = .dictation"))
     let body = try functionBody(named: "terminateVoiceTypingLifecycle", in: source)
-    XCTAssertTrue(body.contains("= .dictation"))
     XCTAssertTrue(body.contains("turnKind: turnKind"))
   }
 
