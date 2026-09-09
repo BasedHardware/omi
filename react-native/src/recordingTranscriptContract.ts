@@ -77,10 +77,13 @@ export function parseRecordingTranscript(
     return {
       sessionId,
       state: value.state as RecordingTranscript['state'],
-      text: recordingTranscriptSpeech(
-        value.text as string | null,
-        value.segments,
-      ),
+      text:
+        value.state === 'completed'
+          ? recordingTranscriptSpeech(
+              value.text as string | null,
+              value.segments,
+            )
+          : null,
       errorCode: value.errorCode as string | null,
       discardedLeadingPackets: value.discardedLeadingPackets as number,
     };

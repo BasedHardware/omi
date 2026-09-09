@@ -180,6 +180,31 @@ test('parseRecordingTranscript uses production Listen segment join when stored t
   });
 });
 
+test('parseRecordingTranscript hides leftover speech when state is not completed', () => {
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'failed', 'Leftover speech', [
+        {start: 0, end: 1, text: 'Leftover speech'},
+      ]).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'failed',
+    text: null,
+  });
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'queued', 'Leftover speech', [
+        {start: 0, end: 1, text: 'Leftover speech'},
+      ]).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'queued',
+    text: null,
+  });
+});
+
 test('a completed stored text keeps later speech stored on segments', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', 'Stored speech', [
