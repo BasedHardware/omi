@@ -5,3 +5,4 @@
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
+* [`quickstart.fr.md`](quickstart.fr.md) — Guide de démarrage rapide en français (French Quickstart).
