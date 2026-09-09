@@ -42,20 +42,24 @@ O `omi-cli` suporta dois métodos de autenticação:
 | Método | Indicado para | Exemplo de uso |
 | :--- | :--- | :--- |
 | **Chave de API (`omi_dev_*`)** | Automações, CI/CD, servidores headless, agentes de IA | `omi auth login --api-key ...` ou `OMI_API_KEY` |
-| **OAuth via Navegador (Google/Apple)** | Desenvolvedores em laptops / máquinas locais | `omi auth login --browser` |
+| **OAuth via Navegador (Google/Apple)** | Desenvolvedores em laptops / máquinas locais | `omi auth login --browser` (Google) / `--provider apple` |
 
 ### Login Interativo
 Ao rodar sem argumentos adicionais, o assistente pergunta qual fluxo deseja utilizar:
 
 ```bash
 omi auth login
-# 1) Browser — Autenticação via Google ou Apple no navegador web
+# 1) Browser — autenticação via Google (use `--provider apple` para Apple)
 # 2) API key — Cole sua chave de desenvolvedor gerada no app.omi.me
 ```
 
 ### Login Direto pelo Navegador
 ```bash
+# Login padrão via Google
 omi auth login --browser
+
+# Alternativa via Apple
+omi auth login --browser --provider apple
 ```
 
 ### Usando uma Chave de Desenvolvedor (API Key)
@@ -66,11 +70,12 @@ Obtenha sua chave no painel do [app.omi.me](https://app.omi.me) em **Developer �
 omi auth login --api-key omi_dev_...
 
 # Ou definir como variável de ambiente (ideal para containers e pipelines de CI)
+# Nota: se o perfil ativo já possuir uma chave salva, use `omi auth logout` para alternar para OMI_API_KEY.
 export OMI_API_KEY="omi_dev_..."
 ```
 
 ### Verificar o Status da Autenticação
-* `omi auth status`: Exibe o perfil ativo local, tokens mascarados e datas de expiração (opera offline).
+* `omi auth status`: Exibe o perfil ativo local e a credencial mascarada; a expiração é mostrada apenas para perfis OAuth (opera offline).
 * `omi auth whoami`: Faz uma chamada à API para confirmar se a credencial está válida no servidor (requer conexão).
 
 ```bash
@@ -81,6 +86,7 @@ omi auth whoami
 Para encerrar a sessão:
 ```bash
 omi auth logout
+# Se OMI_API_KEY estiver definida, remova-a também da sessão (Bash/Zsh: `unset OMI_API_KEY`).
 ```
 
 ---
@@ -108,7 +114,7 @@ Histórico de áudio e texto capturados pelos dispositivos Omi:
 # Listar as 5 conversas mais recentes
 omi conversation list --limit 5
 
-# Obter detalhes e o transkript completo da conversa
+# Obter detalhes e a transcrição completa da conversa
 omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
@@ -162,11 +168,11 @@ omi --json action-item list --open | jq '.'
 
 Para integrações confiáveis em shell scripts e esteiras de CI/CD:
 
-| Código | Significado | Descrição |
+| Exit-Code | Significado | Descrição |
 | :---: | :--- | :--- |
 | `0` | **Sucesso (Success)** | Execução concluída com êxito. |
-| `1` | **Erro de Uso (Usage Error)** | Argumentos inválidos, parâmetros ausentes ou sintaxe incorreta. |
-| `2` | **Erro de Autenticação (Auth Error)** | Não autenticado, chave inválida ou token expirado. |
+| `1` | **Erro de Uso (Erro de Validação)** | Valores inválidos ou validação de aplicação; erros de sintaxe do Click (parâmetros ausentes ou opções desconhecidas) retornam código `2`. |
+| `2` | **Erro de Autenticação / Sintaxe CLI** | Não autenticado, chave inválida ou token expirado; erros de parser de sintaxe do Click também retornam este código. |
 | `3` | **Erro de Servidor/Rede (Server Error)** | Resposta HTTP 5xx, timeout ou falha de conexão. |
 | `4` | **Limite de Requisições (Rate Limited)** | HTTP 429 Too Many Requests — requisição bloqueada por rate limit. |
 | `5` | **Não Encontrado (Not Found)** | HTTP 404 Not Found — o identificador requisitado não existe. |
