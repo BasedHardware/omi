@@ -10823,5 +10823,12 @@
     "speechToTextUnavailableDesc": "Pretvaranje govora u tekst trenutno nije dostupno. Provjerite internetsku vezu i postavke prepoznavanja govora na uređaju, pa pokušajte ponovo.",
     "memoryHistoryPartial": "Dio historije sjećanja nije dostupan. Prikazuje se dosad primljena historija.",
     "tapPlusToStartRecording": "Dodirnite + za početak snimanja",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače."
+    "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
+    "deviceRenameTitle": "Preimenuj uređaj",
+    "deviceRenameDescription": "Postavite lokalni naziv za ovaj uređaj. Čuva se na telefonu i prikazuje umjesto oglašenog naziva. Sam uređaj se ne preimenuje.",
+    "deviceRenameHint": "Naziv uređaja",
+    "deviceRenameTooShort": "Naziv mora imati najmanje 2 znaka",
+    "deviceRenameSaved": "Naziv uređaja je ažuriran",
+    "deviceRenameReset": "Prilagođeni naziv je uklonjen, prikazuje se zadani naziv",
+    "deviceRenameResetAction": "Vrati na zadani naziv"
 }

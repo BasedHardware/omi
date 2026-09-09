@@ -9966,4 +9966,26 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
+
+  @override
+  String get deviceRenameTitle => 'Omdøb enhed';
+
+  @override
+  String get deviceRenameDescription =>
+      'Angiv et lokalt navn til denne enhed. Det gemmes på din telefon og vises i stedet for det annoncerede navn. Enheden selv omdøbes ikke.';
+
+  @override
+  String get deviceRenameHint => 'Enhedsnavn';
+
+  @override
+  String get deviceRenameTooShort => 'Navnet skal være mindst 2 tegn';
+
+  @override
+  String get deviceRenameSaved => 'Enhedsnavnet er opdateret';
+
+  @override
+  String get deviceRenameReset => 'Brugerdefineret navn fjernet; standardnavnet vises';
+
+  @override
+  String get deviceRenameResetAction => 'Nulstil til standardnavn';
 }

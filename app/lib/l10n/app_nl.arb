@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.",
     "memoryHistoryPartial": "Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.",
     "tapPlusToStartRecording": "Tik op + om de opname te starten",
-    "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal."
+    "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal.",
+    "deviceRenameTitle": "Apparaat hernoemen",
+    "deviceRenameDescription": "Stel een lokale naam voor dit apparaat in. Deze wordt op je telefoon opgeslagen en in plaats van de geadverteerde naam getoond. Het apparaat zelf wordt niet hernoemd.",
+    "deviceRenameHint": "Apparaatnaam",
+    "deviceRenameTooShort": "De naam moet minimaal 2 tekens bevatten",
+    "deviceRenameSaved": "Apparaatnaam bijgewerkt",
+    "deviceRenameReset": "Aangepaste naam gewist; standaardnaam wordt getoond",
+    "deviceRenameResetAction": "Terug naar standaardnaam"
 }

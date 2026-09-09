@@ -9792,4 +9792,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get deviceRenameTitle => '重命名设备';
+
+  @override
+  String get deviceRenameDescription => '为此设备设置一个本地名称。它保存在手机上并显示为设备名称，不会更改设备本身的广播名称。';
+
+  @override
+  String get deviceRenameHint => '设备名称';
+
+  @override
+  String get deviceRenameTooShort => '名称至少需要2个字符';
+
+  @override
+  String get deviceRenameSaved => '设备名称已更新';
+
+  @override
+  String get deviceRenameReset => '自定义名称已清除，显示默认名称';
+
+  @override
+  String get deviceRenameResetAction => '恢复默认名称';
 }

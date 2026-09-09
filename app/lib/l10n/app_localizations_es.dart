@@ -10006,4 +10006,26 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Sigue trabajando: esto está tardando más de lo habitual.';
+
+  @override
+  String get deviceRenameTitle => 'Renombrar dispositivo';
+
+  @override
+  String get deviceRenameDescription =>
+      'Define un nombre local para este dispositivo. Se guarda en tu teléfono y se muestra en lugar del nombre anunciado. El dispositivo en sí no se renombra.';
+
+  @override
+  String get deviceRenameHint => 'Nombre del dispositivo';
+
+  @override
+  String get deviceRenameTooShort => 'El nombre debe tener al menos 2 caracteres';
+
+  @override
+  String get deviceRenameSaved => 'Nombre del dispositivo actualizado';
+
+  @override
+  String get deviceRenameReset => 'Nombre personalizado eliminado; se muestra el nombre predeterminado';
+
+  @override
+  String get deviceRenameResetAction => 'Restablecer al nombre predeterminado';
 }

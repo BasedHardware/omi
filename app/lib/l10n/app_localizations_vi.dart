@@ -9977,4 +9977,26 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get deviceRenameTitle => 'Đổi tên thiết bị';
+
+  @override
+  String get deviceRenameDescription =>
+      'Đặt tên cục bộ cho thiết bị này. Tên được lưu trên điện thoại và hiển thị thay cho tên quảng bá. Bản thân thiết bị không bị đổi tên.';
+
+  @override
+  String get deviceRenameHint => 'Tên thiết bị';
+
+  @override
+  String get deviceRenameTooShort => 'Tên phải có ít nhất 2 ký tự';
+
+  @override
+  String get deviceRenameSaved => 'Đã cập nhật tên thiết bị';
+
+  @override
+  String get deviceRenameReset => 'Đã xóa tên tùy chỉnh, hiển thị tên mặc định';
+
+  @override
+  String get deviceRenameResetAction => 'Khôi phục tên mặc định';
 }

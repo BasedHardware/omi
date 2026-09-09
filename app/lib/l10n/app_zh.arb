@@ -3279,5 +3279,12 @@
     "speechToTextUnavailableDesc": "目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。",
     "memoryHistoryPartial": "部分记忆历史暂不可用。正在显示目前已获取的历史记录。",
     "tapPlusToStartRecording": "点击 + 开始录音",
-    "processingTakingLonger": "仍在处理中——比平时耗时更长。"
+    "processingTakingLonger": "仍在处理中——比平时耗时更长。",
+    "deviceRenameTitle": "重命名设备",
+    "deviceRenameDescription": "为此设备设置一个本地名称。它保存在手机上并显示为设备名称，不会更改设备本身的广播名称。",
+    "deviceRenameHint": "设备名称",
+    "deviceRenameTooShort": "名称至少需要2个字符",
+    "deviceRenameSaved": "设备名称已更新",
+    "deviceRenameReset": "自定义名称已清除，显示默认名称",
+    "deviceRenameResetAction": "恢复默认名称"
 }

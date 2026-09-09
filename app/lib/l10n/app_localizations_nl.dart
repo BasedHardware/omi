@@ -10009,4 +10009,26 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
+
+  @override
+  String get deviceRenameTitle => 'Apparaat hernoemen';
+
+  @override
+  String get deviceRenameDescription =>
+      'Stel een lokale naam voor dit apparaat in. Deze wordt op je telefoon opgeslagen en in plaats van de geadverteerde naam getoond. Het apparaat zelf wordt niet hernoemd.';
+
+  @override
+  String get deviceRenameHint => 'Apparaatnaam';
+
+  @override
+  String get deviceRenameTooShort => 'De naam moet minimaal 2 tekens bevatten';
+
+  @override
+  String get deviceRenameSaved => 'Apparaatnaam bijgewerkt';
+
+  @override
+  String get deviceRenameReset => 'Aangepaste naam gewist; standaardnaam wordt getoond';
+
+  @override
+  String get deviceRenameResetAction => 'Terug naar standaardnaam';
 }

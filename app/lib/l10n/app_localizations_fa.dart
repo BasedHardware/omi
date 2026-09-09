@@ -9982,4 +9982,26 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
+
+  @override
+  String get deviceRenameTitle => 'تغییر نام دستگاه';
+
+  @override
+  String get deviceRenameDescription =>
+      'یک نام محلی برای این دستگاه تنظیم کنید. این نام روی گوشی شما ذخیره می‌شود و به جای نام advertised نمایش داده می‌شود. نام خود دستگاه تغییر نمی‌کند.';
+
+  @override
+  String get deviceRenameHint => 'نام دستگاه';
+
+  @override
+  String get deviceRenameTooShort => 'نام باید حداقل ۲ نویسه باشد';
+
+  @override
+  String get deviceRenameSaved => 'نام دستگاه به‌روزرسانی شد';
+
+  @override
+  String get deviceRenameReset => 'نام سفارشی پاک شد؛ نام پیش‌فرض نمایش داده می‌شود';
+
+  @override
+  String get deviceRenameResetAction => 'بازگشت به نام پیش‌فرض';
 }

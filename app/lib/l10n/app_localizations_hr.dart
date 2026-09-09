@@ -10017,4 +10017,26 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
+
+  @override
+  String get deviceRenameTitle => 'Preimenuj uređaj';
+
+  @override
+  String get deviceRenameDescription =>
+      'Postavite lokalni naziv za ovaj uređaj. Sprema se na telefonu i prikazuje umjesto oglašenog naziva. Sam uređaj se ne preimenuje.';
+
+  @override
+  String get deviceRenameHint => 'Naziv uređaja';
+
+  @override
+  String get deviceRenameTooShort => 'Naziv mora imati najmanje 2 znaka';
+
+  @override
+  String get deviceRenameSaved => 'Naziv uređaja je ažuriran';
+
+  @override
+  String get deviceRenameReset => 'Prilagođeni naziv je uklonjen, prikazuje se zadani naziv';
+
+  @override
+  String get deviceRenameResetAction => 'Vrati na zadani naziv';
 }

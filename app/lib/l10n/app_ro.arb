@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.",
     "memoryHistoryPartial": "O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.",
     "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea",
-    "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei."
+    "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei.",
+    "deviceRenameTitle": "Redenumește dispozitivul",
+    "deviceRenameDescription": "Setează un nume local pentru acest dispozitiv. Este salvat pe telefon și afișat în locul numelui difuzat. Dispozitivul în sine nu este redenumit.",
+    "deviceRenameHint": "Numele dispozitivului",
+    "deviceRenameTooShort": "Numele trebuie să aibă cel puțin 2 caractere",
+    "deviceRenameSaved": "Numele dispozitivului a fost actualizat",
+    "deviceRenameReset": "Numele personalizat a fost șters; se afișează numele implicit",
+    "deviceRenameResetAction": "Revenire la numele implicit"
 }

@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/device_rename_dialog.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -240,8 +241,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
-    final deviceName = device?.name ?? 'Omi DevKit';
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
+    // Renamed device: prefer the user-set local name when present and fall
+    // back to the BLE-advertised name otherwise.
+    final customName = device == null ? '' : SharedPreferencesUtil().deviceCustomName(device.id);
+    final deviceName = customName.isNotEmpty ? customName : (device?.name ?? 'Omi DevKit');
     const firmwarePolicy = FirmwareUpdateBuildPolicy.current;
     final isOpenGlass = firmwarePolicy.isOpenGlassDevice(device);
     final allowsFirmwareUpdate = firmwarePolicy.allowsFirmwareUpdateForDevice(device);
@@ -262,7 +266,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
-            showChevron: false,
+            showChevron: device != null,
+            onTap: device == null
+                ? null
+                : () async {
+                    final saved = await showDialog<String>(
+                      context: context,
+                      builder: (c) => DeviceRenameDialog(deviceId: device.id, currentName: device.name),
+                    );
+                    if (saved != null && mounted) setState(() {});
+                  },
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(

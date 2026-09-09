@@ -3257,5 +3257,12 @@
     "speechToTextUnavailableDesc": "Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.",
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
     "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
-    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin."
+    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
+    "deviceRenameTitle": "Nimeä laite uudelleen",
+    "deviceRenameDescription": "Aseta paikallinen nimi tälle laitteelle. Se tallennetaan puhelimeen ja näytetään ilmoitetun nimen sijaan. Itse laitetta ei nimetä uudelleen.",
+    "deviceRenameHint": "Laitteen nimi",
+    "deviceRenameTooShort": "Nimen on oltava vähintään 2 merkkiä pitkä",
+    "deviceRenameSaved": "Laitteen nimi päivitetty",
+    "deviceRenameReset": "Mukautettu nimi poistettu; näytetään oletusnimi",
+    "deviceRenameResetAction": "Palauta oletusnimi"
 }

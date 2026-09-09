@@ -10019,4 +10019,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
+
+  @override
+  String get deviceRenameTitle => 'Переименовать устройство';
+
+  @override
+  String get deviceRenameDescription =>
+      'Задайте локальное имя устройства. Оно сохраняется на телефоне и отображается вместо заводского. Само устройство не переименовывается.';
+
+  @override
+  String get deviceRenameHint => 'Имя устройства';
+
+  @override
+  String get deviceRenameTooShort => 'Имя должно содержать минимум 2 символа';
+
+  @override
+  String get deviceRenameSaved => 'Имя устройства обновлено';
+
+  @override
+  String get deviceRenameReset => 'Пользовательское имя удалено, показано имя по умолчанию';
+
+  @override
+  String get deviceRenameResetAction => 'Сбросить к имени по умолчанию';
 }

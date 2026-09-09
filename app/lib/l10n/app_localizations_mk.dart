@@ -10035,4 +10035,26 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
+
+  @override
+  String get deviceRenameTitle => 'Преименувај уред';
+
+  @override
+  String get deviceRenameDescription =>
+      'Поставете локално име за овој уред. Се зачувува на телефонот и се прикажува наместо објавеното име. Уредот самиот не се преименува.';
+
+  @override
+  String get deviceRenameHint => 'Име на уредот';
+
+  @override
+  String get deviceRenameTooShort => 'Името мора да содржи најмалку 2 знаци';
+
+  @override
+  String get deviceRenameSaved => 'Името на уредот е ажурирано';
+
+  @override
+  String get deviceRenameReset => 'Прилагоденото име е избришано, се прикажува стандардното';
+
+  @override
+  String get deviceRenameResetAction => 'Врати на стандардно име';
 }

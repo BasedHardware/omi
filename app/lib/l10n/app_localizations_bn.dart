@@ -9987,4 +9987,26 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
+
+  @override
+  String get deviceRenameTitle => 'ডিভাইসের নাম পরিবর্তন করুন';
+
+  @override
+  String get deviceRenameDescription =>
+      'এই ডিভাইসের জন্য একটি লোকাল নাম সেট করুন। এটি আপনার ফোনে সংরক্ষিত হয় এবং বিজ্ঞাপিত নামের পরিবর্তে দেখানো হয়। ডিভাইসের নিজের নাম পরিবর্তন হয় না।';
+
+  @override
+  String get deviceRenameHint => 'ডিভাইসের নাম';
+
+  @override
+  String get deviceRenameTooShort => 'নাম কমপক্ষে ২ অক্ষরের হতে হবে';
+
+  @override
+  String get deviceRenameSaved => 'ডিভাইসের নাম আপডেট হয়েছে';
+
+  @override
+  String get deviceRenameReset => 'কাস্টম নাম মুছে ফেলা হয়েছে, ডিফল্ট নাম দেখানো হচ্ছে';
+
+  @override
+  String get deviceRenameResetAction => 'ডিফল্ট নামে রিসেট করুন';
 }

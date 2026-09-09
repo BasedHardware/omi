@@ -9811,4 +9811,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
+
+  @override
+  String get deviceRenameTitle => 'デバイス名を変更';
+
+  @override
+  String get deviceRenameDescription => 'このデバイスのローカル名を設定します。スマートフォンに保存され、アドバタイズ名の代わりに表示されます。デバイス本体の名前は変更されません。';
+
+  @override
+  String get deviceRenameHint => 'デバイス名';
+
+  @override
+  String get deviceRenameTooShort => '名前は2文字以上である必要があります';
+
+  @override
+  String get deviceRenameSaved => 'デバイス名を更新しました';
+
+  @override
+  String get deviceRenameReset => 'カスタム名を消去し、デフォルト名を表示しています';
+
+  @override
+  String get deviceRenameResetAction => 'デフォルト名に戻す';
 }

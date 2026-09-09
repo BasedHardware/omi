@@ -10073,4 +10073,26 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
+
+  @override
+  String get deviceRenameTitle => 'Palitan ang Pangalan ng Device';
+
+  @override
+  String get deviceRenameDescription =>
+      'Magtakda ng lokal na pangalan para sa device na ito. Ise-save ito sa iyong telepono at ipapakita sa halip na inanunsyong pangalan. Hindi pinapalitan ang pangalan ng mismong device.';
+
+  @override
+  String get deviceRenameHint => 'Pangalan ng device';
+
+  @override
+  String get deviceRenameTooShort => 'Dapat may hindi bababa sa 2 karakter ang pangalan';
+
+  @override
+  String get deviceRenameSaved => 'Na-update ang pangalan ng device';
+
+  @override
+  String get deviceRenameReset => 'Inalis ang custom na pangalan, ipinapakita ang default na pangalan';
+
+  @override
+  String get deviceRenameResetAction => 'I-reset sa default na pangalan';
 }

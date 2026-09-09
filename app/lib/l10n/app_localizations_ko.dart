@@ -9814,4 +9814,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
+
+  @override
+  String get deviceRenameTitle => '기기 이름 변경';
+
+  @override
+  String get deviceRenameDescription => '이 기기의 로컬 이름을 설정하세요. 휴대전화에 저장되며 광고되는 이름 대신 표시됩니다. 기기 자체의 이름은 변경되지 않습니다.';
+
+  @override
+  String get deviceRenameHint => '기기 이름';
+
+  @override
+  String get deviceRenameTooShort => '이름은 2자 이상이어야 합니다';
+
+  @override
+  String get deviceRenameSaved => '기기 이름이 업데이트되었습니다';
+
+  @override
+  String get deviceRenameReset => '사용자 지정 이름이 지워져 기본 이름이 표시됩니다';
+
+  @override
+  String get deviceRenameResetAction => '기본 이름으로 재설정';
 }
