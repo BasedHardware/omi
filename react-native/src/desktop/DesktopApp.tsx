@@ -108,6 +108,7 @@ export function DesktopApp({
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
+  const [chatSubmission, setChatSubmission] = useState(0);
   const beforeChat = useRef<{route: DesktopRoute; mode: OmnibarMode}>({
     route: 'Home',
     mode: 'Ask',
@@ -203,6 +204,7 @@ export function DesktopApp({
         onNavigate={navigate}
         onSend={() => {
           if (mode === 'Ask') {
+            setChatSubmission(value => value + 1);
             openChat();
             onSend();
           } else if (mode === 'Recall') {
@@ -239,6 +241,7 @@ export function DesktopApp({
           />
         ) : route === 'Chat' ? (
           <DesktopChat
+            submission={chatSubmission}
             messages={messages}
             busy={chatBusy || activeGenerationId !== null}
             onClose={closeChat}
