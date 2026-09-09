@@ -309,31 +309,59 @@ def test_chat_agent_lane_is_untouched(gateway_on):
 
 
 def test_a_client_that_marked_its_own_prefix_keeps_its_own_options(gateway_on):
-    """The opt-out is a default, not an override: a client that did the work keeps it.
+    """The opt-out is a default, not an override.
 
-    The breakpoint has to ride a non-user message: ``_gateway_user_content``
-    rebuilds user blocks as ``{type, text}`` and drops every other key, so a
-    user-role breakpoint never reaches the gateway in the first place.
+    The client's options use a ttl the default never produces, so this
+    distinguishes "preserved theirs" from "we wrote ours on top".
     """
+    client_options = {'mode': 'explicit', 'ttl': '5m'}
     marked = {
         'model': 'omi-structured',
-        'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
-        'messages': [
-            {
-                'role': 'system',
-                'content': [
-                    {'type': 'text', 'text': 'stable', 'prompt_cache_breakpoint': {'mode': 'explicit'}},
-                ],
-            },
-            {'role': 'user', 'content': 'plan this'},
-        ],
+        'prompt_cache_options': client_options,
+        'messages': [{'role': 'user', 'content': 'plan this'}],
     }
     result = desktop_chat._gateway_body(marked, desktop_chat.CHAT_STRUCTURED_AUTO_LANE_ID)
-    assert result['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    assert result['prompt_cache_options'] == client_options
 
-    without_options = {key: value for key, value in marked.items() if key != 'prompt_cache_options'}
-    result = desktop_chat._gateway_body(without_options, desktop_chat.CHAT_STRUCTURED_AUTO_LANE_ID)
-    assert 'prompt_cache_options' not in result, 'a client breakpoint must not be paired with our opt-out'
+
+def test_a_client_breakpoint_on_a_user_message_still_suppresses_the_opt_out(gateway_on):
+    """_gateway_user_content drops the breakpoint, so the guard must read the ORIGINAL messages.
+
+    Reading the translated copy would strip the client's marking and then write
+    our opt-out on top of it — that client could never cache at all.
+    """
+    body = {
+        'model': 'omi-structured',
+        'messages': [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'stable', 'prompt_cache_breakpoint': {'mode': 'explicit'}},
+                    {'type': 'text', 'text': 'volatile'},
+                ],
+            }
+        ],
+    }
+    result = desktop_chat._gateway_body(body, desktop_chat.CHAT_STRUCTURED_AUTO_LANE_ID)
+    assert 'prompt_cache_options' not in result
+
+
+def test_a_client_routing_key_alone_is_never_turned_into_a_non_cache_request(gateway_on):
+    """A bare prompt_cache_key is how a pre-5.6 caller asks for implicit caching.
+
+    Adding explicit-mode options with no breakpoint on top would flip
+    cache_requested_for_openai_request from True to False for that caller.
+    """
+    from llm_gateway.gateway.accounting import cache_requested_for_openai_request
+
+    body = {
+        'model': 'omi-structured',
+        'prompt_cache_key': 'client-key-1',
+        'messages': [{'role': 'user', 'content': 'plan this'}],
+    }
+    result = desktop_chat._gateway_body(body, desktop_chat.CHAT_STRUCTURED_AUTO_LANE_ID)
+    assert 'prompt_cache_options' not in result
+    assert cache_requested_for_openai_request(result) is True
 
 
 # ---------------------------------------------------------------------------

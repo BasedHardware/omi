@@ -161,14 +161,24 @@ def has_explicit_breakpoint(messages: object) -> bool:
     return False
 
 
-def apply_cache_write_opt_out(body: dict[str, Any]) -> None:
+def apply_cache_write_opt_out(body: dict[str, Any], *, marked_messages: object = None) -> None:
     """Default an outbound request body to the opt-out, without overriding a caller.
 
-    A body that already carries its own ``prompt_cache_options``, or whose
-    messages already mark a prefix, has made a deliberate choice; only an
-    unmarked one gets the default.
+    Three ways a caller can have made a deliberate choice, all of which win:
+    its own ``prompt_cache_options``; a ``prompt_cache_key``, which is how a
+    pre-5.6 caller asks for implicit caching (adding explicit-mode options on
+    top would silently turn that request into a non-cache one — see
+    ``accounting.cache_requested_for_openai_request``); or a breakpoint in its
+    messages.
+
+    ``marked_messages`` is the message list to scan for that breakpoint. Pass the
+    caller's ORIGINAL messages when ``body`` holds a translated copy: a
+    translation that normalizes content parts drops the breakpoint, and scanning
+    the copy would then miss a marking the caller really made.
     """
-    if body.get('prompt_cache_options') is not None or has_explicit_breakpoint(body.get('messages')):
+    if body.get('prompt_cache_options') is not None or body.get('prompt_cache_key') is not None:
+        return
+    if has_explicit_breakpoint(marked_messages if marked_messages is not None else body.get('messages')):
         return
     options = cache_write_opt_out_options()
     if options is not None:
