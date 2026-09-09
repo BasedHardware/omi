@@ -1280,5 +1280,12 @@ describe("static PostgreSQL schema contract", () => {
     expect(listenExcerptSql).toContain("chr(133)");
     expect(listenExcerptSql).toContain("chr(160)");
     expect(listenExcerptSql).toContain("chr(65279)");
+    const unionLastIdSql = migrationSql.find((migration) => migration.version === 62)!.sql;
+    expect(unionLastIdSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.save_conversation_union_cursor");
+    expect(unionLastIdSql).toContain("length(p_last_id) NOT BETWEEN 1 AND 256");
+    expect(unionLastIdSql).toContain("CHECK(length(last_id) BETWEEN 1 AND 256)");
+    expect(unionLastIdSql).toContain("m.chat_session_id=substr(p_last_id,6)");
+    expect(unionLastIdSql).not.toContain("p_last_id !~ '^[!-~]+$'");
+    expect(unionLastIdSql).not.toContain("{1,256}");
   });
 });

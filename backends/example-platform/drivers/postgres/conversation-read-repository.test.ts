@@ -176,6 +176,149 @@ test("union cursor saves bind epoch milliseconds as bigint the same way listen c
   expect(unionSave?.values[5]).toBe(1_757_250_000_000n);
 });
 
+test("union cursor saves pass a named chat last_id outside printable ASCII", async () => {
+  const saved: Array<{ text: string; values: readonly unknown[] }> = [];
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      saved.push({ text: statement.text, values: statement.values });
+      const rows =
+        statement.name === "authority.lock_and_revalidate"
+          ? [authorityRow()]
+          : statement.name === "conversations.read_snapshot"
+          ? [{ snapshot: { revision: 1, records: [] } }]
+          : statement.name === "conversations.save_union_cursor"
+          ? [{}]
+          : statement.name === "conversations.final_clock"
+          ? [{ now: 100 }]
+          : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await withAuthorizedConversationRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    async (_snapshot, _now, storage) => {
+      await storage.saveUnion(
+        hash("a"),
+        hash("b"),
+        1,
+        0,
+        "2026-09-07T13:50:44.000Z",
+        1_757_250_000_000,
+        "chat:你好",
+        "chat",
+        1000
+      );
+      return "ok";
+    }
+  );
+  const unionSave = saved.find((statement) =>
+    statement.text.includes("save_conversation_union_cursor")
+  );
+  expect(unionSave?.values[6]).toBe("chat:你好");
+});
+
+test("union cursor load accepts a named chat last_id outside printable ASCII", async () => {
+  for (const lastId of ["chat:你好", "chat: session-alpha "]) {
+    const connection: CheckedOutPostgresConnection = {
+      connectionIdentity: {},
+      async execute() {
+        return { rowCount: 0 };
+      },
+      async query(statement) {
+        const rows =
+          statement.name === "authority.lock_and_revalidate"
+            ? [authorityRow()]
+            : statement.name === "conversations.read_snapshot"
+            ? [{ snapshot: { revision: 1, records: [] } }]
+            : statement.name === "conversations.read_union_page"
+            ? [
+                {
+                  snapshot: {
+                    revision: 1,
+                    records: [],
+                    after: { updatedAt: 1, id: lastId },
+                  },
+                },
+              ]
+            : statement.name === "conversations.final_clock"
+            ? [{ now: 100 }]
+            : [];
+        return rows as never;
+      },
+    };
+    const pool: PostgresTransactionPool = {
+      async withTransaction(_options, operation) {
+        return operation(connection);
+      },
+    };
+    const loaded = await withAuthorizedConversationRead(
+      pool,
+      context(),
+      new AbortController().signal,
+      async (_snapshot, _now, storage) =>
+        storage.loadUnion(2, hash("c"), hash("d"), 1, 0)
+    );
+    expect(loaded.after).toEqual({ updatedAt: 1, id: lastId });
+  }
+});
+
+test("union cursor load still rejects an empty or oversized last_id", async () => {
+  for (const lastId of ["", "x".repeat(257)]) {
+    const connection: CheckedOutPostgresConnection = {
+      connectionIdentity: {},
+      async execute() {
+        return { rowCount: 0 };
+      },
+      async query(statement) {
+        const rows =
+          statement.name === "authority.lock_and_revalidate"
+            ? [authorityRow()]
+            : statement.name === "conversations.read_snapshot"
+            ? [{ snapshot: { revision: 1, records: [] } }]
+            : statement.name === "conversations.read_union_page"
+            ? [
+                {
+                  snapshot: {
+                    revision: 1,
+                    records: [],
+                    after: { updatedAt: 1, id: lastId },
+                  },
+                },
+              ]
+            : statement.name === "conversations.final_clock"
+            ? [{ now: 100 }]
+            : [];
+        return rows as never;
+      },
+    };
+    const pool: PostgresTransactionPool = {
+      async withTransaction(_options, operation) {
+        return operation(connection);
+      },
+    };
+    await expect(
+      withAuthorizedConversationRead(
+        pool,
+        context(),
+        new AbortController().signal,
+        async (_snapshot, _now, storage) =>
+          storage.loadUnion(2, hash("c"), hash("d"), 1, 0)
+      )
+    ).rejects.toMatchObject({ code: "persistence_failed" });
+  }
+});
+
 test("an unrelated capability never checks out a conversation connection", async () => {
   const pool: PostgresTransactionPool = {
     async withTransaction() {

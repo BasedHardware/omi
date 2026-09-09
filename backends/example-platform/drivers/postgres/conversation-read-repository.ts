@@ -41,7 +41,8 @@ const parseConversationUnionAfter = (
     || !Number.isSafeInteger(updatedAt)
     || updatedAt < 0
     || typeof row.id !== "string"
-    || !/^[!-~]{1,256}$/.test(row.id)
+    || row.id.length < 1
+    || row.id.length > 256
   ) {
     throw new PostgresRepositoryError("persistence_failed");
   }

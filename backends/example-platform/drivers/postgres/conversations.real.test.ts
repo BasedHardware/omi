@@ -878,3 +878,193 @@ realTest(
   },
   60000
 );
+
+realTest(
+  "real conversation union pages past a named session id outside printable ASCII",
+  async () => {
+    const endpoint = new URL(url!);
+    if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "postgres:")
+      throw Error("postgres_test_not_loopback_only");
+    const owner = postgres(url!, { max: 1 });
+    const pool = createPostgresJsTransactionPool({
+      connectionString: url!,
+      maxConnections: 2,
+    });
+    const suffix = randomUUID(),
+      generation = createHash("sha256").update(suffix).digest("hex"),
+      now = () => Math.floor(Date.now() / 1000);
+    const project = "synthetic-union-last-id-project",
+      app = "synthetic-union-last-id-app",
+      uid = `uid-${suffix}`,
+      account = `account-${suffix}`,
+      principal = `principal-${suffix}`,
+      credential = `credential-${suffix}`;
+    try {
+      await owner.unsafe(`DO $roles$ BEGIN
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_application') THEN CREATE ROLE omi_platform_application NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_cleanup') THEN CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore') THEN CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore_operator') THEN CREATE ROLE omi_platform_restore_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+    END $roles$;`);
+      await runPostgresMigrations(owner);
+      for (const statement of seedProdLocalFirebaseAuthorizationSql(
+        {
+          firebase_project_id: project,
+          firebase_uid: uid,
+          application_id: app,
+          account_id: account,
+          principal_id: principal,
+          credential_id: credential,
+          grant_id: `memory-${suffix}`,
+        },
+        now()
+      ))
+        await owner.unsafe(statement.text, [...statement.values]);
+      for (const capability of ["conversations.read", "chat.read"]) {
+        await owner.unsafe(
+          `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
+          [account, app, credential, capability, `${capability}-${suffix}`, "3".repeat(64)]
+        );
+        await owner.unsafe(
+          `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+          [account, app, credential, capability, `${capability}-${suffix}`]
+        );
+      }
+      await owner.unsafe(
+        `INSERT INTO omi_memory.postgres_restore_admission_revisions(database_generation_digest,release_revision,state,restore_id,restored_snapshot_digest,checkpoint_candidate_digest,checkpoint_evidence_digest,first_approval_subject_digest,first_approval_receipt_digest,second_approval_subject_digest,second_approval_receipt_digest,manual_release_receipt_digest,previous_release_revision,content_hash) VALUES($1,1,'released',$2,$3,$3,$3,$4,$5,$6,$7,$3,NULL,$3)`,
+        [generation, `synthetic-${suffix}`, "9".repeat(64), "4".repeat(64), "5".repeat(64), "6".repeat(64), "7".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.postgres_restore_admission_heads(database_generation_digest,release_revision) VALUES($1,1)",
+        [generation]
+      );
+      const appPool: PostgresTransactionPool = {
+        withTransaction: (options, callback) =>
+          pool.withTransaction(options, async (connection) => {
+            await connection.query({
+              name: "union_last_id_test.role",
+              text: "SET LOCAL ROLE omi_platform_application",
+              values: [],
+            });
+            return callback(connection);
+          }),
+      };
+      const runtime = createPostgresFirebaseConversationReadRuntime({
+        authorization: {
+          pool: appPool,
+          project_id: project,
+          application_id: app,
+          runtime_mode: "deployed",
+          context_ttl_seconds: 60,
+          database_generation_digest: generation,
+          id_token_adapter: {
+            verification_source: "firebase_production",
+            async verifyIdToken() {
+              return {
+                aud: project,
+                iss: `https://securetoken.google.com/${project}`,
+                sub: uid,
+                uid,
+                iat: now() - 10,
+                auth_time: now() - 10,
+                exp: now() + 600,
+              };
+            },
+          },
+        },
+        codecRootSecret: new Uint8Array(32).fill(7),
+        cursorSigningKeyset: {
+          active_key_id: "test",
+          keys: [{ key_id: "test", secret: new Uint8Array(32).fill(8) }],
+        },
+      });
+      const call = (query = "") =>
+        runtime.executeRequest(
+          new Request(`https://conversations.example/v1/conversations${query}`, {
+            headers: { authorization: "Bearer header.payload.signature" },
+          })
+        );
+      const recordingId = randomUUID();
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$3,clock_timestamp()-interval '2 seconds','omi','21',16000,1,$4)",
+        [account, recordingId, `conversation:${recordingId}`, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_audio_uploads(account_id,session_id,capture_id,device_id,codec_id,upload_completed_at) VALUES($1,$2::text,$2::uuid,'synthetic-device',21,clock_timestamp())",
+        [account, recordingId]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_audio_transcriptions(account_id,session_id,state,attempts,available_at,updated_at,provider_result) VALUES($1,$2,'completed',1,clock_timestamp(),clock_timestamp(),$3::text::jsonb)",
+        [
+          account,
+          recordingId,
+          JSON.stringify({
+            durationSeconds: 1,
+            segments: [{ text: "recorded words", start: 0, end: 1, speaker: 0 }],
+          }),
+        ]
+      );
+      const newest = Date.now() + 60_000;
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'cjk prompt','human','text',$3,$3,'你好',NULL,0,'sha256:cjk','desktop_chat',NULL,false,'rev-cjk','[]'::jsonb,'gen_cjk')`,
+        [account, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", newest]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'padded prompt','human','text',$3,$3,' session-alpha ',NULL,0,'sha256:padded','desktop_chat',NULL,false,'rev-padded','[]'::jsonb,'gen_padded')`,
+        [account, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", newest - 10_000]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'ascii prompt','human','text',$3,$3,'session-ascii',NULL,0,'sha256:ascii','desktop_chat',NULL,false,'rev-ascii','[]'::jsonb,'gen_ascii')`,
+        [account, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", newest - 20_000]
+      );
+      const firstResponse = await call("?limit=1");
+      expect(firstResponse.status).toBe(200);
+      const firstPage = (await firstResponse.json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(firstPage.items.map((item) => item.id)).toEqual(["chat:你好"]);
+      expect(firstPage.window.hasMore).toBe(true);
+      expect(firstPage.window.nextCursor).not.toBeNull();
+      const secondResponse = await call(
+        `?limit=1&cursor=${encodeURIComponent(firstPage.window.nextCursor!)}`
+      );
+      expect(secondResponse.status).toBe(200);
+      const secondPage = (await secondResponse.json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(secondPage.items.map((item) => item.id)).toEqual(["chat: session-alpha "]);
+      expect(secondPage.window.hasMore).toBe(true);
+      expect(secondPage.window.nextCursor).not.toBeNull();
+      const thirdResponse = await call(
+        `?limit=1&cursor=${encodeURIComponent(secondPage.window.nextCursor!)}`
+      );
+      expect(thirdResponse.status).toBe(200);
+      const thirdPage = (await thirdResponse.json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(thirdPage.items.map((item) => item.id)).toEqual(["chat:session-ascii"]);
+      expect(thirdPage.window.hasMore).toBe(true);
+      expect(thirdPage.window.nextCursor).not.toBeNull();
+      const fourthResponse = await call(
+        `?limit=1&cursor=${encodeURIComponent(thirdPage.window.nextCursor!)}`
+      );
+      expect(fourthResponse.status).toBe(200);
+      const fourthPage = (await fourthResponse.json()) as {
+        items: Array<{ id: string }>;
+        window: { nextCursor: string | null; hasMore: boolean };
+      };
+      expect(fourthPage.items.map((item) => item.id)).toEqual([
+        `recording:${recordingId}`,
+      ]);
+      expect(fourthPage.window.hasMore).toBe(false);
+      expect(fourthPage.window.nextCursor).toBeNull();
+    } finally {
+      await pool.close();
+      await owner.end();
+    }
+  },
+  60000
+);
