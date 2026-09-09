@@ -97,8 +97,7 @@ async function readGenerationHistory(
        FROM chat_messages AS prior
        JOIN chat_messages AS current ON current.id = ? AND current.account_id = ?
        WHERE prior.account_id = current.account_id
-         AND (prior.created_at < current.created_at
-           OR (prior.created_at = current.created_at AND prior.position < current.position))
+         AND prior.position < current.position
          AND ${recoveredPayloadTextKeySql(
            "prior",
            "chatSessionId"

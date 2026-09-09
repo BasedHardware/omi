@@ -297,6 +297,69 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("generation history keeps a later-clock assistant admitted before the current turn", async () => {
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "stale-first",
+        "acct-a",
+        "human",
+        "My name is Ana",
+        1,
+        1,
+        JSON.stringify({ chatSessionId: null, appId: null }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "server-assistant",
+        "acct-a",
+        "ai",
+        "Hello Ana",
+        2,
+        500,
+        JSON.stringify({ chatSessionId: null, appId: null }),
+        "completed"
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "stale-second",
+        "acct-a",
+        "human",
+        "What is my name?",
+        3,
+        1,
+        JSON.stringify({ chatSessionId: null, appId: null }),
+        null
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "stale-second",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [
+        { role: "user", content: "My name is Ana" },
+        { role: "assistant", content: "Hello Ana" },
+      ],
+    });
+  });
+
   test("generation history uses the last duplicate chatSessionId like conversation grouping", async () => {
     await db
       .prepare(
