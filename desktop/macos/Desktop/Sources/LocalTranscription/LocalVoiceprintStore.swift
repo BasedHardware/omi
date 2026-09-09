@@ -80,9 +80,12 @@ final class LocalVoiceprintStore: @unchecked Sendable {
 
   /// The store for the signed-in user's profile root.
   static func forCurrentUser(userId: String? = RewindDatabase.currentUserId) -> LocalVoiceprintStore {
+    // Same resolution as `RewindDatabase.retargetEffectiveOwner`: a missing *or empty* id is
+    // the anonymous profile, never a nameless directory beside it.
+    let owner = userId.flatMap { $0.isEmpty ? nil : $0 } ?? "anonymous"
     let root = DesktopLocalProfile.applicationSupportURL()
       .appendingPathComponent("users", isDirectory: true)
-      .appendingPathComponent(userId ?? "anonymous", isDirectory: true)
+      .appendingPathComponent(owner, isDirectory: true)
     return LocalVoiceprintStore(fileURL: root.appendingPathComponent(fileName))
   }
 

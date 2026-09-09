@@ -49,7 +49,7 @@ actor LocalSpeakerDiarizer {
   private var relabelSink: RelabelSink?
   private var manager: DiarizerManager?
   private var registry: LocalSpeakerRegistry
-  private let store: LocalVoiceprintStore
+  private var store: LocalVoiceprintStore
   private let policy: VoiceEnrollmentPolicy
   private var voiceprints: [StoredVoiceprint]
   private let loadModels: @Sendable () async throws -> DiarizerModels
@@ -73,6 +73,24 @@ actor LocalSpeakerDiarizer {
     let voiceprints = store.load()
     self.voiceprints = voiceprints
     self.registry = LocalSpeakerRegistry(knownVoices: voiceprints.map(Self.knownVoice))
+  }
+
+  /// Follow the effective owner to their own voices. Remembered voices are per-account:
+  /// they live under the signed-in user's profile, and everything held here — the prints,
+  /// the session's clusters, the windows kept for a naming — belongs to the owner it was
+  /// heard under. Called from `RuntimeOwnerIdentity` while the transition reservation is
+  /// held, so the next owner's first window is clustered against their own voices and the
+  /// previous owner's are never written into their file or listed on their People page.
+  ///
+  /// The loaded models are the same for every account and stay as they are.
+  func retargetEffectiveOwner(to store: LocalVoiceprintStore) {
+    self.store = store
+    voiceprints = store.load()
+    registry = LocalSpeakerRegistry(knownVoices: voiceprints.map(Self.knownVoice))
+    relabelSink = nil
+    recentWindows = [:]
+    usedThisRun = []
+    lastSampleAt = [:]
   }
 
   var isAvailable: Bool {

@@ -6,17 +6,18 @@ import XCTest
 /// the person and must survive it.
 final class LocalSpeakerDiarizerRebuildTests: XCTestCase {
   private let now = Date(timeIntervalSince1970: 1_800_000_000)
-  private var directory: URL?
+  private var directories: [URL] = []
 
   private func makeStore() throws -> LocalVoiceprintStore {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("diarizer-rebuild-\(UUID().uuidString)", isDirectory: true)
-    directory = root
+    directories.append(root)
     return LocalVoiceprintStore(fileURL: root.appendingPathComponent(LocalVoiceprintStore.fileName))
   }
 
   override func tearDown() async throws {
-    if let directory { try? FileManager.default.removeItem(at: directory) }
+    for directory in directories { try? FileManager.default.removeItem(at: directory) }
+    directories = []
     try await super.tearDown()
   }
 
@@ -89,5 +90,35 @@ final class LocalSpeakerDiarizerRebuildTests: XCTestCase {
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: store.sampleURL(for: stale).path),
       "the clips the rebuild replaced are deleted, not orphaned on disk")
+  }
+
+  /// Remembered voices are per-account. Signing in as someone else retargets the diarizer
+  /// with the rest of the owner-bound local storage, so the previous owner's voices are
+  /// neither listed on the next owner's People page nor written into their file.
+  func testRetargetingTheEffectiveOwnerSwapsTheRememberedVoices() async throws {
+    let first = try makeStore()
+    first.save([
+      StoredVoiceprint(
+        personId: "anna", embedding: vector(0), speechSeconds: 40, updatedAt: now, isEnrolled: true)
+    ])
+    let second = try makeStore()
+    second.save([
+      StoredVoiceprint(
+        personId: "bob", embedding: vector(1), speechSeconds: 12, updatedAt: now, isEnrolled: true)
+    ])
+
+    let subject = diarizer(first)
+    let before = await subject.voiceSummaries()
+    XCTAssertEqual(before.map(\.personId), ["anna"])
+
+    await subject.retargetEffectiveOwner(to: second)
+    let summaries = await subject.voiceSummaries()
+    XCTAssertEqual(summaries.map(\.personId), ["bob"])
+
+    // A change under the new owner lands in their file, and leaves the previous owner's alone.
+    await subject.setFavorite(personId: "bob", true)
+    XCTAssertEqual(second.load().first?.isFavorite, true)
+    XCTAssertEqual(first.load().map(\.personId), ["anna"])
+    XCTAssertEqual(first.load().first?.isFavorite, false)
   }
 }

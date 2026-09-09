@@ -428,6 +428,8 @@ enum RuntimeOwnerIdentity {
     await FileIndexerService.shared.invalidateCache()
     await OCREmbeddingService.shared.reset()
     await RewindDatabase.shared.retargetEffectiveOwner(to: nextOwner)
+    await LocalSpeakerDiarizer.shared.retargetEffectiveOwner(
+      to: .forCurrentUser(userId: nextOwner))
     await TranscriptionStorage.shared.invalidateCache()
     await MemoryStorage.shared.invalidateCache()
     await ActionItemStorage.shared.invalidateCache()
