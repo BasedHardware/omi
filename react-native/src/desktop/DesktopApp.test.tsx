@@ -112,6 +112,8 @@ jest.mock('../desktopCloudClient', () => ({
     ownerUid: null,
     ownerError: null,
   })),
+  enableCloudApp: jest.fn(async () => undefined),
+  disableCloudApp: jest.fn(async () => undefined),
   optInTrainingData: jest.fn(),
   setPrivateCloudSync: jest.fn(),
   setStoreRecordingPermission: jest.fn(),
@@ -1576,6 +1578,11 @@ test('nested non-retryable Apps enabled failures keep catalogue tiles without cl
   expect(tree).toContain('App details unavailable');
   expect(tree).not.toContain('Not connected');
   expect(tree).not.toContain('Installed');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Install Owned app',
+    ),
+  ).toHaveLength(0);
 });
 
 test('successful empty Apps enabled reads still report catalogue tiles as not connected', async () => {
@@ -1617,6 +1624,130 @@ test('successful empty Apps enabled reads still report catalogue tiles as not co
   expect(tree).toContain('Not connected');
   expect(tree).toContain('App details unavailable');
   expect(tree).not.toContain(desktopAppsUnavailableCopy);
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Install Owned app',
+    ),
+  ).toBeDefined();
+});
+
+test('actual desktop Apps Install uses the existing enable producer', async () => {
+  const catalog = {
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [] as string[],
+    ownerUid: null,
+    ownerError: null,
+  };
+  const {loadConnectors, enableCloudApp} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadConnectors: jest.Mock;
+    enableCloudApp: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce(catalog).mockResolvedValueOnce({
+    ...catalog,
+    apps: [{...catalog.apps[0], enabled: true}],
+    enabledIds: ['catalog-app-1'],
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Install Owned app')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(enableCloudApp).toHaveBeenCalledWith(
+    expect.objectContaining({request: expect.any(Function)}),
+    'catalog-app-1',
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Remove Owned app',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).toContain('Installed');
+});
+
+test('nested non-retryable Apps enable writes omit Install', async () => {
+  const {loadConnectors, enableCloudApp} = jest.requireMock(
+    '../desktopCloudClient',
+  ) as {
+    loadConnectors: jest.Mock;
+    enableCloudApp: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  enableCloudApp.mockRejectedValueOnce(
+    Object.assign(new Error(desktopAppsUnavailableCopy), {retryable: false}),
+  );
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Install Owned app')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(desktopAppsUnavailableCopy);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('Not connected');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Install Owned app',
+    ),
+  ).toHaveLength(0);
 });
 
 test('Apps gallery empty names stay visible instead of a blank title', async () => {

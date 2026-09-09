@@ -1,7 +1,13 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import Puzzle from 'lucide-react-native/icons/puzzle';
-import {loadConnectors, type CloudApp} from '../desktopCloudClient';
+import {
+  cloudErrorCanRetry,
+  disableCloudApp,
+  enableCloudApp,
+  loadConnectors,
+  type CloudApp,
+} from '../desktopCloudClient';
 import {
   appDisplayName,
   appDisplaySource,
@@ -290,6 +296,7 @@ type AppTileModel = {
   name: string;
   source: string;
   status: string;
+  enabled: boolean;
 };
 
 function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
@@ -315,10 +322,21 @@ function tilesFromCatalog(
     name: appDisplayName(app.name),
     source: appDisplaySource(app),
     status: cloudAppStatus(app, installKnown),
+    enabled: app.enabled,
   }));
 }
 
-function AppTile({item}: {item: AppTileModel}) {
+function AppTile({
+  busy,
+  item,
+  pending,
+  onToggle,
+}: {
+  busy: boolean;
+  item: AppTileModel;
+  pending: boolean;
+  onToggle?: (id: string, enabled: boolean) => void;
+}) {
   const Icon = item.Icon;
   return (
     <View style={styles.appSlot}>
@@ -331,6 +349,27 @@ function AppTile({item}: {item: AppTileModel}) {
         {item.status.length > 0 ? (
           <Text style={styles.appStatus}>{item.status}</Text>
         ) : null}
+        {onToggle ? (
+          <FocusPressable
+            accessibilityLabel={
+              item.enabled ? `Remove ${item.name}` : `Install ${item.name}`
+            }
+            accessibilityRole="button"
+            accessibilityState={{disabled: busy}}
+            disabled={busy}
+            onPress={() => onToggle(item.id, !item.enabled)}
+            style={styles.appAction}>
+            <Text style={styles.rowMeta}>
+              {pending
+                ? item.enabled
+                  ? 'Removing…'
+                  : 'Installing…'
+                : item.enabled
+                ? 'Remove'
+                : 'Install'}
+            </Text>
+          </FocusPressable>
+        ) : null}
       </View>
     </View>
   );
@@ -340,44 +379,84 @@ export function AppsPage({session}: {session: DesktopSession}) {
   const [tiles, setTiles] = useState<AppTileModel[] | null>();
   const [enabledError, setEnabledError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installKnown, setInstallKnown] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [writesAvailable, setWritesAvailable] = useState(true);
+  const reload = useCallback(async () => {
+    const backend = omiBackend;
+    if (session !== 'ready' || backend === undefined || backend === null) {
+      return;
+    }
+    const snapshot = await loadConnectors(backend);
+    setTiles(tilesFromCatalog(snapshot.apps, snapshot.enabledIds !== null));
+    setEnabledError(snapshot.enabledError);
+    setInstallKnown(snapshot.enabledIds !== null);
+    setError(null);
+  }, [session]);
   useEffect(() => {
+    let active = true;
     if (session !== 'ready') {
       setTiles(undefined);
       setEnabledError(null);
       setError(null);
-      return;
+      setInstallKnown(false);
+      setPendingId(null);
+      setActionError(null);
+      setWritesAvailable(true);
+      return () => {
+        active = false;
+      };
     }
     const backend = omiBackend;
     if (backend === undefined || backend === null) {
       setTiles(null);
       setEnabledError(null);
       setError(null);
-      return;
+      setInstallKnown(false);
+      return () => {
+        active = false;
+      };
     }
     setTiles(undefined);
     setEnabledError(null);
     setError(null);
-    let active = true;
-    loadConnectors(backend)
-      .then(snapshot => {
-        if (!active) {
-          return;
-        }
-        setTiles(tilesFromCatalog(snapshot.apps, snapshot.enabledIds !== null));
-        setEnabledError(snapshot.enabledError);
-        setError(null);
-      })
-      .catch(reason => {
-        if (active) {
-          setTiles(null);
-          setEnabledError(null);
-          setError(desktopReadErrorCopy(reason));
-        }
-      });
+    setInstallKnown(false);
+    reload().catch(reason => {
+      if (active) {
+        setTiles(null);
+        setEnabledError(null);
+        setError(desktopReadErrorCopy(reason));
+        setInstallKnown(false);
+      }
+    });
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [reload, session]);
+  const setEnabled = async (id: string, enabled: boolean) => {
+    const backend = omiBackend;
+    if (backend === undefined || backend === null || pendingId !== null) {
+      return;
+    }
+    setPendingId(id);
+    setActionError(null);
+    try {
+      if (enabled) {
+        await enableCloudApp(backend, id);
+      } else {
+        await disableCloudApp(backend, id);
+      }
+      await reload();
+    } catch (reason) {
+      setActionError(desktopReadErrorCopy(reason));
+      if (!cloudErrorCanRetry(reason)) {
+        setWritesAvailable(false);
+      }
+    } finally {
+      setPendingId(null);
+    }
+  };
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.appGrid}>
@@ -394,12 +473,27 @@ export function AppsPage({session}: {session: DesktopSession}) {
             {enabledError !== null ? (
               <EmptyCopy>{enabledError}</EmptyCopy>
             ) : null}
+            {actionError !== null ? (
+              <Text accessibilityRole="alert" style={styles.rowMeta}>
+                {actionError}
+              </Text>
+            ) : null}
             {tiles.length === 0 ? (
               enabledError === null ? (
                 <EmptyCopy>No apps are available.</EmptyCopy>
               ) : null
             ) : (
-              tiles.map(item => <AppTile item={item} key={item.id} />)
+              tiles.map(item => (
+                <AppTile
+                  busy={pendingId !== null}
+                  item={item}
+                  key={item.id}
+                  onToggle={
+                    writesAvailable && installKnown ? setEnabled : undefined
+                  }
+                  pending={pendingId === item.id}
+                />
+              ))
             )}
           </>
         )}
@@ -521,4 +615,5 @@ const styles = StyleSheet.create({
     fontSize: token.type.meta,
     marginTop: 12,
   },
+  appAction: {minHeight: 44, justifyContent: 'center'},
 });
