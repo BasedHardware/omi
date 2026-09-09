@@ -178,6 +178,7 @@ test('Home currents keep chat last-turn overview off the timestamp meta', () => 
         node.props.children.includes(item.summary),
     ).length,
   ).toBe(0);
+  expect(textOf(renderer)).not.toContain('Duration unavailable');
 });
 
 test('Library rows keep chat last-turn overview off the timestamp meta', () => {
@@ -219,6 +220,112 @@ test('Library rows keep chat last-turn overview off the timestamp meta', () => {
         node.props.children.includes(item.summary),
     ).length,
   ).toBe(0);
+  expect(textOf(renderer)).not.toContain('Duration unavailable');
+});
+
+test('Home currents keep GET duration instead of clock-only', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:quick',
+    title: 'Quick note',
+    summary: 'Twenty seconds.',
+    searchableText: 'Quick note\nTwenty seconds.',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Quick note');
+  expect(copy).toContain('< 1 min');
+  expect(copy).not.toContain('0 min');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 1 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('< 1 min'),
+    ).length,
+  ).toBe(0);
+});
+
+test('Library rows keep GET duration instead of clock-only', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:quick',
+    title: 'Quick note',
+    summary: 'Twenty seconds.',
+    searchableText: 'Quick note\nTwenty seconds.',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Quick note');
+  expect(copy).toContain('< 1 min');
+  expect(copy).not.toContain('0 min');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 1 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('< 1 min'),
+    ).length,
+  ).toBe(0);
+});
+
+test('a zero conversation start time on Home and Library rows says Duration unavailable', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:epoch-duration',
+    title: 'Missing start',
+    summary: 'Finished without a real start time.',
+    searchableText: 'Missing start\nFinished without a real start time.',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: '2026-09-07T12:00:00.000Z',
+    startedAt: new Date(0).toISOString(),
+    finishedAt: '2026-09-07T12:00:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('Duration unavailable');
+    expect(copy).not.toContain('hr');
+  }
 });
 
 function taskItem(dueAt: number | null, completed = false): TaskProjection {

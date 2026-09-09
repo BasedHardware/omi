@@ -19,6 +19,10 @@ import {
   type MemoryProjection,
   type TaskProjection,
 } from '../desktopReadClient';
+import {
+  conversationHasFinishClock,
+  formatConversationDuration,
+} from '../ui/ConversationDetail';
 import {desktopTokens as token} from './tokens';
 
 function timeLabel(item: DesktopReadProjection): string {
@@ -66,6 +70,11 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
           .filter(part => part !== '')
           .join(' · ')}
       </Text>
+      {conversationHasFinishClock(item) ? (
+        <Text style={styles.rowMeta}>
+          {formatConversationDuration(item.startedAt, item.finishedAt)}
+        </Text>
+      ) : null}
     </View>
   );
 }
