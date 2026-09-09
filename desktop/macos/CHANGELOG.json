@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.329",
+      "date": "2026-09-09",
+      "changes": [
+        "Stopped push-to-talk follow-ups re-answering an earlier question whose spoken reply was cut off by the next press — a reply whose text finished is now treated as given, and the assistant continues from where it stopped instead of restarting that thread"
+      ]
+    },
+    {
       "version": "0.12.328",
       "date": "2026-09-09",
       "changes": [
