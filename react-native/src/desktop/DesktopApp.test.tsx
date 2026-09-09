@@ -644,6 +644,23 @@ test('desktop chat treats a cancelled whitespace-only reply as Response stopped'
   expect(copy).not.toContain(' \t\n');
 });
 
+test('desktop chat keeps Response stopped when a cancelled reply already has text', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'cancelled-partial',
+        text: 'Partial answer',
+        sender: 'ai',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'cancelled',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Partial answer');
+  expect(copy).toContain('Response stopped');
+});
+
 test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
   const renderer = renderDesktop({
     messages: [

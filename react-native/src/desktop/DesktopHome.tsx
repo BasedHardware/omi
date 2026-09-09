@@ -137,6 +137,10 @@ function AskExchange({
             style={styles.rowTitle}>
             {chatMessageDisplayText(item, 'Response stopped.')}
           </Text>
+          {item.generationOutcome === 'cancelled' &&
+          visibleDisplayText(item.text) !== '' ? (
+            <Text style={styles.rowMeta}>Response stopped</Text>
+          ) : null}
           <Text style={styles.rowMeta}>
             {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}
           </Text>
