@@ -31,13 +31,14 @@ class GetCountryInfoRequest(BaseModel):
         description="Country name, common nickname, or ISO code (e.g. 'France', 'Japan', 'USA', 'DEU', 'CHL').",
     )
 
-    @field_validator("country")
+    @field_validator("country", mode="before")
     @classmethod
     def sanitize_country(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Country name or code must not be empty.")
-        return cleaned
+        return v
 
 
 class SearchByCapitalRequest(BaseModel):
@@ -52,13 +53,14 @@ class SearchByCapitalRequest(BaseModel):
         description="Capital city name (e.g. 'Tokyo', 'Paris', 'Canberra', 'Ottawa', 'Berlin').",
     )
 
-    @field_validator("capital")
+    @field_validator("capital", mode="before")
     @classmethod
     def sanitize_capital(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Capital city name must not be empty.")
-        return cleaned
+        return v
 
 
 class GetBorderCountriesRequest(BaseModel):
@@ -73,13 +75,14 @@ class GetBorderCountriesRequest(BaseModel):
         description="Country name or code to inspect land borders (e.g. 'Germany', 'Brazil', 'Switzerland').",
     )
 
-    @field_validator("country")
+    @field_validator("country", mode="before")
     @classmethod
     def sanitize_country(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Country name or code must not be empty.")
-        return cleaned
+        return v
 
 
 class SearchByCurrencyRequest(BaseModel):
@@ -94,13 +97,14 @@ class SearchByCurrencyRequest(BaseModel):
         description="Currency code or name (e.g. 'EUR', 'USD', 'Yen', 'Peso', 'Pound', 'Franc').",
     )
 
-    @field_validator("currency")
+    @field_validator("currency", mode="before")
     @classmethod
     def sanitize_currency(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Currency code or name must not be empty.")
-        return cleaned
+        return v
 
 
 class SearchByLanguageRequest(BaseModel):
@@ -115,13 +119,14 @@ class SearchByLanguageRequest(BaseModel):
         description="Language name or code (e.g. 'Spanish', 'French', 'Arabic', 'Portuguese', 'German').",
     )
 
-    @field_validator("language")
+    @field_validator("language", mode="before")
     @classmethod
     def sanitize_language(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Language name or code must not be empty.")
-        return cleaned
+        return v
 
 
 class CompareCountriesRequest(BaseModel):
@@ -142,10 +147,11 @@ class CompareCountriesRequest(BaseModel):
         description="Second country name or code (e.g. 'Germany', 'United Kingdom').",
     )
 
-    @field_validator("country_a", "country_b")
+    @field_validator("country_a", "country_b", mode="before")
     @classmethod
     def sanitize_country(cls, v: str) -> str:
-        cleaned = " ".join(v.strip().split())
-        if not cleaned:
+        if isinstance(v, str):
+            v = " ".join(v.strip().split())
+        if not v:
             raise ValueError("Country name must not be empty.")
-        return cleaned
+        return v

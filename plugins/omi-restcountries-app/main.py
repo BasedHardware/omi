@@ -6,12 +6,10 @@ Operates with zero external tokens, OAuth, or API keys required.
 """
 
 from collections import OrderedDict
-from contextlib import asynccontextmanager
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -35,9 +33,6 @@ from models import (
 )
 
 logger = logging.getLogger("omi-restcountries-app")
-
-USER_AGENT = "omi-restcountries-app/1.0 (https://omi.me)"
-REQUEST_TIMEOUT_SECONDS = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -76,21 +71,12 @@ app_cache = SimpleTTLCache(maxsize=512, ttl_seconds=3600)
 
 
 # ---------------------------------------------------------------------------
-# Lifespan & FastAPI App Setup
+# FastAPI App Setup
 # ---------------------------------------------------------------------------
-@asynccontextmanager
-async def lifespan(app_instance: FastAPI):
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        app_instance.state.http_client = client
-        yield
-
-
 app = FastAPI(
     title="Omi REST Countries & Geographic Intelligence",
     description="Global country profiles, capitals, currencies, and border intelligence for Omi AI wearables.",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 
@@ -146,7 +132,7 @@ def _format_country_profile(c: Dict[str, Any]) -> str:
         f"{flag} **{name}** ({official})",
         f"• **Capital:** {capital}",
         f"• **Region:** {region} ({subregion})",
-        f"• **Population:** {pop} citizens ({demonym}s)",
+        f"• **Population:** {pop} (Demonym: {demonym})",
         f"• **Area:** {area}",
         f"• **Currency:** {currencies_str}",
         f"• **Languages:** {langs_str}",
@@ -320,20 +306,28 @@ async def compare_countries(request: CompareCountriesRequest) -> ChatToolRespons
     pop_a, pop_b = ca.get("population", 0), cb.get("population", 0)
     area_a, area_b = ca.get("area_sq_km", 0), cb.get("area_sq_km", 0)
 
-    # Population delta
-    pop_diff = abs(pop_a - pop_b)
-    pop_more = name_a if pop_a > pop_b else name_b
+    # Population comparison
+    if pop_a > pop_b:
+        pop_line = f"  ↳ {name_a} has {pop_a - pop_b:,} more residents."
+    elif pop_b > pop_a:
+        pop_line = f"  ↳ {name_b} has {pop_b - pop_a:,} more residents."
+    else:
+        pop_line = f"  ↳ Both countries have equal population ({pop_a:,})."
 
-    # Area delta
-    area_diff = abs(area_a - area_b)
-    area_more = name_a if area_a > area_b else name_b
+    # Area comparison
+    if area_a > area_b:
+        area_line = f"  ↳ {name_a} is larger by {area_a - area_b:,.1f} km²."
+    elif area_b > area_a:
+        area_line = f"  ↳ {name_b} is larger by {area_b - area_a:,.1f} km²."
+    else:
+        area_line = f"  ↳ Both countries have equal land area ({area_a:,.1f} km²)."
 
     comparison_lines = [
         f"📊 **Comparison: {flag_a} {name_a} vs {flag_b} {name_b}**\n",
         f"• **Population:** {pop_a:,} vs {pop_b:,}",
-        f"  ↳ {pop_more} has {pop_diff:,} more residents.",
+        pop_line,
         f"• **Area:** {area_a:,} km² vs {area_b:,} km²",
-        f"  ↳ {area_more} is larger by {area_diff:,} km².",
+        area_line,
         f"• **Capital:** {ca.get('capital', 'N/A')} vs {cb.get('capital', 'N/A')}",
         f"• **Region:** {ca.get('region')} ({ca.get('subregion')}) vs {cb.get('region')} ({cb.get('subregion')})",
         f"• **Languages:** {', '.join(ca.get('languages', {}).values())} vs {', '.join(cb.get('languages', {}).values())}",

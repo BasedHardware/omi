@@ -270,6 +270,48 @@ class TestCountryEndpoints(unittest.TestCase):
         self.assertIn("error", data)
         self.assertIn("Second country 'UnknownLand' not found", data["error"])
 
+    def test_compare_countries_tie_handling(self):
+        """Comparing identical countries or values handles ties cleanly."""
+        resp = self.client.post("/tools/compare_countries", json={"country_a": "France", "country_b": "France"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertNotIn("error", data)
+        self.assertIn("equal population", data["result"])
+        self.assertIn("equal land area", data["result"])
+
+    def test_get_country_info_russia_alias(self):
+        """Lookup Russia via common alias 'Russia'."""
+        resp = self.client.post("/tools/get_country_info", json={"country": "Russia"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertNotIn("error", data)
+        self.assertIn("Moscow", data["result"])
+        self.assertIn("RUS", data["result"])
+
+    def test_demonym_neutral_formatting(self):
+        """Ensure demonyms are formatted neutrally without inflected s (e.g. French, Japanese)."""
+        resp_fr = self.client.post("/tools/get_country_info", json={"country": "France"})
+        self.assertIn("Demonym: French", resp_fr.json()["result"])
+        self.assertNotIn("Frenchs", resp_fr.json()["result"])
+
+        resp_jp = self.client.post("/tools/get_country_info", json={"country": "Japan"})
+        self.assertIn("Demonym: Japanese", resp_jp.json()["result"])
+        self.assertNotIn("Japaneses", resp_jp.json()["result"])
+
+    def test_border_neighbor_resolution(self):
+        """Ensure all neighbor codes resolve to country names and capitals."""
+        resp = self.client.post("/tools/get_border_countries", json={"country": "Germany"})
+        self.assertEqual(resp.status_code, 200)
+        result_text = resp.json()["result"]
+        self.assertIn("Luxembourg", result_text)
+        self.assertNotIn("• Code: LUX", result_text)
+
+    def test_mode_before_whitespace_padding(self):
+        """Input padded with leading/trailing spaces near limit is normalized before length check."""
+        padded_country = "   " * 30 + "France" + "   " * 30  # >100 chars raw, 6 chars normalized
+        req = GetCountryInfoRequest(country=padded_country)
+        self.assertEqual(req.country, "France")
+
     def test_root_landing_page(self):
         """GET / returns HTML landing page."""
         resp = self.client.get("/")
