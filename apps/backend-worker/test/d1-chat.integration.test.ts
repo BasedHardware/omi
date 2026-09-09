@@ -225,9 +225,9 @@ describe("D1-authoritative chat persistence", () => {
     });
     expect(history.status).toBe(200);
     expect(
-      ((await history.json()) as { messages: Array<{ id: string }> }).messages.map(
-        (message) => message.id
-      )
+      (
+        (await history.json()) as { messages: Array<{ id: string }> }
+      ).messages.map((message) => message.id)
     ).toEqual(["d1-unscoped-main"]);
 
     const rows = await readConversations(env.DB, "test-account");
@@ -524,6 +524,70 @@ describe("D1 chat projects an honest conversation list", () => {
         structured: expect.objectContaining({ title: "project me" }),
       }),
     ]);
+  });
+
+  test("omitted limit pages 25 conversations like production DEFAULT_PAGE_LIMIT", async () => {
+    const insert = env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+    );
+    for (let index = 0; index < 26; index++) {
+      const id = `d1-page-${String(index).padStart(2, "0")}`;
+      const session = `session-${String(index).padStart(2, "0")}`;
+      await insert
+        .bind(
+          id,
+          "test-account",
+          `Session ${index}`,
+          "human",
+          1_000 + index,
+          index,
+          JSON.stringify({
+            id,
+            text: `Session ${index}`,
+            sender: "human",
+            type: "text",
+            createdAt: 1_000 + index,
+            updatedAt: 1_000 + index,
+            chatSessionId: session,
+            appId: null,
+            journalRevision: 0,
+            payloadHash: `sha256:${id}`,
+            messageSource: "desktop_chat",
+            rating: null,
+            reported: false,
+            generationOutcome: null,
+            revision: "1",
+            attachments: [],
+          })
+        )
+        .run();
+    }
+
+    const response = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as {
+      items: Array<{ id: string }>;
+      window: {
+        status: string;
+        complete: boolean;
+        hasMore: boolean;
+        nextCursor: string | null;
+      };
+    };
+    expect(page.items.map((item) => item.id)).toEqual(
+      Array.from(
+        { length: 25 },
+        (_, index) => `chat:session-${String(25 - index).padStart(2, "0")}`
+      )
+    );
+    expect(page.window).toEqual({
+      status: "more",
+      complete: false,
+      hasMore: true,
+      nextCursor: "chat:session-01",
+    });
   });
 
   test("space-padded and space-only stored chat-main group onto chat:chat-main", async () => {

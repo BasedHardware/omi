@@ -4,6 +4,8 @@ Updated 2026-09-07. Production readiness remains open. The user authorizes paral
 
 ## Cursor Cloud continuation: Recall and legacy backend
 
+Cloud Linux after the Worker conversations omitted-limit GET slice: Worker `GET /v1/conversations` without `limit` pages 25 rows, matching production conversations envelope `DEFAULT_PAGE_LIMIT`, instead of dumping 50 D1 rows as if that were the first page. Explicit `limit=` stays 1–100. Chat history omitted `limit` stays 50. Legacy `offset` omitted `limit` stays 50. The app first page still sends `limit=50`. This does not invent a conversation-id GET producer. Last proven worker-green remains `5f15687a41`; GitHub Validate backend worker will not queue while PR #12916 is CONFLICTING with origin/v5. A GitHub “1 check success” ping is Mintlify skipped, not worker-green. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
+
 Cloud Linux after the conversation capture-time list slice: Conversations, compact Home currents, wide Home search, and macOS Home/Library rows name GET `capturedAtMs` as Captured (device time) with the same clock as conversation detail, instead of started-only rows that hid the device capture field. A zero capture still says Time unavailable instead of 1970. Untimed rows still omit that chrome. Compact Home Daily Recaps stay title-only for speech with their existing date label. This does not invent a Listen capture producer. Last proven worker-green remains `5f15687a41`; GitHub Validate backend worker will not queue while PR #12916 is CONFLICTING with origin/v5. A GitHub “1 check success” ping is Mintlify skipped, not worker-green. Apple Debug builds, live ScreenCaptureKit, and physical BLE/iPad remain unverified on Linux.
 
 

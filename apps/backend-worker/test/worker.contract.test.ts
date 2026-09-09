@@ -1594,6 +1594,45 @@ describe("worker request contract", () => {
     expect(extra.status).toBe(400);
   });
 
+  test("omitted conversation limit pages 25 rows like production DEFAULT_PAGE_LIMIT", async () => {
+    for (let index = 0; index < 26; index++) {
+      await insertChatMessage({
+        id: `page-${String(index).padStart(2, "0")}`,
+        accountId: "test-account",
+        text: `Session ${index}`,
+        createdAt: 1_000 + index,
+        position: index,
+        chatSessionId: `session-${String(index).padStart(2, "0")}`,
+      });
+    }
+
+    const response = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as {
+      items: Array<{ id: string }>;
+      window: {
+        status: string;
+        complete: boolean;
+        hasMore: boolean;
+        nextCursor: string | null;
+      };
+    };
+    expect(page.items.map((item) => item.id)).toEqual(
+      Array.from(
+        { length: 25 },
+        (_, index) => `chat:session-${String(25 - index).padStart(2, "0")}`
+      )
+    );
+    expect(page.window).toEqual({
+      status: "more",
+      complete: false,
+      hasMore: true,
+      nextCursor: "chat:session-01",
+    });
+  });
+
   test("memories stay non-retryably unavailable because no store exists", async () => {
     const response = await fetchWorker("/v1/memories?limit=50", {
       headers: authenticatedHeaders,

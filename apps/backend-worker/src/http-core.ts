@@ -180,8 +180,11 @@ export function configurationReady(env: CoreEnv): boolean {
   return true;
 }
 
-export function parseLimit(value: string | undefined): number | null {
-  if (value === undefined) return 50;
+export function parseLimit(
+  value: string | undefined,
+  omitted = 50
+): number | null {
+  if (value === undefined) return omitted;
   if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
   return Number(value);
 }
@@ -762,7 +765,7 @@ export async function handleConversations(
   ) {
     return backendError("bad_request", "edit_request", 400);
   }
-  const limit = parseLimit(query.get("limit") ?? undefined);
+  const limit = parseLimit(query.get("limit") ?? undefined, 25);
   const cursor = query.get("cursor") ?? undefined;
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
