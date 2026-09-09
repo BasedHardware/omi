@@ -10822,5 +10822,6 @@
     "speechProfileTopicGoal": "Kaj je vaš dolgoročni cilj?",
     "speechToTextUnavailableDesc": "Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.",
     "memoryHistoryPartial": "Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.",
-    "tapPlusToStartRecording": "Tapnite + za začetek snemanja"
+    "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
+    "processingTakingLonger": "Še poteka — traja dlje kot običajno."
 }
