@@ -13,8 +13,10 @@ export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
   const parsed = new URL(rawUrl);
   if (parsed.protocol === 'http:' || parsed.protocol === 'ws:') {
     parsed.protocol = 'ws:';
-  } else {
+  } else if (parsed.protocol === 'https:' || parsed.protocol === 'wss:') {
     parsed.protocol = 'wss:';
+  } else {
+    throw new TypeError(`Unsupported Parakeet API URL protocol: ${parsed.protocol}`);
   }
   const cleanPath = parsed.pathname.replace(/\/+$/, '');
   parsed.pathname = `${cleanPath}/v3/stream`.replace(/^\/+/, '/');

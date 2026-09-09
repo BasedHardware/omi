@@ -134,6 +134,10 @@ describe('parakeetWsUrl', () => {
     const url = parakeetWsUrl('https://parakeet.example', 8000);
     expect(url).toBe('wss://parakeet.example/v3/stream?sample_rate=8000');
   });
+
+  test('rejects unsupported protocols', () => {
+    expect(() => parakeetWsUrl('ftp://parakeet.example')).toThrow(TypeError);
+  });
 });
 
 describe('createParakeetTranscriber', () => {
