@@ -588,6 +588,38 @@ test('successful empty Apps enabled reads still report catalogue apps as not ins
   expect(labelsOf(renderer)).toContain('Install Owned app');
 });
 
+test('successful Apps enabled reads do not treat catalogue enabled bits as installed', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: true},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {id: request.id, status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  expect(textOf(renderer)).toContain('Owned app');
+  expect(textOf(renderer)).toContain('Not installed');
+  expect(textOf(renderer)).toContain('No installed apps.');
+  expect(labelsOf(renderer)).toContain('Install Owned app');
+  expect(labelsOf(renderer)).not.toContain('Remove Owned app');
+});
+
 test('whitespace-only Apps description does not leave a blank catalogue subtitle', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockImplementation(async request => {

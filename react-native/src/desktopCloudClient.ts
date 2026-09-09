@@ -365,7 +365,7 @@ export async function loadConnectors(
   return {
     apps: apps.map(app => ({
       ...app,
-      enabled: app.enabled || enabled.has(app.id),
+      enabled: enabled.has(app.id),
     })),
     enabledIds,
     enabledError: null,

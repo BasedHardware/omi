@@ -1961,6 +1961,31 @@ test('loadConnectors merges enabled ids and keeps owner filtering honest', async
   expect(serviceApps(snapshot).map(app => app.id)).toEqual(['catalog-app-1']);
 });
 
+test('successful Apps enabled reads do not treat catalogue enabled bits as installed', async () => {
+  const backend = backendFor(request => {
+    if (request.path === '/v1/apps') {
+      return {
+        status: 200,
+        body: JSON.stringify([
+          {id: 'catalog-app-1', name: 'Owned app', enabled: true},
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {status: 200, body: JSON.stringify([])};
+    }
+    if (request.path === '/v1/users/profile') {
+      return {status: 200, body: JSON.stringify({uid: 'user-1'})};
+    }
+    return {status: 404, body: null};
+  });
+  const snapshot = await loadConnectors(backend);
+  expect(snapshot.enabledIds).toEqual([]);
+  expect(snapshot.enabledError).toBeNull();
+  expect(installedApps(snapshot)).toEqual([]);
+  expect(exploreApps(snapshot).map(app => app.enabled)).toEqual([false]);
+});
+
 test('loadConnectors nested non-retryable 503s are unavailable without retry copy', async () => {
   const body = JSON.stringify({
     error: {
