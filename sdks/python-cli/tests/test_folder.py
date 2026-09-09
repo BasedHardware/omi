@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import json
 
-import httpx
-import pytest
-
 from omi_cli.main import app
 
 
@@ -59,6 +56,10 @@ def test_folder_list_text(authed_profile, respx_mock, cli_runner) -> None:
     assert result.exit_code == 0, result.output
     assert "Personal" in result.output
     assert "fld_personal" in result.output
+    assert "#33FF57" in result.output
+    assert "user" in result.output
+    assert "12" in result.output
+    assert "✗" in result.output
 
 
 def test_folder_list_empty(authed_profile, respx_mock, cli_runner) -> None:
@@ -74,4 +75,5 @@ def test_folder_list_error(authed_profile, respx_mock, cli_runner) -> None:
         json={"detail": "Forbidden: requires conversations:read scope"},
     )
     result = cli_runner.invoke(app, ["folder", "list"])
-    assert result.exit_code != 0
+    assert result.exit_code == 2
+    assert "Insufficient permissions" in result.output
