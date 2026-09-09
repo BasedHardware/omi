@@ -56,6 +56,16 @@ SUITE_BATCH_SIZE="${OMI_SWIFT_TEST_SUITE_BATCH_SIZE:-25}"
 # an execution allowance for each ADDITIONAL suite it carries. The allowance
 # only has to cover run time, not startup.
 SUITE_BATCH_PER_SUITE_SECONDS="${OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS:-30}"
+# Independent ceiling on a single batch invocation's watchdog budget. The
+# scaled budget grows linearly with the batch (300s + 30s per extra suite), so
+# CI's batch of 100 would budget 3270s — 54.5 minutes inside a 60-minute job,
+# leaving no room for the bisect fallback that a wedged batch needs. A positive
+# value clamps every batch (and bisect half) to at most this many ACTIVE
+# execution seconds (SwiftPM build-lock waits stay exempt, as with the base
+# budget); 0 keeps the uncapped scaled budget, which stays correct for local
+# batch sizes. CI sets this in .github/workflows/desktop-swift-ci.yml — the
+# tests assert the clamp, not the CI value.
+SUITE_BATCH_CEILING_SECONDS="${OMI_SWIFT_TEST_BATCH_CEILING_SECONDS:-0}"
 # A suite killed by a signal writes nothing but SwiftPM's one-line "Exited with
 # unexpected signal code N" into its log — no frames. The system crash reporter
 # holds the backtrace, and on a hosted runner it is discarded with the machine,
@@ -320,6 +330,13 @@ run_batch() {
   local log_path="$log_dir/batch-$batch_id.log"
   local timeout_path="$log_dir/batch-$batch_id.timeout"
   local budget=$((SUITE_TIMEOUT_SECONDS + (batch_size - 1) * SUITE_BATCH_PER_SUITE_SECONDS))
+  # The aggregate ceiling bounds the worst case independently of the scaled
+  # formula (see SUITE_BATCH_CEILING_SECONDS above): at CI's batch 100 the
+  # uncapped budget is 54.5 min inside a 60-min job — a wedged batch would
+  # hit the job ceiling before the bisect fallback could ever run.
+  if [ "$SUITE_BATCH_CEILING_SECONDS" -gt 0 ] && [ "$budget" -gt "$SUITE_BATCH_CEILING_SECONDS" ]; then
+    budget="$SUITE_BATCH_CEILING_SECONDS"
+  fi
   local status=0
   local suite
 
@@ -522,6 +539,8 @@ if [ "$SUITE_BATCH_SIZE" -lt 1 ]; then
 fi
 [[ "$SUITE_BATCH_PER_SUITE_SECONDS" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS must be a non-negative integer, got '$SUITE_BATCH_PER_SUITE_SECONDS'"
+[[ "$SUITE_BATCH_CEILING_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_BATCH_CEILING_SECONDS must be a non-negative integer (0 disables the ceiling), got '$SUITE_BATCH_CEILING_SECONDS'"
 case "$TEST_LANE" in
   pr|full) ;;
   *) fail "OMI_SWIFT_TEST_LANE must be 'pr' or 'full', got '$TEST_LANE'" ;;

@@ -448,6 +448,36 @@ fi
 unset FAKE_XCRUN_SLOW_SUITE FAKE_XCRUN_SLOW_SECONDS OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
 export OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS=0
 
+# The scaled batch budget grows with the batch size (300s + 30s per extra
+# suite), so CI's batch of 100 budgets 3270s — 54.5 minutes inside a
+# 60-minute job, leaving a wedged batch no room for its bisect fallback
+# before the job timeout kills the whole runner.
+# OMI_SWIFT_TEST_BATCH_CEILING_SECONDS clamps that budget independently of
+# the formula. Same five-suite shape as the scenario above: a suite slow
+# enough to outlive a 3s ceiling (well under its own 13s scaled budget)
+# must get the batch watchdog-killed and failed over to the isolated
+# per-suite path, where the same slow suite also exceeds the 1s per-suite
+# budget and fails for real.
+export OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS=1
+export OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS=3
+export OMI_SWIFT_TEST_BATCH_CEILING_SECONDS=3
+export FAKE_XCRUN_SLOW_SUITE=BetaTests
+export FAKE_XCRUN_SLOW_SECONDS=8
+if "$RUNNER" >"$TMPDIR/batch-ceiling-runner.out" 2>"$TMPDIR/batch-ceiling-runner.err"; then
+  fail "batch under a 3s ceiling unexpectedly survived an 8s suite"
+fi
+if ! grep -q -- "--- BATCH worker-0-0 exited" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "ceiling did not fail the batch over to the isolated fallback"
+fi
+if ! grep -q "budget 3s" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "batch invocation did not report the clamped 3s budget"
+fi
+if ! grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/batch-ceiling-runner.out"; then
+  fail "isolated fallback under the ceiling did not re-fail BetaTests"
+fi
+unset FAKE_XCRUN_SLOW_SUITE FAKE_XCRUN_SLOW_SECONDS OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
+unset OMI_SWIFT_TEST_BATCH_CEILING_SECONDS OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS
+
 # A red batch is never authoritative: every suite it carried is re-run through
 # the isolated per-suite path, and only what fails there is reported failed.
 mkdir -p "$TMPDIR/fallback-tests"

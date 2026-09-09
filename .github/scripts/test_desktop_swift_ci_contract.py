@@ -155,6 +155,57 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
                 self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
+    def test_ci_batch_ceiling_leaves_fallback_headroom(self):
+        """The batch watchdog budget must not crowd out the bisect fallback.
+
+        The scaled batch budget grows linearly with the batch size (per-suite
+        budget + per-extra-suite allowance). At CI's batch size the uncapped
+        budget approaches the job's 60-minute ceiling, so a wedged batch
+        would be killed by the job timeout before its isolation fallback
+        could run. CI must set an independent aggregate ceiling that keeps
+        the worst single-batch watchdog cost well under the job budget.
+        """
+        job = self.jobs["desktop-swift-verify"]
+        self.assertIn('OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"', job)
+        match = re.search(
+            r'OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "(\d+)"', job
+        )
+        if match is None:
+            self.fail(
+                "desktop-swift-verify must set OMI_SWIFT_TEST_BATCH_CEILING_SECONDS "
+                "alongside its batch size"
+            )
+        ceiling = int(match.group(1))
+        timeout_minutes = MACOS_JOB_TIMEOUT_MINUTES["desktop-swift-verify"]
+        timeout_seconds = timeout_minutes * 60
+        # 300s per-suite budget + 30s per additional suite at batch 100.
+        scaled_budget = 300 + 99 * 30
+        self.assertGreater(
+            scaled_budget,
+            timeout_seconds // 2,
+            "this guard lost its premise: the scaled batch budget no longer "
+            "threatens the job ceiling at this batch size",
+        )
+        self.assertGreater(
+            ceiling,
+            0,
+            "a zero ceiling disables the cap and restores the uncapped "
+            "scaled budget as the worst case",
+        )
+        self.assertLess(
+            ceiling,
+            scaled_budget,
+            f"ceiling {ceiling}s never bites: the scaled budget is already "
+            f"{scaled_budget}s",
+        )
+        self.assertLessEqual(
+            ceiling,
+            timeout_seconds // 2,
+            f"ceiling {ceiling}s exceeds half the {timeout_seconds}s job "
+            f"budget; a wedged batch must die with at least half the job "
+            f"left for its bisect fallback",
+        )
+
     def test_no_closed_pull_request_runs_exist(self):
         """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
