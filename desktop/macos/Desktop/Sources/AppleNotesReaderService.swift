@@ -348,6 +348,10 @@ actor AppleNotesReaderService {
     memories: Int, profileSummary: String
   ) {
     guard !notes.isEmpty else { return (0, "") }
+    guard !AIProvider.shouldSkipConnectorSynthesis() else {
+      log("AppleNotesReaderService: skipping note synthesis: Local provider, Connector synthesis is Off")
+      return (0, "")
+    }
 
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d"

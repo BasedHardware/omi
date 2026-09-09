@@ -143,6 +143,50 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.currentProviderMode, "omi-local")
   }
 
+  // MARK: - Connector synthesis gate
+  // Regression coverage for the Apple Notes/Calendar/Gmail/AI-profile
+  // synthesis gate: Local+Off must skip (the default), Local+Cloud must
+  // send, and every other provider must send regardless of the setting.
+
+  func testConnectorSynthesisGate() {
+    let bridgeModeKey = AIProvider.selectedProviderRawValueKey
+    let synthesisModeKey = AIProvider.connectorSynthesisModeKey
+    let previousBridgeMode = UserDefaults.standard.string(forKey: bridgeModeKey)
+    let previousSynthesisMode = UserDefaults.standard.string(forKey: synthesisModeKey)
+    defer {
+      if let previousBridgeMode {
+        UserDefaults.standard.set(previousBridgeMode, forKey: bridgeModeKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: bridgeModeKey)
+      }
+      if let previousSynthesisMode {
+        UserDefaults.standard.set(previousSynthesisMode, forKey: synthesisModeKey)
+      } else {
+        UserDefaults.standard.removeObject(forKey: synthesisModeKey)
+      }
+    }
+
+    // Local + Off (the default, including an unset key): skip.
+    UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: bridgeModeKey)
+    UserDefaults.standard.removeObject(forKey: synthesisModeKey)
+    XCTAssertEqual(AIProvider.connectorSynthesisMode, .off)
+    XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
+
+    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.off.rawValue, forKey: synthesisModeKey)
+    XCTAssertTrue(AIProvider.shouldSkipConnectorSynthesis())
+
+    // Local + Cloud (opted in): send.
+    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.cloud.rawValue, forKey: synthesisModeKey)
+    XCTAssertEqual(AIProvider.connectorSynthesisMode, .cloud)
+    XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
+
+    // Omi AI (any non-local provider): always sends, regardless of the
+    // connector-synthesis setting — the setting is meaningless off Local.
+    UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: bridgeModeKey)
+    UserDefaults.standard.set(AIProvider.ConnectorSynthesisMode.off.rawValue, forKey: synthesisModeKey)
+    XCTAssertFalse(AIProvider.shouldSkipConnectorSynthesis())
+  }
+
   // MARK: - ApiKeysResponse shape assertion
   // After #6594, the response must NOT contain anthropic_api_key.
 

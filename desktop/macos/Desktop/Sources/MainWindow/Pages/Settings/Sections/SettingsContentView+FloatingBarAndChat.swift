@@ -300,6 +300,31 @@ extension SettingsContentView {
           .foregroundColor(Ink.secondary)
       }
 
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        Text("Connector synthesis")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
+
+        Picker("", selection: $connectorSynthesisMode) {
+          Text("Off").tag(AIProvider.ConnectorSynthesisMode.off.rawValue)
+          Text("Send to Omi cloud").tag(AIProvider.ConnectorSynthesisMode.cloud.rawValue)
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+
+        Text(
+          "Off (default): Apple Notes, Calendar, and Gmail memory synthesis, and AI-profile synthesis, do not run under the Local provider."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+        if connectorSynthesisMode == AIProvider.ConnectorSynthesisMode.cloud.rawValue {
+          Text("Formatted note, event, and email text will be sent to Omi's servers and processed by a cloud model.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+        }
+      }
+
       Text("An OpenAI-compatible endpoint (e.g. LM Studio, Ollama). Never routed through Omi's servers.")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
