@@ -145,66 +145,73 @@ fi
 LOCK_PATH="$("$WRAPPER" lock-path)"
 assert_contains "$LOCK_PATH" ".lock" "lock-path reports the lock directory"
 
-# Behavioral: a live holder makes a second bootstrap wait rather than build.
-# Pointed at an empty cache so the fast path cannot short-circuit, and bounded
-# by a 2s timeout so the assertion never reaches the ~15-minute build.
-LOCK_TEST_CACHE="$(mktemp -d)"
-HELD_LOCK="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" "$WRAPPER" lock-path)"
-sleep 120 &
-HOLDER_PID=$!
-mkdir -p "$HELD_LOCK"
-echo "$HOLDER_PID" > "$HELD_LOCK/owner"
+# Behavioral lock fixtures (require macOS: the bootstrap's assert_xcode fails
+# before it can ever reach acquire_bootstrap_lock on Linux, so the "waiting"
+# and "reclaiming" behaviors are unobservable there).
+if command -v xcrun >/dev/null 2>&1; then
+  # A live holder makes a second bootstrap wait rather than build. Pointed at
+  # an empty cache so the fast path cannot short-circuit, and bounded by a 2s
+  # timeout so the assertion never reaches the ~15-minute build.
+  LOCK_TEST_CACHE="$(mktemp -d)"
+  HELD_LOCK="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" "$WRAPPER" lock-path)"
+  sleep 120 &
+  HOLDER_PID=$!
+  mkdir -p "$HELD_LOCK"
+  echo "$HOLDER_PID" > "$HELD_LOCK/owner"
 
-set +e
-CONTENDED="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
-CONTENDED_STATUS=$?
-set -e
-if [ "$CONTENDED_STATUS" -ne 0 ]; then
-  ok "a held lock blocks a second bootstrap instead of racing it"
-else
-  nok "second bootstrap should not proceed while the lock is held"
-fi
-assert_contains "$CONTENDED" "waiting" "waiting bootstrap says who holds the lock"
-if [ -f "$HELD_LOCK/owner" ] && [ "$(cat "$HELD_LOCK/owner")" = "$HOLDER_PID" ]; then
-  ok "a waiter leaves the live holder's lock intact"
-else
-  nok "waiter must not steal or clear a live holder's lock"
-fi
-kill "$HOLDER_PID" 2>/dev/null || true
-wait "$HOLDER_PID" 2>/dev/null || true
+  set +e
+  CONTENDED="$(SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=2 "$WRAPPER" bootstrap 2>&1)"
+  CONTENDED_STATUS=$?
+  set -e
+  if [ "$CONTENDED_STATUS" -ne 0 ]; then
+    ok "a held lock blocks a second bootstrap instead of racing it"
+  else
+    nok "second bootstrap should not proceed while the lock is held"
+  fi
+  assert_contains "$CONTENDED" "waiting" "waiting bootstrap says who holds the lock"
+  if [ -f "$HELD_LOCK/owner" ] && [ "$(cat "$HELD_LOCK/owner")" = "$HOLDER_PID" ]; then
+    ok "a waiter leaves the live holder's lock intact"
+  else
+    nok "waiter must not steal or clear a live holder's lock"
+  fi
+  kill "$HOLDER_PID" 2>/dev/null || true
+  wait "$HOLDER_PID" 2>/dev/null || true
 
-# Behavioral: a lock whose holder died is reclaimed rather than waited out
-# forever. Reuses the just-killed pid, which is guaranteed dead. The bootstrap
-# would go on to a real build, so it is killed as soon as it reports the
-# reclaim — the assertion is on the reclaim, not on the build. The clone URL
-# points at an empty local repository: the pinned-source clone this fixture
-# used to start takes minutes on a hosted runner, and bash defers the
-# wrapper's TERM trap until the foreground clone exits, so killing only the
-# wrapper waited out the whole download (641s locally, ~6 min of the CI
-# launcher step). The tree kill below covers the same trap.
-echo "$HOLDER_PID" > "$HELD_LOCK/owner"
-RECLAIM_FIXTURE_REPO="$LOCK_TEST_CACHE/empty-repo.git"
-git init --quiet --bare "$RECLAIM_FIXTURE_REPO"
-RECLAIM_LOG="$LOCK_TEST_CACHE/reclaim.log"
-SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_REPO_URL="file://$RECLAIM_FIXTURE_REPO" \
-  SWIFT_FORMAT_LOCK_TIMEOUT=30 \
-  "$WRAPPER" bootstrap >"$RECLAIM_LOG" 2>&1 &
-BOOT_PID=$!
-for _ in $(seq 1 20); do
-  grep -q "reclaiming bootstrap lock" "$RECLAIM_LOG" 2>/dev/null && break
-  sleep 0.5
-done
-kill "$BOOT_PID" 2>/dev/null || true
-# Bash defers the wrapper's TERM trap until its foreground child exits, so
-# killing only the wrapper waits out whatever the bootstrap is running: kill
-# the child tree too, then reap.
-pkill -TERM -P "$BOOT_PID" 2>/dev/null || true
-sleep 1
-pkill -KILL -P "$BOOT_PID" 2>/dev/null || true
-wait "$BOOT_PID" 2>/dev/null || true
-assert_contains "$(cat "$RECLAIM_LOG" 2>/dev/null || true)" \
-  "reclaiming bootstrap lock from dead pid" "a dead holder's lock is reclaimed"
-rm -rf "$LOCK_TEST_CACHE"
+  # Behavioral: a lock whose holder died is reclaimed rather than waited out
+  # forever. Reuses the just-killed pid, which is guaranteed dead. The
+  # bootstrap would go on to a real build, so it is killed as soon as it
+  # reports the reclaim — the assertion is on the reclaim, not on the build.
+  # The clone URL points at an empty local repository: the pinned-source clone
+  # this fixture used to start takes minutes on a hosted runner, and bash
+  # defers the wrapper's TERM trap until the foreground clone exits, so
+  # killing only the wrapper waited out the whole download (641s locally,
+  # ~6 min of the CI launcher step). The tree kill below covers the same trap.
+  echo "$HOLDER_PID" > "$HELD_LOCK/owner"
+  RECLAIM_FIXTURE_REPO="$LOCK_TEST_CACHE/empty-repo.git"
+  git init --quiet --bare "$RECLAIM_FIXTURE_REPO"
+  RECLAIM_LOG="$LOCK_TEST_CACHE/reclaim.log"
+  SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_REPO_URL="file://$RECLAIM_FIXTURE_REPO" \
+    SWIFT_FORMAT_LOCK_TIMEOUT=30 \
+    "$WRAPPER" bootstrap >"$RECLAIM_LOG" 2>&1 &
+  BOOT_PID=$!
+  for _ in $(seq 1 20); do
+    grep -q "reclaiming bootstrap lock" "$RECLAIM_LOG" 2>/dev/null && break
+    sleep 0.5
+  done
+  kill "$BOOT_PID" 2>/dev/null || true
+  # Bash defers the wrapper's TERM trap until its foreground child exits, so
+  # killing only the wrapper waits out whatever the bootstrap is running:
+  # kill the child tree too, then reap.
+  pkill -TERM -P "$BOOT_PID" 2>/dev/null || true
+  sleep 1
+  pkill -KILL -P "$BOOT_PID" 2>/dev/null || true
+  wait "$BOOT_PID" 2>/dev/null || true
+  assert_contains "$(cat "$RECLAIM_LOG" 2>/dev/null || true)" \
+    "reclaiming bootstrap lock from dead pid" "a dead holder's lock is reclaimed"
+  rm -rf "$LOCK_TEST_CACHE"
+else
+  echo "  skip: bootstrap lock fixtures (require macOS: assert_xcode gates the lock path)"
+fi
 
 # --- enforcement fixtures (require bootstrapped binary; skip on non-macOS) ---
 if command -v xcrun >/dev/null 2>&1 && [ -x "$("$WRAPPER" binary-path)" ]; then
