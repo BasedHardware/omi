@@ -112,10 +112,11 @@ def test_memories_created_counts_canonical_and_legacy_shapes_without_duplicates(
 
 
 class _CreatedCountQuery:
-    def __init__(self, ids):
+    def __init__(self, ids, count_fails=False):
         self._ids = list(ids)
         self.stream_calls = 0
         self.count_calls = 0
+        self.count_fails = count_fails
 
     def limit(self, count):
         del count
@@ -128,9 +129,12 @@ class _CreatedCountQuery:
     def count(self):
         self.count_calls += 1
         ids = self._ids
+        fails = self.count_fails
 
         class _Aggregation:
             def get(self):
+                if fails:
+                    raise RuntimeError('aggregation failed')
                 return [[SimpleNamespace(value=len(ids))]]
 
         return _Aggregation()
@@ -161,6 +165,17 @@ def test_memories_created_uses_sot_count_when_legacy_store_is_empty():
     assert result == 2
     assert canonical_query.count_calls == 1
     assert legacy_query.stream_calls == 0
+
+
+def test_memories_created_does_not_stream_when_aggregation_fails():
+    canonical_query = _CreatedCountQuery(['canonical-only', 'shared'], count_fails=True)
+    legacy_query = _CreatedCountQuery([])
+
+    result = _count_memories_with_queries(canonical_query, legacy_query)
+
+    assert result == 0
+    assert canonical_query.count_calls == 1
+    assert canonical_query.stream_calls == 0
 
 
 # ---------------------------------------------------------------------------

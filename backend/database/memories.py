@@ -545,10 +545,10 @@ def count_memories_created(uid: str, start_date: datetime, end_date: datetime, *
         return _id_union(canonical_query, legacy_query)
     if canonical_any:
         counted = _aggregation_count(canonical_query)
-        return counted if counted is not None else len({doc.id for doc in canonical_query.stream()})
+        return counted if counted is not None else 0
     if legacy_any:
         counted = _aggregation_count(legacy_query)
-        return counted if counted is not None else len({doc.id for doc in legacy_query.stream()})
+        return counted if counted is not None else 0
     return 0
 
 

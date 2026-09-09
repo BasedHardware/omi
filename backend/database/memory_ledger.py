@@ -121,8 +121,8 @@ def _assert_legacy_commit_privacy_fences(
                 raise LegacyCommitPrivacyFence('legacy memory commit canonical identity is unreadable')
             if item_payload.get('status') == 'tombstoned':
                 raise LegacyCommitPrivacyFence('legacy memory commit references a privacy-deleted memory')
-            # Present canonical item is authority; do not probe the override miss.
-            continue
+            # Still read the override: delete_batch writes suppression before the
+            # canonical tombstone, so a live item can already be privacy-deleted.
         override_snapshot = _document(database, f'{collections.memory_historical_overrides}/{memory_id}').get(
             transaction=transaction
         )

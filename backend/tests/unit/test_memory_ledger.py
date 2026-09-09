@@ -927,7 +927,7 @@ def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch)
     assert updates[0]["attempt_count"] == 2
 
 
-def test_legacy_commit_skips_override_read_when_canonical_item_exists():
+def test_legacy_commit_live_item_with_override_tombstone_is_fenced():
     uid = "u1"
     database = _LedgerDb(
         {
@@ -936,15 +936,16 @@ def test_legacy_commit_skips_override_read_when_canonical_item_exists():
         }
     )
 
-    memory_ledger._assert_legacy_commit_privacy_fences(
-        transaction=_LedgerTransaction(),
-        database=database,
-        uid=uid,
-        mutations=[memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
-    )
+    with pytest.raises(memory_ledger.LegacyCommitPrivacyFence):
+        memory_ledger._assert_legacy_commit_privacy_fences(
+            transaction=_LedgerTransaction(),
+            database=database,
+            uid=uid,
+            mutations=[memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        )
 
     assert f"users/{uid}/memory_items/m1" in database.gets
-    assert f"users/{uid}/memory_historical_overrides/m1" not in database.gets
+    assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
 
 
 def test_legacy_commit_override_only_tombstone_is_fenced():
