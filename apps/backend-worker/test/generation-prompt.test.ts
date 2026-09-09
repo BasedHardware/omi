@@ -737,7 +737,7 @@ describe("composeGenerationPrompt", () => {
       history: [
         { role: "user", content: "My name is Ana" },
         { role: "assistant", content: "Hello Ana" },
-        { role: "user", content: "  still visible  " },
+        { role: "user", content: "still visible" },
       ],
     });
   });
@@ -1079,6 +1079,42 @@ describe("composeGenerationPrompt", () => {
     if (result.kind !== "ok") return;
     expect(result.history).toEqual([
       { role: "user", content: "Recorded words" },
+    ]);
+  });
+
+  test("a NEXT LINE prefix on a fitting prior turn does not evict older visible history", async () => {
+    const older = "o".repeat(8_000);
+    const padded = `${"\u0085".repeat(14_000)}recent-words`;
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("message-older-visible", older)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 2, 1, NULL)"
+      )
+      .bind("message-padded-fit", padded)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 3, 1, NULL)"
+      )
+      .bind("message-now", "current")
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-now",
+      "current"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.history).toEqual([
+      { role: "user", content: older },
+      { role: "user", content: "recent-words" },
     ]);
   });
 

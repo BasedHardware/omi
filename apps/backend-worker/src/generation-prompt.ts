@@ -116,6 +116,7 @@ async function readGenerationHistory(
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index]!;
     if (!isVisibleGenerationText(row.text)) continue;
+    const visible = visibleGenerationTrim(row.text);
     const size = utf8Bytes(row.text);
     if (size > remaining) {
       const prefix = utf8Prefix(row.text, remaining);
@@ -126,10 +127,7 @@ async function readGenerationHistory(
         });
         break;
       }
-      const visiblePrefix = utf8Prefix(
-        visibleGenerationTrim(row.text),
-        remaining
-      );
+      const visiblePrefix = utf8Prefix(visible, remaining);
       if (isVisibleGenerationText(visiblePrefix) && index === rows.length - 1) {
         history.push({
           role: row.sender === "human" ? "user" : "assistant",
@@ -139,10 +137,10 @@ async function readGenerationHistory(
       }
       continue;
     }
-    remaining -= size;
+    remaining -= utf8Bytes(visible);
     history.push({
       role: row.sender === "human" ? "user" : "assistant",
-      content: row.text,
+      content: visible,
     });
   }
   return history.reverse();
