@@ -454,7 +454,32 @@ test("incomplete uploads never queue and malformed audio fails without provider 
     projectDeviceTranscription(
       await readDeviceTranscription(env.DB, "record-owner", session.id)
     )
-  ).toMatchObject({ state: "failed", errorCode: "invalid_audio" });
+  ).toMatchObject({ state: "failed", errorCode: "invalid_audio", text: null });
+});
+
+test("failed transcript GET hides leftover speech like production Listen", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'failed', text = ?, segments = ?, error_code = ? WHERE session_id = ?"
+  )
+    .bind(
+      "Leftover speech",
+      JSON.stringify([{ start: 0, end: 1, text: "Leftover speech" }]),
+      "invalid_audio",
+      session.id
+    )
+    .run();
+  expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({
+    state: "failed",
+    text: null,
+    segments: [],
+    errorCode: "invalid_audio",
+  });
 });
 
 test("provider failures retry durably and expired leases fence late results", async () => {

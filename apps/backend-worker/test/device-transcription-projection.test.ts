@@ -49,6 +49,34 @@ describe("device transcription client projection", () => {
     expect(projectDeviceTranscription(null)).toBeNull();
   });
 
+  test("failed GET hides leftover speech like production Listen", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        state: "failed",
+        errorCode: "invalid_audio",
+      })
+    ).toMatchObject({
+      state: "failed",
+      text: null,
+      segments: [],
+      errorCode: "invalid_audio",
+    });
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        state: "queued",
+        segments: "{",
+        errorCode: "transcription_unavailable",
+      })
+    ).toMatchObject({
+      state: "queued",
+      text: null,
+      segments: [],
+      errorCode: "transcription_unavailable",
+    });
+  });
+
   test("completed empty text keeps later speech stored on segments", () => {
     expect(
       projectDeviceTranscription({

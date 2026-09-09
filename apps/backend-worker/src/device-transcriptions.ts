@@ -340,6 +340,19 @@ export function projectDeviceTranscription(
   ) {
     return null;
   }
+  const errorCode = projectListenTranscriptErrorCode(row.errorCode);
+  if (row.state !== "completed") {
+    return {
+      sessionId: row.sessionId,
+      state: row.state,
+      text: null,
+      segments: [],
+      language: row.language,
+      discardedLeadingPackets: row.discardedLeadingPackets,
+      errorCode,
+      updatedAt: row.updatedAt,
+    };
+  }
   const segments = parseStoredTranscriptSegments(row.segments);
   if (segments === null) return null;
   return {
@@ -349,7 +362,7 @@ export function projectDeviceTranscription(
     segments,
     language: row.language,
     discardedLeadingPackets: row.discardedLeadingPackets,
-    errorCode: projectListenTranscriptErrorCode(row.errorCode),
+    errorCode,
     updatedAt: row.updatedAt,
   };
 }
