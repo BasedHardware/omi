@@ -27,10 +27,28 @@ type StreamingTranscriber interface {
 }
 
 func ParakeetWSURL(apiURL string, sampleRate int) string {
-	base := strings.TrimRight(strings.TrimSpace(apiURL), "/")
-	base = strings.Replace(base, "https://", "wss://", 1)
-	base = strings.Replace(base, "http://", "ws://", 1)
-	return fmt.Sprintf("%s/v3/stream?sample_rate=%d", base, sampleRate)
+	trimmed := strings.TrimSpace(apiURL)
+	raw := trimmed
+	if !strings.Contains(trimmed, "://") {
+		raw = "https://" + trimmed
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "ws":
+		u.Scheme = "ws"
+	default:
+		u.Scheme = "wss"
+	}
+	cleanPath := strings.TrimRight(u.Path, "/")
+	u.Path = cleanPath + "/v3/stream"
+	q := u.Query()
+	q.Set("sample_rate", fmt.Sprintf("%d", sampleRate))
+	u.RawQuery = q.Encode()
+	u.Fragment = ""
+	return u.String()
 }
 
 type wsTranscriber struct {
