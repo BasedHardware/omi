@@ -780,3 +780,34 @@ test('invalid_transcript failures name an invalid result instead of a generic tr
   );
   expect(textOf(renderer)).not.toContain('invalid_transcript');
 });
+
+test('transcription_unavailable failures name an unavailable producer instead of a generic transcription miss', async () => {
+  const transcription = deviceTranscriptionProjection({
+    sessionId: 'session-one',
+    state: 'failed',
+    providerResult: null,
+    discardedLeadingPackets: 0,
+    errorCode: 'transcription_unavailable',
+    updatedAt: 123,
+    startedAt: '2026-09-07T00:00:00Z',
+    codec: 21,
+    chunkCount: 1,
+    byteCount: 3,
+  });
+  mockRequest.mockResolvedValue({
+    id: 'terminal',
+    status: 200,
+    body: JSON.stringify({transcription}),
+  });
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain(
+    'Transcription is unavailable for this recording.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'This recording could not be transcribed.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Transcript is not available from this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain('transcription_unavailable');
+});

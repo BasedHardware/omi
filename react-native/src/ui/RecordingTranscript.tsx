@@ -66,6 +66,8 @@ export function RecordingTranscript({
               ? 'This recording could not be decoded for transcription. It cannot be retried.'
               : result.value.errorCode === 'invalid_transcript'
               ? 'This recording produced an invalid transcript. It cannot be retried.'
+              : result.value.errorCode === 'transcription_unavailable'
+              ? 'Transcription is unavailable for this recording. It cannot be retried.'
               : 'This recording could not be transcribed. It cannot be retried.'
             : result.value.state === 'queued'
             ? 'Transcription is queued.'
