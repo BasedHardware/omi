@@ -74,7 +74,7 @@ export OMI_API_KEY="omi_dev_..."
 ```
 
 ### 驗證登入狀態
-* `omi auth status`：僅讀取本機儲存的認證設定檔與過期時間（**離線執行**，不發送網路請求）。
+* `omi auth status`：讀取本機儲存的認證設定檔與環境變數（如 `OMI_API_KEY`）及過期時間（**離線執行**，不發送網路請求）。
 * `omi auth whoami`：向 Omi 伺服器發送實際的驗證請求，確認金鑰或憑證仍有效且未過期（**需要網路連線**）。
 
 ```bash
@@ -167,8 +167,8 @@ omi --json action-item list --open | jq '.'
 | 結束代碼 | 代表意義 | 說明與處置建議 |
 | :---: | :--- | :--- |
 | `0` | 成功 (Success) | 指令正常執行完畢 |
-| `1` | 指令用法錯誤 (Usage Error) | 傳入無效參數或缺少必要引數 |
-| `2` | 身份驗證錯誤 (Auth Error) | 未登入、API 金鑰無效或 Token 已過期 |
+| `1` | 指令用法錯誤 (Usage Error) | 傳入無效參數或缺少必要引數等應用層用法錯誤（註：Click 底層原生解析錯誤可能直接回傳代碼 `2`） |
+| `2` | 身份驗證錯誤 (Auth Error) | 未登入、API 金鑰無效或 Token 已過期（亦包含 Click 底層語法解析錯誤） |
 | `3` | 伺服器錯誤 (Server Error) | 收到 5xx 錯誤回應、連線超時或網路故障 |
 | `4` | 請求頻率受限 (Rate Limited) | 429 Too Many Requests，請實作指數退避重試 |
 | `5` | 資源不存在 (Not Found) | 404 Not Found，找不到指定的 ID |
