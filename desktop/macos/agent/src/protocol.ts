@@ -896,7 +896,7 @@ export interface RuntimeFailurePayload {
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
+  retryDisposition?: "next_send" | "same_turn";
 }
 
 /// One concrete model identity observed serving this turn's completions.
