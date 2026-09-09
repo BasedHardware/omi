@@ -16,6 +16,7 @@ import {
   coreContext,
   handleChatHistory,
   handleConversations,
+  handleSettings,
   handleTasks,
 } from "../src/http-core";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
@@ -2850,6 +2851,33 @@ describe("settings entitlement admission contract", () => {
     });
     expect(valid.status).toBe(200);
     expect(JSON.stringify(await valid.json())).not.toContain("appearance");
+  });
+
+  test("Settings GET retryable 503 sends production retry-after", async () => {
+    const missingDb = await handleSettings(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request("https://worker.test/v1/settings"),
+        routePath: "/v1/settings",
+        params: {},
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("60");
+    expect((await missingDb.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+
+    const extra = await fetchWorker("/v1/settings?appearance=dark", {
+      headers: authenticatedHeaders,
+    });
+    expect(extra.status).toBe(400);
+    expect(extra.headers.get("retry-after")).toBeNull();
   });
 
   test("Settings renders the same entitlement consumed by chat admission", async () => {

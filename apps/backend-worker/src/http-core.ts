@@ -453,7 +453,9 @@ export async function handleSettings(context: CoreContext): Promise<Response> {
   }
   const db = context.env.DB;
   if (db === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "60",
+    });
   return json(
     await readSettings(
       db,
