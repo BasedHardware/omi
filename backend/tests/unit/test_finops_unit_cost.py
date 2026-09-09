@@ -9,12 +9,20 @@ import pathlib
 
 import pytest
 
-_SPEC = importlib.util.spec_from_file_location(
-    "finops_assemble",
-    pathlib.Path(__file__).resolve().parents[2] / "scripts" / "finops" / "assemble_unit_cost.py",
-)
+_FINOPS = pathlib.Path(__file__).resolve().parents[2] / "scripts" / "finops"
+_SPEC = importlib.util.spec_from_file_location("finops_assemble", _FINOPS / "assemble_unit_cost.py")
 alloc = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(alloc)
+_AUTH_SPEC = importlib.util.spec_from_file_location("finops_gcpauth", _FINOPS / "gcpauth.py")
+gcpauth = importlib.util.module_from_spec(_AUTH_SPEC)
+_AUTH_SPEC.loader.exec_module(gcpauth)
+
+
+def test_writer_is_finops_sa_not_human_or_readonly_bot():
+    assert gcpauth.WRITER_ACCOUNT == "finops-writer@based-hardware.iam.gserviceaccount.com"
+    assert gcpauth.READONLY_ACCOUNT == "read-only-bot-account@based-hardware.iam.gserviceaccount.com"
+    assert "david@" not in gcpauth.WRITER_ACCOUNT
+    assert gcpauth.WRITER_ACCOUNT != gcpauth.READONLY_ACCOUNT
 
 
 # ---------------------------------------------------------------- fnum / is_one_time
