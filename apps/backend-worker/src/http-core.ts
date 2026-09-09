@@ -947,7 +947,9 @@ export async function handleTranscription(
   context: CoreContext
 ): Promise<Response> {
   if (context.env.DB === undefined)
-    return backendError("service_unavailable", "retry", 503, true);
+    return backendError("service_unavailable", "retry", 503, true, {
+      "retry-after": "1",
+    });
   const row = await readDeviceTranscription(
     context.env.DB,
     context.get("accountId"),

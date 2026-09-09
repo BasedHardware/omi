@@ -4,6 +4,7 @@ import {
   parseDeviceSessionAudio,
   parseDeviceSessionCreate,
 } from "../src/device-sessions";
+import { coreContext, handleTranscription } from "../src/http-core";
 import { createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
@@ -273,6 +274,7 @@ describe("device session request validators", () => {
       bindings
     );
     expect(unreadable.status).toBe(503);
+    expect(unreadable.headers.get("retry-after")).toBeNull();
     expect((await unreadable.json()) as object).toEqual({
       error: {
         code: "service_unavailable",
@@ -390,6 +392,30 @@ describe("device session request validators", () => {
       },
     });
   });
+
+  test("transcript GET retryable 503 sends production Listen retry-after", async () => {
+    const missingDb = await handleTranscription(
+      coreContext({
+        env: { ...env, DB: undefined } as never,
+        request: new Request(
+          "https://worker.test/v1/device-sessions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/transcript"
+        ),
+        routePath: "/v1/device-sessions/:id/transcript",
+        params: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+        values: { accountId: "test-account", requestId: "test-request" },
+      })
+    );
+    expect(missingDb.status).toBe(503);
+    expect(missingDb.headers.get("retry-after")).toBe("1");
+    expect((await missingDb.json()) as object).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
+  });
+
   test("recording create replay returns the original session and conflicting metadata is refused", async () => {
     const post = (body: unknown) =>
       fetchWorker("/v1/device-sessions", {
