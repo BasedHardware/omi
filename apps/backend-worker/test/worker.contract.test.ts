@@ -1335,6 +1335,50 @@ describe("worker request contract", () => {
     );
   });
 
+  test("conversation list overviews skip a NEXT LINE-only last turn", async () => {
+    await insertChatMessage({
+      id: "overview-title",
+      accountId: "test-account",
+      text: "Title speech",
+      createdAt: 100,
+      position: 1,
+      chatSessionId: "overview-visible",
+    });
+    await insertChatMessage({
+      id: "overview-later",
+      accountId: "test-account",
+      text: "Later speech",
+      createdAt: 150,
+      position: 2,
+      chatSessionId: "overview-visible",
+      sender: "ai",
+    });
+    await insertChatMessage({
+      id: "overview-nel",
+      accountId: "test-account",
+      text: "\u0085",
+      createdAt: 200,
+      position: 3,
+      chatSessionId: "overview-visible",
+    });
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string; overview: string; updatedAt: number }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:overview-visible")).toEqual(
+      expect.objectContaining({
+        id: "chat:overview-visible",
+        title: "Title speech",
+        overview: "Later speech",
+        updatedAt: 200,
+      })
+    );
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

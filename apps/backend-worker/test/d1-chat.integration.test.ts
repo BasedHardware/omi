@@ -779,6 +779,36 @@ describe("D1 chat projects an honest conversation list", () => {
     });
   });
 
+  test("chat overviews skip a NEXT LINE-only last turn", async () => {
+    const accountId = "nel-last-chat-overview";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("nel-last-overview-1", accountId, "Title speech", 100, 1, "{broken")
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'ai', ?, 'completed', ?, ?)"
+    )
+      .bind("nel-last-overview-2", accountId, "Later speech", 150, 2, "{broken")
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind("nel-last-overview-3", accountId, "\u0085", 200, 3, "{broken")
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: MAIN_CONVERSATION_ID,
+      title: "Title speech",
+      overview: "Later speech",
+      createdAt: 100,
+      updatedAt: 200,
+      source: "chat",
+      status: "in_progress",
+    });
+  });
+
   test("conversation projection preserves embedded NUL and duplicate JSON key semantics", async () => {
     const accountId = "nul-conversations";
     const fixtures = [

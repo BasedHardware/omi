@@ -1293,5 +1293,12 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleTitleSql).toContain("WHEN m.sender='human' THEN 1 ELSE 2 END");
     expect(visibleTitleSql).not.toContain("THEN 'Chat'");
     expect(visibleTitleSql).toContain("chr(133)");
+    const visibleOverviewSql = migrationSql.find((migration) => migration.version === 64)!.sql;
+    expect(visibleOverviewSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_chat_conversation_sessions");
+    expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC");
+    expect(visibleOverviewSql).not.toContain("(array_agg(m.text ORDER BY m.created_at DESC, m.id DESC))[1] AS last_text");
+    expect(visibleOverviewSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");
+    expect(visibleOverviewSql).not.toContain("THEN 'Chat'");
+    expect(visibleOverviewSql).toContain("chr(133)");
   });
 });

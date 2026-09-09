@@ -694,6 +694,29 @@ realTest(
         })
       );
       await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'Title speech','human','text',310,310,'session-nel-overview',NULL,0,'sha256:overview-title','desktop_chat',NULL,false,'rev-overview-title','[]'::jsonb,'gen_overview_title')`,
+        [account, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'Later speech','human','text',311,311,'session-nel-overview',NULL,0,'sha256:overview-later','desktop_chat',NULL,false,'rev-overview-later','[]'::jsonb,'gen_overview_later')`,
+        [account, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',312,312,'session-nel-overview',NULL,0,'sha256:overview-nel','desktop_chat',NULL,false,'rev-overview-nel','[]'::jsonb,'gen_overview_nel')`,
+        [account, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "\u0085"]
+      );
+      const visibleOverview = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string; updatedAt: number }>;
+      };
+      expect(visibleOverview.items.find((item) => item.id === "chat:session-nel-overview")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-nel-overview",
+          title: "Title speech",
+          overview: "Later speech",
+          updatedAt: 312,
+        })
+      );
+      await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
       );
@@ -703,6 +726,7 @@ realTest(
       expect(ids(revoked)).not.toContain("chat:session-blank");
       expect(ids(revoked)).not.toContain("chat:session-nbsp");
       expect(ids(revoked)).not.toContain("chat:session-nel-title");
+      expect(ids(revoked)).not.toContain("chat:session-nel-overview");
       expect(revoked.items).toHaveLength(1);
     } finally {
       await pool.close();
