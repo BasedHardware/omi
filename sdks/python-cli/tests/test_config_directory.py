@@ -25,8 +25,9 @@ def test_save_preserves_existing_parent(tmp_path, mode, symlink):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
-def test_new_directory_and_file_are_private(tmp_path, monkeypatch):
-    path = tmp_path / ".omi" / "config.toml"
+@pytest.mark.parametrize("parts", [(".omi",), (".config", "omi", "profiles")])
+def test_new_directory_and_file_are_private(tmp_path, monkeypatch, parts):
+    path = tmp_path.joinpath(*parts, "config.toml")
     original = cfg.tomli_w.dump
 
     def inspect(payload, handle):
@@ -35,7 +36,10 @@ def test_new_directory_and_file_are_private(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cfg.tomli_w, "dump", inspect)
     cfg.save(cfg.Config(path=path))
-    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    for parent in path.parents:
+        if parent == tmp_path:
+            break
+        assert stat.S_IMODE(parent.stat().st_mode) == 0o700
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 

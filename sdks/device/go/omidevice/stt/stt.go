@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gorilla/websocket"
 )
@@ -34,14 +35,14 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 
 type wsTranscriber struct {
 	conn  *websocket.Conn
-	ready bool
+	ready atomic.Bool
 }
 
 func (t *wsTranscriber) AppendPCM(pcm []byte) error {
 	if t.conn == nil {
 		return fmt.Errorf("not connected")
 	}
-	if !t.ready {
+	if !t.ready.Load() {
 		return nil
 	}
 	return t.conn.WriteMessage(websocket.BinaryMessage, pcm)
@@ -72,7 +73,8 @@ func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn, ready: true}
+	t := &wsTranscriber{conn: conn}
+	t.ready.Store(true)
 	go readDeepgram(conn, onTranscript)
 	return t, nil
 }
@@ -115,7 +117,7 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn, ready: false}
+	t := &wsTranscriber{conn: conn}
 	// wait ready in background and stream
 	go func() {
 		for {
@@ -128,7 +130,7 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 				continue
 			}
 			if msg["type"] == "ready" {
-				t.ready = true
+				t.ready.Store(true)
 				continue
 			}
 			if text := extractText(msg); text != "" && onTranscript != nil {

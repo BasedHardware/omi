@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift
   - desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
   - desktop/macos/Desktop/Sources/Auth/AuthStorageCanary.swift
+  - desktop/macos/Desktop/Sources/Auth/DesktopDeveloperSecretStore.swift
   - desktop/macos/Desktop/Sources/DesktopKeychainStore.swift
   - desktop/macos/Desktop/Sources/Logger.swift
   - desktop/macos/Desktop/Sources/Observability/SentryBeforeSendPolicy.swift
@@ -28,7 +29,6 @@ covers:
   - desktop/macos/Desktop/Sources/AgentVMService.swift
   - desktop/macos/Desktop/Sources/APIKeyService.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
-  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexScanPolicy.swift
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
   - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift

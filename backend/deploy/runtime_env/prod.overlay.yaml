@@ -400,6 +400,9 @@ overlay:
         env:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: indexed
+            category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend
       daily-memory-sweep-job:
