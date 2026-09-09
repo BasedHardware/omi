@@ -1,14 +1,8 @@
 import React, {useCallback, useLayoutEffect, useRef} from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {FlatList, StyleSheet, Text, View} from 'react-native';
 import X from 'lucide-react-native/icons/x';
 import type {ChatMessage} from '../chatClient';
-import {ChatMessageRow} from '../ui/ChatTranscript';
+import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {ScrollFade, useScrollFade} from './ScrollFade';
@@ -116,13 +110,7 @@ export function DesktopChat({
             </View>
           }
           ListFooterComponent={
-            busy ? (
-              <ActivityIndicator
-                accessibilityLabel="Omi is replying"
-                color={token.color.inkMuted}
-                style={styles.thinking}
-              />
-            ) : null
+            busy ? <ChatThinking reduceMotion={reduceMotion} desktop /> : null
           }
         />
       </ScrollFade>
@@ -148,7 +136,6 @@ const styles = StyleSheet.create({
   title: {fontSize: 24, color: token.color.ink, fontWeight: '600'},
   muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
   earlier: {alignSelf: 'center', padding: 10},
-  thinking: {padding: 12},
   header: {alignItems: 'flex-end'},
   close: {
     width: 32,
