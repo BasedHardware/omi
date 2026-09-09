@@ -1129,7 +1129,8 @@ test('Home renders real memories alongside conversations', () => {
   const tree = renderedText(renderer);
   expect(tree).toContain('Conversations & memories');
   expect(tree).toContain('Prefers concise release notes');
-  expect(tree).toContain('Memory');
+  expect(tree).toContain('0 citations');
+  expect(tree).not.toMatch(/(^| )Memory( |$)/);
 });
 
 test('Home opens the real Rewind destination', async () => {

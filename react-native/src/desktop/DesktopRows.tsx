@@ -9,6 +9,7 @@ import {
   conversationListUsesListenOverview,
   conversationRecapTitle,
   formatTaskDue,
+  memoryCitationCopy,
   memoryDisplayBody,
   memoryDisplayTitle,
   projectionClockLabel,
@@ -83,7 +84,9 @@ export const ReadRow = memo(function ReadRow({
     );
   }
   const meta =
-    item.kind === 'memory' ? [timeLabel(item), 'Memory'] : [timeLabel(item)];
+    item.kind === 'memory'
+      ? [timeLabel(item), memoryCitationCopy(item.citations)]
+      : [timeLabel(item)];
   return (
     <View style={styles.row}>
       <RowGlyph kind={item.kind} />

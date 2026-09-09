@@ -47,7 +47,61 @@ test('a zero Home current timestamp says Time unavailable instead of omitting th
   const copy = textOf(renderer);
   expect(copy).toContain('Time unavailable');
   expect(copy).toContain('Undated memory');
+  expect(copy).toContain('0 citations');
   expect(copy).not.toContain('1970');
+  expect(copy).not.toMatch(/(^| )Memory( |$)/);
+});
+
+test('Home currents keep memory citation counts instead of a Memory kind label', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-cited',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: ['citation-v1:launch', 'citation-v1:home'],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'input',
+      outputDigest: 'output',
+    },
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('A walk.');
+  expect(copy).toContain('2 citations');
+  expect(copy).not.toContain('citation-v1:launch');
+  expect(copy).not.toMatch(/(^| )Memory( |$)/);
+});
+
+test('Home currents omit whitespace-only memory citations from the count', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-blank-citations',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: [' \t\n', ''],
+    timestamp: null,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('0 citations');
+  expect(copy).not.toContain('2 citations');
 });
 
 test('Home currents keep listen overview speech on the row title', () => {
