@@ -172,6 +172,9 @@ describe("device transcription client projection", () => {
     expect(recordingTranscriptSpeech("", segments)).toContain("Later speech");
     expect(recordingListSpeech("", segments)).toBe("First words Later speech");
     expect(recordingListSpeech("Stored speech", segments)).toBe(
+      "First words Later speech"
+    );
+    expect(recordingTranscriptSpeech("Stored speech", segments)).toBe(
       "Stored speech"
     );
   });
@@ -185,6 +188,21 @@ describe("device transcription client projection", () => {
       "First words\u0085 \u0085Later speech"
     );
     expect(recordingListSpeech("", segments)).toBe("First words Later speech");
+  });
+
+  test("list titles scan the first 240 Whisper segments like production Listen 0065", () => {
+    const segments = [
+      { start: 0, end: 0.1, text: "First words" },
+      ...Array.from({ length: 239 }, (_, index) => ({
+        start: 0.1 + index,
+        end: 0.2 + index,
+        text: "\u0085",
+      })),
+      { start: 240, end: 241, text: "Hidden later" },
+    ];
+    expect(recordingListSpeech("", segments)).toBe("First words");
+    expect(recordingListSpeech("", segments)).not.toContain("Hidden later");
+    expect(recordingTranscriptSpeech("", segments)).toContain("Hidden later");
   });
 
   test("GET maps DeviceAudioError codes to invalid_audio like production Listen", () => {

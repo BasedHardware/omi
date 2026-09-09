@@ -130,9 +130,7 @@ export async function readConversations(
     .prepare(
       `SELECT s.id, s.started_at, s.ended_at, s.captured_at_ms, t.state, substr(${visibleStoredTextTrimSql(
         "t.text"
-      )}, 1, 241) AS text, CASE WHEN length(${visibleStoredTextTrimSql(
-        "t.text"
-      )}) > 0 THEN NULL ELSE t.segments END AS segments, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
+      )}, 1, 241) AS text, t.segments, t.updated_at FROM device_transcriptions t JOIN device_sessions s ON s.id = t.session_id AND s.account_id = t.account_id WHERE t.account_id = ? ORDER BY s.started_at DESC`
     )
     .bind(accountId)
     .all<{
@@ -148,7 +146,9 @@ export async function readConversations(
   for (const recording of recordings.results) {
     const segments = parseStoredTranscriptSegments(recording.segments) ?? [];
     const speech =
-      recordingListSpeech(recording.text, segments) ?? recording.text ?? "";
+      recording.state === "completed"
+        ? recordingListSpeech(recording.text, segments) ?? recording.text ?? ""
+        : "";
     conversations.push({
       id: `recording:${recording.id}`,
       title: recordingExcerpt(speech).slice(0, 80),

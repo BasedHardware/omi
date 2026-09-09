@@ -277,6 +277,39 @@ test("recording titles visible-trim kept Whisper segments before join", async ()
   expect(rows[0]?.overview).not.toContain("\u0085");
 });
 
+test("recording titles use skip-empty segment speech when stored text is also present", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ?, segments = ? WHERE session_id = ?"
+  )
+    .bind(
+      "Stored speech",
+      JSON.stringify([
+        { start: 0, end: 0.1, text: "First words" },
+        ...Array.from({ length: 200 }, (_, index) => ({
+          start: 0.1 + index,
+          end: 0.2 + index,
+          text: "\u0085",
+        })),
+        { start: 200, end: 201, text: "Later speech" },
+      ]),
+      session.id
+    )
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "First words Later speech",
+    overview: "First words Later speech",
+    source: "omi",
+    status: "completed",
+  });
+  expect(rows[0]?.title).not.toContain("Stored speech");
+  expect(rows[0]?.overview).not.toContain("Stored speech");
+});
+
 test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", async () => {
   const session = await recording();
   await completeDeviceSession(env.DB, "record-owner", session.id, 102);

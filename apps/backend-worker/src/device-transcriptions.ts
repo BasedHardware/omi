@@ -275,7 +275,7 @@ function joinWellFormedSegmentTexts(
     }
     if (typeof text !== "string") return null;
     if (skipEmptyAfterTrim) {
-      const visible = visibleTranscriptText(text);
+      const visible = visibleTranscriptText(text).slice(0, 240);
       if (visible === "") continue;
       parts.push(visible);
       continue;
@@ -296,7 +296,7 @@ export function recordingListSpeech(
   storedText: string | null,
   segments: unknown[]
 ): string | null {
-  return recordingSpeech(storedText, segments, true);
+  return recordingSpeech(storedText, segments.slice(0, 240), true);
 }
 
 function recordingSpeech(
@@ -306,6 +306,9 @@ function recordingSpeech(
 ): string | null {
   const joined = joinWellFormedSegmentTexts(segments, skipEmptyAfterTrim);
   if (joined === null) return storedText;
+  if (skipEmptyAfterTrim && visibleTranscriptText(joined) !== "") {
+    return joined;
+  }
   const storedVisible =
     storedText === null ? "" : visibleTranscriptText(storedText);
   if (storedVisible === "" && visibleTranscriptText(joined) !== "") {
