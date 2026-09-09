@@ -296,7 +296,8 @@ extension DesktopAlertPresenting {
   func pauseQueueUntilAppActive() {}
 }
 
-/// The root observable application state for the desktop shell.
+/// The root observable application state for the desktop shell: it owns
+/// the session lifecycle and the state every scene observes.
 @MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
