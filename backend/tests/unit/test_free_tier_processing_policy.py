@@ -470,14 +470,31 @@ def test_structure_feature_is_configured_and_not_on_the_free_allowlist(policy) -
 # --- 5. rollout helper reads the module constant; env parse is true-only -----------------------
 
 
-# red-proof: snapshot the flag at import (`return True`) so monkeypatching the constant is ignored
+# red-proof: snapshot the flag at import (`return True`) so monkeypatching the constant is ignored;
+# red-proof: drop the cohort consult (`return FREE_TIER_LOCAL_PROCESSING`) and the flag lights everyone
 def test_free_tier_local_processing_enabled_reads_module_constant_and_is_monkeypatchable(monkeypatch, policy) -> None:
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', f'uid:{UID}')
     monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', True)
-    assert policy.free_tier_local_processing_enabled() is True
+    assert policy.free_tier_local_processing_enabled(UID) is True
     monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', False)
-    assert policy.free_tier_local_processing_enabled() is False
-    monkeypatch.setattr(policy, 'free_tier_local_processing_enabled', lambda: True)
+    assert policy.free_tier_local_processing_enabled(UID) is False
+    monkeypatch.setattr(policy, 'free_tier_local_processing_enabled', lambda uid=None: True)
     assert policy.free_tier_local_processing_enabled() is True
+
+
+def test_flag_is_necessary_never_sufficient(monkeypatch, policy) -> None:
+    """A lit flag admits only the configured cohort; no uid or no cohort admits nobody."""
+    monkeypatch.setattr(policy, 'FREE_TIER_LOCAL_PROCESSING', True)
+    monkeypatch.delenv('FREE_TIER_LOCAL_PROCESSING_COHORT', raising=False)
+    assert policy.free_tier_local_processing_enabled(UID) is False
+    assert policy.free_tier_local_processing_enabled() is False
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', f'uid:{UID}')
+    assert policy.free_tier_local_processing_enabled(UID) is True
+    assert policy.free_tier_local_processing_enabled('someone-else') is False
+    # The coordinator's no-uid call is fail-closed even for a configured cohort.
+    assert policy.free_tier_local_processing_enabled() is False
+    monkeypatch.setenv('FREE_TIER_EMERGENCY_STOP', 'true')
+    assert policy.free_tier_local_processing_enabled(UID) is False
 
 
 def _load_policy_with_env(value: str | None) -> ModuleType:
@@ -517,12 +534,20 @@ def _load_policy_with_env(value: str | None) -> ModuleType:
 )
 def test_env_parse_accepts_only_true_case_insensitive(value, expected) -> None:
     previous = os.environ.get('FREE_TIER_LOCAL_PROCESSING')
+    previous_cohort = os.environ.get('FREE_TIER_LOCAL_PROCESSING_COHORT')
+    os.environ['FREE_TIER_LOCAL_PROCESSING_COHORT'] = f'uid:{UID}'
     try:
         mod = _load_policy_with_env(value)
         assert mod.FREE_TIER_LOCAL_PROCESSING is expected
-        assert mod.free_tier_local_processing_enabled() is expected
+        assert mod.free_tier_local_processing_enabled(UID) is expected
+        # A lit flag never answers a uid-less caller.
+        assert mod.free_tier_local_processing_enabled() is False
     finally:
         if previous is None:
             os.environ.pop('FREE_TIER_LOCAL_PROCESSING', None)
         else:
             os.environ['FREE_TIER_LOCAL_PROCESSING'] = previous
+        if previous_cohort is None:
+            os.environ.pop('FREE_TIER_LOCAL_PROCESSING_COHORT', None)
+        else:
+            os.environ['FREE_TIER_LOCAL_PROCESSING_COHORT'] = previous_cohort

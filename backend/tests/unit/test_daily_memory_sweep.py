@@ -2209,7 +2209,7 @@ def _run_sweep_for_plan(monkeypatch, *, suppression_on: bool, allowed: bool, rea
     source_calls = []
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.free_tier_memory_suppression_enabled",
-        lambda: suppression_on,
+        lambda uid=None: suppression_on,
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.authorize_managed_compute",
