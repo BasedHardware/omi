@@ -1413,6 +1413,33 @@ describe("composeGenerationPrompt", () => {
     expect(result.prompt).not.toContain("notes.txt");
   });
 
+  test("keeps visible attachment speech after a NEXT LINE prefix longer than the excerpt budget", async () => {
+    const prefix = "\u0085".repeat(GENERATION_ATTACHMENT_TEXT_BUDGET / 2);
+    await insertBound(db, {
+      id: "att-nel-budget",
+      accountId: "acct-a",
+      messageId: "msg-nel-budget",
+      mimeType: "text/plain",
+      displayName: "notes.txt",
+    });
+    r2.putBytes(
+      "attachments/acct-a/att-nel-budget",
+      new TextEncoder().encode(`${prefix}Recorded words`)
+    );
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "msg-nel-budget",
+      "summarize this"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.prompt).toContain("summarize this");
+    expect(result.prompt).toContain("Recorded words");
+    expect(result.prompt).toContain("notes.txt");
+  });
+
   test("omits a whitespace-only attachment name while keeping visible file bytes", async () => {
     await insertBound(db, {
       id: "att-blank-name",

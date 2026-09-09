@@ -152,22 +152,55 @@ type TextExcerpt =
   | { kind: "empty" }
   | { kind: "missing" };
 
+type TextExcerptChunk =
+  | {
+      kind: "text";
+      value: string;
+      byteLength: number;
+      truncated: boolean;
+    }
+  | { kind: "empty" }
+  | { kind: "missing" };
+
 async function readTextExcerpt(
   r2: R2Bucket | undefined,
   r2Key: string,
   maxBytes: number
 ): Promise<TextExcerpt> {
   if (r2 === undefined || maxBytes <= 0) return { kind: "empty" };
+  let offset = 0;
+  let skipped = 0;
+  for (;;) {
+    const chunk = await readTextExcerptRange(r2, r2Key, maxBytes, offset);
+    if (chunk.kind !== "text") return chunk;
+    const visible = visibleGenerationTrim(chunk.value);
+    if (isVisibleGenerationText(visible)) {
+      return { kind: "text", value: utf8Prefix(visible, maxBytes) };
+    }
+    if (!chunk.truncated || chunk.byteLength === 0) return { kind: "empty" };
+    skipped += chunk.byteLength;
+    if (skipped > GENERATION_ATTACHMENT_TEXT_BUDGET) return { kind: "empty" };
+    offset += chunk.byteLength;
+  }
+}
+
+async function readTextExcerptRange(
+  r2: R2Bucket,
+  r2Key: string,
+  maxBytes: number,
+  offset: number
+): Promise<TextExcerptChunk> {
   try {
     const object = await r2.get(r2Key, {
-      range: { offset: 0, length: maxBytes },
+      range: { offset, length: maxBytes },
     });
     if (object === null) return { kind: "missing" };
     const bytes = new Uint8Array(await object.arrayBuffer());
     if (bytes.byteLength === 0) return { kind: "empty" };
     if (bytes.includes(0)) return { kind: "missing" };
     const truncated =
-      typeof object.size === "number" && object.size > bytes.byteLength;
+      typeof object.size === "number" &&
+      object.size > offset + bytes.byteLength;
     try {
       return {
         kind: "text",
@@ -175,6 +208,8 @@ async function readTextExcerpt(
           bytes,
           truncated ? { stream: true } : undefined
         ),
+        byteLength: bytes.byteLength,
+        truncated,
       };
     } catch {
       return { kind: "missing" };
