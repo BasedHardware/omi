@@ -122,7 +122,14 @@ class PageWriteTests(unittest.TestCase):
                     raise failure
                 return failure
             response = Mock(status_code=200)
-            response.json.return_value = {"id": "created-page", "url": "https://www.notion.so/created-page"} if method == "POST" else {"results": []}
+            # The append endpoint returns newly created first-level blocks,
+            # including object/id even without read-content capabilities.
+            response.json.return_value = {"id": "created-page", "url": "https://www.notion.so/created-page"} if method == "POST" else {
+                "object": "list", "type": "block", "block": {},
+                "has_more": False, "next_cursor": None,
+                "results": [{"object": "block", "id": f"00000000-0000-4000-8000-{len(calls) * 100 + index:012d}"}
+                            for index in range(len(calls[-1][3]["children"]))],
+            }
             return response
 
         body = {"uid": "test-user", "content": content}
@@ -276,6 +283,56 @@ class PageWriteTests(unittest.TestCase):
                 self.assertIn("not confirmed", result.error)
                 self.assertIn("before retrying", result.error)
                 self.assertNotIn("private", result.error)
+
+    def test_malformed_append_success_does_not_confirm_the_batch(self):
+        blocks = [{"object": "block", "id": f"00000000-0000-4000-8000-{index:012d}"} for index in range(100)]
+        invalid_results = [
+            {"foo": "bar"},
+            {"object": "page", "id": "unrelated-page"},
+            {"object": "page", "results": blocks},
+            {"results": blocks},
+            {"object": "list"},
+        ]
+        for results in (None, "private malformed results", {},
+                        [None] * 100, ["block"] * 100, [{}] * 100,
+                        [{"object": "page", "id": block["id"]} for block in blocks],
+                        [{"object": "block", "id": None}] * 100,
+                        [{"object": "block", "id": " "}] * 100,
+                        [{"object": "block", "id": 123}] * 100):
+            invalid_results.append({"object": "list", "results": results})
+
+        for create, fail_at in ((False, 1), (False, 2), (True, 2)):
+            for payload in invalid_results:
+                with self.subTest(create=create, fail_at=fail_at, payload=payload):
+                    response = Mock(status_code=200)
+                    response.json.return_value = payload
+                    result, calls = self.write("\n".join(f"p{index}" for index in range(301)), create=create, fail_at=fail_at, failure=response)
+                    self.assertEqual(len(calls), fail_at)
+                    self.assertIsNone(result.result)
+                    self.assertIn(f"{(fail_at - 1) * 100} of 301", result.error)
+                    self.assertIn("created-page" if create else "existing-page", result.error)
+                    self.assertIn("not confirmed", result.error)
+                    self.assertIn("may have been applied", result.error)
+                    self.assertIn("duplicate", result.error)
+                    self.assertNotIn("private", result.error)
+
+    def test_paginated_append_response_acknowledges_the_submitted_batch(self):
+        # The version-matched SDK permits a paginated list of partial blocks:
+        # https://github.com/makenotion/notion-sdk-js/blob/v2.2.15/src/api-endpoints.ts
+        for create in (False, True):
+            with self.subTest(create=create):
+                response = Mock(status_code=200)
+                response.json.return_value = {
+                    "object": "list", "type": "block", "block": {},
+                    "has_more": True, "next_cursor": "opaque-cursor",
+                    "results": [{"object": "block", "id": "00000000-0000-4000-8000-000000000001"}],
+                }
+                result, calls = self.write("\n".join(f"p{index}" for index in range(301)), create=create, fail_at=2, failure=response)
+                self.assertIsNone(result.error)
+                self.assertEqual(len(calls), 4)
+                self.assertEqual([len(call[3]["children"]) for call in calls], [100, 100, 100, 1])
+                self.assertEqual(self.saved_paragraphs(calls), [f"p{index}" for index in range(301)])
+                self.assertIn("**Page Created!**" if create else "Added 301 paragraph(s)", result.result)
 
     def test_write_logs_omit_content_and_upstream_error_details(self):
         content = "private synthetic note contents"

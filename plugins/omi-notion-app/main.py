@@ -108,6 +108,24 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
         return {"error": str(e)}
 
 
+def append_response_valid(result: Any) -> bool:
+    """Recognize the documented successful append response before counting a batch."""
+    if not isinstance(result, dict) or result.get("object") != "list" or "error" in result:
+        return False
+    blocks = result.get("results")
+    # The response can be paginated and contain partial block objects. It
+    # acknowledges the write; its result count need not equal the batch size.
+    if not isinstance(blocks, list):
+        return False
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("object") != "block":
+            return False
+        block_id = block.get("id")
+        if not isinstance(block_id, str) or not block_id.strip():
+            return False
+    return True
+
+
 def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int, total: int) -> Optional[str]:
     """Stop at the first unconfirmed write; replay could duplicate saved content."""
     for batch in batches:
@@ -115,7 +133,7 @@ def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int
             result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data=batch)
         except Exception:
             result = None
-        if not isinstance(result, dict) or not result or "error" in result:
+        if not append_response_valid(result):
             status = result.get("status_code") if isinstance(result, dict) else None
             diagnostic = f" (HTTP {status})" if status else ""
             return (

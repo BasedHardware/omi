@@ -140,6 +140,12 @@ Batches are sent in order. A failed write stops the operation without replaying
 earlier requests. The error includes the page ID and confirmed paragraph-block
 count (including a page already created), since a failed transport response may
 still have committed. Inspect the page before retrying to avoid duplicate text.
+The [append response](https://developers.notion.com/reference/patch-block-children)
+must have the documented list shape and returned block identities before a
+batch is confirmed. A valid paginated response acknowledges the submitted
+request, so confirmed counts track accepted request batches rather than the
+number of returned results. Malformed responses stop the operation with only
+earlier accepted batches included in the error count.
 
 Run `python3 plugins/omi-notion-app/test_main.py` from the repository root.
 The hermetic tests import the production module with framework/storage doubles
