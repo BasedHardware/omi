@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a finished chat answer briefly jumping back to an older, shorter version with its tool chips while it settled, and made long transcripts stay responsive while an answer streams"
+}
