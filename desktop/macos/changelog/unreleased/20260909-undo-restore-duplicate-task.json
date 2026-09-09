@@ -1,3 +1,0 @@
-{
-  "change": "Fixed undoing the deletion of a completed task duplicating it instead of restoring it"
-}
