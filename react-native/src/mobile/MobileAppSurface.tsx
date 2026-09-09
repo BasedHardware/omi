@@ -24,6 +24,7 @@ import Puzzle from 'lucide-react-native/icons/puzzle';
 import Settings from 'lucide-react-native/icons/settings';
 import {
   desktopBackendUnavailableCopy,
+  formatTaskDue,
   taskDisplayTitle,
   visibleDisplayText,
 } from '../desktopReadClient';
@@ -47,6 +48,7 @@ export type MobileTask = {
   id: string;
   title: string;
   completed: boolean;
+  dueAt?: number | null;
 };
 
 export type MobileRecap = {
@@ -160,11 +162,13 @@ const TaskRow = memo(function TaskRow({
   onToggle,
   onEdit,
   busy,
+  showDue = false,
 }: {
   task: MobileTask;
   onToggle?: (id: string) => void;
   onEdit?: (id: string) => void;
   busy: boolean;
+  showDue?: boolean;
 }) {
   return (
     <View style={styles.taskRow}>
@@ -190,9 +194,19 @@ const TaskRow = memo(function TaskRow({
         <View
           style={[styles.checkbox, task.completed && styles.checkboxDone]}
         />
-        <Text style={[styles.taskText, task.completed && styles.taskTextDone]}>
-          {taskDisplayTitle(task)}
-        </Text>
+        <View style={styles.taskCopy}>
+          <Text
+            style={[styles.taskText, task.completed && styles.taskTextDone]}>
+            {taskDisplayTitle(task)}
+          </Text>
+          {showDue ? (
+            <Text style={styles.taskDue}>
+              {task.completed
+                ? `Completed · ${formatTaskDue(task.dueAt ?? null)}`
+                : formatTaskDue(task.dueAt ?? null)}
+            </Text>
+          ) : null}
+        </View>
       </Pressable>
       {onEdit && (
         <Pressable
@@ -679,6 +693,7 @@ export function MobileAppSurface({
                         : undefined
                     }
                     busy={busyTaskId !== null}
+                    showDue
                     task={item}
                   />
                 )}
@@ -967,6 +982,12 @@ const styles = StyleSheet.create({
     gap: mobileSpace.md,
     alignItems: 'flex-start',
   },
+  taskCopy: {flex: 1},
+  taskDue: {
+    ...mobileType.caption,
+    color: mobileColor.textMuted,
+    marginTop: 3,
+  },
   taskEdit: {minHeight: 44, minWidth: 44, justifyContent: 'center'},
   taskEditText: {color: mobileColor.text, fontSize: 13},
   checkbox: {
@@ -978,7 +999,7 @@ const styles = StyleSheet.create({
     width: 25,
   },
   checkboxDone: {backgroundColor: mobileColor.textSubtle},
-  taskText: {...mobileType.body, color: mobileColor.text, flex: 1},
+  taskText: {...mobileType.body, color: mobileColor.text},
   taskTextDone: {
     color: mobileColor.textSubtle,
     textDecorationLine: 'line-through',

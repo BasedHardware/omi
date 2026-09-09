@@ -1059,6 +1059,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       readOutcomes?.tasks.status === 'success'
         ? readOutcomes.tasks.value.items.map(task => ({
             completed: task.completed,
+            dueAt: task.dueAt,
             id: task.id,
             title: task.title,
           }))

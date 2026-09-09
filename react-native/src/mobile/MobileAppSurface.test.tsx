@@ -49,6 +49,7 @@ jest.mock('react-native-safe-area-context', () => ({
     require('react').createElement('SafeAreaContextView', props, children),
 }));
 
+import {formatTaskDue} from '../desktopReadClient';
 import {MobileAppSurface, type MobileAppSurfaceProps} from './MobileAppSurface';
 
 function buildProps(
@@ -1045,4 +1046,73 @@ test('compact Home omits a capture microphone without a start-capture producer',
   ).toHaveLength(0);
   expect(renderedText(renderer)).toContain('Listening');
   act(() => renderer.unmount());
+});
+
+test('compact Tasks tab keeps GET due dates instead of title-only', () => {
+  const dueAt = 1_767_225_600;
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {id: 'task-1', title: 'Prepare product demo', completed: false, dueAt},
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Prepare product demo');
+  expect(copy).toContain(formatTaskDue(dueAt));
+  expect(copy).not.toContain('Completed');
+});
+
+test('compact Tasks tab keeps GET completed due dates instead of title-only', () => {
+  const dueAt = 1_767_225_600;
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {id: 'task-1', title: 'Prepare product demo', completed: true, dueAt},
+    ],
+  });
+  expect(renderedText(renderer)).toContain(
+    `Completed · ${formatTaskDue(dueAt)}`,
+  );
+});
+
+test('compact Tasks tab missing due says No due date', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {
+        id: 'task-1',
+        title: 'Prepare product demo',
+        completed: false,
+        dueAt: null,
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('No due date');
+});
+
+test('a zero compact Tasks due timestamp says Date unavailable instead of 1970', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {id: 'task-1', title: 'Prepare product demo', completed: false, dueAt: 0},
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Date unavailable');
+  expect(copy).not.toContain('1970');
+  expect(copy).not.toContain('No due date');
+});
+
+test('compact Home task previews stay title-only', () => {
+  const dueAt = 1_767_225_600;
+  const renderer = render({
+    tasks: [
+      {id: 'task-1', title: 'Prepare product demo', completed: false, dueAt},
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Prepare product demo');
+  expect(copy).not.toContain(formatTaskDue(dueAt));
+  expect(copy).not.toContain('No due date');
+  expect(copy).not.toContain('Completed ·');
 });
