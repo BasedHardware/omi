@@ -111,4 +111,3 @@ class GetSolarTimesRequest(BaseModel):
             return parsed.isoformat()
         except ValueError:
             raise ValueError("Date must be in YYYY-MM-DD format (e.g. '2026-09-08').")
-
