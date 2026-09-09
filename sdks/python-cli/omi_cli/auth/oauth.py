@@ -292,6 +292,24 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
     key_name = _cli_key_name()
 
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        # Snapshot existing CLI keys before minting so that:
+        # 1. Stale keys are known prior to creation, and
+        # 2. Overlapping concurrent logins on the same host do not inadvertently delete
+        #    each other's freshly minted keys.
+        stale_key_ids: set[str] = set()
+        try:
+            listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
+            if listing.status_code == 200:
+                raw_list = listing.json()
+                if isinstance(raw_list, list):
+                    for key in raw_list:
+                        if isinstance(key, dict) and key.get("name") == key_name:
+                            k_id = key.get("id")
+                            if isinstance(k_id, str) and k_id:
+                                stale_key_ids.add(k_id)
+        except httpx.HTTPError:
+            pass
+
         resp = client.post(
             f"{base}{_DEV_KEYS_PATH}",
             headers=headers,
@@ -316,22 +334,21 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
             )
 
         new_key_id = resp_data.get("id") if isinstance(resp_data, dict) else None
+        if not isinstance(new_key_id, str) or not new_key_id:
+            # When the response omits an ID, return the minted key without risking
+            # accidental deletion of the fresh credential.
+            return str(raw_key)
 
-        # Best-effort cleanup of our own stale keys after replacement mint succeeds.
-        # Non-critical: if listing or deleting fails, the newly minted key remains valid.
-        try:
-            listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
-            if listing.status_code == 200:
-                for key in listing.json():
-                    if (
-                        isinstance(key, dict)
-                        and key.get("name") == key_name
-                        and key.get("id")
-                        and key.get("id") != new_key_id
-                    ):
-                        client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
-        except httpx.HTTPError:
-            pass
+        # Discard the new key from stale candidates (in case the snapshot already had it)
+        stale_key_ids.discard(new_key_id)
+
+        # Best-effort cleanup of only pre-mint snapshot keys after replacement mint succeeds.
+        if stale_key_ids:
+            try:
+                for stale_id in stale_key_ids:
+                    client.delete(f"{base}{_DEV_KEYS_PATH}/{stale_id}", headers=headers)
+            except httpx.HTTPError:
+                pass
 
     return str(raw_key)
 
