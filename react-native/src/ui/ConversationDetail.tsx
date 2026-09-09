@@ -4,7 +4,9 @@ import {
   clockLabel,
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationHasFinishClock,
   conversationStatusCopy,
+  formatConversationDuration,
   visibleDisplayText,
   type ConversationProjection,
 } from '../desktopReadClient';
@@ -21,52 +23,6 @@ export function formatConversationDate(value: string | null): string {
   }
   const label = clockLabel(Date.parse(value), Date.now());
   return label === '' ? 'Time unavailable' : label;
-}
-
-export function conversationHasFinishClock(conversation: {
-  finishedAt: string | null;
-  status: string;
-}): boolean {
-  if (conversation.finishedAt !== null) {
-    return true;
-  }
-  const status = visibleDisplayText(conversation.status);
-  return status === 'completed' || status === 'failed';
-}
-
-export function formatConversationDuration(
-  startedAt: string | null,
-  finishedAt: string | null,
-): string {
-  if (startedAt === null || finishedAt === null) {
-    return 'Duration unavailable';
-  }
-  const startedAtMs = Date.parse(startedAt);
-  const finishedAtMs = Date.parse(finishedAt);
-  if (
-    !Number.isFinite(startedAtMs) ||
-    startedAtMs <= 0 ||
-    !Number.isFinite(finishedAtMs) ||
-    finishedAtMs <= 0
-  ) {
-    return 'Duration unavailable';
-  }
-  const duration = finishedAtMs - startedAtMs;
-  if (duration < 0) {
-    return 'Duration unavailable';
-  }
-  if (duration < 60_000) {
-    return '< 1 min';
-  }
-  const minutes = Math.round(duration / 60_000);
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0
-    ? `${hours} hr`
-    : `${hours} hr ${remainingMinutes} min`;
 }
 
 export function ConversationDetail({

@@ -13,10 +13,12 @@ import Search from 'lucide-react-native/icons/search';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationHasFinishClock,
   conversationListUsesListenOverview,
   conversationRecapTitle,
   conversationDayLabel,
   desktopBackendUnavailableCopy,
+  formatConversationDuration,
   visibleDisplayText,
   type ConversationProjection,
   type DesktopReadProjection,
@@ -25,9 +27,7 @@ import {
 import {FocusPressable} from '../ui/Pressable';
 import {
   ConversationDetail,
-  conversationHasFinishClock,
   formatConversationDate,
-  formatConversationDuration,
 } from '../ui/ConversationDetail';
 import {ReadStatus, emptyLibraryCopy} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';

@@ -1438,6 +1438,100 @@ test('wide Home search rows keep listen overview speech on the title', () => {
   ).toBeGreaterThan(0);
 });
 
+test('wide Home search rows keep GET duration instead of title-only', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:quick-home-search',
+        title: 'Quick note',
+        summary: 'Twenty seconds.',
+        searchableText: 'Quick note\nTwenty seconds.',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Quick note');
+  expect(tree).toContain('< 1 min');
+  expect(tree).not.toContain('0 min');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 1 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('< 1 min'),
+    ).length,
+  ).toBe(0);
+});
+
+test('wide Home search in-progress chats omit Duration unavailable', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'chat:session-alpha',
+        title: 'Hi',
+        summary: 'Later independent turn',
+        searchableText: 'Hi\nLater independent turn',
+        createdAt: '2026-09-07T00:00:00.000Z',
+        updatedAt: '2026-09-07T00:01:00.000Z',
+        startedAt: '2026-09-07T00:00:00.000Z',
+        finishedAt: null,
+        starred: false,
+        status: 'in_progress',
+        source: 'chat',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Hi');
+  expect(tree).toContain('Later independent turn');
+  expect(tree).not.toContain('Duration unavailable');
+});
+
+test('wide Home search rows with a zero start time say Duration unavailable', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:epoch-duration-home-search',
+        title: 'Missing start',
+        summary: 'Finished without a real start time.',
+        searchableText: 'Missing start\nFinished without a real start time.',
+        createdAt: new Date(0).toISOString(),
+        updatedAt: '2026-09-07T12:00:00.000Z',
+        startedAt: new Date(0).toISOString(),
+        finishedAt: '2026-09-07T12:00:00.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Duration unavailable');
+  expect(tree).not.toContain('hr');
+});
+
 test('wide Home search rows keep empty memory text visible', () => {
   const renderer = render(
     <ProjectionRow

@@ -8,21 +8,19 @@ import {
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
+  formatConversationDuration,
   formatTaskDue,
   memoryCitationCopy,
   memoryDisplayBody,
   memoryDisplayTitle,
   projectionClockLabel,
+  conversationHasFinishClock,
   taskDisplayTitle,
   type ConversationProjection,
   type DesktopReadProjection,
   type MemoryProjection,
   type TaskProjection,
 } from '../desktopReadClient';
-import {
-  conversationHasFinishClock,
-  formatConversationDuration,
-} from '../ui/ConversationDetail';
 import {desktopTokens as token} from './tokens';
 
 function timeLabel(item: DesktopReadProjection): string {
