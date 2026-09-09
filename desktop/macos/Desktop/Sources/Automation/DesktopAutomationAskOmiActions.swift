@@ -28,7 +28,7 @@ enum OpenAskOmiAutomation {
     _ navigation: ChatFirstShellNavigation = .shared
   ) -> Bool {
     guard isComposerPresented(navigation) else { return false }
-    return ShellSummon.shellWindow()?.firstResponder is NSTextView
+    return shellWindowIfAppRunning()?.firstResponder is NSTextView
   }
 
   /// Select Chat and claim the query-shell caret. Does not activate the app or exit quiet mode.
@@ -38,9 +38,23 @@ enum OpenAskOmiAutomation {
   ) {
     navigation.selectPrimary(.chat, origin: .chatDeeplink)
     NotificationCenter.default.post(name: .homeStageOpenChat, object: nil)
-    if ensureWindow, ShellSummon.shellWindow() == nil {
+    // A headless XCTest host has no NSApplication. Do not create one
+    // (`NSApplication.shared`) and do not ask AppDelegate to open a window.
+    if ensureWindow, runningApplication() != nil, shellWindowIfAppRunning() == nil {
       AppDelegate.openMainWindow?()
     }
+  }
+
+  /// `NSApp` is an IUO and is nil in a headless XCTest host. Never create
+  /// `NSApplication.shared` from here — that has AppKit side effects in tests.
+  fileprivate static func shellWindowIfAppRunning() -> NSWindow? {
+    guard runningApplication() != nil else { return nil }
+    return ShellSummon.shellWindow()
+  }
+
+  fileprivate static func runningApplication() -> NSApplication? {
+    let application: NSApplication? = NSApp
+    return application
   }
 
   static func detail(
@@ -120,7 +134,7 @@ private func openAskOmiForAutomation(wait: Bool) async -> [String: String] {
   let presentedImmediately = OpenAskOmiAutomation.isComposerPresented()
   let openMs = presentedImmediately ? start.duration(to: .now).askOmiMillisecondsString : "timeout"
   let quiet = presentation == .quiet
-  let canWaitForFocus = !quiet && ShellSummon.shellWindow() != nil
+  let canWaitForFocus = !quiet && OpenAskOmiAutomation.shellWindowIfAppRunning() != nil
   if !canWaitForFocus {
     return OpenAskOmiAutomation.detail(
       wait: true,

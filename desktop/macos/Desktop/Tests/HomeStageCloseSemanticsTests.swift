@@ -157,6 +157,20 @@ final class HomeStageCloseSemanticsTests: XCTestCase {
     XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
   }
 
+  /// CI's XCTest host has no NSApplication. Focus and ensure-window must not
+  /// touch `NSApp.windows` (IUO crash) or create `NSApplication.shared`.
+  func testOpenAskOmiStaysNilSafeWithoutNSApplication() throws {
+    let suiteName = "HomeStageCloseSemanticsTests.open-ask-omi-nil-app.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+    XCTAssertFalse(OpenAskOmiAutomation.isComposerFocused(navigation))
+    OpenAskOmiAutomation.requestComposer(navigation: navigation, ensureWindow: true)
+    XCTAssertEqual(navigation.route, .chat)
+  }
+
   func testOpenAskOmiContractOmitsFocusTimeoutWhenQuietBlocksFocus() {
     let detail = OpenAskOmiAutomation.detail(
       wait: true,
