@@ -526,6 +526,7 @@ class AppState: ObservableObject {
   /// recording policy or whether the microphone/meeting gate runs.
   var shouldCaptureSystemAudio: Bool {
     !UserDefaults.standard.bool(forKey: .disableSystemAudioCapture)
+      && !UserDefaults.standard.bool(forKey: .onboardingSystemAudioSkipped)
   }
   var vadGateService: VADGateService? {
     get { servicesCoordinator.vadGateService }

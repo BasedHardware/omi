@@ -3838,7 +3838,20 @@ class ChatProvider: ObservableObject {
       .init(message: userMessage, status: .completed),
       .init(message: assistantMessage, status: .streaming),
     ]
-    return await recordCanonicalExchange(turns) != nil
+    guard await recordCanonicalExchange(turns) != nil else { return false }
+    // The journal publishes this user row without the attachment bytes it
+    // never persists, so a first publication renders its tile from the picked
+    // file's path — blank once that path is an app-owned temp export the OS or
+    // a Quick Look purge removes. Put the just-sent bytes back on the row;
+    // later echoes keep them through `carryingLocalOnlyFields`.
+    if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+      let carried = ChatResource.carryingImageData(
+        messages[index].resources, from: userMessage.resources)
+      if carried != messages[index].resources {
+        messages[index].resources = carried
+      }
+    }
+    return true
   }
 
   /// Behavioral seam for the journal-first admission contract. Tests inject a

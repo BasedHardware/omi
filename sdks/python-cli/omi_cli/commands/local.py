@@ -235,7 +235,7 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
         if source:
             shutil.copyfile(source, output)
         else:
-            output.write_text(result)
+            output.write_text(result, encoding="utf-8")
         return output
 
     if isinstance(result, Mapping):
@@ -253,10 +253,10 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
 
         content = result.get("content")
         if isinstance(content, str):
-            output.write_text(content)
+            output.write_text(content, encoding="utf-8")
             return output
 
-    output.write_text(json.dumps(result, indent=2, sort_keys=False))
+    output.write_text(json.dumps(result, indent=2, sort_keys=False), encoding="utf-8")
     return output
 
 
@@ -380,13 +380,13 @@ def _add_exact_screen_fallback(
     next_payload = dict(payload)
     escaped_query = _sql_like_literal(query)
     query_clauses = [
-        f"appName LIKE '%{escaped_query}%'",
-        f"windowTitle LIKE '%{escaped_query}%'",
-        f"ocrText LIKE '%{escaped_query}%'",
+        f"appName LIKE '%{escaped_query}%' ESCAPE '!'",
+        f"windowTitle LIKE '%{escaped_query}%' ESCAPE '!'",
+        f"ocrText LIKE '%{escaped_query}%' ESCAPE '!'",
     ]
     if app_filter:
         escaped_app = _sql_like_literal(app_filter)
-        where_clause = f"(appName LIKE '%{escaped_app}%') AND ({' OR '.join(query_clauses)})"
+        where_clause = f"(appName LIKE '%{escaped_app}%' ESCAPE '!') AND ({' OR '.join(query_clauses)})"
     else:
         where_clause = "(" + " OR ".join(query_clauses) + ")"
 
@@ -413,7 +413,7 @@ def _add_exact_screen_fallback(
 
 
 def _sql_like_literal(value: str) -> str:
-    return value.replace("'", "''")
+    return value.replace("!", "!!").replace("%", "!%").replace("_", "!_").replace("'", "''")
 
 
 def _first_string(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> Optional[str]:

@@ -986,7 +986,7 @@ def update_action_item(
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
-    # Build update data from non-None fields
+    # Build update data from explicitly provided fields so due_at=null can clear the date.
     update_data = {}
     if request.description is not None:
         update_data['description'] = request.description.strip()
@@ -997,7 +997,7 @@ def update_action_item(
             update_data['completed_at'] = datetime.now(timezone.utc)
         else:
             update_data['completed_at'] = None
-    if request.due_at is not None:
+    if 'due_at' in request.model_fields_set:
         update_data['due_at'] = request.due_at
 
     if not update_data:

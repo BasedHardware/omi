@@ -44,6 +44,27 @@ import XCTest
       XCTAssertEqual(snap.firstChunksEnergyBucket, .none)
     }
 
+    func testPermissionDenialClosesAttemptWithItsOwnTerminalClass() {
+      let recorder = makeRecorder()
+      // Not the shared `begin` helper: that seeds micPermissionGranted: true, which
+      // would emit tcc_microphone_granted: true on the snapshot for an attempt the
+      // microphone permission is what refused.
+      recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: false)
+
+      let snap = recorder.terminate(
+        disposition: .permissionDenied,
+        source: "permission_gate",
+        peak: nil,
+        rms: nil,
+        turnAudioSeconds: nil,
+        voicedAudioSeconds: nil,
+        judgeable: false)
+
+      XCTAssertEqual(snap.failureClass, .permissionDenied)
+      XCTAssertEqual(snap.turnDisposition, .permissionDenied)
+      XCTAssertEqual(snap.captureStartOutcome, .notRequested)
+    }
+
     // MARK: - Failure classification 2: zero / near-zero samples
 
     func testOperationalCaptureWithOnlyZeroSamplesClassifiesZeroSamples() {
@@ -481,6 +502,79 @@ import XCTest
       clock.advance(milliseconds: 947)
 
       XCTAssertEqual(recorder.holdSeconds ?? 0, 0.947, accuracy: 0.001)
+    }
+
+    // MARK: - Turn kind classification
+
+    /// `turn_kind` rides the same snapshot as the capture funnel so a
+    /// release-health query splits dictation vs question without using the
+    /// product event as its denominator.
+    func testTerminateCarriesTheExplicitTurnKind() {
+      for (kind, raw) in [
+        (PTTAttemptLifecycleRecorder.TurnKind.dictation, "dictation"),
+        (.question, "question"),
+        (.unknown, "unknown"),
+      ] {
+        let recorder = makeRecorder()
+        begin(recorder)
+        captureAccepted(recorder)
+        let snapshot = recorder.terminate(
+          disposition: .committed,
+          turnKind: kind,
+          source: "hub",
+          peak: 1200,
+          rms: 300,
+          turnAudioSeconds: 2,
+          voicedAudioSeconds: 1,
+          judgeable: true)
+        XCTAssertEqual(snapshot.properties["turn_kind"] as? String, raw)
+        XCTAssertEqual(snapshot.turnKind, kind)
+      }
+    }
+
+    /// A site that terminates before intent is knowable (cancel, too-short,
+    /// silent discard) omits the argument rather than guessing.
+    func testTerminateWithoutTurnKindStaysUnknown() {
+      let recorder = makeRecorder()
+      begin(recorder)
+      let snapshot = terminate(recorder, disposition: .tooShort, peak: 0, rms: 0, seconds: 0.2, judgeable: false)
+      XCTAssertEqual(snapshot.properties["turn_kind"] as? String, "unknown")
+    }
+
+    /// A directly-constructed snapshot (the success-denominator path in
+    /// `DesktopDiagnosticsManagerTests`) defaults to `unknown` so the closed
+    /// set always has a value on the wire.
+    func testSnapshotTurnKindDefaultsToUnknown() {
+      let snapshot = PTTAttemptLifecycleRecorder.Snapshot(
+        attemptId: "1", failureClass: .committed, captureStartOutcome: .accepted,
+        captureStartStatusClass: .ok, msToFirstAudioBucket: .lt100,
+        msToFirstUsableFrameBucket: .lt200, firstChunksEnergyBucket: .audible,
+        turnDisposition: .committed, inputRouteClass: .builtIn, inputRouteSource: .default,
+        routeChangedDuringAttempt: false, recoveryTriggered: false, recoveryAction: .none,
+        recoveryAttemptId: nil, recoveryOutcomeOfNextTurn: .none, mode: "hold", source: "hub",
+        hubActive: true, micPermissionGranted: true, turnAudioSeconds: 2.0,
+        voicedAudioSeconds: 1.5, peak: 1200, rms: 300, isNearZero: false, judgeable: true,
+        telemetrySchemaVersion: 2)
+      XCTAssertEqual(snapshot.properties["turn_kind"] as? String, "unknown")
+    }
+
+    /// The product event's closed audio buckets — boundaries are exclusive
+    /// lower edges (`lt_2` is [0,2), `ge_60` is [60,∞)).
+    func testAudioSecondsBucketBoundaries() {
+      typealias Bucket = PTTAttemptLifecycleRecorder.AudioSecondsBucket
+      XCTAssertNil(Bucket.bucket(fromSeconds: nil))
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 0), .lt2)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 1.99), .lt2)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 2), .lt5)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 4.99), .lt5)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 5), .lt10)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 9.99), .lt10)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 10), .lt20)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 19.99), .lt20)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 20), .lt60)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 59.99), .lt60)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 60), .ge60)
+      XCTAssertEqual(Bucket.bucket(fromSeconds: 600), .ge60)
     }
 
     private func terminate(
