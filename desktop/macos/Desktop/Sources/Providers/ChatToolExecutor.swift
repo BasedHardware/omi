@@ -2229,9 +2229,14 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
       // System Settings from a chat turn repeats the auto-reprompt class. Report it.
-      if MicrophoneCaptureAuthorizationPolicy.action(for: AudioCaptureService.authorizationStatus())
-        == .surfacePermissionAlert
-      {
+      let microphoneAction = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus())
+      if microphoneAction == .surfacePermissionAlert {
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
         appState?.hasMicrophonePermission = false
         return permissionRequestResult(
           type: type, granted: false,
@@ -2269,14 +2274,14 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       // Same rule as microphone: a denied authorization is spent — no re-request,
       // no forced System Settings jump from a chat turn.
-      let preStatus = await withCheckedContinuation {
-        (continuation: CheckedContinuation<UNAuthorizationStatus, Never>) in
-        UserNotificationCallbackBridge.authorizationStatus { status in
-          continuation.resume(returning: status)
-        }
-      }
+      guard let preStatus = await notificationAuthorizationStatusDirectly(),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
       if preStatus == .denied {
         appState?.hasNotificationPermission = false
+        appState?.notificationAuthorizationStatus = .denied
         return permissionRequestResult(
           type: type, granted: false,
           pendingMessage:
@@ -2290,6 +2295,10 @@ class ChatToolExecutor {
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
       if !granted, preStatus == .notDetermined {
+        // The user just answered the system prompt with No, so the real TCC state
+        // is now .denied. Without this the cache still reads .notDetermined and a
+        // later caller treats a spent authorization as still askable.
+        appState?.notificationAuthorizationStatus = .denied
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
@@ -2308,6 +2317,7 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      UserDefaults.standard.set(false, forKey: .onboardingAccessibilitySkipped)
       requestAccessibilityPermissionDirectly(
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
@@ -2535,6 +2545,14 @@ class ChatToolExecutor {
     await awaitCancellablePermissionRequest { completion in
       UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
         completion(authorizationStatus == .authorized)
+      }
+    }
+  }
+
+  private static func notificationAuthorizationStatusDirectly() async -> UNAuthorizationStatus? {
+    await awaitCancellablePermissionRequest { completion in
+      UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
+        completion(authorizationStatus)
       }
     }
   }

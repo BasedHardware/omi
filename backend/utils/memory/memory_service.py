@@ -1651,70 +1651,56 @@ class MemoryService:
         if mode not in {MemoryRolloutMode.write, MemoryRolloutMode.read}:
             raise HTTPException(status_code=503, detail="Memory writes are globally paused")
 
-    def _canonical_status(self, uid: str, memory_id: str) -> Optional[MemoryItemStatus]:
-        """Read one canonical status to suppress historical identity collisions."""
-        client = self.db_client if self.db_client is not None else default_db_client
-        try:
-            from database.memory_collections import MemoryCollections
-            from models.product_memory import MemoryItem
-
-            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
-            if getattr(snapshot, "exists", False) is not True:
-                receipt_id = privacy_deletion_receipt_id(uid, memory_id)
-                receipt = client.document(f"{MemoryCollections(uid=uid).memory_deletion_receipts}/{receipt_id}").get()
-                if getattr(receipt, "exists", False) is True:
-                    receipt_payload = receipt.to_dict()
-                    if (
-                        isinstance(receipt_payload, dict)
-                        and receipt_payload.get("schema_version") == "memory_deletion_receipt.v2"
-                        and receipt_payload.get("uid") == uid
-                        and receipt_payload.get("receipt_id") == receipt_id
-                    ):
-                        return MemoryItemStatus.tombstoned
-                override = client.document(
-                    f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-                ).get()
-                if getattr(override, "exists", False) is True:
-                    override_payload = override.to_dict()
-                    if isinstance(override_payload, dict):
-                        raw_status = override_payload.get("status") or override_payload.get("suppression")
-                        if isinstance(raw_status, MemoryItemStatus):
-                            return raw_status
-                        if isinstance(raw_status, str):
-                            return MemoryItemStatus(raw_status)
-                return None
-            payload = snapshot.to_dict()
-            if not isinstance(payload, dict):
-                return None
-            raw_status = payload.get("status")
-            if isinstance(raw_status, MemoryItemStatus):
-                return raw_status
-            if isinstance(raw_status, str) and raw_status in {status.value for status in MemoryItemStatus}:
-                return MemoryItemStatus(raw_status)
-            item = MemoryItem.model_validate(payload)
-            return item.status
-        except Exception as exc:
-            # A materialization may use a compact override/suppression record
-            # before a full canonical item exists.  It is still canonical
-            # authority and must suppress the historical public ID.
+    def _present_item_status(self, snapshot: Any) -> MemoryItemStatus:
+        """Parse a present canonical item. Unparseable present docs are 503, never override."""
+        status = self._status_from_snapshot(snapshot)
+        if status is not None:
+            return status
+        payload = snapshot.to_dict() if snapshot is not None else None
+        if isinstance(payload, dict):
             try:
-                from database.memory_collections import MemoryCollections
-
-                override = client.document(
-                    f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}"
-                ).get()
-                if getattr(override, "exists", False) is not True:
-                    raise exc
-                override_payload = override.to_dict()
-                if not isinstance(override_payload, dict):
-                    raise exc
-                raw_status = override_payload.get("status") or override_payload.get("suppression")
-                if isinstance(raw_status, MemoryItemStatus):
-                    return raw_status
-                if isinstance(raw_status, str):
-                    return MemoryItemStatus(raw_status)
+                return MemoryItem.model_validate(payload).status
             except Exception:
                 pass
+        raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+
+    def _present_override_status(self, snapshot: Any) -> MemoryItemStatus:
+        """Parse a present historical override. Unparseable present docs are 503."""
+        status = self._status_from_snapshot(snapshot)
+        if status is not None:
+            return status
+        raise HTTPException(status_code=503, detail="Canonical memory unavailable")
+
+    def _canonical_status(self, uid: str, memory_id: str) -> Optional[MemoryItemStatus]:
+        """Read one canonical status to suppress historical identity collisions.
+
+        A present item with a valid status is authority: do not read the override.
+        A present but unparseable item or override is 503 (historical is never
+        admitted). Both docs absent admits the historical row.
+        """
+        client = self.db_client if self.db_client is not None else default_db_client
+        try:
+            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
+            if getattr(snapshot, "exists", False) is True:
+                return self._present_item_status(snapshot)
+            receipt_id = privacy_deletion_receipt_id(uid, memory_id)
+            receipt = client.document(f"{MemoryCollections(uid=uid).memory_deletion_receipts}/{receipt_id}").get()
+            if getattr(receipt, "exists", False) is True:
+                receipt_payload = receipt.to_dict()
+                if (
+                    isinstance(receipt_payload, dict)
+                    and receipt_payload.get("schema_version") == "memory_deletion_receipt.v2"
+                    and receipt_payload.get("uid") == uid
+                    and receipt_payload.get("receipt_id") == receipt_id
+                ):
+                    return MemoryItemStatus.tombstoned
+            override = client.document(f"{MemoryCollections(uid=uid).memory_historical_overrides}/{memory_id}").get()
+            if getattr(override, "exists", False) is True:
+                return self._present_override_status(override)
+            return None
+        except HTTPException:
+            raise
+        except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
     def _canonical_item_for_lineage(self, uid: str, memory_id: str) -> Optional[MemoryItem]:
@@ -2197,58 +2183,70 @@ class MemoryService:
         if callable(get_all):
             collections = MemoryCollections(uid=uid)
             statuses: Dict[str, MemoryItemStatus] = {}
-            # Keep each request comfortably below Firestore's practical batch
-            # read limits while covering both the item and override documents.
+            # Item batch first. Override get_all runs only for the missing-item
+            # subset so a present canonical item is not paired with a billed miss.
             for start in range(0, len(normalized_ids), 100):
                 chunk = normalized_ids[start : start + 100]
                 item_refs = [client.document(f"{collections.memory_items}/{memory_id}") for memory_id in chunk]
-                override_refs = [
-                    client.document(f"{collections.memory_historical_overrides}/{memory_id}") for memory_id in chunk
-                ]
-                refs = item_refs + override_refs
                 try:
-                    snapshots = budgeted_get_all(client, refs, budget)
+                    item_snapshots = budgeted_get_all(client, item_refs, budget)
                 except ListReadBudgetExhausted:
                     raise
                 except Exception as exc:
                     raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
-                snapshots_by_path: Dict[str, Any] = {}
-                for snapshot in snapshots:
-                    snapshot_path = getattr(getattr(snapshot, "reference", None), "path", None)
-                    if not isinstance(snapshot_path, str) or snapshot_path in snapshots_by_path:
-                        # Firestore does not promise result ordering and may
-                        # omit missing documents. A client that also omits
-                        # reference identity cannot be mapped safely.
-                        snapshots_by_path = {}
-                        break
-                    snapshots_by_path[snapshot_path] = snapshot
-                if snapshots and not snapshots_by_path:
+                item_by_path = self._snapshots_by_reference_path(item_snapshots)
+                if item_snapshots and item_by_path is None:
                     return {
                         memory_id: status
                         for memory_id in normalized_ids
                         if (status := self._canonical_status(uid, memory_id))
                     }
+                missing_ids: List[str] = []
                 for index, memory_id in enumerate(chunk):
-                    item_snapshot = snapshots_by_path.get(item_refs[index].path)
-                    override_snapshot = snapshots_by_path.get(override_refs[index].path)
-                    status = self._status_from_snapshot(item_snapshot)
-                    if status is None:
-                        status = self._status_from_snapshot(override_snapshot)
-                    if status is None and (
-                        getattr(item_snapshot, "exists", False) is True
-                        or getattr(override_snapshot, "exists", False) is True
-                    ):
-                        # A present canonical authority record with no valid
-                        # status must never admit its historical duplicate.
-                        # Reuse the strict single-record parser so a valid
-                        # override can still suppress a malformed item.
-                        status = self._canonical_status(uid, memory_id)
-                        if status is None:
-                            raise HTTPException(status_code=503, detail="Canonical memory unavailable")
-                    if status is not None:
-                        statuses[memory_id] = status
+                    item_snapshot = (item_by_path or {}).get(item_refs[index].path)
+                    if getattr(item_snapshot, "exists", False) is True:
+                        statuses[memory_id] = self._present_item_status(item_snapshot)
+                    else:
+                        missing_ids.append(memory_id)
+                if not missing_ids:
+                    continue
+                override_refs = [
+                    client.document(f"{collections.memory_historical_overrides}/{memory_id}")
+                    for memory_id in missing_ids
+                ]
+                try:
+                    override_snapshots = budgeted_get_all(client, override_refs, budget)
+                except ListReadBudgetExhausted:
+                    raise
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
+                override_by_path = self._snapshots_by_reference_path(override_snapshots)
+                if override_snapshots and override_by_path is None:
+                    return {
+                        memory_id: status
+                        for memory_id in normalized_ids
+                        if (status := self._canonical_status(uid, memory_id))
+                    }
+                for index, memory_id in enumerate(missing_ids):
+                    override_snapshot = (override_by_path or {}).get(override_refs[index].path)
+                    if getattr(override_snapshot, "exists", False) is True:
+                        statuses[memory_id] = self._present_override_status(override_snapshot)
             return statuses
         return {memory_id: status for memory_id in normalized_ids if (status := self._canonical_status(uid, memory_id))}
+
+    @staticmethod
+    def _snapshots_by_reference_path(snapshots: Any) -> Optional[Dict[str, Any]]:
+        """Map get_all results by document path. None means the client omitted identity."""
+        snapshots_by_path: Dict[str, Any] = {}
+        for snapshot in snapshots:
+            snapshot_path = getattr(getattr(snapshot, "reference", None), "path", None)
+            if not isinstance(snapshot_path, str) or snapshot_path in snapshots_by_path:
+                # Firestore does not promise result ordering and may omit missing
+                # documents. A client that also omits reference identity cannot
+                # be mapped safely.
+                return None
+            snapshots_by_path[snapshot_path] = snapshot
+        return snapshots_by_path
 
     def _write_historical_override(self, uid: str, memory_id: str, status: MemoryItemStatus) -> None:
         """Persist one idempotent canonical suppression/ownership record."""
@@ -2889,11 +2887,12 @@ class MemoryService:
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
             by_id[match.memory.id] = match
+        historical_ids = [match.memory.id for match in historical if match.memory.id not in by_id]
+        historical_statuses = self.canonical_statuses(uid, historical_ids) if historical_ids else {}
         for match in historical:
             if match.memory.id in by_id:
                 continue
-            status = self._canonical_status(uid, match.memory.id)
-            if status is not None:
+            if historical_statuses.get(match.memory.id) is not None:
                 continue
             by_id[match.memory.id] = match
         results = [match for match in by_id.values() if result_filter is None or result_filter(match.memory)]
@@ -3182,6 +3181,7 @@ class MemoryService:
         *,
         include_archive: bool = True,
         page_size: int = 500,
+        budget: Optional[ListReadBudget] = None,
     ) -> Iterator[MemoryDB]:
         """Stream each live logical memory once for compatibility consumers.
 
@@ -3195,6 +3195,7 @@ class MemoryService:
             include_archive=include_archive,
             page_size=page_size,
             include_ledger_history=False,
+            budget=budget,
         )
 
     def iter_portability_export_memories(
@@ -3203,6 +3204,7 @@ class MemoryService:
         *,
         include_archive: bool = True,
         page_size: int = 500,
+        budget: Optional[ListReadBudget] = None,
     ) -> Iterator[MemoryDB]:
         """Stream owner-portable memories, including representable ledger history.
 
@@ -3219,6 +3221,7 @@ class MemoryService:
             include_archive=include_archive,
             page_size=page_size,
             include_ledger_history=True,
+            budget=budget,
         )
 
     @staticmethod
@@ -3240,12 +3243,13 @@ class MemoryService:
         include_archive: bool,
         page_size: int,
         include_ledger_history: bool,
+        budget: Optional[ListReadBudget] = None,
     ) -> Iterator[MemoryDB]:
         archive_explicit = include_archive
         page_size = max(1, min(int(page_size or 500), 500))
         client = self.db_client if self.db_client is not None else default_db_client
         try:
-            canonical_items = iter_authoritative_product_memory_items(uid=uid, db_client=client)
+            canonical_items = iter_authoritative_product_memory_items(uid=uid, db_client=client, budget=budget)
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
 
@@ -3278,17 +3282,19 @@ class MemoryService:
             pending_historical.append(record)
             if len(pending_historical) < page_size:
                 continue
-            yield from self._export_unsuppressed_historical(uid, pending_historical)
+            yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
             pending_historical = []
         if pending_historical:
-            yield from self._export_unsuppressed_historical(uid, pending_historical)
+            yield from self._export_unsuppressed_historical(uid, pending_historical, budget=budget)
 
     def _export_unsuppressed_historical(
         self,
         uid: str,
         records: List[HistoricalMemoryRecord],
+        *,
+        budget: Optional[ListReadBudget] = None,
     ) -> Iterator[MemoryDB]:
-        historical_statuses = self.canonical_statuses(uid, [record.memory.id for record in records])
+        historical_statuses = self.canonical_statuses(uid, [record.memory.id for record in records], budget=budget)
         for record in records:
             # Suppression overrides are canonical authority even when the
             # canonical item itself has already been physically cleaned up.

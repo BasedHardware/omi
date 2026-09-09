@@ -22,6 +22,7 @@ from omi_cli.main import app, main
         ),
         (["--clear-why-it-matters", "--clear-success-criteria"], {"why_it_matters": None, "success_criteria": []}),
         (["--title", "Ship"], {"title": "Ship"}),
+        (["--desired-outcome", "Ship", "--clear-unit"], {"desired_outcome": "Ship", "unit": None}),
         (["--why-it-matters", ""], {"why_it_matters": ""}),
     ],
 )
