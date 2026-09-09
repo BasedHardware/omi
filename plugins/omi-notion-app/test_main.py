@@ -42,9 +42,15 @@ with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(notion)
 
 class PageReadTests(unittest.TestCase):
-    def read(self, content_response):
+    def read(self, content_response, archived=False):
         metadata = Mock(status_code=200)
-        metadata.json.return_value = {"properties": {}, "id": "test-page"}
+        metadata.json.return_value = {
+            "properties": {"title": {"type": "title", "title": [{"plain_text": "Known title"}]}},
+            "id": "test-page", "archived": archived,
+            "url": "https://www.notion.so/test-page",
+            "created_time": "2026-09-01T00:00:00.000Z",
+            "last_edited_time": "2026-09-08T00:00:00.000Z",
+        }
         request = Mock(json=AsyncMock(return_value={"uid": "test-user", "page_id": "test-page"}))
         with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion.requests, "get", side_effect=[metadata, content_response]) as get:
             result = asyncio.run(notion.tool_get_page(request))
@@ -58,13 +64,35 @@ class PageReadTests(unittest.TestCase):
                 with self.subTest(status=status, body=body):
                     result = self.read(Mock(status_code=status, text=body))
                     self.assertIsNone(result.result)
-                    self.assertEqual(result.error, f"Failed to retrieve page content (HTTP {status}). Please try again.")
+                    self.assertTrue(result.error.startswith(f"Failed to retrieve page content (HTTP {status}). Please try again."))
                     self.assertNotIn("private upstream response", result.error)
 
     def test_transport_failure_is_not_success(self):
         result = self.read(RuntimeError("private transport detail"))
         self.assertIsNone(result.result)
-        self.assertEqual(result.error, "Failed to retrieve page content. Please try again.")
+        self.assertTrue(result.error.startswith("Failed to retrieve page content. Please try again."))
+
+    def test_content_errors_retain_known_metadata_without_success(self):
+        # Separate metadata/content endpoints: errors must not erase a successful
+        # metadata read, or claim that unavailable content is an empty page.
+        for archived in (False, True):
+            for status in (404, 403, 429, 500, None):
+                with self.subTest(archived=archived, status=status):
+                    response = (Mock(status_code=status, text="private upstream response")
+                                if status else RuntimeError("private transport detail"))
+                    result = self.read(response, archived=archived)
+                    self.assertIsNone(result.result)
+                    self.assertIn("Failed to retrieve page content", result.error)
+                    if status:
+                        self.assertIn(f"HTTP {status}", result.error)
+                    self.assertIn("**Known title**", result.error)
+                    self.assertIn("**Status:** Archived" if archived else "**Status:** Active", result.error)
+                    self.assertIn("**URL:** https://www.notion.so/test-page", result.error)
+                    self.assertIn("**Created:** 2026-09-01", result.error)
+                    self.assertIn("**Last Edited:** 2026-09-08", result.error)
+                    self.assertIn("**Page ID:** `test-page`", result.error)
+                    self.assertNotIn("**Content:**", result.error)
+                    self.assertNotIn("private", result.error)
 
     def test_successful_empty_and_nonempty_content(self):
         for text in ("", "Useful page content"):
@@ -73,7 +101,7 @@ class PageReadTests(unittest.TestCase):
                 response.json.return_value = {"results": [] if not text else [{"type": "paragraph", "paragraph": {"rich_text": [{"plain_text": text}]}}]}
                 result = self.read(response)
                 self.assertIsNone(result.error)
-                self.assertIn("**Untitled**", result.result)
+                self.assertIn("**Known title**", result.result)
                 self.assertEqual("**Content:**" in result.result, bool(text))
                 if text:
                     self.assertIn(text, result.result)

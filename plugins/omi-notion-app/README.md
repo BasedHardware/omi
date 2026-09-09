@@ -129,5 +129,6 @@ When users connect their Notion workspace, they must grant access to specific pa
 Run `python3 plugins/omi-notion-app/test_main.py` from the repository root.
 The hermetic tests import the production module with framework/storage doubles
 and exercise `get_page` through its real HTTP helper: failed content retrieval
-must return a sanitized tool error, while empty and populated successful reads
+must return a sanitized tool error retaining the independently retrieved page
+metadata (including archive status), while empty and populated successful reads
 retain their output. No live workspace or credentials are used.
