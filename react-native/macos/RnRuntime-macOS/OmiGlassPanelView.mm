@@ -3,6 +3,7 @@
 #import <React/RCTViewManager.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h>
 
 static const CGFloat defaultCornerRadius = 22.0;
 static const CGFloat OmiGlassScrimAlpha = 0.46;
@@ -49,6 +50,55 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
 @property (nonatomic, strong) CALayer *sheen;
 @property (nonatomic, strong, nullable) id accessibilityObserver;
 
+@end
+
+// Fade content itself so the existing window material remains uninterrupted.
+@interface OmiScrollFadeView : RCTView
+@property (nonatomic) BOOL fadeVisible;
+@property (nonatomic, strong) CAGradientLayer *contentMask;
+@end
+
+@implementation OmiScrollFadeView
+
+- (void)setFadeVisible:(BOOL)fadeVisible
+{
+  _fadeVisible = fadeVisible;
+  self.needsLayout = YES;
+}
+
+- (void)layout
+{
+  [super layout];
+  self.wantsLayer = YES;
+  if (!self.fadeVisible || NSHeight(self.bounds) <= 0) {
+    self.layer.mask = nil;
+    return;
+  }
+  if (self.contentMask == nil) {
+    self.contentMask = [CAGradientLayer layer];
+    self.contentMask.colors = @[(id)NSColor.blackColor.CGColor,
+        (id)NSColor.blackColor.CGColor, (id)NSColor.clearColor.CGColor];
+  }
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  self.contentMask.frame = self.bounds;
+  self.contentMask.startPoint = CGPointMake(0.5, self.isFlipped ? 0 : 1);
+  self.contentMask.endPoint = CGPointMake(0.5, self.isFlipped ? 1 : 0);
+  self.contentMask.locations = @[@0, @(MAX(0, 1 - 40 / NSHeight(self.bounds))), @1];
+  self.layer.mask = self.contentMask;
+  [CATransaction commit];
+}
+
+@end
+
+@interface OmiScrollFadeManager : RCTViewManager
+@end
+
+@implementation OmiScrollFadeManager
+RCT_EXPORT_MODULE(OmiScrollFade)
+RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
+- (NSView *)view { return [[OmiScrollFadeView alloc] initWithFrame:NSZeroRect]; }
++ (BOOL)requiresMainQueueSetup { return YES; }
 @end
 
 @implementation OmiGlassPanelView

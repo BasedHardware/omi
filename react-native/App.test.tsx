@@ -88,7 +88,7 @@ test('DesktopApp owns the session gate inside the shell', () => {
   expect(desktopKit).toContain("session === 'signed-out'");
   expect(desktopKit).toContain("session === 'probing'");
   // The signed-out shell is the shared Welcome component and nothing else.
-  expect(desktopKit).toContain('<Onboarding');
+  expect(desktopKit).toContain('<DesktopOnboarding');
   expect(desktopKit).not.toContain('Restoring your session');
   expect(desktopKit).not.toContain(
     'Sign in to load conversations and memories.',

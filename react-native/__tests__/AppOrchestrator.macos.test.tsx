@@ -134,6 +134,35 @@ function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
+async function openSignIn(renderer: ReactTestRenderer.ReactTestRenderer) {
+  for (const label of ['Get started', 'Continue']) {
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === label)
+        .props.onPress(),
+    );
+  }
+}
+async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
+  if (labelsOf(renderer).includes('Chat with Omi')) {
+    return;
+  }
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+}
+async function reachAgreement(renderer: ReactTestRenderer.ReactTestRenderer) {
+  for (const label of ['Continue without more permissions', 'Continue']) {
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === label)
+        .props.onPress(),
+    );
+  }
+}
+
 const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
 
 beforeEach(() => {
@@ -212,6 +241,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
 
   // A real native sign-in persists: completion is recorded, reads refresh,
   // and the full chrome takes over.
+  await openSignIn(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -219,9 +249,10 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   });
   expect(mockAuth.signIn).toHaveBeenCalledTimes(1);
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
-  expect(textOf(renderer)).toContain('Before you start');
+  expect(textOf(renderer)).toContain('Choose what Omi can access');
   expect(mockBackend.request).not.toHaveBeenCalled();
   mockAuth.hasCloudSession.mockResolvedValue(true);
+  await reachAgreement(renderer);
   await act(async () => {
     renderer.root
       .findAll(
@@ -236,7 +267,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   expect(labels).toContain('Home currents');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toContain("Search what you've seen and heard…");
+  ).toContain('Ask about your day…');
 
   // Signing out clears the session and returns to the same Welcome.
   mockAuth.hasCloudSession.mockResolvedValue(false);
@@ -268,6 +299,7 @@ test('a cancelled native sign-in keeps the Welcome up without faking ready', asy
   mockAuth.signIn.mockResolvedValue({signedIn: false});
 
   const renderer = await renderApp();
+  await openSignIn(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -359,13 +391,17 @@ test('a send still in flight when the session dies never seeds the next session'
   const omnibar = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibar.props.onChangeText('PRIVATE IN-FLIGHT MESSAGE');
   });
   await act(async () => {
-    omnibar.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
   expect(textOf(renderer)).toContain('PRIVATE IN-FLIGHT MESSAGE');
@@ -416,6 +452,7 @@ test('a send still in flight when the session dies never seeds the next session'
   // The next account signs in and its history load fails: nothing from the
   // previous account may render in its shell.
   nextSession = true;
+  await openSignIn(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -423,6 +460,7 @@ test('a send still in flight when the session dies never seeds the next session'
     await flushAsyncQueue();
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
+  await openChat(renderer);
   expect(textOf(renderer)).not.toContain('PRIVATE IN-FLIGHT MESSAGE');
   expect(textOf(renderer)).not.toContain('PRIVATE REPLY FROM THE DEAD SESSION');
   expect(labelsOf(renderer)).toContain('Send');
@@ -432,13 +470,17 @@ test('a send still in flight when the session dies never seeds the next session'
   const omnibarAgain = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibarAgain.props.onChangeText('fresh account message');
   });
   await act(async () => {
-    omnibarAgain.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
   expect(
@@ -496,6 +538,7 @@ test('the previous session transcript never survives a sign-out', async () => {
   });
 
   const renderer = await renderApp();
+  await openSignIn(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -504,6 +547,7 @@ test('the previous session transcript never survives a sign-out', async () => {
   await act(async () => {
     await Promise.resolve();
   });
+  await openChat(renderer);
   expect(textOf(renderer)).toContain('PRIVATE PRIOR SESSION');
 
   mockBackend.request.mockImplementation(async () => ({
@@ -531,6 +575,7 @@ test('the previous session transcript never survives a sign-out', async () => {
 
   // The next sign-in starts from an empty transcript even when history
   // cannot load: the prior account's bubbles must never flash back in.
+  await openSignIn(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Sign in')
@@ -541,6 +586,7 @@ test('the previous session transcript never survives a sign-out', async () => {
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
   expect(labelsOf(renderer)).toContain('Home currents');
+  await openChat(renderer);
   expect(textOf(renderer)).not.toContain('PRIVATE PRIOR SESSION');
 });
 
@@ -628,6 +674,7 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   await act(async () => {
     await flushAsyncQueue();
   });
+  await openChat(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')
@@ -639,13 +686,17 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   const omnibar = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibar.props.onChangeText('fresh question');
   });
   await act(async () => {
-    omnibar.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
   expect(textOf(renderer)).toContain('fresh answer');
@@ -684,13 +735,17 @@ test.each(['', 'next question'])(
     const omnibar = renderer.root
       .findAllByType(TextInput)
       .find(
-        node => node.props.placeholder === "Search what you've seen and heard…",
+        node =>
+          node.props.placeholder === 'Ask about your day…' ||
+          node.props.placeholder === 'Message Omi…',
       )!;
     act(() => {
       omnibar.props.onChangeText('unsent question');
     });
     await act(async () => {
-      omnibar.props.onSubmitEditing();
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Send')
+        .props.onPress();
       await flushAsyncQueue();
     });
     const composer = renderer.root
@@ -758,13 +813,17 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
   const omnibar = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibar.props.onChangeText('interrupted question');
   });
   await act(async () => {
-    omnibar.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
 
@@ -845,13 +904,17 @@ test('a send during the initial history load still receives the transcript', asy
   const omnibar = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibar.props.onChangeText('sent before history landed');
   });
   await act(async () => {
-    omnibar.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
   expect(textOf(renderer)).toContain('sent before history landed');
@@ -974,9 +1037,11 @@ test('a send during an older-history load still keeps the earlier page', async (
   await act(async () => {
     await flushAsyncQueue();
   });
+  await openChat(renderer);
   expect(textOf(renderer)).toContain('RECENT HISTORY');
   expect(labelsOf(renderer)).toContain('Load earlier messages');
 
+  await openChat(renderer);
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')
@@ -988,13 +1053,17 @@ test('a send during an older-history load still keeps the earlier page', async (
   const omnibar = renderer.root
     .findAllByType(TextInput)
     .find(
-      node => node.props.placeholder === "Search what you've seen and heard…",
+      node =>
+        node.props.placeholder === 'Ask about your day…' ||
+        node.props.placeholder === 'Message Omi…',
     )!;
   act(() => {
     omnibar.props.onChangeText('sent while older loading');
   });
   await act(async () => {
-    omnibar.props.onSubmitEditing();
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
     await flushAsyncQueue();
   });
   expect(textOf(renderer)).toContain('sent while older loading');
@@ -1032,6 +1101,7 @@ test('a send during an older-history load still keeps the earlier page', async (
 
   expect(textOf(renderer)).toContain('OLDER HISTORY MESSAGE');
   expect(textOf(renderer)).toContain('OLDER HISTORY REPLY');
+  await openChat(renderer);
   expect(textOf(renderer)).toContain('RECENT HISTORY');
   expect(textOf(renderer)).toContain('sent while older loading');
   expect(textOf(renderer)).toContain('reply while older pending');
@@ -1090,11 +1160,15 @@ test.each(['stop', 'unmount', 'signout'])(
     const omnibar = renderer.root
       .findAllByType(TextInput)
       .find(
-        node => node.props.placeholder === "Search what you've seen and heard…",
+        node =>
+          node.props.placeholder === 'Ask about your day…' ||
+          node.props.placeholder === 'Message Omi…',
       )!;
     act(() => omnibar.props.onChangeText('my old request'));
     await act(async () => {
-      omnibar.props.onSubmitEditing();
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Send')
+        .props.onPress();
     });
     expect(mockBackend.sendOmiChat).toHaveBeenCalledTimes(1);
     const requestId = mockBackend.sendOmiChat.mock.calls[0][0];

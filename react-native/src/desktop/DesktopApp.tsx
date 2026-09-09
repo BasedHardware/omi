@@ -7,7 +7,7 @@ import type {
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
-import {Onboarding} from '../ui/Onboarding';
+import {DesktopOnboarding} from './DesktopOnboarding';
 import {
   desktopNavBarHeight,
   desktopTrafficLightButton,
@@ -16,11 +16,16 @@ import {
   desktopWindowInset,
   type DesktopSession,
 } from './desktopChrome';
-import {DesktopChrome, type DesktopRoute} from './DesktopTopChrome';
+import {
+  DesktopChrome,
+  type DesktopRoute,
+  type OmnibarMode,
+} from './DesktopTopChrome';
 import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
+import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
 import {ShippingStage} from './ShippingStage';
@@ -95,7 +100,40 @@ export function DesktopApp({
     setCaptureRevision(value => value + 1),
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
+  const [mode, setMode] = useState<OmnibarMode>('Ask');
+  const [recallQuery, setRecallQuery] = useState('');
+  useEffect(() => {
+    if (mode !== 'Recall') {
+      return;
+    }
+    const timer = setTimeout(
+      () => setRecallQuery(draft.trim().slice(0, 200)),
+      200,
+    );
+    return () => clearTimeout(timer);
+  }, [draft, mode]);
+  const navigate = (next: DesktopRoute) => {
+    setRoute(next);
+    if (next === 'Rewind') {
+      setMode('Recall');
+    } else if (mode === 'Recall') {
+      setMode('Ask');
+    }
+  };
   const omnibarRef = useRef<TextInput>(null);
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
+  const focusedSearchRequest = useRef(0);
+  useEffect(() => {
+    if (
+      route === 'Home' &&
+      session === 'ready' &&
+      searchFocusRequest !== focusedSearchRequest.current &&
+      omnibarRef.current !== null
+    ) {
+      focusedSearchRequest.current = searchFocusRequest;
+      omnibarRef.current.focus();
+    }
+  }, [route, session, searchFocusRequest]);
   useEffect(() => {
     if (session !== 'ready') {
       setRoute('Home');
@@ -103,13 +141,14 @@ export function DesktopApp({
   }, [session]);
   useEffect(() => {
     const subscription = subscribeDesktopSearchCommand(() => {
+      setMode('Search');
       setRoute('Home');
-      omnibarRef.current?.focus();
+      setSearchFocusRequest(value => value + 1);
     });
     return () => subscription.remove();
   }, []);
   const chatNotice =
-    route === 'Home' ? visibleChatError(session, chatError) : null;
+    route === 'Chat' ? visibleChatError(session, chatError) : null;
   // Session gate. Until OmiAuth reports a real cloud session with onboarding
   // complete, this shell paints no product IA at all: the probe keeps an
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
@@ -118,7 +157,7 @@ export function DesktopApp({
   if (session === 'signed-out') {
     return (
       <View accessibilityLabel="Omi desktop" style={styles.root}>
-        <Onboarding
+        <DesktopOnboarding
           error={authError}
           onSignIn={onSignIn}
           onCancelSignIn={onCancelSignIn}
@@ -137,15 +176,31 @@ export function DesktopApp({
   return (
     <View accessibilityLabel="Omi desktop" style={styles.root}>
       <DesktopChrome
+        chatBusy={chatBusy}
+        capture={capture}
         activeGenerationId={activeGenerationId}
-        chatNotice={chatNotice}
+        chatNotice={null}
         draft={draft}
         omnibarRef={omnibarRef}
         onDraftChange={onDraftChange}
-        onNavigate={setRoute}
+        mode={mode}
+        onModeChange={next => {
+          setMode(next);
+          setRoute(
+            next === 'Recall' ? 'Rewind' : next === 'Ask' ? 'Chat' : 'Home',
+          );
+        }}
+        onNavigate={navigate}
         onSend={() => {
-          setRoute('Home');
-          onSend();
+          if (mode === 'Ask') {
+            setRoute('Chat');
+            onSend();
+          } else if (mode === 'Recall') {
+            setRecallQuery(draft.trim().slice(0, 200));
+            setRoute('Rewind');
+          } else {
+            setRoute('Home');
+          }
         }}
         onStop={onStop}
         route={route}
@@ -157,21 +212,44 @@ export function DesktopApp({
         {route === 'Home' ? (
           <DesktopHome
             chatBusy={chatBusy}
-            draft={draft}
+            draft={mode === 'Search' ? draft : ''}
             hasOlderChat={hasOlderChat}
             loadingOlderChat={loadingOlderChat}
             messages={messages}
-            onOpenRewind={() => setRoute('Rewind')}
+            onOpenChat={() => {
+              setMode('Ask');
+              setRoute('Chat');
+            }}
+            onOpenRewind={() => navigate('Rewind')}
+            onOpenTasks={() => setRoute('Tasks')}
+            onOpenConversations={() => setRoute('Conversations')}
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
             reads={reads}
             readsPhase={readsPhase}
           />
+        ) : route === 'Chat' ? (
+          <DesktopChat
+            messages={messages}
+            draft={draft}
+            busy={chatBusy || activeGenerationId !== null}
+            canStop={activeGenerationId !== null}
+            error={chatNotice}
+            hasOlder={hasOlderChat}
+            loadingOlder={loadingOlderChat}
+            onLoadOlder={onLoadOlderChat}
+            onDraftChange={onDraftChange}
+            onSend={onSend}
+            onStop={onStop}
+          />
         ) : route === 'Conversations' ? (
           <LibraryPage outcomes={outcomes} />
         ) : route === 'Rewind' ? (
-          <DesktopRewind capture={capture} captureRevision={captureRevision} />
+          <DesktopRewind
+            captureRevision={captureRevision}
+            query={recallQuery}
+          />
         ) : route === 'Tasks' ? (
           <TasksPage outcomes={outcomes} {...taskMutations} />
         ) : route === 'Apps' ? (

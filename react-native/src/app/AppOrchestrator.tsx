@@ -41,6 +41,7 @@ import {OutcomeStatus} from '../ui/ReadStatus';
 import {ProjectionList, ProjectionRow} from '../ui/ProjectionList';
 import {HomeSearchField} from '../ui/SearchField';
 import {Onboarding} from '../ui/Onboarding';
+import {DesktopOnboarding} from '../desktop/DesktopOnboarding';
 import {PageShell} from '../ui/PageShell';
 import {FocusPressable} from '../ui/Pressable';
 import {ConversationsPage} from '../pages/Conversations';
@@ -733,8 +734,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
+  const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
   const firstRunOnboarding = (
-    <Onboarding
+    <OnboardingSurface
       setupRequired={setupRequired}
       completingSetup={completingSetup}
       onCompleteSetup={connectDevice => {

@@ -1,6 +1,14 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {Image, NativeModules, Switch, Text} from 'react-native';
+import {
+  AppState,
+  FlatList,
+  Image,
+  NativeModules,
+  Switch,
+  Text,
+  TextInput,
+} from 'react-native';
 
 const mockRewind = {listFrames: jest.fn(), readFrame: jest.fn()};
 NativeModules.OmiRewind = mockRewind;
@@ -51,136 +59,212 @@ async function press(view: ReactTestRenderer.ReactTestRenderer, name: string) {
   });
 }
 beforeEach(() => {
+  jest.useFakeTimers();
+  AppState.currentState = 'active';
+  jest.mocked(AppState.addEventListener).mockReturnValue({remove: jest.fn()});
   NativeModules.OmiRewind = mockRewind;
-  mockRewind.listFrames
-    .mockReset()
-    .mockResolvedValue({frames: [frame('one')], nextCursor: null});
+  mockRewind.listFrames.mockReset().mockImplementation(async ({source}) => ({
+    frames: source === 'captured' ? [frame('captured:one')] : [],
+    nextCursor: null,
+  }));
   mockRewind.readFrame.mockReset().mockImplementation(async id => image(id));
 });
 afterEach(() => {
   act(() => mounted.splice(0).forEach(view => view.unmount()));
+  jest.useRealTimers();
 });
 
-test('loads native history, advances its cursor and opens the chosen stored frame', async () => {
+function rows(view: ReactTestRenderer.ReactTestRenderer) {
+  return view.root
+    .findAllByType(Text)
+    .map(node => node.props.children)
+    .filter(value => typeof value === 'string' && value.startsWith('Window '));
+}
+const firstPage = () =>
+  Array.from({length: 50}, (_, index) => ({
+    ...frame(`captured:${index}`),
+    capturedAtMs: 1000 - index,
+  }));
+
+test('merges native history, advances the source cursor and opens the stored frame', async () => {
   const first = deferred<{
     frames: ReturnType<typeof frame>[];
     nextCursor: string | null;
   }>();
-  mockRewind.listFrames.mockReturnValueOnce(first.promise);
+  mockRewind.listFrames.mockImplementation(({source, cursor}) => {
+    if (source === 'shipping') {
+      return Promise.resolve({
+        frames: [{...frame('shipping:old'), capturedAtMs: 0}],
+        nextCursor: null,
+      });
+    }
+    return cursor
+      ? Promise.resolve({
+          frames: [{...frame('captured:two'), capturedAtMs: 1}],
+          nextCursor: null,
+        })
+      : first.promise;
+  });
   const view = await render();
   expect(content(view)).toContain('Loading screen history…');
   expect(content(view)).not.toContain('No captures saved yet.');
-  expect(mockRewind.listFrames).toHaveBeenCalledWith({
-    source: 'shipping',
-    query: '',
-    cursor: null,
-    limit: 50,
-  });
-  expect(
-    view.root.findAll(
-      node => node.props.accessibilityLabel === 'View capture one',
-    ),
-  ).toHaveLength(0);
+  for (const source of ['captured', 'shipping']) {
+    expect(mockRewind.listFrames).toHaveBeenCalledWith({
+      source,
+      query: '',
+      cursor: null,
+      limit: 50,
+    });
+  }
   await act(async () =>
-    first.resolve({frames: [frame('one')], nextCursor: 'page-two'}),
+    first.resolve({frames: firstPage(), nextCursor: 'page-two'}),
   );
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('two')],
-    nextCursor: null,
-  });
+  expect(view.root.findByType(FlatList).props.data).toHaveLength(50);
+  expect(rows(view).length).toBeLessThan(50);
   await press(view, 'Load more history');
-  expect(mockRewind.listFrames).toHaveBeenLastCalledWith({
-    source: 'shipping',
+  expect(mockRewind.listFrames).toHaveBeenCalledWith({
+    source: 'captured',
     query: '',
     cursor: 'page-two',
     limit: 50,
   });
-  expect(label(view, 'View capture one')).toBeDefined();
-  await press(view, 'View capture two');
-  expect(mockRewind.readFrame).toHaveBeenCalledWith('two');
   expect(
-    view.root.findAllByType(Image).map(node => node.props.source.uri),
-  ).toContain('data:image/jpeg;base64,image-two');
+    view.root
+      .findByType(FlatList)
+      .props.data.slice(-2)
+      .map((item: ReturnType<typeof frame>) => item.windowTitle),
+  ).toEqual(['Window captured:two', 'Window shipping:old']);
+  await press(view, 'View capture captured:0');
+  expect(mockRewind.readFrame).toHaveBeenCalledWith('captured:0');
+  expect(view.root.findByType(Image).props.source.uri).toBe(
+    'data:image/jpeg;base64,image-captured:0',
+  );
 });
 
-test('new search retires a delayed previous list response', async () => {
+test('uses the external query for both stores without duplicate input or source switches', async () => {
+  mockRewind.listFrames.mockImplementation(async ({source}) => ({
+    frames: [
+      {
+        ...frame(`${source}:one`),
+        capturedAtMs: source === 'shipping' ? 20 : 10,
+      },
+    ],
+    nextCursor: null,
+  }));
+  const view = await render({query: 'meeting'});
+  expect(view.root.findAllByType(TextInput)).toHaveLength(0);
+  expect(content(view)).not.toContain('Existing Omi history');
+  expect(content(view)).not.toContain('This app');
+  for (const source of ['captured', 'shipping']) {
+    expect(mockRewind.listFrames).toHaveBeenCalledWith({
+      source,
+      query: 'meeting',
+      cursor: null,
+      limit: 50,
+    });
+  }
+  expect(rows(view)).toEqual(['Window shipping:one', 'Window captured:one']);
+});
+
+test('a changed query retires delayed responses from both old stores', async () => {
   const old = deferred<{
     frames: ReturnType<typeof frame>[];
     nextCursor: null;
   }>();
-  mockRewind.listFrames.mockReturnValueOnce(old.promise);
-  const view = await render();
-  await act(async () =>
-    label(view, 'Search screen history').props.onChangeText('current'),
+  mockRewind.listFrames.mockImplementation(async ({source, query}) =>
+    query === ''
+      ? old.promise
+      : {frames: [frame(`${source}:current`)], nextCursor: null},
   );
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('current')],
-    nextCursor: null,
-  });
-  await press(view, 'Search history');
+  const view = await render();
+  await act(async () => view.update(<DesktopRewind query="current" />));
   await act(async () =>
     old.resolve({frames: [frame('retired')], nextCursor: null}),
   );
-  expect(label(view, 'View capture current')).toBeDefined();
-  expect(
-    view.root.findAll(
-      node => node.props.accessibilityLabel === 'View capture retired',
-    ),
-  ).toHaveLength(0);
+  expect(rows(view)).toEqual([
+    'Window captured:current',
+    'Window shipping:current',
+  ]);
 });
 
 test('a late image cannot replace a newer selected image', async () => {
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('one'), frame('two')],
+  mockRewind.listFrames.mockImplementation(async ({source}) => ({
+    frames:
+      source === 'captured'
+        ? [frame('captured:one'), frame('captured:two')]
+        : [],
     nextCursor: null,
-  });
+  }));
   const old = deferred<ReturnType<typeof image>>();
   mockRewind.readFrame.mockReturnValueOnce(old.promise);
   const view = await render();
-  await press(view, 'View capture one');
-  await press(view, 'View capture two');
-  await act(async () => old.resolve(image('one')));
-  const sources = view.root
-    .findAllByType(Image)
-    .map(node => node.props.source.uri);
-  expect(sources).toContain('data:image/jpeg;base64,image-two');
-  expect(sources).not.toContain('data:image/jpeg;base64,image-one');
+  await press(view, 'View capture captured:one');
+  await press(view, 'View capture captured:two');
+  await act(async () => old.resolve(image('captured:one')));
+  expect(view.root.findByType(Image).props.source.uri).toBe(
+    'data:image/jpeg;base64,image-captured:two',
+  );
 });
 
 test.each([
   [
-    {code: 'OMI_REWIND_UNAVAILABLE'},
-    'No local Rewind history is available for this account on this Mac.',
+    {code: 'OMI_REWIND_AUTH'},
+    'Sign in again from Settings to open your screen history.',
   ],
-  [{code: 'OMI_REWIND_AUTH'}, 'Sign in again to open your screen history.'],
-  [
-    new Error('private filesystem path'),
-    'Screen history could not be loaded. Try again.',
-  ],
+  [new Error('private filesystem path'), 'Screen history could not be loaded.'],
 ])(
-  'list failure remains explicit and never claims an empty history',
+  'list failure remains explicit and refresh recovers',
   async (failure, message) => {
-    mockRewind.listFrames.mockRejectedValueOnce(failure);
+    mockRewind.listFrames.mockRejectedValue(failure);
     const view = await render();
     expect(content(view)).toContain(message);
     expect(content(view)).not.toContain('No captures saved yet.');
     expect(content(view)).not.toContain('private filesystem path');
-    mockRewind.listFrames.mockResolvedValueOnce({
-      frames: [frame('recovered')],
+    mockRewind.listFrames.mockImplementation(async ({source}) => ({
+      frames: source === 'captured' ? [frame('captured:recovered')] : [],
       nextCursor: null,
+    }));
+    await act(async () => {
+      jest.advanceTimersByTime(15000);
     });
-    await press(view, 'Refresh history');
-    expect(label(view, 'View capture recovered')).toBeDefined();
+    expect(label(view, 'View capture captured:recovered')).toBeDefined();
   },
 );
 
-test('missing native bridge reports unavailable instead of empty success', async () => {
-  delete NativeModules.OmiRewind;
+test('an absent store is tolerated while other failures visibly mark partial history', async () => {
+  mockRewind.listFrames.mockImplementation(async ({source}) => {
+    if (source === 'shipping') {
+      throw {code: 'OMI_REWIND_UNAVAILABLE'};
+    }
+    return {frames: [frame('captured:one')], nextCursor: null};
+  });
   const view = await render();
-  expect(content(view)).toContain(
-    'No local Rewind history is available for this account on this Mac.',
+  expect(label(view, 'View capture captured:one')).toBeDefined();
+  expect(content(view)).not.toContain('could not be loaded');
+  mockRewind.listFrames.mockImplementation(async ({source}) => {
+    if (source === 'shipping') {
+      throw new Error('private path');
+    }
+    return {frames: [frame('captured:one')], nextCursor: null};
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(15000);
+  });
+  expect(label(view, 'View capture captured:one')).toBeDefined();
+  expect(content(view)).toContain('Some screen history could not be loaded.');
+  expect(content(view)).not.toContain('private path');
+});
+
+test('both missing stores are empty, but a missing native bridge remains unavailable', async () => {
+  mockRewind.listFrames.mockRejectedValue({code: 'OMI_REWIND_UNAVAILABLE'});
+  const empty = await render();
+  expect(content(empty)).toContain('No captures saved yet.');
+  delete NativeModules.OmiRewind;
+  const unavailable = await render();
+  expect(content(unavailable)).toContain(
+    'No local Recall history is available for this account on this Mac.',
   );
-  expect(content(view)).not.toContain('No captures saved yet.');
+  expect(content(unavailable)).not.toContain('No captures saved yet.');
 });
 
 test.each(['rejected', 'wrong-id'])(
@@ -192,48 +276,48 @@ test.each(['rejected', 'wrong-id'])(
       mockRewind.readFrame.mockResolvedValueOnce(image('another'));
     }
     const view = await render();
-    await press(view, 'View capture one');
+    await press(view, 'View capture captured:one');
     expect(content(view)).toContain('This captured frame could not be opened.');
     expect(content(view)).not.toContain('private path');
     expect(view.root.findAllByType(Image)).toHaveLength(0);
   },
 );
 
-test('late page failure and image failure cannot replace a new search', async () => {
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('one')],
-    nextCursor: 'old-page',
-  });
+test('late page and image failures cannot replace a new query', async () => {
   const oldPage = deferred<{
     frames: ReturnType<typeof frame>[];
     nextCursor: null;
   }>();
   const oldImage = deferred<ReturnType<typeof image>>();
+  mockRewind.listFrames.mockImplementation(async ({source, cursor, query}) => {
+    if (source === 'shipping') {
+      return {frames: [], nextCursor: null};
+    }
+    if (query === 'new') {
+      return {frames: [frame('captured:new')], nextCursor: null};
+    }
+    if (cursor) {
+      return oldPage.promise;
+    }
+    return {frames: firstPage(), nextCursor: 'old-page'};
+  });
   mockRewind.readFrame.mockReturnValueOnce(oldImage.promise);
   const view = await render();
-  await press(view, 'View capture one');
-  mockRewind.listFrames.mockReturnValueOnce(oldPage.promise);
+  await press(view, 'View capture captured:0');
   await press(view, 'Load more history');
-  await act(async () =>
-    label(view, 'Search screen history').props.onChangeText('new'),
-  );
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('new')],
-    nextCursor: null,
-  });
-  await press(view, 'Search history');
+  await act(async () => view.update(<DesktopRewind query="new" />));
   await act(async () => {
     oldPage.reject(new Error('old list'));
     oldImage.reject(new Error('old image'));
   });
-  expect(label(view, 'View capture new')).toBeDefined();
+  expect(rows(view)).toEqual(['Window captured:new']);
   expect(content(view)).not.toContain('could not be');
   expect(content(view)).toContain('Select a capture to view it.');
 });
 
 test('image decoder failure is visible without exposing stored image data', async () => {
   const view = await render();
-  await press(view, 'View capture one');
+  await press(view, 'View capture captured:one');
   await act(async () =>
     view.root
       .findByType(Image)
@@ -244,84 +328,88 @@ test('image decoder failure is visible without exposing stored image data', asyn
   expect(view.root.findAllByType(Image)).toHaveLength(0);
 });
 
-test('switching history source retires a delayed old-source page', async () => {
-  const old = deferred<{
-    frames: ReturnType<typeof frame>[];
-    nextCursor: null;
-  }>();
-  mockRewind.listFrames.mockReturnValueOnce(old.promise);
-  const view = await render();
-  mockRewind.listFrames.mockResolvedValueOnce({
-    frames: [frame('captured')],
+test('new captures and periodic refresh update Recall without reopening the selected image', async () => {
+  const view = await render({captureRevision: 0});
+  await press(view, 'View capture captured:one');
+  const count = mockRewind.listFrames.mock.calls.length;
+  mockRewind.listFrames.mockImplementation(async ({source}) => ({
+    frames:
+      source === 'captured'
+        ? [frame('captured:new'), frame('captured:one')]
+        : [],
     nextCursor: null,
-  });
-  const sourceButton = view.root.findAll(
-    node =>
-      node.props.accessibilityRole === 'button' &&
-      node.findAllByType(Text).some(text => text.props.children === 'This app'),
-  )[0]!;
-  await act(async () => sourceButton.props.onPress());
-  expect(mockRewind.listFrames).toHaveBeenLastCalledWith({
-    source: 'captured',
-    query: '',
-    cursor: null,
-    limit: 50,
-  });
-  await act(async () =>
-    old.resolve({frames: [frame('shipping-stale')], nextCursor: null}),
+  }));
+  await act(async () => view.update(<DesktopRewind captureRevision={1} />));
+  expect(rows(view)).toContain('Window captured:new');
+  expect(view.root.findByType(Image).props.source.uri).toBe(
+    'data:image/jpeg;base64,image-captured:one',
   );
-  expect(label(view, 'View capture captured')).toBeDefined();
-  expect(
-    view.root.findAll(
-      node => node.props.accessibilityLabel === 'View capture shipping-stale',
-    ),
-  ).toHaveLength(0);
+  expect(mockRewind.listFrames).toHaveBeenCalledTimes(count + 2);
+  expect(mockRewind.readFrame).toHaveBeenCalledTimes(1);
+  expect(label(view, 'Refresh history')).toBeUndefined();
+  expect(label(view, 'Start screen capture')).toBeUndefined();
+  expect(content(view)).not.toContain('Timeline');
+  await act(async () => {
+    jest.advanceTimersByTime(15000);
+  });
+  expect(mockRewind.listFrames).toHaveBeenCalledTimes(count + 4);
+  act(() => view.unmount());
+  mounted.splice(mounted.indexOf(view), 1);
+  await act(async () => {
+    jest.advanceTimersByTime(30000);
+  });
+  expect(mockRewind.listFrames).toHaveBeenCalledTimes(count + 4);
 });
 
-test('explicit capture controls switch source and new capture hints preserve the selected image until refresh', async () => {
-  const capture = {
-    available: true,
-    capturing: false,
-    busy: false,
-    error: null,
-    start: jest.fn(async () => undefined),
-    stop: jest.fn(async () => undefined),
-  };
-  const view = await render({capture, captureRevision: 0});
-  await press(view, 'Start screen capture');
-  expect(capture.start).toHaveBeenCalledTimes(1);
-  expect(mockRewind.listFrames).toHaveBeenLastCalledWith({
-    source: 'captured',
-    query: '',
-    cursor: null,
-    limit: 50,
+test('background pauses refresh and foreground refreshes without waiting for the timer', async () => {
+  let change!: (state: 'active' | 'background') => void;
+  const remove = jest.fn();
+  const subscription = jest
+    .spyOn(AppState, 'addEventListener')
+    .mockImplementation((_event, listener) => {
+      change = listener;
+      return {remove};
+    });
+  try {
+    const view = await render();
+    mockRewind.listFrames.mockClear();
+    act(() => change('background'));
+    await act(async () => {
+      jest.advanceTimersByTime(30000);
+    });
+    expect(mockRewind.listFrames).not.toHaveBeenCalled();
+    await act(async () => change('active'));
+    expect(mockRewind.listFrames).toHaveBeenCalledTimes(2);
+    act(() => view.unmount());
+    mounted.splice(mounted.indexOf(view), 1);
+    expect(remove).toHaveBeenCalledTimes(1);
+  } finally {
+    subscription.mockRestore();
+  }
+});
+
+test('automatic refresh never replaces older pages the user has loaded', async () => {
+  mockRewind.listFrames.mockImplementation(async ({source, cursor}) =>
+    source === 'shipping'
+      ? {frames: [], nextCursor: null}
+      : cursor
+      ? {frames: [frame('captured:older')], nextCursor: null}
+      : {frames: firstPage(), nextCursor: 'older'},
+  );
+  const view = await render({captureRevision: 0});
+  await press(view, 'Load more history');
+  expect(view.root.findByType(FlatList).props.data).toEqual(
+    expect.arrayContaining([frame('captured:older')]),
+  );
+  mockRewind.listFrames.mockClear();
+  await act(async () => view.update(<DesktopRewind captureRevision={1} />));
+  await act(async () => {
+    jest.advanceTimersByTime(30000);
   });
-  await act(async () =>
-    view.update(
-      <DesktopRewind
-        capture={{...capture, capturing: true}}
-        captureRevision={0}
-      />,
-    ),
+  expect(mockRewind.listFrames).not.toHaveBeenCalled();
+  expect(view.root.findByType(FlatList).props.data).toEqual(
+    expect.arrayContaining([frame('captured:older')]),
   );
-  await press(view, 'Stop screen capture');
-  expect(capture.stop).toHaveBeenCalledTimes(1);
-  await press(view, 'View capture one');
-  const count = mockRewind.listFrames.mock.calls.length;
-  await act(async () =>
-    view.update(<DesktopRewind capture={capture} captureRevision={1} />),
-  );
-  expect(content(view)).toContain(
-    'New captures are saved. Refresh to view them.',
-  );
-  expect(view.root.findByType(Image).props.source.uri).toBe(
-    'data:image/jpeg;base64,image-one',
-  );
-  expect(mockRewind.listFrames).toHaveBeenCalledTimes(count);
-  await press(view, 'Refresh history');
-  expect(mockRewind.listFrames).toHaveBeenCalledTimes(count + 1);
-  expect(content(view)).not.toContain('New captures are saved.');
-  expect(view.root.findAllByType(Image)).toHaveLength(0);
 });
 
 test('Settings Screen Capture switch operates the shared producer instead of changing a staged preference', async () => {
@@ -381,4 +469,53 @@ test('Settings Screen Capture switch operates the shared producer instead of cha
     }
     NativeModules.OmiDesktopCommands = previous;
   }
+});
+
+test.each(['OMI_REWIND_AUTH', 'OMI_REWIND_OWNER_CHANGED'])(
+  'refresh %s clears private rows, pagination and the selected image',
+  async code => {
+    mockRewind.listFrames.mockImplementation(async ({source}) => ({
+      frames: source === 'captured' ? firstPage() : [],
+      nextCursor: source === 'captured' ? 'next' : null,
+    }));
+    const view = await render();
+    await press(view, 'View capture captured:0');
+    expect(view.root.findByType(Image)).toBeDefined();
+    expect(label(view, 'Load more history')).toBeDefined();
+    mockRewind.listFrames.mockRejectedValue({code});
+    await act(async () => jest.advanceTimersByTime(15000));
+    expect(rows(view)).toEqual([]);
+    expect(view.root.findAllByType(Image)).toHaveLength(0);
+    expect(
+      view.root.findAll(
+        node => node.props.accessibilityLabel === 'Load more history',
+      ),
+    ).toHaveLength(0);
+    expect(content(view)).not.toContain('Select a capture to view it.');
+    expect(content(view)).not.toContain('No captures saved yet.');
+  },
+);
+
+test('a delayed preview cannot restore private bytes after refresh loses ownership', async () => {
+  const preview = deferred<ReturnType<typeof image>>();
+  mockRewind.readFrame.mockReturnValueOnce(preview.promise);
+  const view = await render();
+  await press(view, 'View capture captured:one');
+  mockRewind.listFrames.mockRejectedValue({code: 'OMI_REWIND_OWNER_CHANGED'});
+  await act(async () => jest.advanceTimersByTime(15000));
+  await act(async () => preview.resolve(image('captured:one')));
+  expect(rows(view)).toEqual([]);
+  expect(view.root.findAllByType(Image)).toHaveLength(0);
+});
+
+test('transient refresh failure preserves readable rows and selected preview', async () => {
+  const view = await render();
+  await press(view, 'View capture captured:one');
+  mockRewind.listFrames.mockRejectedValue(new Error('temporary'));
+  await act(async () => jest.advanceTimersByTime(15000));
+  expect(rows(view)).toEqual(['Window captured:one']);
+  expect(view.root.findByType(Image).props.source.uri).toBe(
+    'data:image/jpeg;base64,image-captured:one',
+  );
+  expect(content(view)).toContain('Screen history could not be loaded.');
 });

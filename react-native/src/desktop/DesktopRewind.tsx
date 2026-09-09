@@ -1,16 +1,17 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  AppState,
+  FlatList,
   Image,
   NativeModules,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
 import {desktopTokens as token} from './tokens';
-import type {useRewindCapture} from '../app/useRewindCapture';
+import {ScrollFade, useScrollFade} from './ScrollFade';
+import {createRewindTimeline} from './rewindTimeline';
 
 type Frame = {
   id: string;
@@ -33,60 +34,90 @@ type Rewind = {
 
 function errorCopy(error: unknown) {
   const code = (error as {code?: string} | null)?.code;
-  if (code === 'OMI_REWIND_UNAVAILABLE')
-    return 'No local Rewind history is available for this account on this Mac.';
-  if (code === 'OMI_REWIND_AUTH')
-    return 'Sign in again to open your screen history.';
-  return 'Screen history could not be loaded. Try again.';
+  if (code === 'OMI_REWIND_UNAVAILABLE') {
+    return 'No local Recall history is available for this account on this Mac.';
+  }
+  if (code === 'OMI_REWIND_AUTH' || code === 'OMI_REWIND_OWNER_CHANGED') {
+    return 'Sign in again from Settings to open your screen history.';
+  }
+  return 'Screen history could not be loaded.';
 }
 
 export function DesktopRewind({
-  capture,
   captureRevision = 0,
+  query = '',
 }: {
-  capture?: ReturnType<typeof useRewindCapture>;
   captureRevision?: number;
+  query?: string;
 }) {
-  const capturedRevision = useRef(captureRevision);
-  capturedRevision.current = captureRevision;
-  const [seenRevision, setSeenRevision] = useState(captureRevision);
-  const [source, setSource] = useState<'shipping' | 'captured'>('shipping');
-  const [draft, setDraft] = useState('');
-  const [query, setQuery] = useState('');
+  const fade = useScrollFade();
+  const seenRevision = useRef(captureRevision);
+  const lastQuery = useRef(query);
+  const paginated = useRef(false);
+  const appState = useRef(AppState.currentState);
   const [revision, setRevision] = useState(0);
   const [frames, setFrames] = useState<Frame[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const timeline = useRef<ReturnType<typeof createRewindTimeline> | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Frame | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
   const epoch = useRef(0);
+  const imageEpoch = useRef(0);
   const loading = useRef(false);
   const bridge = NativeModules.OmiRewind as Rewind | undefined;
+  const handleFailure = useCallback((failure: unknown) => {
+    const code = (failure as {code?: string} | null)?.code;
+    if (code === 'OMI_REWIND_AUTH' || code === 'OMI_REWIND_OWNER_CHANGED') {
+      epoch.current += 1;
+      imageEpoch.current += 1;
+      timeline.current = null;
+      loading.current = false;
+      setBusy(false);
+      setFrames([]);
+      setHasMore(false);
+      setSelected(null);
+      setImage(null);
+      setImageError(null);
+    }
+    setError(errorCopy(failure));
+  }, []);
 
   useEffect(() => {
     const current = (epoch.current += 1);
-    setFrames([]);
-    setCursor(null);
-    setSelected(null);
+    if (lastQuery.current !== query) {
+      setFrames([]);
+      setHasMore(false);
+      setSelected(null);
+      lastQuery.current = query;
+      paginated.current = false;
+    }
     setError(null);
-    setSeenRevision(capturedRevision.current);
     setBusy(true);
     loading.current = true;
+    const reader =
+      bridge === undefined ? null : createRewindTimeline(bridge, query);
+    timeline.current = reader;
     const request =
-      bridge === undefined
+      reader === null
         ? Promise.reject({code: 'OMI_REWIND_UNAVAILABLE'})
-        : bridge.listFrames({source, query, cursor: null, limit: 50});
+        : reader.next();
     request
       .then(
         page => {
-          if (epoch.current !== current) return;
+          if (epoch.current !== current) {
+            return;
+          }
           setFrames(page.frames);
-          setCursor(page.nextCursor);
+          setHasMore(page.next);
+          setError(page.warning ?? null);
         },
         failure => {
-          if (epoch.current === current) setError(errorCopy(failure));
+          if (epoch.current === current) {
+            handleFailure(failure);
+          }
         },
       )
       .finally(() => {
@@ -98,16 +129,53 @@ export function DesktopRewind({
     return () => {
       epoch.current += 1;
     };
-  }, [bridge, source, query, revision]);
+  }, [bridge, query, revision, handleFailure]);
+
+  useEffect(() => {
+    if (
+      !busy &&
+      !paginated.current &&
+      appState.current === 'active' &&
+      seenRevision.current !== captureRevision
+    ) {
+      seenRevision.current = captureRevision;
+      setRevision(value => value + 1);
+    }
+  }, [busy, captureRevision]);
+  useEffect(() => {
+    const refresh = () => {
+      if (
+        !loading.current &&
+        !paginated.current &&
+        appState.current === 'active'
+      ) {
+        setRevision(value => value + 1);
+      }
+    };
+    const listener = AppState.addEventListener('change', state => {
+      appState.current = state;
+      if (state === 'active') {
+        refresh();
+      }
+    });
+    const timer = setInterval(refresh, 15000);
+    return () => {
+      clearInterval(timer);
+      listener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
+    const currentImage = ++imageEpoch.current;
     setImage(null);
     setImageError(null);
     if (selected !== null && bridge !== undefined) {
       bridge.readFrame(selected.id).then(
         result => {
-          if (!active) return;
+          if (!active || imageEpoch.current !== currentImage) {
+            return;
+          }
           if (
             result.id !== selected.id ||
             result.mimeType !== 'image/jpeg' ||
@@ -118,25 +186,40 @@ export function DesktopRewind({
           }
           setImage(`data:image/jpeg;base64,${result.base64}`);
         },
-        () => {
-          if (active) setImageError('This captured frame could not be opened.');
+        failure => {
+          if (active && imageEpoch.current === currentImage) {
+            const code = (failure as {code?: string} | null)?.code;
+            if (
+              code === 'OMI_REWIND_AUTH' ||
+              code === 'OMI_REWIND_OWNER_CHANGED'
+            ) {
+              handleFailure(failure);
+              return;
+            }
+            setImageError('This captured frame could not be opened.');
+          }
         },
       );
     }
     return () => {
       active = false;
     };
-  }, [bridge, selected]);
+  }, [bridge, selected, handleFailure]);
 
   const more = async () => {
-    if (loading.current || cursor === null || bridge === undefined) return;
+    if (loading.current || !hasMore || timeline.current === null) {
+      return;
+    }
     const current = epoch.current;
+    paginated.current = true;
     loading.current = true;
     setBusy(true);
     setError(null);
     try {
-      const page = await bridge.listFrames({source, query, cursor, limit: 50});
-      if (epoch.current !== current) return;
+      const page = await timeline.current.next();
+      if (epoch.current !== current) {
+        return;
+      }
       setFrames(previous => {
         const ids = new Set(previous.map(frame => frame.id));
         return [
@@ -144,9 +227,12 @@ export function DesktopRewind({
           ...page.frames.filter(frame => !ids.has(frame.id)),
         ];
       });
-      setCursor(page.nextCursor);
+      setHasMore(page.next);
+      setError(page.warning ?? null);
     } catch (failure) {
-      if (epoch.current === current) setError(errorCopy(failure));
+      if (epoch.current === current) {
+        handleFailure(failure);
+      }
     } finally {
       if (epoch.current === current) {
         loading.current = false;
@@ -154,154 +240,79 @@ export function DesktopRewind({
       }
     }
   };
-  const search = () => {
-    setQuery(draft.trim());
-    setRevision(value => value + 1);
-  };
   return (
-    <View style={styles.root} accessibilityLabel="Rewind screen history">
-      <View style={styles.toolbar}>
-        <TextInput
-          accessibilityLabel="Search screen history"
-          placeholder="Search screen history"
-          maxLength={200}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={search}
-          style={styles.input}
-        />
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Search history"
-          onPress={search}
-          style={styles.button}>
-          <Text style={styles.text}>Search</Text>
-        </FocusPressable>
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh history"
-          onPress={() => setRevision(value => value + 1)}
-          style={styles.button}>
-          <Text style={styles.text}>Refresh</Text>
-        </FocusPressable>
-      </View>
-      <View style={styles.toolbar}>
-        {(['shipping', 'captured'] as const).map(value => (
-          <FocusPressable
-            key={value}
-            accessibilityRole="button"
-            accessibilityState={{selected: source === value}}
-            onPress={() => setSource(value)}
-            style={[styles.button, source === value && styles.selected]}>
-            <Text style={styles.text}>
-              {value === 'shipping' ? 'Existing Omi history' : 'This app'}
-            </Text>
-          </FocusPressable>
-        ))}
-      </View>
-      <Text style={styles.meta}>
-        Screen history stored on this Mac. Search matches captured text, apps,
-        and window titles.
-      </Text>
-      {capture !== undefined ? (
-        <View style={styles.toolbar}>
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              capture.capturing || capture.busy
-                ? 'Stop screen capture'
-                : 'Start screen capture'
-            }
-            disabled={!capture.available}
-            onPress={() => {
-              if (capture.capturing || capture.busy)
-                void capture.stop().catch(() => undefined);
-              else {
-                setSource('captured');
-                void capture.start();
-              }
-            }}
-            style={styles.button}>
-            <Text style={styles.text}>
-              {capture.capturing || capture.busy
-                ? 'Stop capture'
-                : 'Start capture'}
-            </Text>
-          </FocusPressable>
-          <Text style={[styles.meta, styles.status]}>
-            {!capture.available
-              ? 'Capture is available in the native Mac app.'
-              : capture.capturing
-              ? 'Capturing the active window. Password managers and excluded apps are skipped.'
-              : capture.busy
-              ? 'Waiting for screen recording permission…'
-              : 'Capture is stopped. Start to save new screen history.'}
-          </Text>
-        </View>
-      ) : null}
-      {capture?.error ? (
-        <Text accessibilityRole="alert" style={styles.text}>
-          {capture.error}
-        </Text>
-      ) : null}
-      {source === 'captured' && captureRevision > seenRevision ? (
-        <Text style={styles.meta}>
-          New captures are saved. Refresh to view them.
-        </Text>
-      ) : null}
+    <View style={styles.root} accessibilityLabel="Recall screen history">
       {error !== null ? (
         <Text accessibilityRole="alert" style={styles.text}>
           {error}
         </Text>
       ) : null}
       <View style={styles.content}>
-        <ScrollView style={styles.list} contentContainerStyle={styles.rows}>
-          {frames.map(frame => (
-            <FocusPressable
-              key={frame.id}
-              accessibilityRole="button"
-              accessibilityLabel={`View capture ${frame.id}`}
-              accessibilityState={{selected: selected?.id === frame.id}}
-              onPress={() => setSelected(frame)}
-              style={[
-                styles.row,
-                selected?.id === frame.id && styles.selected,
-              ]}>
-              <Text style={styles.text}>
-                {frame.appName || 'Captured screen'}
-              </Text>
-              <Text style={styles.meta} numberOfLines={2}>
-                {frame.windowTitle}
-              </Text>
-              <Text style={styles.meta}>
-                {new Date(frame.capturedAtMs).toLocaleString()}
-              </Text>
-            </FocusPressable>
-          ))}
-          {busy ? (
-            <Text style={styles.meta}>Loading screen history…</Text>
-          ) : null}
-          {!busy && error === null && frames.length === 0 ? (
-            <Text style={styles.text}>
-              {query
-                ? 'No captures match this search.'
-                : 'No captures saved yet.'}
-            </Text>
-          ) : null}
-          {cursor !== null ? (
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel="Load more history"
-              disabled={busy}
-              onPress={() => void more()}
-              style={styles.button}>
-              <Text style={styles.text}>Load more</Text>
-            </FocusPressable>
-          ) : null}
-        </ScrollView>
+        <ScrollFade visible={fade.visible} style={styles.list}>
+          <FlatList
+            data={frames}
+            keyExtractor={frame => frame.id}
+            extraData={selected?.id}
+            onLayout={fade.onLayout}
+            onScroll={fade.onScroll}
+            onContentSizeChange={fade.onContentSizeChange}
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.rows}
+            renderItem={({item: frame}) => (
+              <FocusPressable
+                key={frame.id}
+                accessibilityRole="button"
+                accessibilityLabel={`View capture ${frame.id}`}
+                accessibilityState={{selected: selected?.id === frame.id}}
+                onPress={() => setSelected(frame)}
+                style={[
+                  styles.row,
+                  selected?.id === frame.id && styles.selected,
+                ]}>
+                <Text style={styles.text}>
+                  {frame.appName || 'Captured screen'}
+                </Text>
+                <Text style={styles.meta} numberOfLines={2}>
+                  {frame.windowTitle}
+                </Text>
+                <Text style={styles.meta}>
+                  {new Date(frame.capturedAtMs).toLocaleString()}
+                </Text>
+              </FocusPressable>
+            )}
+            ListEmptyComponent={
+              !busy && error === null ? (
+                <Text style={styles.text}>
+                  {query
+                    ? 'No captures match this search.'
+                    : 'No captures saved yet.'}
+                </Text>
+              ) : null
+            }
+            ListFooterComponent={
+              <>
+                {busy ? (
+                  <Text style={styles.meta}>Loading screen history…</Text>
+                ) : null}
+                {hasMore ? (
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Load more history"
+                    disabled={busy}
+                    onPress={() => void more()}
+                    style={styles.button}>
+                    <Text style={styles.text}>Load more</Text>
+                  </FocusPressable>
+                ) : null}
+              </>
+            }
+          />
+        </ScrollFade>
         <View style={styles.preview}>
           {selected === null ? (
-            <Text style={styles.meta}>Select a capture to view it.</Text>
+            frames.length > 0 ? (
+              <Text style={styles.meta}>Select a capture to view it.</Text>
+            ) : null
           ) : imageError !== null ? (
             <Text accessibilityRole="alert" style={styles.text}>
               {imageError}
@@ -330,14 +341,6 @@ export function DesktopRewind({
 const styles = StyleSheet.create({
   root: {flex: 1, gap: 12, padding: 12},
   toolbar: {flexDirection: 'row', gap: 8, alignItems: 'center'},
-  input: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 12,
-    backgroundColor: token.color.glassQuiet,
-    padding: 12,
-    color: token.color.ink,
-  },
   button: {
     padding: 12,
     borderRadius: 12,
@@ -362,7 +365,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: token.color.glassQuiet,
+    backgroundColor: 'transparent',
   },
   image: {width: '100%', height: '100%'},
 });
