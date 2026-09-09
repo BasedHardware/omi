@@ -1643,6 +1643,28 @@ test('Settings does not persist audio capture when microphone access is denied',
   );
 });
 
+test('Settings names denied notification access instead of asking macOS again', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    loadPermissionStatus: jest.Mock;
+  };
+  settings.loadPermissionStatus.mockResolvedValueOnce({
+    microphone: 'unknown',
+    notifications: 'denied',
+    screen: 'unknown',
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Notification access is denied in System Settings.');
+  expect(tree).not.toContain('Ask macOS for notification permission.');
+});
+
 test('Settings audio recording labels are not raw mode tokens', async () => {
   const settings = jest.requireMock('../desktopSettingsClient') as {
     requestDesktopPermission: jest.Mock;

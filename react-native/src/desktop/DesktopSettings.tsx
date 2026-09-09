@@ -426,6 +426,8 @@ export function DesktopSettings({
         copy={
           permissions.notifications === 'granted'
             ? 'Banners are allowed in System Settings.'
+            : permissions.notifications === 'denied'
+            ? 'Notification access is denied in System Settings.'
             : 'Ask macOS for notification permission.'
         }
         title="Notifications"
