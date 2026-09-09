@@ -28,6 +28,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from notion_content import encode_payload, plan_content_requests, title_items
 
 load_dotenv()
 
@@ -88,9 +89,9 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
         if method == "GET":
             response = requests.get(url, headers=headers, params=params)
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data or {})
+            response = requests.post(url, headers=headers, data=encode_payload(json_data or {}))
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=json_data)
+            response = requests.patch(url, headers=headers, data=encode_payload(json_data))
         elif method == "DELETE":
             response = requests.delete(url, headers=headers)
         else:
@@ -105,6 +106,27 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
     except Exception as e:
         log(f"Notion API request error: {e}")
         return {"error": str(e)}
+
+
+def append_content_batches(uid: str, page_id: str, batches: list, confirmed: int, total: int) -> Optional[str]:
+    """Stop at the first unconfirmed write; replay could duplicate saved content."""
+    for batch in batches:
+        try:
+            result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data=batch)
+        except Exception:
+            result = None
+        if not isinstance(result, dict) or not result or "error" in result:
+            status = result.get("status_code") if isinstance(result, dict) else None
+            diagnostic = f" (HTTP {status})" if status else ""
+            return (
+                f"Content write was not confirmed{diagnostic}.\n\n"
+                f"**Page ID:** `{page_id}`\n"
+                f"Confirmed {confirmed} of {total} paragraph block(s) saved. "
+                "The failed batch may have been applied. Check the page before retrying; "
+                "replaying the full content can duplicate it."
+            )
+        confirmed += len(batch["children"])
+    return None
 
 
 def extract_title(page: dict) -> str:
@@ -586,7 +608,7 @@ async def tool_create_page(request: Request):
         page_data = {
             "properties": {
                 "title": {
-                    "title": [{"text": {"content": title}}]
+                    "title": title_items(title)
                 }
             }
         }
@@ -597,7 +619,7 @@ async def tool_create_page(request: Request):
             # For database pages, use Name property instead of title
             page_data["properties"] = {
                 "Name": {
-                    "title": [{"text": {"content": title}}]
+                    "title": title_items(title)
                 }
             }
         elif parent_page_id:
@@ -611,28 +633,23 @@ async def tool_create_page(request: Request):
             else:
                 return ChatToolResponse(error="Please specify a parent page or database ID.")
 
-        # Add content as paragraph blocks
-        if content:
-            paragraphs = content.split("\n")
-            page_data["children"] = [
-                {
-                    "object": "block",
-                    "type": "paragraph",
-                    "paragraph": {
-                        "rich_text": [{"text": {"content": p}}]
-                    }
-                }
-                for p in paragraphs if p.strip()
-            ]
+        batches = plan_content_requests(content or "", page_data)
+        result = notion_api_request(uid, "POST", "/pages", json_data=batches[0])
 
-        log(f"Creating page with data: {page_data}")
+        page_id = result.get("id") if isinstance(result, dict) else None
+        if not result or "error" in result or not isinstance(page_id, str) or not page_id.strip():
+            status = result.get("status_code") if isinstance(result, dict) else None
+            diagnostic = f" (HTTP {status})" if status else ""
+            return ChatToolResponse(error=(
+                f"Page creation was not confirmed{diagnostic}. "
+                "Check Notion before retrying; the page may already have been created."
+            ))
 
-        result = notion_api_request(uid, "POST", "/pages", json_data=page_data)
+        total = sum(len(batch.get("children", [])) for batch in batches)
+        error = append_content_batches(uid, page_id, batches[1:], len(batches[0].get("children", [])), total)
+        if error:
+            return ChatToolResponse(error=f"Page created, but not all content writes were confirmed.\n\n{error}")
 
-        if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to create page: {result.get('error', 'Unknown error')}")
-
-        page_id = result.get("id", "")
         url = result.get("url", "")
 
         result_parts = [
@@ -647,11 +664,11 @@ async def tool_create_page(request: Request):
 
         return ChatToolResponse(result="\n".join(result_parts))
 
-    except Exception as e:
-        log(f"Error creating page: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to create page: {str(e)}")
+    except ValueError as e:
+        return ChatToolResponse(error=f"Failed to create page: {e}")
+    except Exception:
+        log("Error creating page")
+        return ChatToolResponse(error="Failed to create page. Check Notion before retrying.")
 
 
 @app.post("/tools/update_page", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -737,29 +754,17 @@ async def tool_append_content(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Notion workspace first in the app settings.")
 
-        # Create paragraph blocks from content
-        paragraphs = content.split("\n")
-        children = [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{"text": {"content": p}}]
-                }
-            }
-            for p in paragraphs if p.strip()
-        ]
+        batches = plan_content_requests(content)
+        total = sum(len(batch["children"]) for batch in batches)
+        error = append_content_batches(uid, page_id, batches, 0, total)
+        if error:
+            return ChatToolResponse(error=error)
 
-        result = notion_api_request(uid, "PATCH", f"/blocks/{page_id}/children", json_data={"children": children})
+        return ChatToolResponse(result=f"**Content Added!**\n\nAdded {total} paragraph(s) to the page.")
 
-        if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to append content: {result.get('error', 'Unknown error')}")
-
-        return ChatToolResponse(result=f"**Content Added!**\n\nAdded {len(children)} paragraph(s) to the page.")
-
-    except Exception as e:
-        log(f"Error appending content: {e}")
-        return ChatToolResponse(error=f"Failed to append content: {str(e)}")
+    except Exception:
+        log("Error appending content")
+        return ChatToolResponse(error="Failed to append content. Check the page before retrying.")
 
 
 @app.post("/tools/list_databases", tags=["chat_tools"], response_model=ChatToolResponse)
