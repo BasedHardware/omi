@@ -247,6 +247,10 @@ omi
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
+Both transcript JSON and `local call --args-json` require finite numbers:
+`NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
+range are rejected before opening an API client. In `--json` mode, these input
+errors are reported as JSON on stderr.
 
 ## Global flags
 

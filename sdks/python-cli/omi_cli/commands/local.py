@@ -15,6 +15,7 @@ import typer
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
+from omi_cli.json_input import load_json_input
 from omi_cli.local_client import existing_path
 
 if TYPE_CHECKING:
@@ -99,9 +100,9 @@ def call(
 ) -> None:
     ctx = _ctx(typer_ctx)
     try:
-        parsed = json.loads(args_json)
-    except json.JSONDecodeError as exc:
-        raise UsageError(message="--args-json must be valid JSON") from exc
+        parsed = load_json_input(args_json)
+    except ValueError as exc:
+        raise UsageError(message="--args-json must be valid JSON", detail=str(exc)) from exc
     if not isinstance(parsed, Mapping):
         raise UsageError(message="--args-json must be a JSON object")
     _emit_tool(ctx, tool_name, parsed)
