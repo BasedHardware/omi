@@ -28,12 +28,20 @@ type StreamingTranscriber interface {
 
 func ParakeetWSURL(apiURL string, sampleRate int) string {
 	trimmed := strings.TrimSpace(apiURL)
+	if trimmed == "" {
+		return ""
+	}
 	raw := trimmed
-	if !strings.Contains(trimmed, "://") {
-		raw = "https://" + trimmed
+	if strings.HasPrefix(trimmed, "//") {
+		raw = "https:" + trimmed
+	} else {
+		schemeSep := strings.Index(trimmed, "://")
+		if schemeSep < 0 || strings.ContainsAny(trimmed[:schemeSep], "/?#") {
+			raw = "https://" + trimmed
+		}
 	}
 	u, err := url.Parse(raw)
-	if err != nil {
+	if err != nil || u.Host == "" {
 		return ""
 	}
 	switch strings.ToLower(u.Scheme) {
@@ -42,11 +50,33 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 	default:
 		u.Scheme = "wss"
 	}
+
 	cleanPath := strings.TrimRight(u.Path, "/")
 	u.Path = cleanPath + "/v3/stream"
-	q := u.Query()
-	q.Set("sample_rate", fmt.Sprintf("%d", sampleRate))
-	u.RawQuery = q.Encode()
+	if u.RawPath != "" {
+		u.RawPath = strings.TrimRight(u.RawPath, "/") + "/v3/stream"
+	}
+
+	var newParts []string
+	foundSampleRate := false
+	if u.RawQuery != "" {
+		for _, part := range strings.Split(u.RawQuery, "&") {
+			if part == "" {
+				continue
+			}
+			k, _, _ := strings.Cut(part, "=")
+			if k == "sample_rate" {
+				newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+				foundSampleRate = true
+			} else {
+				newParts = append(newParts, part)
+			}
+		}
+	}
+	if !foundSampleRate {
+		newParts = append(newParts, fmt.Sprintf("sample_rate=%d", sampleRate))
+	}
+	u.RawQuery = strings.Join(newParts, "&")
 	u.Fragment = ""
 	return u.String()
 }

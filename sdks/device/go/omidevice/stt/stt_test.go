@@ -39,6 +39,24 @@ func TestParakeetWSURL(t *testing.T) {
 			sampleRate: 8000,
 			want:       "wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=8000",
 		},
+		{
+			name:       "schemeless with query containing protocol",
+			apiURL:     "parakeet.example/gateway?redirect=https://other.example",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/gateway/v3/stream?redirect=https://other.example&sample_rate=16000",
+		},
+		{
+			name:       "preserve percent-escaped path and query",
+			apiURL:     "https://parakeet.example/gateway%2Fv1?region=eu%20zone",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/gateway%2Fv1/v3/stream?region=eu%20zone&sample_rate=16000",
+		},
+		{
+			name:       "replace sample_rate and strip fragment",
+			apiURL:     "https://parakeet.example/gateway?sample_rate=8000&token=abc#frag",
+			sampleRate: 16000,
+			want:       "wss://parakeet.example/gateway/v3/stream?sample_rate=16000&token=abc",
+		},
 	}
 
 	for _, tc := range tests {
