@@ -3232,5 +3232,6 @@
     "speechProfileTopicGoal": "ما هدفك على المدى الطويل؟",
     "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
     "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
-    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل"
+    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
+    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد."
 }

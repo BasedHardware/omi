@@ -9979,4 +9979,7 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
 }

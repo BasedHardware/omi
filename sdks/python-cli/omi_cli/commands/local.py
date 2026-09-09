@@ -15,6 +15,7 @@ import typer
 
 from omi_cli import config as cfg
 from omi_cli.errors import UsageError
+from omi_cli.json_input import load_json_input
 from omi_cli.local_client import existing_path
 
 if TYPE_CHECKING:
@@ -99,9 +100,9 @@ def call(
 ) -> None:
     ctx = _ctx(typer_ctx)
     try:
-        parsed = json.loads(args_json)
-    except json.JSONDecodeError as exc:
-        raise UsageError(message="--args-json must be valid JSON") from exc
+        parsed = load_json_input(args_json)
+    except ValueError as exc:
+        raise UsageError(message="--args-json must be valid JSON", detail=str(exc)) from exc
     if not isinstance(parsed, Mapping):
         raise UsageError(message="--args-json must be a JSON object")
     _emit_tool(ctx, tool_name, parsed)
@@ -224,6 +225,18 @@ def _emit_tool(
     ctx.renderer.emit(result, title=tool_name)
 
 
+def _same_file(source: Path, output: Path) -> bool:
+    """True when source and output refer to the same existing file.
+
+    Uses ``os.path.samefile`` so hard links to the same inode are
+    detected even when their path strings differ.
+    """
+    try:
+        return source.exists() and os.path.samefile(source, output)
+    except OSError:
+        return False
+
+
 def _write_screenshot_result(result: Any, output: Path) -> Path:
     output = output.expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -231,6 +244,8 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
     if isinstance(result, str):
         source = existing_path(result)
         if source:
+            if _same_file(source, output):
+                return output
             shutil.copyfile(source, output)
         else:
             output.write_text(result, encoding="utf-8")
@@ -241,6 +256,8 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
         if source_path:
             source = existing_path(source_path)
             if source:
+                if _same_file(source, output):
+                    return output
                 shutil.copyfile(source, output)
                 return output
 

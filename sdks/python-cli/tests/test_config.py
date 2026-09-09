@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 from pathlib import Path
@@ -43,6 +44,72 @@ def test_load_missing_file_returns_empty_config(config_path: Path) -> None:
     assert config.path == config_path
     assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
     assert config.profiles == {}
+
+
+def test_load_malformed_toml_returns_empty_config_with_error(config_path: Path) -> None:
+    """A broken config must not crash diagnostics — return an empty Config
+    that records why parsing failed."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "not valid TOML" in config.load_error
+
+
+def test_load_invalid_utf8_records_unicode_error(config_path: Path) -> None:
+    """A config with invalid UTF-8 must not crash diagnostics either; it is
+    recorded on load_error so write commands refuse to clobber it."""
+    config_path.write_bytes(b"active_profile = \xff\xfe\n")
+    config = cfg.load()
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "not valid UTF-8" in config.load_error
+
+
+def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
+    """save() must refuse to overwrite a file that failed to parse on load:
+    a write command would otherwise silently destroy profiles/credentials the
+    user could still repair by hand."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    config = cfg.load()
+    assert config.was_load_error
+    original = config_path.read_bytes()
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    # The corrupt file is left untouched.
+    assert config_path.read_bytes() == original
+
+
+def test_version_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
+    """`omi version` must keep working when the config TOML is malformed."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+    assert "omi-cli" in result.output
+
+
+def test_config_path_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
+    """`omi config path` must keep working when the config TOML is malformed."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    result = cli_runner.invoke(app, ["config", "path"])
+    assert result.exit_code == 0, result.output
+    assert str(config_path) in result.output
+
+
+def test_config_path_json_succeeds_with_malformed_config(config_path: Path, cli_runner) -> None:
+    """The `--json config path` branch must keep working when the config TOML
+    is malformed (regression guard for the JSON renderer path)."""
+    config_path.write_text("active_profile = [\n", encoding="utf-8")  # invalid TOML
+    result = cli_runner.invoke(app, ["--json", "config", "path"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["path"] == str(config_path)
 
 
 def test_config_set_preserves_unknown_root_settings(config_path: Path, cli_runner) -> None:

@@ -10020,4 +10020,7 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
+
+  @override
+  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
 }
