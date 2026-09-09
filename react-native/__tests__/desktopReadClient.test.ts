@@ -442,6 +442,30 @@ describe('homeSearchItems', () => {
       homeSearchItems([conversation], [task], '').map(item => item.id),
     ).toEqual(['task-search', 'conversation-search']);
   });
+
+  test('memory rows match visible speech instead of hidden citation ids', () => {
+    const memory: DesktopReadProjection = {
+      kind: 'memory',
+      id: 'memory-search',
+      title: 'The launch is Friday.',
+      summary: 'The launch is Friday.',
+      searchableText: 'The launch is Friday.',
+      citations: ['citation-v1:launch'],
+      timestamp: null,
+      provenance: {
+        label: null,
+        synthesisVersion: 'synthesis-v1',
+        inputDigest: 'a',
+        outputDigest: 'b',
+      },
+    };
+    expect(
+      homeSearchItems([memory], [], 'citation-v1').map(item => item.id),
+    ).toEqual([]);
+    expect(
+      homeSearchItems([memory], [], 'Friday').map(item => item.id),
+    ).toEqual(['memory-search']);
+  });
 });
 
 describe('desktopReadsCanRetry', () => {
@@ -551,7 +575,7 @@ test('loads and normalizes all three exact desktop read routes', async () => {
         expect.objectContaining({
           kind: 'memory',
           id: 'memory1_abc',
-          searchableText: 'The launch is Friday.\ncitation-v1:launch',
+          searchableText: 'The launch is Friday.',
           timestamp: 1785900200,
         }),
       ],
@@ -1315,6 +1339,27 @@ test('preserves absent memory timestamps without inventing an order', async () =
     })),
   );
   expect(result.items[0].timestamp).toBeNull();
+});
+
+test('indexes visible memory text instead of hidden citation ids', async () => {
+  const result = await loadMemories(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify(page([memory], 'recall-completeness-v1')),
+    })),
+  );
+  expect(result.items[0]).toEqual(
+    expect.objectContaining({
+      id: 'memory1_abc',
+      citations: ['citation-v1:launch'],
+      searchableText: 'The launch is Friday.',
+    }),
+  );
+  expect(result.items[0].searchableText).not.toContain('citation-v1');
+  expect(homeSearchItems(result.items, [], 'citation-v1')).toEqual([]);
+  expect(
+    homeSearchItems(result.items, [], 'Friday').map(item => item.id),
+  ).toEqual(['memory1_abc']);
 });
 
 test('separates a machine slug from visible memory text', () => {

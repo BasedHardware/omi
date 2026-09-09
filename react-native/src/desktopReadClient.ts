@@ -1091,10 +1091,10 @@ export async function loadMemories(
       id,
       title: parsedText.body,
       summary: parsedText.body,
-      searchableText: `${memoryDisplayTitle({
+      searchableText: memoryDisplayTitle({
         title: parsedText.body,
         summary: parsedText.body,
-      })}\n${citations.join('\n')}`,
+      }),
       citations,
       timestamp: optionalTimestamp(item, `Memory ${index} timestamp`),
       provenance: {
