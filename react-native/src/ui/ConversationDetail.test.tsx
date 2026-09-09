@@ -197,3 +197,58 @@ test('legacy load failure offers retry without inventing an empty transcript', (
   );
   expect(reload).toHaveBeenCalledTimes(1);
 });
+
+test('conversation details name starred conversations without an empty star toggle', () => {
+  const starred = render({
+    conversation: {...conversation, starred: true},
+  });
+  expect(text(starred)).toContain('Starred');
+  expect(
+    starred.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Starred conversation' &&
+        node.props.children === 'Starred',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    starred.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toHaveLength(0);
+
+  const unstarred = render();
+  expect(text(unstarred)).not.toContain('Starred');
+  expect(
+    unstarred.root.findAll(
+      node => node.props.accessibilityLabel === 'Not starred',
+    ),
+  ).toHaveLength(0);
+});
+
+test('legacy conversation details name starred conversations from the list row', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(),
+  });
+  const starred = render({
+    apiContract: 'omi',
+    conversation: {...conversation, id: 'old-1', starred: true},
+  });
+  expect(text(starred)).toContain('Starred');
+  expect(
+    starred.root.findAll(
+      node => node.props.accessibilityLabel === 'Starred conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+});

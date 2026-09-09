@@ -109,6 +109,13 @@ export function ConversationDetail({
         <Text style={[styles.conversationDetailField, ink]}>
           Status · {conversationStatusCopy(conversation.status)}
         </Text>
+        {conversation.starred ? (
+          <Text
+            accessibilityLabel="Starred conversation"
+            style={[styles.conversationDetailField, ink]}>
+            Starred
+          </Text>
+        ) : null}
         {conversation.locked && (
           <Text style={[styles.conversationDetailField, ink]}>Locked</Text>
         )}
@@ -217,6 +224,13 @@ function LegacyConversationBody({
           status: conversation.status,
         })}
       </Text>
+      {conversation.starred ? (
+        <Text
+          accessibilityLabel="Starred conversation"
+          style={[styles.conversationDetailField, ink]}>
+          Starred
+        </Text>
+      ) : null}
       {detail.sections.map((section, index) => (
         <View key={index} style={styles.conversationDetailFields}>
           <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
