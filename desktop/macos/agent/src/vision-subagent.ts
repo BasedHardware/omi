@@ -85,13 +85,23 @@ const SCREENSHOT_EXT_BY_MIME: Record<string, string> = {
   "image/webp": "webp",
 };
 
+/** Directory the vision screenshot is written into. Exported so
+ *  pi-mono-extension's read-gate (classifyVisionScreenshotRead) can confine
+ *  its deny rule to this exact location instead of matching any file on disk
+ *  that happens to share the screenshot's basename. Single source of truth
+ *  for "where the screenshot lives," shared by the writer here and the
+ *  reader there. */
+export function visionScreenshotDirectory(): string {
+  return tmpdir();
+}
+
 /** Writes a screenshot to a fixed path (overwritten per query — pi-mono RPC
  *  only handles one prompt at a time, so there's no concurrent-write race)
  *  and returns the absolute path for the model to hand to the vision
  *  subagent instead of the raw image bytes. */
 export function writeScreenshotForVisionSubagent(base64Data: string, mimeType: string): string {
   const ext = SCREENSHOT_EXT_BY_MIME[mimeType] ?? "png";
-  const path = join(tmpdir(), `omi-screen.${ext}`);
+  const path = join(visionScreenshotDirectory(), `omi-screen.${ext}`);
   writeFileSync(path, Buffer.from(base64Data, "base64"));
   return path;
 }

@@ -1307,6 +1307,20 @@ test("classifyVisionScreenshotRead: leaves unrelated paths alone regardless of a
   assert.equal(classifyVisionScreenshotRead("/Users/someone/Documents/photo.png", "omi-local-vision"), null);
 });
 
+// Regression test: the basename-only match used to block ANY file named
+// omi-screen.png/.jpg/.jpeg/.webp anywhere on disk, for every provider, not
+// just the fixed tmp-dir path the vision subagent actually writes to.
+test("classifyVisionScreenshotRead: does not block a user file that merely shares the screenshot's basename outside the screenshot directory", () => {
+  assert.equal(
+    classifyVisionScreenshotRead("/Users/someone/Documents/omi-screen.png", "omi-local"),
+    null,
+  );
+  assert.equal(
+    classifyVisionScreenshotRead("/Users/someone/Documents/omi-screen.jpg", undefined),
+    null,
+  );
+});
+
 test("inspectToolCall: denies a direct read of the vision screenshot from a non-vision model", () => {
   const tmp = tmpdir();
   const d = inspectToolCall(readEvent(`${tmp}/omi-screen.png`), "default", "omi-local");

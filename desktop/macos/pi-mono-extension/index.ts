@@ -50,6 +50,7 @@ import {
   type OmiToolManifestEntry,
   type OmiToolProjectionContext,
 } from "../agent/dist/runtime/omi-tool-manifest.js";
+import { visionScreenshotDirectory } from "../agent/dist/vision-subagent.js";
 
 /**
  * Opaque, request-scoped correlation ids are the only context forwarded to
@@ -804,8 +805,10 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
 }
 
 /** Filename pattern for the on-disk screenshot handed to the vision
- *  subagent (see agent/src/index.ts's writeScreenshotForVisionSubagent).
- *  Matched on the basename only so it's independent of the OS temp dir. */
+ *  subagent (see agent/src/vision-subagent.ts's writeScreenshotForVisionSubagent).
+ *  Matched together with the directory check below (visionScreenshotDirectory)
+ *  so a user file elsewhere on disk that happens to share this basename is
+ *  never blocked — only the exact fixed path the writer uses is. */
 const VISION_SCREENSHOT_BASENAME = /^omi-screen\.(?:png|jpe?g|webp)$/;
 
 /** The provider name pi-mono-extension registers the vision-capable local
@@ -835,6 +838,7 @@ export function classifyVisionScreenshotRead(filePath: string, activeModelProvid
   if (activeModelProvider === VISION_PROVIDER_NAME) return null;
   const resolved = resolve(filePath);
   if (!VISION_SCREENSHOT_BASENAME.test(basename(resolved))) return null;
+  if (dirname(resolved) !== visionScreenshotDirectory()) return null;
   return {
     blocked: true,
     reason:
