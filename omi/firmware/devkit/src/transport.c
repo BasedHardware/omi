@@ -39,6 +39,7 @@ uint16_t current_package_index = 0;
 //
 
 struct k_mutex write_sdcard_mutex;
+K_SEM_DEFINE(pusher_wake_sem, 0, 1);
 
 static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         const struct bt_gatt_attr *attr,
@@ -288,6 +289,7 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     } else {
         LOG_INF("Invalid CCC value: %u", value);
     }
+    k_sem_give(&pusher_wake_sem);
 }
 
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn,
@@ -428,6 +430,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     k_work_schedule(&battery_work, K_MSEC(100)); // run immediately
 
     is_connected = true;
+    k_sem_give(&pusher_wake_sem);
 }
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
@@ -442,6 +445,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         current_connection = NULL;
     }
     current_mtu = 0;
+    k_sem_give(&pusher_wake_sem);
 }
 
 static bool _le_param_req(struct bt_conn *conn, struct bt_le_conn_param *param)
@@ -474,6 +478,7 @@ static void _le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data
             info->rx_max_len,
             info->rx_max_time);
     current_mtu = info->tx_max_len;
+    k_sem_give(&pusher_wake_sem);
 }
 
 static struct bt_conn_cb _callback_references = {
@@ -516,6 +521,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) {
         return false;
     } else {
+        k_sem_give(&pusher_wake_sem);
         return true;
     }
 }
@@ -693,69 +699,77 @@ void update_file_size()
 void pusher(void)
 {
     k_msleep(500);
+    static bool file_size_updated = true;
+    static bool connection_was_true = false;
+
     while (1) {
-        //
-        // Load current connection
-        //
-        struct bt_conn *conn = current_connection;
-        // updating the most recent file size is expensive!
-        static bool file_size_updated = true;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) {
+        k_sem_take(&pusher_wake_sem, K_FOREVER);
+
+        struct bt_conn *connection_snapshot = current_connection;
+        if (connection_snapshot && !connection_was_true) {
             k_msleep(100);
             file_size_updated = false;
             connection_was_true = true;
-        } else if (!conn) {
+        } else if (!connection_snapshot) {
             connection_was_true = false;
         }
         if (!file_size_updated) {
             LOG_PRINTK("updating file size\n");
             update_file_size();
-
             file_size_updated = true;
         }
-        if (conn) {
-            conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE) {
-            valid = false;
-        } else if (!conn) {
-            valid = false;
-        } else {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
-        }
 
-        if (!valid && !storage_is_on) {
-            bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-                k_mutex_unlock(&write_sdcard_mutex);
+        while (!ring_buf_is_empty(&ring_buf)) {
+            struct bt_conn *conn = current_connection;
+            if (conn) {
+                conn = bt_conn_ref(conn);
             }
-            if (result) {
-                heartbeat_count++;
-                if (heartbeat_count == 255) {
-                    update_file_size();
-                    heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
-                }
+
+            bool valid = true;
+            if (current_mtu < MINIMAL_PACKET_SIZE) {
+                valid = false;
+            } else if (!conn) {
+                valid = false;
             } else {
+                valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
             }
-        }
-        if (valid) {
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
-            }
-        }
-        if (conn) {
-            bt_conn_unref(conn);
-        }
 
-        k_yield();
+            bool progressed = false;
+            if (!valid && !storage_is_on) {
+                bool result = false;
+                if (file_num_array[1] < MAX_STORAGE_BYTES) {
+                    k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+                    if (is_sd_on()) {
+                        result = write_to_storage();
+                    }
+                    k_mutex_unlock(&write_sdcard_mutex);
+                }
+                if (result) {
+                    progressed = true;
+                    heartbeat_count++;
+                    if (heartbeat_count == 255) {
+                        update_file_size();
+                        heartbeat_count = 0;
+                        LOG_PRINTK("drawing\n");
+                    }
+                }
+            }
+
+            if (valid) {
+                (void) push_to_gatt(conn);
+                progressed = true;
+            }
+
+            if (conn) {
+                bt_conn_unref(conn);
+            }
+
+            if (!progressed) {
+                break;
+            }
+
+            k_yield();
+        }
     }
 }
 extern struct bt_gatt_service storage_service;
@@ -793,6 +807,7 @@ int bt_off()
     is_connected = false;
     storage_is_on = false;
     current_mtu = 0;
+    k_sem_give(&pusher_wake_sem);
 
     return 0;
 }
@@ -803,6 +818,7 @@ int bt_on()
     bt_gatt_service_register(&storage_service);
     sd_on();
     mic_on();
+    k_sem_give(&pusher_wake_sem);
 
     return 0;
 }
