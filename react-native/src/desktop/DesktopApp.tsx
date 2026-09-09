@@ -135,6 +135,10 @@ export function DesktopApp({
     return () => clearTimeout(timer);
   }, [draft, mode]);
   const navigate = (next: DesktopRoute) => {
+    if (next === 'Chat') {
+      openChat();
+      return;
+    }
     setRoute(next);
     if (next === 'Rewind') {
       setMode('Recall');
@@ -216,7 +220,6 @@ export function DesktopApp({
         }}
         onStop={onStop}
         route={route}
-        backgroundRoute={beforeChat.current.route}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
         <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />

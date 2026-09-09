@@ -12,6 +12,7 @@ import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Square from 'lucide-react-native/icons/square';
 import House from 'lucide-react-native/icons/house';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
+import MessageSquare from 'lucide-react-native/icons/message-square';
 import ListFilter from 'lucide-react-native/icons/list-filter';
 import Puzzle from 'lucide-react-native/icons/puzzle';
 import History from 'lucide-react-native/icons/rotate-ccw-clock';
@@ -34,10 +35,11 @@ import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
 import {desktopTokens as token} from './tokens';
 
-export type DesktopRoute = DesktopNavItem | 'Settings' | 'Chat';
+export type DesktopRoute = DesktopNavItem | 'Settings';
 
 const navIcons: Record<DesktopNavItem, typeof House> = {
   Home: House,
+  Chat: MessageSquare,
   Conversations: MessageCircle,
   Rewind: History,
   Tasks: ListFilter,
@@ -55,7 +57,6 @@ type Props = {
   onModeChange?: (mode: OmnibarMode) => void;
   activeGenerationId: string | null;
   route: DesktopRoute;
-  backgroundRoute?: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
   draft: string;
   onDraftChange: (value: string) => void;
@@ -79,7 +80,6 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
-  backgroundRoute,
 }: Props) {
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
@@ -93,11 +93,7 @@ export function DesktopChrome({
   const placed = useRef(false);
   const animating = useRef(false);
   const lastTarget = useRef({x: -1, width: -1});
-  const selectedRoute = route === 'Chat' ? backgroundRoute ?? 'Home' : route;
-  const activeNav =
-    selectedRoute === 'Settings' || selectedRoute === 'Chat'
-      ? null
-      : selectedRoute;
+  const activeNav = route === 'Settings' ? null : route;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
@@ -185,7 +181,7 @@ export function DesktopChrome({
           />
           {desktopNavItems.map((label, index) => {
             const Icon = navIcons[label];
-            const active = selectedRoute === label;
+            const active = route === label;
             return (
               <View
                 key={label}
@@ -258,8 +254,8 @@ export function DesktopChrome({
         <ShippingPressable
           accessibilityLabel="Settings"
           accessibilityRole="button"
-          accessibilityState={{selected: selectedRoute === 'Settings'}}
-          active={selectedRoute === 'Settings'}
+          accessibilityState={{selected: route === 'Settings'}}
+          active={route === 'Settings'}
           onPress={() => onNavigate('Settings')}
           style={styles.settingsButton}>
           <Settings color={token.color.ink} size={15} />

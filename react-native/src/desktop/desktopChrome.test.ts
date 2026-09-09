@@ -34,9 +34,10 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('desktop chrome uses the shipping Home Conversations IA', () => {
+test('desktop chrome includes a dedicated Chat destination', () => {
   expect(desktopNavItems).toEqual([
     'Home',
+    'Chat',
     'Conversations',
     'Rewind',
     'Tasks',
@@ -44,7 +45,7 @@ test('desktop chrome uses the shipping Home Conversations IA', () => {
   ]);
   expect(isShippingDesktopNav('Home')).toBe(true);
   expect(isShippingDesktopNav('Conversations')).toBe(true);
-  expect(isShippingDesktopNav('Chat')).toBe(false);
+  expect(isShippingDesktopNav('Chat')).toBe(true);
   expect(isShippingDesktopNav('Library')).toBe(false);
   expect(isShippingDesktopNav('Memories')).toBe(false);
   expect(desktopSearchPlaceholder).toBe("Search what you've seen and heard…");

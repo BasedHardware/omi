@@ -3,10 +3,9 @@ import {ActivityIndicator, Animated, StyleSheet, Text} from 'react-native';
 import Renderer, {act} from 'react-test-renderer';
 import {ChatMessageRow, ChatThinking} from './ChatTranscript';
 import {DesktopChat} from '../desktop/DesktopChat';
+import {OmiAvatar, omiMarkGeometry} from './OmiAvatar';
 
 jest.mock('../app/useReduceMotion', () => ({useReduceMotion: () => true}));
-
-jest.mock('./OmiAvatar', () => ({OmiAvatar: () => null}));
 
 test('retires row animation and restores a row when animation is disabled', () => {
   const stop = jest.fn();
@@ -109,7 +108,7 @@ test.each([false, true])(
   },
 );
 
-test('pending skeleton stops its animation and stays visible with reduced motion', () => {
+test('pending Omi mark circles beside the skeleton and both stop for reduced motion or unmount', () => {
   const start = jest.fn();
   const stop = jest.fn();
   const loop = jest
@@ -120,7 +119,18 @@ test('pending skeleton stops its animation and stays visible with reduced motion
     act(() => {
       tree = Renderer.create(<ChatThinking reduceMotion={false} desktop />);
     });
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
+    const avatar = tree.root.findByType(OmiAvatar);
+    expect(avatar.props).toMatchObject({tone: 'ink', animate: true});
+    expect(omiMarkGeometry.lapMs).toBe(900);
+    const dots = avatar.findAllByType(Animated.View);
+    expect(dots).toHaveLength(8);
+    expect(StyleSheet.flatten(dots[0].props.style).opacity.__getValue()).toBe(
+      1,
+    );
+    expect(StyleSheet.flatten(dots[4].props.style).opacity.__getValue()).toBe(
+      0.5,
+    );
     expect(
       tree.root.findAll(
         node => node.props.accessibilityLabel === 'Waiting for response',
@@ -133,12 +143,24 @@ test('pending skeleton stops its animation and stays visible with reduced motion
     ).toBe(true);
     expect(tree.root.findAllByType(ActivityIndicator)).toHaveLength(0);
     act(() => tree.update(<ChatThinking reduceMotion desktop />));
-    expect(stop).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(2);
+    expect(
+      tree.root
+        .findByType(OmiAvatar)
+        .findAllByType(Animated.View)
+        .every(dot => StyleSheet.flatten(dot.props.style).opacity === 1),
+    ).toBe(true);
     const style = StyleSheet.flatten(
-      tree.root.findByType(Animated.View).props.style,
+      tree.root
+        .findAllByType(Animated.View)
+        .find(node => node.props.accessible === false)!.props.style,
     );
     expect(style.opacity.__getValue()).toBe(1);
+    act(() => tree.update(<ChatThinking reduceMotion={false} />));
+    expect(start).toHaveBeenCalledTimes(4);
+    expect(tree.root.findByType(OmiAvatar).props.tone).toBe('ink');
     act(() => tree.unmount());
+    expect(stop).toHaveBeenCalledTimes(4);
   } finally {
     loop.mockRestore();
   }
