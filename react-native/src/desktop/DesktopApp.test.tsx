@@ -2,7 +2,14 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {NativeModules, ScrollView, Switch, Text, TextInput} from 'react-native';
+import {
+  FlatList,
+  NativeModules,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+} from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {TaskPagination} from '../ui/TaskPagination';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
@@ -643,6 +650,90 @@ test('Chat replaces the lower view, keeps one omnibar, and closes to the previou
       node => node.props.accessibilityLabel === 'Chat with Omi',
     ),
   ).toHaveLength(0);
+});
+
+test('only an explicit Ask submission resumes following after reading earlier messages', () => {
+  const scrollToEnd = jest
+    .spyOn(FlatList.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
+  const onSend = jest.fn();
+  const onLoadOlderChat = jest.fn();
+  try {
+    const renderer = renderDesktop({
+      draft: 'a new question',
+      hasOlderChat: true,
+      onSend,
+      onLoadOlderChat,
+      messages: [
+        {
+          id: 'initial',
+          text: 'Earlier conversation',
+          sender: 'human',
+          createdAt: 1,
+          generationOutcome: null,
+        },
+      ],
+    });
+    act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+        .props.onPress(),
+    );
+    const list = () => renderer.root.findByType(FlatList);
+    const scrollUp = () =>
+      list().props.onScroll({
+        nativeEvent: {
+          contentOffset: {x: 0, y: 0},
+          contentSize: {width: 600, height: 2000},
+          layoutMeasurement: {width: 600, height: 500},
+        },
+      });
+    act(scrollUp);
+    scrollToEnd.mockClear();
+    const props = renderer.root.findByType(DesktopApp)
+      .props as React.ComponentProps<typeof DesktopApp>;
+    act(() =>
+      renderer.update(
+        <DesktopApp
+          {...props}
+          messages={[
+            ...props.messages,
+            {
+              id: 'passive',
+              text: 'Incoming message',
+              sender: 'ai',
+              createdAt: 2,
+              generationOutcome: null,
+            },
+          ]}
+        />,
+      ),
+    );
+    act(() => list().props.onContentSizeChange(600, 2200));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+        .props.onPress(),
+    );
+    expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+    act(() => list().props.onContentSizeChange(600, 2400));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(scrollToEnd).toHaveBeenCalledWith({animated: false});
+    scrollToEnd.mockClear();
+    act(() => list().props.onContentSizeChange(600, 2600));
+    expect(scrollToEnd).toHaveBeenCalledTimes(1);
+    act(scrollUp);
+    scrollToEnd.mockClear();
+    act(() => list().props.onContentSizeChange(600, 2800));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    scrollToEnd.mockRestore();
+  }
 });
 
 test('omnibar send uses the existing chat send path', () => {

@@ -1,4 +1,4 @@
-import React, {useCallback, useRef} from 'react';
+import React, {useCallback, useLayoutEffect, useRef} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import {ScrollFade, useScrollFade} from './ScrollFade';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
+  submission: number;
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
@@ -24,6 +25,7 @@ type Props = {
   onClose: () => void;
 };
 export function DesktopChat({
+  submission,
   messages,
   busy,
   error,
@@ -34,6 +36,10 @@ export function DesktopChat({
 }: Props) {
   const list = useRef<FlatList<ChatMessage>>(null);
   const follow = useRef(true);
+  useLayoutEffect(() => {
+    follow.current = true;
+    list.current?.scrollToEnd({animated: false});
+  }, [submission]);
   const fade = useScrollFade();
   const reduceMotion = useReduceMotion();
   const renderItem = useCallback(
