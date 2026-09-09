@@ -65,12 +65,18 @@ async def listen(
         while not disconnected_event.is_set():
             disconnect_task = asyncio.create_task(disconnected_event.wait())
             sleep_task = asyncio.create_task(asyncio.sleep(3600))
-            done, pending = await asyncio.wait(
-                [disconnect_task, sleep_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for p in pending:
-                p.cancel()
+            try:
+                done, pending = await asyncio.wait(
+                    [disconnect_task, sleep_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            finally:
+                for task in (disconnect_task, sleep_task):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(
+                    disconnect_task, sleep_task, return_exceptions=True
+                )
             for d in done:
                 if d is sleep_task and d.exception():
                     raise d.exception()
