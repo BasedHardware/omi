@@ -13,6 +13,9 @@ from utils.jit_rollout import (
 )
 from utils.metrics import (
     JIT_FIRST_OPEN_TOTAL,
+    LAZY_DESKTOP_DEFERRAL_EVENTS,
+    LAZY_DESKTOP_DEFERRAL_TOTAL,
+    record_lazy_desktop_deferral,
     JIT_ROLLOUT_DECISION_LATENCY_SECONDS,
     JIT_ROLLOUT_DECISION_TOTAL,
     JIT_WRITER_MODE_TRANSITION_TOTAL,
@@ -57,3 +60,41 @@ async def test_authority_increments_uid_free_rollout_counters():
         error_class='none',
     )._value.get()
     assert after == before + 1
+
+
+def test_lazy_desktop_deferral_metric_is_bounded_and_uid_free():
+    payload = generate_latest().decode()
+    assert 'lazy_desktop_deferral_total' in payload
+    assert LAZY_DESKTOP_DEFERRAL_TOTAL._labelnames == ('event',)
+    assert 'uid' not in LAZY_DESKTOP_DEFERRAL_TOTAL._labelnames
+    assert LAZY_DESKTOP_DEFERRAL_EVENTS == {
+        'stored',
+        'fenced',
+        'enrich_started',
+        'enrich_lost_ownership',
+        'enrich_complete',
+        'enrich_failed',
+    }
+
+
+def _lazy_count(event: str) -> float:
+    return LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=event)._value.get()
+
+
+def test_lazy_desktop_deferral_unknown_event_collapses_to_other():
+    before_other = _lazy_count('other')
+    before_stored = _lazy_count('stored')
+    record_lazy_desktop_deferral(event='stored')
+    record_lazy_desktop_deferral(event='uid:abc')  # a caller cannot mint a new series
+    assert _lazy_count('stored') == before_stored + 1
+    assert _lazy_count('other') == before_other + 1
+    assert 'uid:abc' not in generate_latest().decode()
+
+
+def test_lazy_desktop_deferral_recorder_never_raises(monkeypatch):
+    # The finalizer and router call this on persistence/enrichment paths; a
+    # registry failure must not change their outcome.
+    monkeypatch.setattr(
+        LAZY_DESKTOP_DEFERRAL_TOTAL, 'labels', lambda **_kw: (_ for _ in ()).throw(RuntimeError('down'))
+    )
+    assert record_lazy_desktop_deferral(event='stored') is None

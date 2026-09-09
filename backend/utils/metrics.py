@@ -140,6 +140,39 @@ def record_jit_first_open(*, event: str, effect: str) -> None:
     JIT_FIRST_OPEN_TOTAL.labels(event=event, effect=effect).inc()
 
 
+# Lazy desktop deferral (the pre-JIT free-desktop cost path): a raw transcript is
+# stored at capture and the paid enrichment runs only when the user first opens
+# the conversation. `stored` vs `enrich_*` is the observed ever-opened fraction,
+# which the JIT first-open deferral for paid tiers is sized against. Bounded
+# label set; anything else collapses to `other` so a new call site cannot mint
+# an unbounded series.
+LAZY_DESKTOP_DEFERRAL_EVENTS = frozenset(
+    {
+        'stored',
+        'fenced',
+        'enrich_started',
+        'enrich_lost_ownership',
+        'enrich_complete',
+        'enrich_failed',
+    }
+)
+
+LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
+    'lazy_desktop_deferral_total',
+    'Lazy desktop deferral lifecycle: store at capture and first-open enrichment outcomes; never labeled by UID',
+    ['event'],
+)
+
+
+def record_lazy_desktop_deferral(*, event: str) -> None:
+    """Never raises: observability must not change a persistence or enrichment outcome."""
+    label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    try:
+        LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     'Accepted client-segmented product journeys by bounded journey and client kind',

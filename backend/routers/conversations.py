@@ -73,6 +73,7 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -180,11 +181,14 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
+    record_lazy_desktop_deferral(event='enrich_started')
 
     def _run_enrichment():
         try:
@@ -206,8 +210,10 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             if enriched is not None:
                 record_and_persist_finalized_meeting_receipt(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
+            record_lazy_desktop_deferral(event='enrich_complete')
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:

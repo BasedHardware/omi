@@ -247,3 +247,98 @@ def test_deferred_enrichment_failure_rearms_retry_through_lifecycle_owner(monkey
     assert recovered.wait(timeout=10.0), 'deferred failure recovery did not run'
     recovery.assert_called_once_with('uid1', 'deferred-conv-1')
     raw_update.assert_not_called()
+
+
+def _lazy_metric(event: str) -> float:
+    from utils.metrics import LAZY_DESKTOP_DEFERRAL_TOTAL
+
+    return LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=event)._value.get()
+
+
+def test_deferred_enrichment_counts_started_and_complete_on_the_real_counter(monkeypatch):
+    """First-open enrichment is the observed "ever opened" event for the lazy
+    desktop path. It must land on the bounded Prometheus counter, through the
+    actual _enrich_deferred_conversation entry point, not a log line."""
+    import threading
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        conversations_router, 'record_and_persist_finalized_meeting_receipt', MagicMock(), raising=False
+    )
+    conv_obj = SimpleNamespace(id='deferred-conv-metric', language='en', deferred=False)
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _data: conv_obj)
+    done = threading.Event()
+
+    def fake_process(_uid, _language, conversation, **_kwargs):
+        done.set()
+        return conversation
+
+    monkeypatch.setattr(conversations_router, 'process_conversation', fake_process)
+    started_before = _lazy_metric('enrich_started')
+    complete_before = _lazy_metric('enrich_complete')
+    failed_before = _lazy_metric('enrich_failed')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-metric', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    assert done.wait(timeout=10.0)
+    deadline = threading.Event()
+    for _ in range(200):
+        if _lazy_metric('enrich_complete') == complete_before + 1:
+            break
+        deadline.wait(0.01)
+    assert _lazy_metric('enrich_started') == started_before + 1
+    assert _lazy_metric('enrich_complete') == complete_before + 1
+    assert _lazy_metric('enrich_failed') == failed_before
+
+
+def test_deferred_enrichment_counts_failed_and_lost_ownership(monkeypatch):
+    import threading
+    import time
+
+    recovered = threading.Event()
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(
+        lifecycle_service,
+        'recover_deferred_processing_failure',
+        MagicMock(side_effect=lambda *_args: recovered.set() or True),
+        raising=False,
+    )
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        conversations_router,
+        'deserialize_conversation',
+        lambda _data: SimpleNamespace(id='deferred-conv-fail', language='en', deferred=False),
+    )
+    monkeypatch.setattr(
+        conversations_router, 'process_conversation', MagicMock(side_effect=RuntimeError('enrichment unavailable'))
+    )
+    failed_before = _lazy_metric('enrich_failed')
+    complete_before = _lazy_metric('enrich_complete')
+    lost_before = _lazy_metric('enrich_lost_ownership')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-fail', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+    assert recovered.wait(timeout=10.0)
+    for _ in range(200):
+        if _lazy_metric('enrich_failed') == failed_before + 1:
+            break
+        time.sleep(0.01)
+    assert _lazy_metric('enrich_failed') == failed_before + 1
+    assert _lazy_metric('enrich_complete') == complete_before
+
+    # Reacquisition loss is counted separately and never as a start.
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    started_before = _lazy_metric('enrich_started')
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-lost', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+    assert _lazy_metric('enrich_lost_ownership') == lost_before + 1
+    assert _lazy_metric('enrich_started') == started_before
