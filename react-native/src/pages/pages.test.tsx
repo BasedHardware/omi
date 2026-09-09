@@ -234,6 +234,66 @@ test('web Settings keeps GET planLabel instead of a plan-less usage row', async 
   }
 });
 
+test('web Settings keeps GET limitReached instead of a usage-only row', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 200,
+    body: JSON.stringify({
+      identity: {displayName: 'Local QA identity', email: ''},
+      entitlement: {
+        planLabel: 'Omi Plus',
+        limitKey: 'chat',
+        used: 1,
+        limit: 100,
+        limitReached: true,
+      },
+    }),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    const tree = textOf(renderer);
+    expect(tree).toContain('1 of 100 requests used · Limit reached');
+    expect(tree).not.toContain('Upgrade');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test('web Settings does not invent Limit reached from exhausted used and limit', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 200,
+    body: JSON.stringify({
+      identity: {displayName: 'Local QA identity', email: ''},
+      entitlement: {
+        planLabel: 'Omi Plus',
+        limitKey: 'chat',
+        used: 100,
+        limit: 100,
+      },
+    }),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    const tree = textOf(renderer);
+    expect(tree).toContain('100 of 100 requests used');
+    expect(tree).not.toContain('Limit reached');
+    expect(tree).not.toContain('Upgrade');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
 test('Settings exposes real native app permissions even if cloud account reads fail', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(false);
   const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue();

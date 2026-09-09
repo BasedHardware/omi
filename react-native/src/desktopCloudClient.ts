@@ -644,6 +644,7 @@ export type ServiceSettingsSnapshot = {
     limitKey: string;
     used: number;
     limit: number | null;
+    limitReached: boolean;
   } | null;
 };
 
@@ -698,6 +699,8 @@ export async function loadServiceSettings(
     (entitlement.limitKey === 'chat' &&
       !Number.isSafeInteger(entitlement.used)) ||
     entitlement.used < 0 ||
+    (entitlement.limitReached !== undefined &&
+      typeof entitlement.limitReached !== 'boolean') ||
     (entitlement.limit !== null &&
       (typeof entitlement.limit !== 'number' ||
         !Number.isFinite(entitlement.limit) ||
@@ -715,6 +718,7 @@ export async function loadServiceSettings(
       limitKey: entitlement.limitKey,
       used: entitlement.used,
       limit: entitlement.limit as number | null,
+      limitReached: entitlement.limitReached === true,
     },
   };
 }

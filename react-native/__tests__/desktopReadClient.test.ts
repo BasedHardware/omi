@@ -2299,7 +2299,13 @@ test('keeps an empty Settings entitlement limitKey instead of failing the page',
   );
   expect(result).toEqual({
     identity: {displayName: 'Local identity', email: ''},
-    entitlement: {planLabel: '', limitKey: '', used: 7, limit: 100},
+    entitlement: {
+      planLabel: '',
+      limitKey: '',
+      used: 7,
+      limit: 100,
+      limitReached: false,
+    },
   });
   await expect(
     loadServiceSettings(
@@ -2336,8 +2342,65 @@ test('keeps GET Settings planLabel instead of dropping the billing label', async
       limitKey: 'chat',
       used: 7,
       limit: 100,
+      limitReached: false,
     },
   });
+});
+
+test('keeps GET Settings limitReached instead of deriving exhaustion from used and limit', async () => {
+  const reached = await loadServiceSettings(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify({
+        identity: {displayName: 'Local identity', email: ''},
+        entitlement: {
+          planLabel: 'Omi Plus',
+          limitKey: 'chat',
+          used: 1,
+          limit: 100,
+          limitReached: true,
+        },
+      }),
+    })),
+  );
+  expect(reached.entitlement).toEqual({
+    planLabel: 'Omi Plus',
+    limitKey: 'chat',
+    used: 1,
+    limit: 100,
+    limitReached: true,
+  });
+  const exhaustedWithoutFlag = await loadServiceSettings(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify({
+        identity: {displayName: 'Local identity', email: ''},
+        entitlement: {
+          planLabel: 'Omi Plus',
+          limitKey: 'chat',
+          used: 100,
+          limit: 100,
+        },
+      }),
+    })),
+  );
+  expect(exhaustedWithoutFlag.entitlement?.limitReached).toBe(false);
+  await expect(
+    loadServiceSettings(
+      backendFor(() => ({
+        status: 200,
+        body: JSON.stringify({
+          identity: {displayName: 'Local identity', email: ''},
+          entitlement: {
+            limitKey: 'chat',
+            used: 1,
+            limit: 100,
+            limitReached: 'true',
+          },
+        }),
+      })),
+    ),
+  ).rejects.toThrow('Usage allowance response is malformed');
 });
 
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {

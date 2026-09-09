@@ -687,12 +687,20 @@ export function SettingsPage({
                     serviceSettings.entitlement.limitKey === 'chat'
                       ? 'requests'
                       : 'seconds'
-                  } used`}
+                  } used${
+                    serviceSettings.entitlement.limitReached
+                      ? ' · Limit reached'
+                      : ''
+                  }`}
                 />
               ) : (
                 <SettingRow
                   title="Usage"
-                  copy="Usage allowance is unavailable for this connection."
+                  copy={`Usage allowance is unavailable for this connection.${
+                    serviceSettings.entitlement?.limitReached
+                      ? ' · Limit reached'
+                      : ''
+                  }`}
                 />
               )}
             </>
