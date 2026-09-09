@@ -686,6 +686,78 @@ if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/full-runner.out"; then
 fi
 unset OMI_SWIFT_TEST_SLOW_SUITES_FILE
 
+# --- PR-lane serial/solo deferral ---
+#
+# The serial and solo clusters pay one ~30s invocation per member for
+# sub-second tests, sequentially, after every worker exits. With
+# OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL=1 the PR lane defers them too: only
+# declaring-file changes wake a member (plus ratcheted watch prefixes for
+# slow-listed entries). pr-tests holds 5 parallel suites + 3 serial ones.
+export OMI_SWIFT_TEST_LANE=pr
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL=1
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-serial-defer-runner.out" 2>"$TMPDIR/pr-serial-defer-runner.err"; then
+  fail "green PR lane with serial deferral failed"
+fi
+if ! grep -q "Ran 4 Swift suites in isolation" "$TMPDIR/pr-serial-defer-runner.out"; then
+  fail "PR lane did not defer the serial cluster (expected 4 of 8 executed)"
+fi
+if ! grep -q "Deferred 4 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-serial-defer-runner.out"; then
+  fail "runner did not announce the deferred serial/slow suites"
+fi
+for deferred_name in BetaTests AuthRefreshResilienceTests AuthTokenStorageTests OwnerAuthorityAdopterTests; do
+  if ! grep -q "$deferred_name" "$TMPDIR/pr-serial-defer-runner.out"; then
+    fail "deferred announcement did not name $deferred_name"
+  fi
+  if grep -q -- "--filter $deferred_name/" "$FAKE_XCRUN_LOG"; then
+    fail "deferred serial/slow suite $deferred_name still executed"
+  fi
+done
+
+# A serial member's own declaring file wakes it (slow-listed BetaTests stays
+# deferred: its own file did not change, so 1 serial wake = 5 executed).
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AuthTokenStorageTests.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-serial-wake-runner.out" 2>"$TMPDIR/pr-serial-wake-runner.err"; then
+  fail "PR lane failed when a serial member's declaring file changed"
+fi
+if ! grep -q "Ran 5 Swift suites in isolation" "$TMPDIR/pr-serial-wake-runner.out"; then
+  fail "declaring-file change did not wake the serial member (expected 5 executed)"
+fi
+if ! grep -q -- "--filter AuthTokenStorageTests/" "$FAKE_XCRUN_LOG"; then
+  fail "woken serial member did not execute"
+fi
+
+# A watched subject path wakes a slow-listed entry even though no test file
+# changed: the fixture slow list watches Desktop/Sources/Widget/ for BetaTests.
+cat >"$TMPDIR/watch-slow-suites.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "BetaTests": {
+      "reason": "Fixture: measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08",
+      "watch": ["desktop/macos/Desktop/Sources/Widget/"]
+    }
+  }
+}
+JSON
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/watch-slow-suites.json"
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Sources/Widget/WidgetRoot.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-watch-wake-runner.out" 2>"$TMPDIR/pr-watch-wake-runner.err"; then
+  fail "PR lane failed when a watched subject path changed"
+fi
+if ! grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "watched subject path did not wake the deferred slow suite"
+fi
+if ! grep -q "Ran 5 Swift suites in isolation" "$TMPDIR/pr-watch-wake-runner.out"; then
+  fail "watch-wake scenario did not report 5 executed suites (slow woken, serial deferred)"
+fi
+
+unset OMI_SWIFT_TEST_CHANGED_FILES OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL
+
 # An invalid lane value fails closed before any suite executes.
 export OMI_SWIFT_TEST_LANE=pr-fast
 if "$RUNNER" >"$TMPDIR/bad-lane.out" 2>"$TMPDIR/bad-lane.err"; then

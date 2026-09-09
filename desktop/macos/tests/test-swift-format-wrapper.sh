@@ -187,6 +187,13 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 kill "$BOOT_PID" 2>/dev/null || true
+# Bash defers the wrapper's TERM trap until its foreground child exits, so
+# killing only the wrapper waits out the whole swift-format clone it is
+# running (measured 641s locally, ~7 min of the CI launcher step): kill the
+# child tree too, then reap.
+pkill -TERM -P "$BOOT_PID" 2>/dev/null || true
+sleep 1
+pkill -KILL -P "$BOOT_PID" 2>/dev/null || true
 wait "$BOOT_PID" 2>/dev/null || true
 assert_contains "$(cat "$RECLAIM_LOG" 2>/dev/null || true)" \
   "reclaiming bootstrap lock from dead pid" "a dead holder's lock is reclaimed"

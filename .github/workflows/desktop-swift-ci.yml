@@ -267,6 +267,13 @@ jobs:
           # scheduled health runs, and manual dispatch always run everything.
           OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
+          # The PR lane also defers the serial and solo clusters: their
+          # isolation contract costs one ~30s invocation per member for
+          # sub-second tests, sequentially, after every worker exits
+          # (24 invocations / 12.9 min on run 34306382692). Declaring files
+          # and ratcheted subject watch paths still wake them; the full lane
+          # always executes them.
+          OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"
         run: ./scripts/run-swift-ci.sh --test
 
       - name: Desktop launcher script tests

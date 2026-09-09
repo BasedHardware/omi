@@ -182,6 +182,14 @@ def normalized_slow_suites(path: Path) -> dict[str, dict[str, str]]:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"slow_suites[{name}].{key} must be a non-empty string")
             entry[key] = value.strip()
+        raw_watch = raw_entry.get("watch", [])
+        if not isinstance(raw_watch, list) or any(
+            not isinstance(item, str) or not item.strip() or " " in item for item in raw_watch
+        ):
+            raise ValueError(
+                f"slow_suites[{name}].watch must be a list of non-empty, space-free repo-relative path prefixes"
+            )
+        entry["watch"] = ",".join(item.strip() for item in raw_watch)
         slow_suites[name] = entry
 
     max_count = data.get("max_slow_suite_count")
@@ -213,8 +221,10 @@ def main() -> int:
         except ValueError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
-        for name in slow_suites:
-            print(name)
+        # "suite<TAB>watch1,watch2" — the runner splits the second field into
+        # subject-path prefixes that wake a deferred suite when they change.
+        for name, entry in slow_suites.items():
+            print(f"{name}\t{entry.get('watch', '')}")
         return 0
 
     if args.slow_check:

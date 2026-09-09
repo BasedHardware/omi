@@ -435,6 +435,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         verify_job = self.jobs["desktop-swift-verify"]
         self.assertIn("OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}", verify_job)
         self.assertIn("OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}", verify_job)
+        # The serial/solo clusters cost one ~30s invocation per member for
+        # sub-second tests, sequentially (24 invocations / 12.9 min measured
+        # on run 34306382692); the PR lane defers them behind the same
+        # declaring-file and ratcheted-watch wake rules.
+        self.assertIn('OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"', verify_job)
         # The slow list and its validator are full-suite inputs: editing them
         # must wake the debug test lane.
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))

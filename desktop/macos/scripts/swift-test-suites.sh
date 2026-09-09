@@ -83,6 +83,9 @@ CHANGED_FILES="${OMI_SWIFT_TEST_CHANGED_FILES:-}"
 # isolated re-runs execute at once (each owns a copy-on-write clone, so the
 # SwiftPM build lock never serializes them).
 ISOLATION_PARALLEL="${OMI_SWIFT_TEST_ISOLATION_PARALLEL:-3}"
+# With 1, the PR lane also defers the serial and solo clusters (see the
+# deferral section below); every other lane always executes them.
+DEFER_SERIAL_ON_PR="${OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL:-0}"
 # A red batch larger than this first re-runs as two half-batches before any
 # per-suite isolation. Batch co-residency flakes are common enough that a
 # straight 50-member fallback re-ran ~100 isolated invocations (~36s each) and
@@ -527,6 +530,10 @@ if [ "$ISOLATION_PARALLEL" -lt 1 ]; then
 fi
 [[ "$FALLBACK_BISECT_MIN" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_FALLBACK_BISECT_MIN must be a non-negative integer, got '$FALLBACK_BISECT_MIN'"
+case "$DEFER_SERIAL_ON_PR" in
+  0|1) ;;
+  *) fail "OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL must be 0 or 1, got '$DEFER_SERIAL_ON_PR'" ;;
+esac
 
 # Static guardrails are part of the authoritative Swift component suite, not a
 # separate best-effort lint. Run their fixture tests first so a broken checker
@@ -627,17 +634,28 @@ is_serial_suite() {
 }
 
 # PR-lane deferral. A deferred suite is ratcheted slow (measured evidence in
-# swift-test-slow-suites.json) AND neither its own declaring files nor the
-# deferral infrastructure changed in this diff. Everything else — including
-# every deferred suite on pushes, scheduled health runs, manual dispatch, and
-# local runs — executes exactly as before.
+# swift-test-slow-suites.json) AND neither its own declaring files nor a
+# watched subject path nor the deferral infrastructure changed in this diff.
+# Everything else — including every deferred suite on pushes, scheduled
+# health runs, manual dispatch, and local runs — executes exactly as before.
+# With DEFER_SERIAL_ON_PR=1 the PR lane also defers the serial and solo
+# clusters: they exist for process-global isolation, so each member pays a
+# full ~30s SwiftPM/xctest invocation for sub-second tests, sequentially,
+# after every worker has exited (run 34306382692: 24 single-suite
+# invocations, 12.9 min of the suite step). Their declaring files still wake
+# them, and ratcheted watch prefixes keep subject-area changes (auth sources
+# for the fixed auth cluster) on the PR critical path.
 slow_suites_resolved=""
+slow_watch_map=""
 if [ "$TEST_LANE" = "pr" ]; then
   if [ -f "$SLOW_SUITES_FILE" ]; then
-    # --slow-list prints one suite name per line; normalize to a single
-    # space-delimited line so the word-boundary matcher below sees every
-    # entry, not just a lone first one.
-    slow_suites_resolved="$("$SKIP_RATCHET" --slow-list --slow-file "$SLOW_SUITES_FILE" | tr '\n' ' ')"
+    slow_lookup="$("$SKIP_RATCHET" --slow-list --slow-file "$SLOW_SUITES_FILE")"
+    # --slow-list prints one "suite<TAB>watch" pair per line. The names feed
+    # the space-delimited word-boundary matcher below, so normalize newlines
+    # to spaces — a multi-entry list never matched when newline-joined — and
+    # keep the full lookup as the watch map.
+    slow_suites_resolved="$(printf '%s\n' "$slow_lookup" | cut -f1 | tr '\n' ' ')"
+    slow_watch_map="$slow_lookup"
   fi
 fi
 
@@ -645,6 +663,29 @@ is_slow_suite() {
   case " $slow_suites_resolved " in
     *" $1 "*) return 0 ;;
   esac
+  return 1
+}
+
+# Watch prefixes a slow-suite entry registered for its subject sources
+# (comma-separated, no spaces). Empty when the entry declared none.
+suite_watch_prefixes() {
+  awk -F '\t' -v suite="$1" '$1 == suite {print $2}' <<<"$slow_watch_map"
+}
+
+# True when a watched subject path (or any parent directory of it) changed.
+suite_watched_path_changed() {
+  local suite="$1"
+  local prefixes changed prefix
+  prefixes="$(suite_watch_prefixes "$suite")"
+  [ -n "$prefixes" ] || return 1
+  while IFS= read -r changed; do
+    [ -n "$changed" ] || continue
+    for prefix in ${prefixes//,/ }; do
+      case "$changed" in
+        "$prefix"*) return 0 ;;
+      esac
+    done
+  done <<<"$CHANGED_FILES"
   return 1
 }
 
@@ -674,11 +715,25 @@ deferral_rebaselined() {
 
 deferred_suites=""
 declare -a kept_suites=()
-if [ "$TEST_LANE" != "pr" ] || [ -z "$slow_suites_resolved" ] || deferral_rebaselined; then
+if [ "$TEST_LANE" != "pr" ] || { [ -z "$slow_suites_resolved" ] && [ "$DEFER_SERIAL_ON_PR" != "1" ]; } || deferral_rebaselined; then
   kept_suites=("${suites[@]}")
 else
   for suite in "${suites[@]}"; do
-    if is_slow_suite "$suite" && ! suite_declares_changed_file "$suite"; then
+    defer=0
+    if is_slow_suite "$suite"; then
+      if suite_declares_changed_file "$suite" || suite_watched_path_changed "$suite"; then
+        defer=0
+      else
+        defer=1
+      fi
+    elif [ "$DEFER_SERIAL_ON_PR" = "1" ] && { is_serial_suite "$suite" || is_solo_suite "$suite"; }; then
+      if suite_declares_changed_file "$suite"; then
+        defer=0
+      else
+        defer=1
+      fi
+    fi
+    if [ "$defer" = "1" ]; then
       deferred_suites="$deferred_suites $suite"
     else
       kept_suites+=("$suite")

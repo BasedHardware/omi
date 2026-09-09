@@ -147,9 +147,33 @@ fi
 if ! grep -q "OK: slow-suite deferrals at ratchet (1)." "$TMPDIR/slow-ok.out"; then
   fail "valid slow-suite output did not report the count"
 fi
+# The trailing tab field carries the comma-separated watch prefixes (empty
+# here); the runner splits it to decide subject-path wakes.
 slow_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-ok.json")"
-if [ "$slow_list" != "SlowHarnessTests" ]; then
+expected=$'SlowHarnessTests\t'
+if [ "$slow_list" != "$expected" ]; then
   fail "slow-list output was '$slow_list'"
+fi
+
+cat >"$TMPDIR/slow-watch.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08",
+      "watch": ["desktop/macos/Desktop/Sources/Widget/"]
+    }
+  }
+}
+JSON
+watch_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-watch.json")"
+expected_watch=$'SlowHarnessTests\tdesktop/macos/Desktop/Sources/Widget/'
+if [ "$watch_list" != "$expected_watch" ]; then
+  fail "slow-list watch output was '$watch_list'"
+fi
+if ! "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-watch.json" --tests-root "$TMPDIR/tests" >/dev/null; then
+  fail "watch-bearing slow-suite file failed validation"
 fi
 
 cat >"$TMPDIR/slow-too-many.json" <<'JSON'
