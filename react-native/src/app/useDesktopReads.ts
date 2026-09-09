@@ -5,6 +5,7 @@ import {
   loadConversations,
   loadMemories,
   ConversationCursorExpiredError,
+  MemoryCursorExpiredError,
   TaskCursorExpiredError,
   type TaskRead,
   projectionTimestamp,
@@ -331,7 +332,20 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     setMemoriesLoadingMore(true);
     setMemoryNotice(null);
     try {
-      const next = await loadMemories(omiBackend, cursor);
+      let replace = false;
+      let next;
+      try {
+        next = await loadMemories(omiBackend, cursor);
+      } catch (error) {
+        if (
+          !(error instanceof MemoryCursorExpiredError) ||
+          sequence !== refreshSeqRef.current
+        ) {
+          throw error;
+        }
+        replace = true;
+        next = await loadMemories(omiBackend);
+      }
       if (sequence !== refreshSeqRef.current) {
         return;
       }
@@ -339,13 +353,15 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       if (current === null || current.memories.status !== 'success') {
         return;
       }
-      const items = [...current.memories.value.items, ...next.items];
+      const items = replace
+        ? next.items
+        : [...current.memories.value.items, ...next.items];
       if (items.length > 10000) {
         throw new Error('Memory list is too large');
       }
       if (
         new Set(items.map(item => item.id)).size !== items.length ||
-        (next.page.hasMore && next.page.nextCursor === cursor)
+        (!replace && next.page.hasMore && next.page.nextCursor === cursor)
       ) {
         throw new Error('Memory page did not advance');
       }
@@ -355,6 +371,9 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
       };
       readOutcomesRef.current = merged;
       setReadOutcomes(merged);
+      if (replace) {
+        setMemoryNotice('Memories changed. The list has been refreshed.');
+      }
       setMemoriesPageRetryable(true);
     } catch (error) {
       if (sequence === refreshSeqRef.current) {

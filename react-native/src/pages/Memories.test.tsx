@@ -20,7 +20,10 @@ jest.mock('../desktopReadClient', () => {
 });
 jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
-import {desktopBackendUnavailableCopy} from '../desktopReadClient';
+import {
+  desktopBackendUnavailableCopy,
+  MemoryCursorExpiredError,
+} from '../desktopReadClient';
 
 const page = (cursor: string | null): ReadPageState => ({
   windowStatus: cursor ? 'more' : 'complete',
@@ -317,6 +320,65 @@ test('an incomplete empty memory search does not claim a complete miss', () => {
     act(() => {
       view.unmount();
     });
+  }
+});
+
+test('an expired memory cursor replaces the old page once and does not loop', async () => {
+  mockLoad
+    .mockRejectedValueOnce(new MemoryCursorExpiredError())
+    .mockResolvedValueOnce({
+      items: [memory('fresh-first')],
+      page: page(null),
+    });
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(mockLoad.mock.calls.map(call => call[1])).toEqual([
+      'next-cursor',
+      undefined,
+    ]);
+    expect(ids(view)).toEqual(['fresh-first']);
+    expect(textOf(view)).toContain(
+      'Memories changed. The list has been refreshed.',
+    );
+    expect(textOf(view)).not.toContain('More memories could not be loaded.');
+    expect(ids(view)).not.toContain('kept-first');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('failed memory cursor recovery retains loaded rows and still offers Load more', async () => {
+  mockLoad.mockRejectedValue(new MemoryCursorExpiredError());
+  let view!: Renderer.ReactTestRenderer;
+  await act(async () => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={outcome('kept-first', 'next-cursor')}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    await act(async () => {
+      button(view).props.onPress();
+    });
+    expect(mockLoad).toHaveBeenCalledTimes(2);
+    expect(ids(view)).toEqual(['kept-first']);
+    expect(textOf(view)).toContain('More memories could not be loaded.');
+    expect(textOf(view)).toContain('Load more memories');
+  } finally {
+    await act(async () => view.unmount());
   }
 });
 

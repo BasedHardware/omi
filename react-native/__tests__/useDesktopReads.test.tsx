@@ -28,6 +28,7 @@ import {
   loadConversations,
   loadMemories,
   ConversationCursorExpiredError,
+  MemoryCursorExpiredError,
   TaskCursorExpiredError,
 } from '../src/desktopReadClient';
 
@@ -759,6 +760,69 @@ test('nested non-retryable memory pages omit Load more Try again', async () => {
   expect(reads.latest().memoryNotice).toBe(desktopBackendUnavailableCopy);
   expect(reads.latest().memoryNotice).not.toContain('Try again');
   expect(reads.latest().memoriesPageRetryable).toBe(false);
+  expect(reads.latest().readOutcomes?.memories).toMatchObject({
+    value: {items: [{title: 'Old memory'}]},
+  });
+  reads.unmount();
+});
+
+test('an expired memory cursor replaces the old page once and does not loop', async () => {
+  readsMock.mockResolvedValue(pagedMemoryOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadMemories as jest.Mock)
+    .mockRejectedValueOnce(new MemoryCursorExpiredError())
+    .mockResolvedValueOnce({
+      items: [
+        {
+          kind: 'memory',
+          id: 'memory-fresh',
+          title: 'Fresh first page',
+          summary: 'Fresh first page',
+          searchableText: 'Fresh first page',
+          citations: [],
+          timestamp: 1,
+          provenance: {
+            label: null,
+            synthesisVersion: 'v1',
+            inputDigest: 'a',
+            outputDigest: 'b',
+          },
+        },
+      ],
+      page: {
+        windowStatus: 'complete',
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+        completenessStatus: 'complete',
+        reasons: [],
+      },
+    });
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreMemories();
+  });
+  expect((loadMemories as jest.Mock).mock.calls.map(call => call[1])).toEqual([
+    'memory-cursor-one',
+    undefined,
+  ]);
+  expect(reads.latest().readOutcomes?.memories).toMatchObject({
+    value: {items: [{title: 'Fresh first page'}]},
+  });
+  expect(reads.latest().memoryNotice).toContain('refreshed');
+  reads.unmount();
+});
+
+test('failed memory cursor recovery retains loaded rows and allows explicit retry', async () => {
+  readsMock.mockResolvedValue(pagedMemoryOutcomes());
+  const reads = await renderReads({enabled: true});
+  (loadMemories as jest.Mock).mockRejectedValue(new MemoryCursorExpiredError());
+  await ReactTestRenderer.act(async () => {
+    await reads.latest().loadMoreMemories();
+  });
+  expect(loadMemories).toHaveBeenCalledTimes(2);
+  expect(reads.latest().memoryNotice).toBe(
+    'More memories could not be loaded.',
+  );
   expect(reads.latest().readOutcomes?.memories).toMatchObject({
     value: {items: [{title: 'Old memory'}]},
   });

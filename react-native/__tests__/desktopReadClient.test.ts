@@ -36,6 +36,7 @@ import {
   loadDesktopReads,
   loadMemories,
   loadTasks,
+  MemoryCursorExpiredError,
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryCitationCopy,
@@ -1478,6 +1479,30 @@ test('preserves a cursor-backed multi-page memory window', async () => {
   });
   expect(paths).toEqual([
     '/v1/memories?limit=50&cursor=opaque%2F%2B%20cursor%3D',
+  ]);
+});
+
+test('memory reads classify stale later-page cursors without treating first-page 400 as expiry', async () => {
+  const paths: string[] = [];
+  const backend = backendFor(request => {
+    paths.push(request.path);
+    return {status: 400, body: null};
+  });
+  await expect(loadMemories(backend, 'opaque/+ cursor=')).rejects.toThrow(
+    MemoryCursorExpiredError,
+  );
+  expect(paths).toEqual([
+    '/v1/memories?limit=50&cursor=opaque%2F%2B%20cursor%3D',
+  ]);
+  try {
+    await loadMemories(backend);
+    throw new Error('expected first-page 400 to fail');
+  } catch (error) {
+    expect(error).not.toBeInstanceOf(MemoryCursorExpiredError);
+  }
+  expect(paths).toEqual([
+    '/v1/memories?limit=50&cursor=opaque%2F%2B%20cursor%3D',
+    '/v1/memories?limit=50',
   ]);
 });
 

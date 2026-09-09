@@ -613,6 +613,7 @@ class DesktopProjectionUnavailableError extends Error {}
 class DesktopBackendUnavailableError extends Error {}
 export class ConversationCursorExpiredError extends Error {}
 export class TaskCursorExpiredError extends Error {}
+export class MemoryCursorExpiredError extends Error {}
 
 function nativeErrorCode(value: unknown): string | null {
   if (value === null || typeof value !== 'object') {
@@ -759,6 +760,13 @@ async function read(
       throw new ConversationCursorExpiredError(
         'Conversations changed. Refresh the list.',
       );
+    }
+    if (
+      response.status === 400 &&
+      id === 'desktop-memories-read' &&
+      path.includes('&cursor=')
+    ) {
+      throw new MemoryCursorExpiredError('Memories changed. Refresh the list.');
     }
     if (response.status === 401) {
       const unauthorized = new Error(

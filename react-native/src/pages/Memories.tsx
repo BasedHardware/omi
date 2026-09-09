@@ -11,6 +11,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   desktopBackendUnavailableCopy,
   loadMemories,
+  MemoryCursorExpiredError,
   memoryDisplayBody,
   memoryDisplayTitle,
   memoryCitationCopy,
@@ -107,15 +108,34 @@ export function MemoriesPage({
     setLoadMoreError(null);
     setLoadMoreRetryable(true);
     try {
-      const next = await loadMemories(omiBackend, page.nextCursor);
+      let replace = false;
+      let next;
+      try {
+        next = await loadMemories(omiBackend, page.nextCursor);
+      } catch (reason) {
+        if (
+          !(reason instanceof MemoryCursorExpiredError) ||
+          attempt !== generation.current
+        ) {
+          throw reason;
+        }
+        replace = true;
+        next = await loadMemories(omiBackend);
+      }
       if (attempt !== generation.current) {
         return;
       }
-      setItems(current => {
-        const ids = new Set(current.map(item => item.id));
-        return [...current, ...next.items.filter(item => !ids.has(item.id))];
-      });
-      setPage(next.page);
+      if (replace) {
+        setItems(next.items);
+        setPage(next.page);
+        setLoadMoreError('Memories changed. The list has been refreshed.');
+      } else {
+        setItems(current => {
+          const ids = new Set(current.map(item => item.id));
+          return [...current, ...next.items.filter(item => !ids.has(item.id))];
+        });
+        setPage(next.page);
+      }
     } catch (reason) {
       if (attempt === generation.current) {
         const unavailable =
