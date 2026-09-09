@@ -167,6 +167,7 @@ describe("device session request validators", () => {
           return {
             text: "Recorded speech",
             segments: [{ start: 0, end: 0.1, text: "Recorded speech" }],
+            transcription_info: { language: "en" },
           };
         },
       },

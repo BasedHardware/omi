@@ -84,6 +84,11 @@ test("verified completion atomically queues once, persists transcription and pro
     updatedAt: expect.any(Number),
   });
   expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({ language: null });
+  expect(
     await readDeviceTranscription(env.DB, "another-owner", session.id)
   ).toBeNull();
   const conversations = await readConversations(env.DB, "record-owner");

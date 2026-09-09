@@ -284,6 +284,38 @@ describe("device transcription client projection", () => {
     expect(recordingTranscriptSpeech("", segments)).toContain("Hidden later");
   });
 
+  test("GET language is always null like production Listen", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        language: "en",
+      })
+    ).toMatchObject({
+      language: null,
+    });
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        state: "queued",
+        language: "en",
+      })
+    ).toMatchObject({
+      state: "queued",
+      language: null,
+    });
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        state: "failed",
+        language: "en",
+        errorCode: "invalid_audio",
+      })
+    ).toMatchObject({
+      state: "failed",
+      language: null,
+    });
+  });
+
   test("GET maps DeviceAudioError codes to invalid_audio like production Listen", () => {
     const failed = {
       ...completed,
