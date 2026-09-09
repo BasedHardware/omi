@@ -3,6 +3,7 @@
 import json
 import socket
 from datetime import datetime
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -36,7 +37,7 @@ def _request(path, params):
                 "TVMaze is temporarily rate limiting requests. Please try again in a few seconds."
             ) from exc
         raise ProviderError("TVMaze is temporarily unavailable. Please try again later.") from exc
-    except (URLError, socket.timeout, TimeoutError, OSError) as exc:
+    except (URLError, socket.timeout, TimeoutError, OSError, HTTPException) as exc:
         raise ProviderError("Could not reach TVMaze. Please try again later.") from exc
     except (ValueError, UnicodeError) as exc:
         raise ProviderError("TVMaze returned an unreadable response. Please try again later.") from exc
@@ -102,7 +103,9 @@ def get_tv_show(payload):
         if returned_id != show_id:
             raise ProviderError("TVMaze returned a different show ID. Please try again later.")
         lines = [name, f"Status: {data.get('status') or 'not listed'} | {_channel(data)}"]
-        embedded = data.get("_embedded") or {}
+        embedded = data.get("_embedded")
+        if embedded is None:
+            embedded = {}
         if not isinstance(embedded, dict):
             raise ProviderError("TVMaze returned unexpected episode information. Please try again later.")
         episode = embedded.get("nextepisode")

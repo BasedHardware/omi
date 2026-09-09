@@ -3,6 +3,7 @@
 import io
 import json
 import unittest
+from http.client import HTTPResponse
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
@@ -99,6 +100,14 @@ class TVMazeToolsTest(unittest.TestCase):
                 self.assertIn("No next episode is currently listed", result)
                 self.assertIn("does not by itself mean", result)
 
+    def test_falsey_malformed_embedded_data_is_not_reported_as_absent(self):
+        for embedded in ([], "", False, 0):
+            with self.subTest(embedded=embedded):
+                with patch.object(service, "urlopen", return_value=response(show(_embedded=embedded))):
+                    result = service.get_tv_show({"show_id": 1})
+                self.assertEqual(set(result), {"error"})
+                self.assertIn("unexpected episode information", result["error"])
+
     def test_invalid_or_naive_provider_timestamps_are_not_presented_as_local_time(self):
         for timestamp in ("2026-09-10T20:00:00", "not-a-date", 42):
             with self.subTest(timestamp=timestamp):
@@ -149,6 +158,24 @@ class TVMazeToolsTest(unittest.TestCase):
         for value in ({"not": "a list"}, [{"show": None}]):
             with patch.object(service, "urlopen", return_value=response(value)):
                 self.assertEqual(set(service.search_tv_shows({"query": "Office"})), {"error"})
+
+    def test_truncated_chunked_body_returns_error_from_both_tools(self):
+        class TruncatedSocket:
+            def makefile(self, *args, **kwargs):
+                return io.BytesIO(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nA\r\n{}")
+
+        for handler, payload in (
+            (service.search_tv_shows, {"query": "Office"}),
+            (service.get_tv_show, {"show_id": 1}),
+        ):
+            with self.subTest(tool=handler.__name__):
+                upstream = HTTPResponse(TruncatedSocket())
+                upstream.begin()
+                with patch.object(service, "urlopen", return_value=upstream):
+                    result = handler(payload)
+                self.assertEqual(set(result), {"error"})
+                self.assertIn("Could not reach TVMaze", result["error"])
+                self.assertTrue(upstream.isclosed())
 
     def test_manifest_exposes_json_post_tools_with_required_fields(self):
         self.assertEqual({tool["name"] for tool in service.TOOLS}, {"search_tv_shows", "get_tv_show"})

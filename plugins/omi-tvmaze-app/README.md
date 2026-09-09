@@ -38,7 +38,7 @@ Each tool accepts a JSON object POST body and returns exactly one of `result`
 or `error`. Malformed JSON and non-object bodies use FastAPI's standard HTTP
 422 validation response. Missing next-episode data is a successful “not
 currently listed” result, not a cancellation claim. Unknown IDs, provider
-timeouts, rate limits, oversized responses, and invalid provider JSON are
+timeouts, rate limits, truncated/oversized responses, and invalid provider JSON are
 explicit tool errors.
 
 ```bash
