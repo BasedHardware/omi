@@ -92,8 +92,18 @@ extension PushToTalkManager {
   /// Read-only projection of the same rule `isBlockedByUsageLimit()` enforces,
   /// so a button can render the blocked treatment without posting the popup.
   /// Posting stays a side effect of actually attempting a turn.
+  ///
+  /// This is the monthly free-tier question-quota gate (`FloatingBarUsageLimiter`),
+  /// independent of the separate trial-expired flag `isPaywalledEffective`
+  /// guards — so the exemption here is BYOK, or (like transcription's own gate)
+  /// the Local provider with a self-hosted backend URL configured
+  /// (`AIProvider.hasLocalBackendConfigured`): a PTT turn is voice capture
+  /// feeding a chat turn, so it is only genuinely free of Omi's cloud once the
+  /// voice side is too. Local text alone, with no local transcription backend,
+  /// still sends the audio to Omi's Deepgram proxy and stays gated.
   var isPushToTalkUsageLimitBlocked: Bool {
-    !APIKeyService.isByokActive && FloatingBarUsageLimiter.shared.isLimitReached
+    guard !APIKeyService.isByokActive, !AIProvider.hasLocalBackendConfigured else { return false }
+    return FloatingBarUsageLimiter.shared.isLimitReached
   }
 
   /// How a visible push-to-talk button must render right now.
