@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { projectDeviceTranscription } from "../src/device-transcriptions";
+import {
+  projectDeviceTranscription,
+  recordingListSpeech,
+  recordingTranscriptSpeech,
+} from "../src/device-transcriptions";
 
 const completed = {
   sessionId: "session-one",
@@ -152,5 +156,23 @@ describe("device transcription client projection", () => {
       state: "completed",
       text: "Stored speech",
     });
+  });
+
+  test("GET speech keeps interstitial NEXT LINE segments that list titles skip", () => {
+    const segments = [
+      { start: 0, end: 0.1, text: "First words" },
+      ...Array.from({ length: 200 }, (_, index) => ({
+        start: 0.1 + index,
+        end: 0.2 + index,
+        text: "\u0085",
+      })),
+      { start: 200, end: 201, text: "Later speech" },
+    ];
+    expect(recordingTranscriptSpeech("", segments)).toContain("\u0085");
+    expect(recordingTranscriptSpeech("", segments)).toContain("Later speech");
+    expect(recordingListSpeech("", segments)).toBe("First words Later speech");
+    expect(recordingListSpeech("Stored speech", segments)).toBe(
+      "Stored speech"
+    );
   });
 });

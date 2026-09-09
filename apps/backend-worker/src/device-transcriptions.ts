@@ -219,7 +219,10 @@ function visibleTranscriptText(value: string): string {
   return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, "");
 }
 
-function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
+function joinWellFormedSegmentTexts(
+  segments: unknown[],
+  skipEmptyAfterTrim = false
+): string | null {
   if (segments.length === 0) return null;
   const parts: string[] = [];
   for (const segment of segments) {
@@ -232,20 +235,36 @@ function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
     }
     const text = (segment as { text?: unknown }).text;
     if (text === undefined || text === null) {
-      parts.push("");
+      if (!skipEmptyAfterTrim) parts.push("");
       continue;
     }
     if (typeof text !== "string") return null;
+    if (skipEmptyAfterTrim && visibleTranscriptText(text) === "") continue;
     parts.push(text);
   }
-  return parts.join(" ");
+  return parts.length === 0 ? null : parts.join(" ");
 }
 
 export function recordingTranscriptSpeech(
   storedText: string | null,
   segments: unknown[]
 ): string | null {
-  const joined = joinWellFormedSegmentTexts(segments);
+  return recordingSpeech(storedText, segments, false);
+}
+
+export function recordingListSpeech(
+  storedText: string | null,
+  segments: unknown[]
+): string | null {
+  return recordingSpeech(storedText, segments, true);
+}
+
+function recordingSpeech(
+  storedText: string | null,
+  segments: unknown[],
+  skipEmptyAfterTrim: boolean
+): string | null {
+  const joined = joinWellFormedSegmentTexts(segments, skipEmptyAfterTrim);
   if (joined === null) return storedText;
   const storedVisible =
     storedText === null ? "" : visibleTranscriptText(storedText);

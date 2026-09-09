@@ -1,6 +1,6 @@
 import {
   parseStoredTranscriptSegments,
-  recordingTranscriptSpeech,
+  recordingListSpeech,
 } from "./device-transcriptions";
 import {
   recoveredPayloadTextKeySql,
@@ -148,9 +148,7 @@ export async function readConversations(
   for (const recording of recordings.results) {
     const segments = parseStoredTranscriptSegments(recording.segments) ?? [];
     const speech =
-      recordingTranscriptSpeech(recording.text, segments) ??
-      recording.text ??
-      "";
+      recordingListSpeech(recording.text, segments) ?? recording.text ?? "";
     conversations.push({
       id: `recording:${recording.id}`,
       title: recordingExcerpt(speech).slice(0, 80),
