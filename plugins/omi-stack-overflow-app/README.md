@@ -47,6 +47,20 @@ curl -X POST http://localhost:8080/tools/get_top_answers \
   -d '{"question_id":11227809, "limit":2}'
 ```
 
+## Tests
+
+From the repository root, run the hermetic handler regressions:
+
+```bash
+python3 plugins/omi-stack-overflow-app/test_main.py
+```
+
+Only the Python standard library is needed. Tests import the whole production
+module using framework import stubs and mock the Stack Exchange provider seam.
+They exercise search acceptance states, question details, and provider errors;
+they do not test HTTP routing, framework validation, or the live service. The
+same command runs in the local and CI checks manifest.
+
 ## Deployment
 
 The app is ready for Railway or Heroku-style deployment:

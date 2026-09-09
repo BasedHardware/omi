@@ -170,7 +170,7 @@ def _format_question(item: dict[str, Any], index: int, site: str) -> str:
     score = item.get("score", 0)
     answers = item.get("answer_count", 0)
     views = item.get("view_count", 0)
-    accepted = "accepted" if item.get("is_answered") else "not accepted"
+    accepted = "accepted" if item.get("accepted_answer_id") else "not accepted"
     tags = ", ".join(item.get("tags", [])) or "no tags"
     link = item.get("link") or _question_url(site, question_id)
 
