@@ -3256,5 +3256,6 @@
     "speechProfileTopicGoal": "Wat is je langetermijndoel?",
     "speechToTextUnavailableDesc": "Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.",
     "memoryHistoryPartial": "Een deel van de herinneringsgeschiedenis is niet beschikbaar. De tot nu toe ontvangen geschiedenis wordt getoond.",
-    "tapPlusToStartRecording": "Tik op + om de opname te starten"
+    "tapPlusToStartRecording": "Tik op + om de opname te starten",
+    "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal."
 }

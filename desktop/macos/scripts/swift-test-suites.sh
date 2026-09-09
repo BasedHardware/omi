@@ -56,6 +56,16 @@ SUITE_BATCH_SIZE="${OMI_SWIFT_TEST_SUITE_BATCH_SIZE:-25}"
 # an execution allowance for each ADDITIONAL suite it carries. The allowance
 # only has to cover run time, not startup.
 SUITE_BATCH_PER_SUITE_SECONDS="${OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS:-30}"
+# Independent ceiling on a single batch invocation's watchdog budget. The
+# scaled budget grows linearly with the batch (300s + 30s per extra suite), so
+# CI's batch of 100 would budget 3270s — 54.5 minutes inside a 60-minute job,
+# leaving no room for the bisect fallback that a wedged batch needs. A positive
+# value clamps every batch (and bisect half) to at most this many ACTIVE
+# execution seconds (SwiftPM build-lock waits stay exempt, as with the base
+# budget); 0 keeps the uncapped scaled budget, which stays correct for local
+# batch sizes. CI sets this in .github/workflows/desktop-swift-ci.yml — the
+# tests assert the clamp, not the CI value.
+SUITE_BATCH_CEILING_SECONDS="${OMI_SWIFT_TEST_BATCH_CEILING_SECONDS:-0}"
 # A suite killed by a signal writes nothing but SwiftPM's one-line "Exited with
 # unexpected signal code N" into its log — no frames. The system crash reporter
 # holds the backtrace, and on a hosted runner it is discarded with the machine,
@@ -63,6 +73,39 @@ SUITE_BATCH_PER_SUITE_SECONDS="${OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS:-3
 # (#11573). Print the reports this run produced next to the failing suites.
 CRASH_REPORT_DIR="${OMI_SWIFT_TEST_CRASH_REPORT_DIR:-$HOME/Library/Logs/DiagnosticReports}"
 CRASH_REPORT_LIMIT="${OMI_SWIFT_TEST_CRASH_REPORT_LIMIT:-6}"
+# The ratcheted slow-suite list (see swift-test-slow-suites.json). Members are
+# measured slow (each entry carries its evidence) and are deferred out of the
+# PR lane so a pull request holds its hosted Mac for minutes, not tens of
+# minutes. The full lane — every main push, the scheduled health run, and
+# manual dispatch — still runs them, so the release planner's exact-SHA
+# evidence never loses them.
+SLOW_SUITES_FILE="${OMI_SWIFT_TEST_SLOW_SUITES_FILE:-$SCRIPT_DIR/swift-test-slow-suites.json}"
+# `full` runs everything (the historical behavior, and the local default);
+# `pr` defers ratcheted slow suites unless this diff touches their own inputs.
+TEST_LANE="${OMI_SWIFT_TEST_LANE:-full}"
+# Repo-relative changed paths (one per line) supplied by CI. A deferred suite
+# wakes when a file that declares it changed; runner or deferral-list changes
+# re-baseline the whole selection.
+CHANGED_FILES="${OMI_SWIFT_TEST_CHANGED_FILES:-}"
+# A red batch re-runs every member through the authoritative per-suite path.
+# That fallback used to be serial inside one worker scratch directory, which a
+# timed-out 25-suite batch turned into ~20 min of re-runs; this bounds how many
+# isolated re-runs execute at once (each owns a copy-on-write clone, so the
+# SwiftPM build lock never serializes them).
+ISOLATION_PARALLEL="${OMI_SWIFT_TEST_ISOLATION_PARALLEL:-3}"
+# With 1, the PR lane also defers the serial and solo clusters (see the
+# deferral section below); every other lane always executes them.
+DEFER_SERIAL_ON_PR="${OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL:-0}"
+# A red batch larger than this first re-runs as two half-batches before any
+# per-suite isolation. Batch co-residency flakes are common enough that a
+# straight 50-member fallback re-ran ~100 isolated invocations (~36s each) and
+# blew the job ceiling (run 34301327490: two red batches, step cancelled at
+# 69 invocations); bisection settles the green half in ONE invocation and
+# descends to singles only for the half that is still red.
+FALLBACK_BISECT_MIN="${OMI_SWIFT_TEST_FALLBACK_BISECT_MIN:-16}"
+# PR-lane slow-suite ratchet threshold in seconds of measured XCTest wall
+# time (see the ratchet at the end of the run); 0 disables. Set by CI.
+SLOW_RATCHET_SECONDS="${OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS:-0}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -101,6 +144,50 @@ terminate_process_tree() {
   if kill -0 "$pid" 2>/dev/null; then
     kill "-$signal" "$pid" 2>/dev/null || true
   fi
+}
+
+# XCTest prints one "Test Suite 'X' passed at <date>." block plus a following
+# "Executed N tests, ... in (T) (W) seconds" line per suite — including suites
+# sharing a batch process. Record each suite's wall seconds as
+# `<log_dir>/<suite>.seconds` so the run summary can name the slow tail even on
+# the all-green path (whose logs used to be discarded with the temp directory,
+# leaving nothing to tune deferral with). Suites with no parsed entry are
+# simply absent from the summary; the hermetic fixture's fake xcrun emits no
+# XCTest timing lines, so recording is a no-op there.
+record_suite_seconds() {
+  local log_path="$1"
+  local log_dir="$2"
+  python3 - "$log_path" "$log_dir" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+log_path, log_dir = sys.argv[1], sys.argv[2]
+try:
+    text = Path(log_path).read_text(encoding="utf-8", errors="replace")
+except OSError:
+    raise SystemExit(0)
+suite_re = re.compile(r"Test Suite '([^']+)' (?:passed|failed) at ")
+executed_re = re.compile(
+    r"Executed \d+ tests?, with \d+ failures? \(0 unexpected\) in [\d.]+ \(([\d.]+)\) seconds"
+)
+current = None
+for line in text.splitlines():
+    match = suite_re.search(line)
+    if match:
+        name = match.group(1)
+        # Skip the aggregate wrappers around a run, not individual suites.
+        # "Selected tests" is what XCTest names the wrapper of a --filter run.
+        current = None if name in ("All tests", "Selected tests") or name.endswith(".xctest") else name
+        continue
+    if current is None:
+        continue
+    match = executed_re.search(line)
+    if match:
+        seconds_path = Path(log_dir) / f"{current}.seconds"
+        seconds_path.write_text(match.group(1) + "\n", encoding="utf-8")
+        current = None
+PY
 }
 
 # Runs ONE `xcrun swift test` invocation covering one or more suites under the
@@ -218,11 +305,14 @@ run_suite() {
   fi
 
   rm -f "$timeout_path"
+  local suite_started=$SECONDS
   run_swift_test "$log_path" "$budget" "$build_path" "$runtime_path" "$suite" || status=$?
+  echo "swift test invocation [suite $suite] wall=$((SECONDS - suite_started))s exit=$status (budget ${budget}s)"
   if [ -f "$timeout_path" ]; then
     echo "suite timed out after ${budget}s" >>"$log_path"
     status=124
   fi
+  record_suite_seconds "$log_path" "$log_dir"
   echo "$status" >"$status_path"
   exit "$status"
 }
@@ -240,11 +330,20 @@ run_batch() {
   local log_path="$log_dir/batch-$batch_id.log"
   local timeout_path="$log_dir/batch-$batch_id.timeout"
   local budget=$((SUITE_TIMEOUT_SECONDS + (batch_size - 1) * SUITE_BATCH_PER_SUITE_SECONDS))
+  # The aggregate ceiling bounds the worst case independently of the scaled
+  # formula (see SUITE_BATCH_CEILING_SECONDS above): at CI's batch 100 the
+  # uncapped budget is 54.5 min inside a 60-min job — a wedged batch would
+  # hit the job ceiling before the bisect fallback could ever run.
+  if [ "$SUITE_BATCH_CEILING_SECONDS" -gt 0 ] && [ "$budget" -gt "$SUITE_BATCH_CEILING_SECONDS" ]; then
+    budget="$SUITE_BATCH_CEILING_SECONDS"
+  fi
   local status=0
   local suite
 
   rm -f "$timeout_path"
+  local batch_started=$SECONDS
   run_swift_test "$log_path" "$budget" "$build_path" "$runtime_path" "${batch_suites[@]}" || status=$?
+  echo "swift test invocation [batch $batch_id x${batch_size}] wall=$((SECONDS - batch_started))s exit=$status (budget ${budget}s)"
   if [ -f "$timeout_path" ]; then
     echo "batch of ${batch_size} suite(s) timed out after ${budget}s" >>"$log_path"
     status=124
@@ -253,7 +352,10 @@ run_batch() {
   if [ "$status" = "0" ]; then
     # Write the per-suite status files the reporting loop reads, and point each
     # suite's log at the batch's combined output so nothing downstream has to
-    # know a batch happened.
+    # know a batch happened. Harvest per-suite seconds from the combined log
+    # first: it dies with the temp directory, and green suites' durations are
+    # the deferral tuning data.
+    record_suite_seconds "$log_path" "$log_dir"
     for suite in "${batch_suites[@]}"; do
       echo "$suite passed in batch $batch_id; combined output: $log_path" >"$log_dir/$suite.log"
       echo "0" >"$log_dir/$suite.status"
@@ -266,12 +368,71 @@ run_batch() {
   # log files — and let those results stand. If none of them reproduces the
   # failure, the batch hit an order dependence between two suites that share a
   # process; the run stays green, matching the isolated verdict, and this line
-  # is the trail back to it.
+  # is the trail back to it. Batches larger than FALLBACK_BISECT_MIN bisect
+  # first: each half re-runs as its own batch (one invocation settles a green
+  # half) and only a still-red half of at most FALLBACK_BISECT_MIN members
+  # descends to isolated singles, up to ISOLATION_PARALLEL at a time on
+  # copy-on-write clones of this worker's scratch (a serial fallback on one
+  # SwiftPM lock cost ~20 min; a straight 50-member parallel fallback cost ~10
+  # min per flaky batch on run 34301327490).
   echo "--- BATCH $batch_id exited $status; re-running its ${batch_size} suite(s) in isolation ---"
-  echo "batch suites: ${batch_suites[*]}"
-  for suite in "${batch_suites[@]}"; do
-    "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$build_path" "$runtime_path" || true
-  done
+  echo "batch suites: ${batch_suites[@]}"
+  local fallback_dir="$log_dir/.fallback-$batch_id"
+  mkdir -p "$fallback_dir"
+
+  if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
+    local mid=$(((batch_size + 1) / 2))
+    local -a left_suites=("${batch_suites[@]:0:$mid}")
+    local -a right_suites=("${batch_suites[@]:$mid}")
+    local -a half_suites=()
+    local half_index half_id half_build half_runtime
+    # Halves run sequentially on their own clones so they cannot contend on
+    # this worker's scratch while the worker may already be running its next
+    # batch. Recursion terminates: each __run_batch invocation re-enters this
+    # same rule with a strictly smaller member count.
+    for half_index in 0 1; do
+      if [ "$half_index" = 0 ]; then
+        half_suites=("${left_suites[@]}")
+      else
+        half_suites=("${right_suites[@]}")
+      fi
+      [ "${#half_suites[@]}" -gt 0 ] || continue
+      half_id="$batch_id-h$half_index"
+      half_build="$fallback_dir/$half_id.build"
+      half_runtime="$fallback_dir/$half_id.runtime"
+      if [ "$PREBUILD" = "1" ]; then
+        cp -cR "$build_path" "$half_build"
+      else
+        mkdir -p "$half_build"
+      fi
+      mkdir -p "$half_runtime/home" "$half_runtime/tmp"
+      "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
+    done
+    exit 0
+  fi
+
+  printf '%s\n' "${batch_suites[@]}" \
+    | xargs -P "$ISOLATION_PARALLEL" -I{} "$SCRIPT_PATH" __isolated_fallback_suite "$log_dir" {} "$build_path" "$fallback_dir"
+  exit 0
+}
+
+# One member of a failed batch, re-run with full isolation: its own
+# copy-on-write clone of the worker's prebuilt scratch (so parallel re-runs
+# never queue on one SwiftPM lock) and its own Foundation runtime home.
+run_isolated_fallback_suite() {
+  local log_dir="$1"
+  local suite="$2"
+  local build_path="$3"
+  local fallback_dir="$4"
+  local iso_build="$fallback_dir/$suite.build"
+  local iso_runtime="$fallback_dir/$suite.runtime"
+  if [ "$PREBUILD" = "1" ]; then
+    cp -cR "$build_path" "$iso_build"
+  else
+    mkdir -p "$iso_build"
+  fi
+  mkdir -p "$iso_runtime/home" "$iso_runtime/tmp"
+  "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$iso_build" "$iso_runtime" || true
   exit 0
 }
 
@@ -345,6 +506,10 @@ if [ "${1:-}" = "__run_suite" ]; then
   run_suite "$2" "$3" "$4" "$5"
 fi
 
+if [ "${1:-}" = "__isolated_fallback_suite" ]; then
+  run_isolated_fallback_suite "$2" "$3" "$4" "$5"
+fi
+
 if [ "${1:-}" = "__run_batch" ]; then
   shift
   run_batch "$@"
@@ -374,6 +539,25 @@ if [ "$SUITE_BATCH_SIZE" -lt 1 ]; then
 fi
 [[ "$SUITE_BATCH_PER_SUITE_SECONDS" =~ ^[0-9]+$ ]] \
   || fail "OMI_SWIFT_TEST_SUITE_BATCH_PER_SUITE_SECONDS must be a non-negative integer, got '$SUITE_BATCH_PER_SUITE_SECONDS'"
+[[ "$SUITE_BATCH_CEILING_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_BATCH_CEILING_SECONDS must be a non-negative integer (0 disables the ceiling), got '$SUITE_BATCH_CEILING_SECONDS'"
+case "$TEST_LANE" in
+  pr|full) ;;
+  *) fail "OMI_SWIFT_TEST_LANE must be 'pr' or 'full', got '$TEST_LANE'" ;;
+esac
+[[ "$ISOLATION_PARALLEL" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_ISOLATION_PARALLEL must be a positive integer, got '$ISOLATION_PARALLEL'"
+if [ "$ISOLATION_PARALLEL" -lt 1 ]; then
+  fail "OMI_SWIFT_TEST_ISOLATION_PARALLEL must be at least 1"
+fi
+[[ "$FALLBACK_BISECT_MIN" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_FALLBACK_BISECT_MIN must be a non-negative integer, got '$FALLBACK_BISECT_MIN'"
+[[ "$SLOW_RATCHET_SECONDS" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS must be a non-negative integer, got '$SLOW_RATCHET_SECONDS'"
+case "$DEFER_SERIAL_ON_PR" in
+  0|1) ;;
+  *) fail "OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL must be 0 or 1, got '$DEFER_SERIAL_ON_PR'" ;;
+esac
 
 # Static guardrails are part of the authoritative Swift component suite, not a
 # separate best-effort lint. Run their fixture tests first so a broken checker
@@ -384,20 +568,38 @@ if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
   python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
   python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
   python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
+  "$SKIP_RATCHET" --slow-check --slow-file "$SLOW_SUITES_FILE"
 fi
 
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not
 # silently skipped (SwiftPM compiles the whole Tests target; this must match).
+# Discovery also records every file that declares each suite (paths relative to
+# the tests root) in $suite_map: the PR lane consults it so a deferred slow
+# suite still runs when this diff edits its own declaring files.
 suite_class_pattern='^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) [A-Za-z0-9_]+:.*XCTestCase'
 suite_class_name='s/^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) ([A-Za-z0-9_]+):.*/\5/'
 
+cd "$MACOS_DIR"
+suite_log_dir="$(mktemp -d)"
+suite_worker_dir="$(mktemp -d)"
+trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
+suite_map="$suite_worker_dir/suite-map.tsv"
+: >"$suite_map"
+while IFS= read -r file; do
+  relative="${file#"$TESTS_ROOT"/}"
+  grep -E "$suite_class_pattern" "$file" 2>/dev/null \
+    | sed -E "$suite_class_name" \
+    | while IFS= read -r suite; do
+        printf '%s\t%s\n' "$suite" "$relative"
+      done
+done < <(find "$TESTS_ROOT" -type f -name '*.swift' -exec grep -lE "$suite_class_pattern" {} + 2>/dev/null || true) \
+  | sort -u >>"$suite_map"
+
 declare -a suites=()
 while IFS= read -r suite; do
+  [ -n "$suite" ] || continue
   suites+=("$suite")
-done < <(find "$TESTS_ROOT" -type f -name '*.swift' -print0 \
-  | xargs -0 grep -hE "$suite_class_pattern" \
-  | sed -E "$suite_class_name" \
-  | sort -u)
+done < <(cut -f1 "$suite_map" | sort -u)
 
 # A suite that drives RuntimeOwnerAuthorityTestFixture transitions the
 # process-global owner authority through that same standard domain, so it
@@ -455,9 +657,118 @@ is_serial_suite() {
   return 1
 }
 
+# PR-lane deferral. A deferred suite is ratcheted slow (measured evidence in
+# swift-test-slow-suites.json) AND neither its own declaring files nor a
+# watched subject path nor the deferral infrastructure changed in this diff.
+# Everything else — including every deferred suite on pushes, scheduled
+# health runs, manual dispatch, and local runs — executes exactly as before.
+# With DEFER_SERIAL_ON_PR=1 the PR lane also defers the serial and solo
+# clusters: they exist for process-global isolation, so each member pays a
+# full ~30s SwiftPM/xctest invocation for sub-second tests, sequentially,
+# after every worker has exited (run 34306382692: 24 single-suite
+# invocations, 12.9 min of the suite step). Their declaring files still wake
+# them, and ratcheted watch prefixes keep subject-area changes (auth sources
+# for the fixed auth cluster) on the PR critical path.
+slow_suites_resolved=""
+slow_watch_map=""
+if [ "$TEST_LANE" = "pr" ]; then
+  if [ -f "$SLOW_SUITES_FILE" ]; then
+    slow_lookup="$("$SKIP_RATCHET" --slow-list --with-watch --slow-file "$SLOW_SUITES_FILE")"
+    # --slow-list prints one "suite<TAB>watch" pair per line. The names feed
+    # the space-delimited word-boundary matcher below, so normalize newlines
+    # to spaces — a multi-entry list never matched when newline-joined — and
+    # keep the full lookup as the watch map.
+    slow_suites_resolved="$(printf '%s\n' "$slow_lookup" | cut -f1 | tr '\n' ' ')"
+    slow_watch_map="$slow_lookup"
+  fi
+fi
+
+is_slow_suite() {
+  case " $slow_suites_resolved " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+# Watch prefixes a slow-suite entry registered for its subject sources
+# (comma-separated, no spaces). Empty when the entry declared none.
+suite_watch_prefixes() {
+  awk -F '\t' -v suite="$1" '$1 == suite {print $2}' <<<"$slow_watch_map"
+}
+
+# True when a watched subject path (or any parent directory of it) changed.
+suite_watched_path_changed() {
+  local suite="$1"
+  local prefixes changed prefix
+  prefixes="$(suite_watch_prefixes "$suite")"
+  [ -n "$prefixes" ] || return 1
+  while IFS= read -r changed; do
+    [ -n "$changed" ] || continue
+    for prefix in ${prefixes//,/ }; do
+      case "$changed" in
+        "$prefix"*) return 0 ;;
+      esac
+    done
+  done <<<"$CHANGED_FILES"
+  return 1
+}
+
+# True when one of the suite's declaring test files is in the changed-files
+# set CI forwarded (repo-relative paths). Extensions can declare a suite in a
+# second file, so every declaring file counts.
+suite_declares_changed_file() {
+  local suite="$1"
+  local declaring
+  while IFS=$'\t' read -r name declaring; do
+    [ "$name" = "$suite" ] || continue
+    if printf '%s\n' "$CHANGED_FILES" | grep -qxF "desktop/macos/Desktop/Tests/$declaring"; then
+      return 0
+    fi
+  done <"$suite_map"
+  return 1
+}
+
+# A change to the runner, the deferral list, the ratchet that validates it,
+# the package manifest, or the test driver re-baselines the whole selection:
+# the partition below must not depend on a stale slow list to judge its own
+# correctness.
+deferral_rebaselined() {
+  printf '%s\n' "$CHANGED_FILES" | grep -qxE \
+    'desktop/macos/(Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))'
+}
+
+deferred_suites=""
+declare -a kept_suites=()
+if [ "$TEST_LANE" != "pr" ] || { [ -z "$slow_suites_resolved" ] && [ "$DEFER_SERIAL_ON_PR" != "1" ]; } || deferral_rebaselined; then
+  kept_suites=("${suites[@]}")
+else
+  for suite in "${suites[@]}"; do
+    defer=0
+    if is_slow_suite "$suite"; then
+      if suite_declares_changed_file "$suite" || suite_watched_path_changed "$suite"; then
+        defer=0
+      else
+        defer=1
+      fi
+    elif [ "$DEFER_SERIAL_ON_PR" = "1" ] && { is_serial_suite "$suite" || is_solo_suite "$suite"; }; then
+      if suite_declares_changed_file "$suite"; then
+        defer=0
+      else
+        defer=1
+      fi
+    fi
+    if [ "$defer" = "1" ]; then
+      deferred_suites="$deferred_suites $suite"
+    else
+      kept_suites+=("$suite")
+    fi
+  done
+fi
+suite_count="${#kept_suites[@]}"
+
 declare -a parallel_suites=()
 declare -a serial_suites=()
-for suite in "${suites[@]}"; do
+for suite in "${kept_suites[@]}"; do
   if is_serial_suite "$suite"; then
     serial_suites+=("$suite")
   else
@@ -467,13 +778,8 @@ done
 
 "$SKIP_RATCHET" --check --tests-root "$TESTS_ROOT"
 
-cd "$MACOS_DIR"
-suite_log_dir="$(mktemp -d)"
-suite_worker_dir="$(mktemp -d)"
-trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
 failed_suites=""
 crashed_suites=""
-suite_count="${#suites[@]}"
 worker_count=0
 
 if [[ "$PACKAGE_PATH" = /* ]]; then
@@ -554,7 +860,7 @@ if [ "$worker_count" -eq 0 ] && [ "${#serial_suites[@]}" -gt 0 ]; then
   worker_count=1
 fi
 
-for suite in "${suites[@]}"; do
+for suite in "${kept_suites[@]}"; do
   status_path="$suite_log_dir/$suite.status"
   if [ ! -f "$status_path" ]; then
     failed_suites="$failed_suites $suite"
@@ -579,7 +885,48 @@ fi
 
 echo "Ran $suite_count Swift suites in isolation with $worker_count worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget, batches of up to ${SUITE_BATCH_SIZE} suite(s) per SwiftPM process (any failing batch re-runs per suite)."
 
-if [ -n "$failed_suites" ]; then
-  echo "FAILED Swift suites:$failed_suites"
+if [ -n "$deferred_suites" ]; then
+  deferred_count="$(printf '%s\n' $deferred_suites | grep -c .)"
+  echo "Deferred $deferred_count ratcheted slow suite(s) to the full lane (main pushes, the scheduled health run, and manual dispatch execute them):$deferred_suites"
+fi
+
+# Green batches used to discard their logs with the temp directory, so the
+# slow tail was invisible until it broke a batch budget. Name it every run.
+if ls "$suite_log_dir"/*.seconds >/dev/null 2>&1; then
+  echo "Slowest executed Swift suites this run (wall seconds):"
+  for seconds_path in "$suite_log_dir"/*.seconds; do
+    printf '%s %s\n' "$(cat "$seconds_path")" "$(basename "${seconds_path%.seconds}")"
+  done | sort -rn | head -25 | while read -r seconds suite; do
+    printf '  %8ss  %s\n' "$seconds" "$suite"
+  done
+fi
+
+# PR-lane slow-suite ratchet: the fast lane must not silently grow a slow
+# tail. Any executed suite whose measured XCTest wall seconds exceed
+# SLOW_RATCHET_SECONDS and which is not already ratcheted in
+# swift-test-slow-suites.json fails the run — slow-listed suites are exempt
+# even when a diff woke them, because deferral is exactly the slow list's
+# job. Disabled (0) outside the PR lane and for local runs.
+ratchet_offenders=""
+if [ "$TEST_LANE" = "pr" ] && [ "$SLOW_RATCHET_SECONDS" -gt 0 ]; then
+  for seconds_path in "$suite_log_dir"/*.seconds; do
+    [ -e "$seconds_path" ] || continue
+    suite="$(basename "${seconds_path%.seconds}")"
+    is_slow_suite "$suite" && continue
+    suite_seconds="$(cat "$seconds_path")"
+    if awk -v s="$suite_seconds" -v cap="$SLOW_RATCHET_SECONDS" 'BEGIN { exit (s > cap) ? 0 : 1 }'; then
+      ratchet_offenders="$ratchet_offenders $suite=${suite_seconds}s"
+    fi
+  done
+fi
+if [ -n "$ratchet_offenders" ]; then
+  echo "FAILED slow-suite ratchet: PR-lane suites over ${SLOW_RATCHET_SECONDS}s of test time that are not ratcheted in swift-test-slow-suites.json:$ratchet_offenders" >&2
+  echo "Fix the slowness, or defer the suite by adding it to desktop/macos/scripts/swift-test-slow-suites.json with a reason and this run's evidence (it still executes on every main push, the scheduled health run, and manual dispatch, and wakes when its own files or watched subjects change)." >&2
+fi
+
+if [ -n "$failed_suites" ] || [ -n "$ratchet_offenders" ]; then
+  if [ -n "$failed_suites" ]; then
+    echo "FAILED Swift suites:$failed_suites"
+  fi
   exit 1
 fi

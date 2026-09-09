@@ -2,6 +2,50 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.331",
+      "date": "2026-09-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.330",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice typing dropping the first word when a dictation starts with \"this\" — \"type this is a test\" now types \"This is a test\", not \"Is a test\""
+      ]
+    },
+    {
+      "version": "0.12.329",
+      "date": "2026-09-09",
+      "changes": [
+        "Stopped push-to-talk follow-ups re-answering an earlier question whose spoken reply was cut off by the next press — a reply whose text finished is now treated as given, and the assistant continues from where it stopped instead of restarting that thread"
+      ]
+    },
+    {
+      "version": "0.12.328",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed undoing the deletion of a completed task duplicating it instead of restoring it"
+      ]
+    },
+    {
+      "version": "0.12.327",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice turns dropping the on-screen context captured when you pressed the talk button",
+        "Fixed a push-to-talk stall so an automation voice turn starts responding immediately instead of waiting on the first screen capture."
+      ]
+    },
+    {
+      "version": "0.12.326",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed a finished chat answer briefly jumping back to an older, shorter version with its tool chips while it settled, and made long transcripts stay responsive while an answer streams",
+        "Stopped developer macOS builds from asking for Keychain access on every rebuild"
+      ]
+    },
+    {
       "version": "0.12.325",
       "date": "2026-09-09",
       "changes": [

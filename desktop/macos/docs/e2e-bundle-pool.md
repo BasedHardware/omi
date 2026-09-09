@@ -62,29 +62,28 @@ Recurring: macOS 15 and later periodically re-ask whether an app may keep
 recording the screen. `check` reports that as `screen_recording=stale`; one
 click clears it.
 
-### Auth: shared (default in a GUI session) or isolated
+### Auth: shared (default) or isolated
 
 - **shared** — a full launch clones the Omi Dev session before start, exactly
-  as any named bundle does, **when the launcher can read the keychain**: a GUI
-  shell can; a background agent shell (launchd `Background` session, ssh)
-  cannot — the dump comes back empty and the slot keeps whatever session it
-  already has. So sign in once during the grant pass; the session persists in
-  the slot's own keychain item across rebuilds. Tests then run as the
+  as any named bundle does. Developer sources dump from a JSON file under
+  Application Support (`developer-secrets/<bundle-id>.json`), so cloning works
+  from a Background agent shell (launchd `Background` session, ssh) as well as
+  a GUI shell. Rebuilds never prompt for Keychain access. Sign in once to Omi
+  Dev; later slots clone that file-backed session. Tests then run as the
   developer's account against the dev backend, so their writes are real.
 - **isolated** — the slot keeps its own session. Sign in **once** inside the
   slot app with a dedicated test account; the session persists in the slot's
-  own keychain item across rebuilds. The Rewind history is not cloned either.
+  own developer-secrets file across rebuilds. The Rewind history is not cloned either.
   ```bash
   ./scripts/omi-e2e-pool acquire --slot 2 --auth isolated
   ```
   The mode sticks to the slot, not to the lane that set it, and `status` shows
   it.
 
-**Headless default.** An `acquire` from a non-GUI session (`launchctl
-managername` is anything but `Aqua`) defaults the slot to **isolated** instead
-of shared, because a shared slot launched from there can never be seeded — the
-same keychain wall blocks the dump. An explicit `--auth` always wins. GUI
-acquires keep the shared default.
+**Headless default.** Developer-bundle dump/seed no longer needs the login
+keychain, so `--auth shared` works from a Background session. The pool still
+defaults a non-Aqua `acquire` to **isolated** unless `--auth` is passed. An
+explicit `--auth` always wins. GUI acquires keep the shared default.
 
 ## Using a slot from a task
 
@@ -119,14 +118,14 @@ document:
   refused while the installed bundle is fast-reusable** (exit 2). You never
   need it: rebuilds that are genuinely required are not blocked. A rewind
   reseed (`OMI_FORCE_REWIND_SEED=1`) still forces the full lane deliberately.
-- **An empty auth dump never wipes anything.** When seeding cannot run (a
-  background session cannot read the source keychain), the slot keeps its
+- **An empty auth dump never wipes anything.** When seeding cannot run (the
+  source developer-secrets file is missing or has no tokens), the slot keeps its
   existing session and the log says so — there is no "Launching cold" for pool
   slots.
-- **Never reset a pool slot's Keychain.** `omi-local-profile-keychain-reset.sh`
+- **Never reset a pool slot's secret store.** `omi-local-profile-keychain-reset.sh`
   refuses `com.omi.omi-e2e-*` (any pool size and any configured
   `OMI_E2E_POOL_PREFIX`) outright: pool slots are not local-emulator profiles,
-  and their keychain item is the persisted session a human signed in for.
+  and their developer-secrets file is the persisted session a human signed in for.
 - **A signed-out slot is a hard fail.** `check` exits 2 — the same class as a
   missing TCC grant — and points at the one-time human fix. Health-only is not
   ready: the ready gate is `omi-e2e-pool check` for grants/sign-in, then

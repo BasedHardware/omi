@@ -35,7 +35,19 @@ def _get(pins, width=300, height=150, uid=UID):
 
 
 def test_malformed_pins_are_rejected_with_400():
-    for bad in ['abc', '1.0', '1.0,2.0,3.0', '91,0', '0,181', 'a,b', '']:
+    for bad in [
+        'abc',
+        '1.0',
+        '1.0,2.0,3.0',
+        '91,0',
+        '0,181',
+        'a,b',
+        '',
+        '90.00004,0',
+        '-90.00004,0',
+        '0,180.00004',
+        '0,-180.00004',
+    ]:
         with pytest.raises(HTTPException) as excinfo:
             _get(bad)
         assert excinfo.value.status_code == 400, bad
@@ -119,6 +131,18 @@ def test_parse_pins_quantizes_dedupes_and_sorts():
 def test_parse_pins_caps_at_50():
     raw = '|'.join(f'{i / 100:.2f},0.0' for i in range(80))
     assert len(static_map_mod.parse_pins(raw)) == 50
+
+
+def test_parse_pins_rejects_out_of_bounds_coordinates_before_quantization():
+    # Coordinates just outside legal [-90, 90] and [-180, 180] bounds must not
+    # round onto the legal boundary and get accepted.
+    for bad in ['90.00004,0', '-90.00004,0', '0,180.00004', '0,-180.00004']:
+        with pytest.raises(static_map_mod.MalformedPinsError, match='pin coordinates out of bounds'):
+            static_map_mod.parse_pins(bad)
+
+    # Exact boundary coordinates remain legal and quantize properly.
+    assert static_map_mod.parse_pins('90.0,180.0') == [(90.0, 180.0)]
+    assert static_map_mod.parse_pins('-90.0,-180.0') == [(-90.0, -180.0)]
 
 
 def test_single_pin_url_centers_at_street_zoom():

@@ -172,9 +172,13 @@ struct QueryShellHome: View {
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
       ChatSwitchPerfLog.mark("QueryShellHome.appear")
+      QueryShellComposerAutomation.publish(mode)
       takePendingDraftIfAny()
       refreshRecentScreenFrames()
       claimCaret()
+    }
+    .onChange(of: searchText) { _, _ in
+      QueryShellComposerAutomation.publish(mode)
     }
     // A prefilled draft (first-real-app card, daily-summary follow-up) lands in the composer,
     // focused and unsent. This is the app's only chat destination, so it is the only consumer.
