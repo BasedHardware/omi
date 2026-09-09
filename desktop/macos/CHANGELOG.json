@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.325",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed sent chat attachments showing a blank placeholder once the picked screenshot's temporary file was removed",
+        "Fixed the Home chat input bar spreading its controls across the window — the message field, paperclip, microphone, and send button now keep their usual layout"
+      ]
+    },
+    {
       "version": "0.12.324",
       "date": "2026-09-08",
       "changes": [
