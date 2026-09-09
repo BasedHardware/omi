@@ -35,7 +35,15 @@ export async function readTasks(
   accountId: string,
   limit: number,
   cursor: string | undefined
-): Promise<TaskRead.Page | "unavailable"> {
+): Promise<TaskRead.Page | "unavailable" | "invalid_cursor"> {
+  if (cursor !== undefined) {
+    if (cursor.length < 1 || cursor.length > 1024) return "invalid_cursor";
+    const found = await db
+      .prepare("SELECT 1 FROM tasks WHERE account_id = ? AND id = ?")
+      .bind(accountId, cursor)
+      .first();
+    if (found === null) return "invalid_cursor";
+  }
   const statement = db.prepare(
     "SELECT id, description, completed, completed_at AS completedAt, due_at AS dueAt, owner, source, provenance, sort_order AS sortOrder, indent_level AS indentLevel, created_at AS createdAt, updated_at AS updatedAt, revision FROM tasks WHERE account_id = ? AND (? IS NULL OR id > ?) ORDER BY id LIMIT ?"
   );

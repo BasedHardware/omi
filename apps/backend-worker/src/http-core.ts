@@ -848,6 +848,8 @@ export async function handleTasks(context: CoreContext): Promise<Response> {
   if (limit === null || cursor === "")
     return backendError("bad_request", "edit_request", 400);
   const page = await readTasks(db, context.get("accountId"), limit, cursor);
+  if (page === "invalid_cursor")
+    return backendError("bad_request", "edit_request", 400);
   if (page === "unavailable")
     return backendError("service_unavailable", "retry", 503, true);
   return json(page);

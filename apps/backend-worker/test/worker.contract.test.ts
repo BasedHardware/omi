@@ -1625,9 +1625,24 @@ describe("worker request contract", () => {
     const extra = await fetchWorker("/v1/tasks?limit=1&extra=1", {
       headers: authenticatedHeaders,
     });
+    const unknownCursor = await fetchWorker("/v1/tasks?cursor=task:missing", {
+      headers: authenticatedHeaders,
+    });
+    const oversizedCursor = await fetchWorker(
+      `/v1/tasks?cursor=${"x".repeat(1025)}`,
+      { headers: authenticatedHeaders }
+    );
     expect(emptyCursor.status).toBe(400);
     expect(invalidLimit.status).toBe(400);
     expect(extra.status).toBe(400);
+    expect(unknownCursor.status).toBe(400);
+    expect(oversizedCursor.status).toBe(400);
+    expect((await unknownCursor.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
+    expect((await oversizedCursor.json()) as unknown).toEqual({
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    });
   });
 
   test("chat history validates pagination before resolving the account", async () => {
