@@ -45,33 +45,50 @@ export function EmptyCopy({children}: {children: string}) {
   return <Text style={styles.emptyCopy}>{children}</Text>;
 }
 
+function ConversationCopy({item}: {item: ConversationProjection}) {
+  const listenOverview = conversationListUsesListenOverview(item);
+  return (
+    <View style={styles.rowCopy}>
+      <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
+        {listenOverview
+          ? conversationRecapTitle(item)
+          : conversationDisplayTitle(item)}
+      </Text>
+      {listenOverview ? null : (
+        <Text numberOfLines={2} style={styles.rowSummary}>
+          {conversationDisplaySummary(item)}
+        </Text>
+      )}
+      <Text numberOfLines={1} style={styles.rowMeta}>
+        {[timeLabel(item), item.starred ? 'Starred' : '']
+          .filter(part => part !== '')
+          .join(' · ')}
+      </Text>
+    </View>
+  );
+}
+
 export const ReadRow = memo(function ReadRow({
   item,
 }: {
   item: DesktopReadProjection;
 }) {
-  const listenOverview =
-    item.kind === 'conversation' && conversationListUsesListenOverview(item);
+  if (item.kind === 'conversation') {
+    return (
+      <View style={styles.row}>
+        <RowGlyph kind="conversation" />
+        <ConversationCopy item={item} />
+      </View>
+    );
+  }
   const meta =
-    item.kind === 'conversation'
-      ? [
-          timeLabel(item),
-          item.starred ? 'Starred' : '',
-          listenOverview ? '' : conversationDisplaySummary(item),
-        ]
-      : item.kind === 'memory'
-      ? [timeLabel(item), 'Memory']
-      : [timeLabel(item)];
+    item.kind === 'memory' ? [timeLabel(item), 'Memory'] : [timeLabel(item)];
   return (
     <View style={styles.row}>
       <RowGlyph kind={item.kind} />
       <View style={styles.rowCopy}>
-        <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
-          {item.kind === 'conversation'
-            ? listenOverview
-              ? conversationRecapTitle(item)
-              : conversationDisplayTitle(item)
-            : item.kind === 'memory'
+        <Text numberOfLines={1} style={styles.rowTitle}>
+          {item.kind === 'memory'
             ? memoryDisplayTitle(item)
             : taskDisplayTitle(item)}
         </Text>
@@ -88,26 +105,10 @@ export const ConversationRow = memo(function ConversationRow({
 }: {
   item: ConversationProjection;
 }) {
-  const listenOverview = conversationListUsesListenOverview(item);
   return (
     <View style={styles.row}>
       <RowGlyph kind="conversation" />
-      <View style={styles.rowCopy}>
-        <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
-          {listenOverview
-            ? conversationRecapTitle(item)
-            : conversationDisplayTitle(item)}
-        </Text>
-        <Text numberOfLines={1} style={styles.rowMeta}>
-          {[
-            timeLabel(item),
-            item.starred ? 'Starred' : '',
-            listenOverview ? '' : conversationDisplaySummary(item),
-          ]
-            .filter(part => part !== '')
-            .join(' · ')}
-        </Text>
-      </View>
+      <ConversationCopy item={item} />
     </View>
   );
 });
@@ -165,6 +166,12 @@ const styles = StyleSheet.create({
     fontFamily: token.font,
     fontSize: token.type.title,
     fontWeight: '500',
+  },
+  rowSummary: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    marginTop: 2,
   },
   rowMeta: {
     color: token.color.inkMuted,
