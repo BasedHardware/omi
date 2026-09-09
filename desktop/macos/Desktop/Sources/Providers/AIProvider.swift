@@ -95,6 +95,40 @@ struct AIProvider: Identifiable {
   /// normal cloud/dev resolution", same opt-in framing as the two keys above.
   static let localBackendURLKey = "localBackendURL"
 
+  /// UserDefaults key for whether background connector synthesis (Apple
+  /// Notes, Calendar, and Gmail memory synthesis, plus AI-profile synthesis)
+  /// is allowed to call Omi's cloud synthesis endpoint while the Local
+  /// provider is active. Only meaningful under Local — every other provider
+  /// already synthesizes server-side regardless of this setting.
+  static let connectorSynthesisModeKey = "localConnectorSynthesisMode"
+
+  /// Values for `connectorSynthesisModeKey`.
+  enum ConnectorSynthesisMode: String {
+    /// Default: Notes/Calendar/Gmail memory synthesis and AI-profile
+    /// synthesis do not run while Local is active — no formatted note,
+    /// event, or email text leaves the machine.
+    case off
+    /// Opt-in: the same formatted text sent under any other provider is
+    /// sent to Omi's servers and processed by a cloud model.
+    case cloud
+  }
+
+  /// The persisted connector-synthesis choice, defaulting to `.off`.
+  static var connectorSynthesisMode: ConnectorSynthesisMode {
+    let raw =
+      UserDefaults.standard.string(forKey: connectorSynthesisModeKey) ?? ConnectorSynthesisMode.off.rawValue
+    return ConnectorSynthesisMode(rawValue: raw) ?? .off
+  }
+
+  /// Whether a connector-synthesis call site (Apple Notes, Calendar, Gmail
+  /// memory synthesis, or AI-profile synthesis) should skip its network call
+  /// entirely. True only when the Local provider is active *and* the user
+  /// has not opted into sending that data to Omi's cloud; every other
+  /// provider is unaffected.
+  static func shouldSkipConnectorSynthesis() -> Bool {
+    resolveBridgeMode() == .local && connectorSynthesisMode == .off
+  }
+
   /// Default local endpoint — localhost, matching LM Studio's default port.
   /// Only used as the initial value of an editable Settings field, never
   /// hardcoded into a request path.
