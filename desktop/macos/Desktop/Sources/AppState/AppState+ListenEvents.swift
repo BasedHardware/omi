@@ -208,14 +208,15 @@ extension AppState {
       speakerSegments[index].personId = target.personId
       moved += 1
     }
-    // The live name map is keyed by speaker id; move the names with the ids.
-    let previousNames = liveSpeakerPersonMap
-    for (from, target) in relabels {
+    // The live name map is keyed by speaker id; move the names with the ids. Cleared in a
+    // pass of its own before anything is written: a swap (0↔1) visits both ends, and
+    // clearing one while writing the other would let dictionary order decide whether the
+    // second entry wipes what the first just wrote. Ids no relabel mentions keep their name.
+    for from in relabels.keys {
       liveSpeakerPersonMap[from] = nil
-      liveSpeakerPersonMap[target.speakerId] = target.personId
     }
-    for (speakerId, personId) in previousNames where relabels[speakerId] == nil {
-      liveSpeakerPersonMap[speakerId] = personId
+    for target in relabels.values {
+      liveSpeakerPersonMap[target.speakerId] = target.personId
     }
     let summary = relabels.map {
       "\($0.key)→\($0.value.speakerId)\($0.value.isUser ? "(you)" : "")\($0.value.personId.map { " person=\($0)" } ?? "")"
