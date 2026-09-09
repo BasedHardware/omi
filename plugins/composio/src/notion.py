@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import re
 import requests
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, status, Form, BackgroundTasks
@@ -536,29 +537,24 @@ def contains_personal_info(text):
 
 def format_as_memory(text):
     """Format text as a memory about the user"""
-    text_lower = text.lower()
-
-    # Replace first-person pronouns with "User"
-    if "i am" in text_lower or "i'm" in text_lower:
-        return text.replace("I am", "User is").replace("I'm", "User is")
-    elif "i like" in text_lower:
-        return text.replace("I like", "User likes")
-    elif "i love" in text_lower:
-        return text.replace("I love", "User loves")
-    elif "i enjoy" in text_lower:
-        return text.replace("I enjoy", "User enjoys")
-    elif "i prefer" in text_lower:
-        return text.replace("I prefer", "User prefers")
-    elif "i don't like" in text_lower or "i do not like" in text_lower:
-        return text.replace("I don't like", "User doesn't like").replace("I do not like", "User does not like")
-    elif "i hate" in text_lower:
-        return text.replace("I hate", "User hates")
-    elif "my favorite" in text_lower:
-        return text.replace("My favorite", "User's favorite")
-    elif "i have" in text_lower:
-        return text.replace("I have", "User has")
-    elif "my friend" in text_lower:
-        return text.replace("My friend", "User's friend")
-    else:
-        # If no specific pattern is matched, prepend with "User:"
-        return f"User note: {text}"
+    # Match and replace using the same casing policy, preserving the rest of
+    # the sentence (including proper names) and the existing rule priority.
+    replacements = (
+        (r"i am|i'm", "User is"),
+        (r"i like", "User likes"),
+        (r"i love", "User loves"),
+        (r"i enjoy", "User enjoys"),
+        (r"i prefer", "User prefers"),
+        (
+            r"i don't like|i do not like",
+            lambda match: "User doesn't like" if match.group(0).lower() == "i don't like" else "User does not like",
+        ),
+        (r"i hate", "User hates"),
+        (r"my favorite", "User's favorite"),
+        (r"i have", "User has"),
+        (r"my friend", "User's friend"),
+    )
+    for pattern, replacement in replacements:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return f"User note: {text}"

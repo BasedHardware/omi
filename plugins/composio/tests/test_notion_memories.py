@@ -24,15 +24,17 @@ class NotionMemoryTests(unittest.TestCase):
         cls.notion = importlib.import_module("src.notion")
 
     def test_first_person_keywords_ignore_case(self):
-        for text in (
-            "I like reading science fiction books on weekends",
-            "i like reading science fiction books on weekends",
-            "I LIKE reading science fiction books on weekends",
-            "I'm learning to play the piano with a teacher",
+        for text, expected in (
+            ("I like reading science fiction books on weekends", "User likes reading science fiction books on weekends"),
+            ("i like reading science fiction books on weekends", "User likes reading science fiction books on weekends"),
+            ("I LIKE reading science fiction books on weekends", "User likes reading science fiction books on weekends"),
+            ("i'M learning to play the piano with a teacher", "User is learning to play the piano with a teacher"),
+            ("i prefer reading books by Ursula Le Guin", "User prefers reading books by Ursula Le Guin"),
+            ("my favorite author has always been Ursula Le Guin", "User's favorite author has always been Ursula Le Guin"),
         ):
             with self.subTest(text=text):
                 self.assertTrue(self.notion.contains_personal_info(text))
-                self.assertEqual(len(self.notion.extract_memories_from_text(text)), 1)
+                self.assertEqual(self.notion.extract_memories_from_text(text), [expected])
 
     def test_nonpersonal_and_short_content_remain_excluded(self):
         self.assertEqual(self.notion.extract_memories_from_text(
@@ -47,7 +49,7 @@ class NotionMemoryTests(unittest.TestCase):
         response.json.return_value = {"results": [{
             "type": "paragraph",
             "paragraph": {"rich_text": [{
-                "plain_text": "I like reading science fiction books on weekends."
+                "plain_text": "i LIKE reading science fiction books on weekends."
             }]},
         }]}
         with (
