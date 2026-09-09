@@ -296,4 +296,5 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
   Object.freeze({version:62,name:"conversation-union-last-id-length",fileName:"0062-conversation-union-last-id-length.sql",sha256:"41b5f43af031908f9805673bcbdd0a02036c259c1f55d08e6ae1259392b91b04"}),
   Object.freeze({version:63,name:"chat-session-visible-titles",fileName:"0063-chat-session-visible-titles.sql",sha256:"a9708a62343db0ae7a8660ebdfaabef19e74e4f90a00d4d5a46c051a8bfd3146"}),
   Object.freeze({version:64,name:"chat-session-visible-overviews",fileName:"0064-chat-session-visible-overviews.sql",sha256:"31cd13dabf2c8d8ea7844850edf9c3575ddaea7d34139ea162f1b7c9561b2b0f"}),
+  Object.freeze({version:65,name:"listen-excerpt-skip-empty-windows",fileName:"0065-listen-excerpt-skip-empty-windows.sql",sha256:"6267afe1f6e8ecb4cbdabab06c133e54924bbb362ae3e9937d8c259997c13355"}),
 ]);

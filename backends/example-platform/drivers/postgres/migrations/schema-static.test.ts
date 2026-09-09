@@ -1300,5 +1300,19 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleOverviewSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");
     expect(visibleOverviewSql).not.toContain("THEN 'Chat'");
     expect(visibleOverviewSql).toContain("chr(133)");
+    const skipEmptyListenSql = migrationSql.find((migration) => migration.version === 65)!.sql;
+    expect(skipEmptyListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_page");
+    expect(skipEmptyListenSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_union_page");
+    expect(skipEmptyListenSql).toContain(
+      "FILTER (WHERE length(btrim(segment.text_content,v_ws))>0)",
+    );
+    expect(skipEmptyListenSql).toContain(
+      "FILTER (WHERE length(btrim(segment.value->>'text',v_ws))>0)",
+    );
+    expect(skipEmptyListenSql.match(/FILTER \(WHERE length\(btrim\(/g)).toHaveLength(4);
+    expect(skipEmptyListenSql).not.toContain(
+      "string_agg(left(btrim(segment.text_content,v_ws),240),' ' ORDER BY segment.ordinal),v_ws)",
+    );
+    expect(skipEmptyListenSql).toContain("chr(133)");
   });
 });

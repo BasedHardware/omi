@@ -896,6 +896,40 @@ realTest(
       expect(listenOnly.items.find((item) => item.id === listenId)).toMatchObject(
         titled
       );
+      const emptyWindowsId = randomUUID();
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$3,clock_timestamp()-interval '4 seconds','omi','21',16000,1,$4)",
+        [account, emptyWindowsId, `conversation:${emptyWindowsId}`, "2".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_audio_uploads(account_id,session_id,capture_id,device_id,codec_id,upload_completed_at) VALUES($1,$2::text,$2::uuid,'synthetic-device',21,clock_timestamp())",
+        [account, emptyWindowsId]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_audio_transcriptions(account_id,session_id,state,attempts,available_at,updated_at,provider_result) VALUES($1,$2,'completed',1,clock_timestamp(),clock_timestamp(),$3::text::jsonb)",
+        [
+          account,
+          emptyWindowsId,
+          JSON.stringify({
+            durationSeconds: 239,
+            segments: [
+              ...Array.from({ length: 239 }, () => ({
+                text: "\u0085",
+                start: 0,
+                end: 1,
+                speaker: 0,
+              })),
+              { text: "Recorded words", start: 239, end: 240, speaker: 0 },
+            ],
+          }),
+        ]
+      );
+      const skipEmpty = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(
+        skipEmpty.items.find((item) => item.id === `recording:${emptyWindowsId}`)
+      ).toMatchObject(titled);
       await owner.unsafe(
         `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
         [account, app, credential, "chat.read", `chat.read-${suffix}`, "3".repeat(64)]
@@ -913,6 +947,9 @@ realTest(
       expect(unionPage.items.find((item) => item.id === listenId)).toMatchObject(
         titled
       );
+      expect(
+        unionPage.items.find((item) => item.id === `recording:${emptyWindowsId}`)
+      ).toMatchObject(titled);
     } finally {
       await pool.close();
       await owner.end();
