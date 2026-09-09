@@ -1087,3 +1087,68 @@ test('conversation list names locked and discarded conversations without empty b
     ),
   ).toHaveLength(0);
 });
+
+test('conversation list names failed conversations without Status on every row', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: '',
+    summary: '',
+    searchableText: '',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'recording:failed-one',
+                status: 'failed',
+              },
+              {
+                ...base,
+                id: 'chat:chat-main',
+                title: 'Hello',
+                searchableText: 'Hello',
+                status: 'in_progress',
+                source: 'chat' as const,
+                finishedAt: null,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Conversation title unavailable');
+  expect(copy).toContain('Failed');
+  expect(copy).toContain('Hello');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Failed conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(copy).not.toContain(conversationStatusCopy('in_progress'));
+});

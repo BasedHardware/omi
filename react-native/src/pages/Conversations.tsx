@@ -78,6 +78,13 @@ const ConversationRow = memo(function ConversationRow({
             Discarded
           </Text>
         ) : null}
+        {item.status === 'failed' ? (
+          <Text
+            accessibilityLabel="Failed conversation"
+            style={styles.conversationRowTime}>
+            Failed
+          </Text>
+        ) : null}
       </View>
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.resultTitle}>
         {listenOverview

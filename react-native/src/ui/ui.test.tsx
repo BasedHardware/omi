@@ -1847,6 +1847,60 @@ test('wide Home search rows keep GET locked and discarded flags instead of title
   expect(plainTree).not.toContain('Discarded');
 });
 
+test('wide Home search rows keep GET failed status instead of title-only', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:failed-home-search',
+        title: '',
+        summary: '',
+        searchableText: '',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'failed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Conversation title unavailable');
+  expect(tree).toContain('Failed');
+  const plain = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'chat:chat-main',
+        title: 'Hello',
+        summary: 'Later turn',
+        searchableText: 'Hello\nLater turn',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: null,
+        starred: false,
+        status: 'in_progress',
+        source: 'chat',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const plainTree = JSON.stringify(plain.toJSON());
+  expect(plainTree).toContain('Hello');
+  expect(plainTree).not.toContain('Failed');
+  expect(plainTree).not.toContain('In progress');
+});
+
 test('wide Home search completed tasks keep GET due dates instead of Completed-only', () => {
   const dueAt = 1786000000;
   const expected = `Completed · ${new Date(dueAt * 1000).toLocaleDateString(

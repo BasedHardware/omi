@@ -1077,6 +1077,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             starred: item.starred,
             locked: item.locked,
             discarded: item.discarded,
+            failed: item.status === 'failed',
             title: conversationRecapTitle(item),
           }))
         : [];

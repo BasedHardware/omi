@@ -101,6 +101,11 @@ export const ProjectionRow = memo(function ProjectionRow({
             Discarded
           </Text>
         ) : null}
+        {item.kind === 'conversation' && item.status === 'failed' ? (
+          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            Failed
+          </Text>
+        ) : null}
       </View>
       <Text
         numberOfLines={listenOverview ? 3 : 2}

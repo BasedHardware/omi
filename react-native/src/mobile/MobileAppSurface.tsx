@@ -58,6 +58,7 @@ export type MobileRecap = {
   starred?: boolean;
   locked?: boolean;
   discarded?: boolean;
+  failed?: boolean;
 };
 
 export type MobileDeviceState = {
@@ -251,6 +252,11 @@ const RecapCard = memo(function RecapCard({
           accessibilityLabel="Discarded conversation"
           style={styles.recapStar}>
           Discarded
+        </Text>
+      ) : null}
+      {recap.failed === true ? (
+        <Text accessibilityLabel="Failed conversation" style={styles.recapStar}>
+          Failed
         </Text>
       ) : null}
       <Text style={styles.recapDate}>{recap.dateLabel}</Text>

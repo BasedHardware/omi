@@ -430,3 +430,42 @@ test('Home and Library rows keep GET locked and discarded flags instead of title
   expect(textOf(plain)).not.toContain('Locked');
   expect(textOf(plain)).not.toContain('Discarded');
 });
+
+test('Home and Library rows keep GET failed status instead of title-only', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:failed-row',
+    title: '',
+    summary: '',
+    searchableText: '',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'failed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('Conversation title unavailable');
+    expect(copy).toContain('Failed');
+    expect(copy).not.toContain('In progress');
+  }
+  let plain!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    plain = ReactTestRenderer.create(
+      <ReadRow item={{...item, status: 'completed', title: 'Kept recording'}} />,
+    );
+  });
+  expect(textOf(plain)).not.toContain('Failed');
+});

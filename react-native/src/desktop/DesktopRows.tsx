@@ -68,9 +68,13 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
           .filter(part => part !== '')
           .join(' · ')}
       </Text>
-      {item.locked || item.discarded ? (
+      {item.locked || item.discarded || item.status === 'failed' ? (
         <Text style={styles.rowMeta}>
-          {[item.locked ? 'Locked' : '', item.discarded ? 'Discarded' : '']
+          {[
+            item.locked ? 'Locked' : '',
+            item.discarded ? 'Discarded' : '',
+            item.status === 'failed' ? 'Failed' : '',
+          ]
             .filter(part => part !== '')
             .join(' · ')}
         </Text>

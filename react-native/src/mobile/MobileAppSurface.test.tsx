@@ -802,6 +802,34 @@ test('Daily Recaps name locked and discarded conversations without empty badges'
   expect(renderedText(plain)).not.toContain('Discarded');
 });
 
+test('Daily Recaps name failed conversations without Status on every card', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-failed',
+        title: 'Conversation title unavailable',
+        dateLabel: 'Yesterday',
+        failed: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Failed');
+  expect(
+    flagged.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Failed conversation' &&
+        node.props.children === 'Failed',
+    ).length,
+  ).toBeGreaterThan(0);
+
+  const plain = render({
+    recaps: [
+      {id: 'recap-plain-fail', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(plain)).not.toContain('Failed');
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [
