@@ -181,16 +181,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
-        record_lazy_desktop_deferral(event='enrich_lost_ownership')
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
         record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
-    record_lazy_desktop_deferral(event='enrich_started')
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False

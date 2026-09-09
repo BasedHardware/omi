@@ -64,9 +64,15 @@ async def test_authority_increments_uid_free_rollout_counters():
     assert after == before + 1
 
 
+def _rendered_lazy_sample(payload: str, event: str) -> float:
+    prefix = f'lazy_desktop_deferral_total{{event="{event}"}} '
+    for line in payload.splitlines():
+        if line.startswith(prefix):
+            return float(line[len(prefix) :])
+    raise AssertionError(f'no rendered lazy_desktop_deferral_total sample for event={event}')
+
+
 def test_lazy_desktop_deferral_metric_is_bounded_and_uid_free():
-    payload = generate_latest().decode()
-    assert 'lazy_desktop_deferral_total' in payload
     assert LAZY_DESKTOP_DEFERRAL_TOTAL._labelnames == ('event',)
     assert 'uid' not in LAZY_DESKTOP_DEFERRAL_TOTAL._labelnames
     assert LAZY_DESKTOP_DEFERRAL_EVENTS == {
@@ -74,9 +80,29 @@ def test_lazy_desktop_deferral_metric_is_bounded_and_uid_free():
         'fenced',
         'enrich_started',
         'enrich_lost_ownership',
+        'enrich_reacquire_error',
         'enrich_complete',
         'enrich_failed',
     }
+
+    payload = generate_latest().decode()
+    # Every bounded child is pre-seeded, so a healthy but idle process still
+    # exports a sample: "not deployed" and "no captures" must not look alike.
+    for event in LAZY_DESKTOP_DEFERRAL_EVENTS | {'other'}:
+        _rendered_lazy_sample(payload, event)
+
+    # The HELP text has to carry the three constraints on reading the ratio,
+    # because whoever writes the PromQL will not read utils/metrics.py.
+    help_line = next(line for line in payload.splitlines() if line.startswith('# HELP lazy_desktop_deferral_total'))
+    assert 'sum by (event)' in help_line  # stored is emitted by backend AND pusher
+    assert 'pusher' in help_line
+    assert 'attempt/persist ratio' in help_line  # not per-conversation
+    assert 'FREE_TIER_LOCAL_PROCESSING' in help_line  # ratio undefined while on
+
+    # Assert on a rendered sample after a real increment, not just the HELP line.
+    before = _rendered_lazy_sample(payload, 'fenced')
+    record_lazy_desktop_deferral(event='fenced')
+    assert _rendered_lazy_sample(generate_latest().decode(), 'fenced') == before + 1
 
 
 def _lazy_count(event: str) -> float:
