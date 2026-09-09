@@ -94,10 +94,13 @@ installing `requirements.txt`:
 python -m unittest discover -s tests -v
 ```
 
-Alternatively, with `uv` installed, run `bash test.sh`. This provisions Python
-3.11 and the plugin's pinned direct dependencies in an isolated environment.
-The repository's local and CI check manifest runs the same script when plugin
-files change. Dependency provisioning requires network access; the tests do not.
+Alternatively, with `uv` installed, run `bash setup-tests.sh` once to provision
+Python 3.11 and the plugin's pinned direct dependencies in `.test-venv`, then
+run `bash test.sh`. Rerun setup when `requirements.txt` changes. Setup requires
+network access; the test runner never installs or downloads anything.
+The repository's local and CI check manifest runs this offline test script when
+plugin files change. CI provisions the environment before running the manifest
+and caches uv's downloads using the plugin requirements.
 
 The tests exercise personal-keyword detection and the Notion extraction route
 with synthetic responses; no Notion or OMI account is needed. Personal-keyword

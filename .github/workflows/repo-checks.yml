@@ -98,7 +98,9 @@ jobs:
           # fetching the astral-sh/versions manifest to resolve "latest".
           version: "0.11.13"
           enable-cache: true
-          cache-dependency-glob: backend/openapi-requirements.txt
+          cache-dependency-glob: |
+            backend/openapi-requirements.txt
+            plugins/composio/requirements.txt
 
       - name: Install runtime environment validator dependency
         run: uv pip install --system pyyaml==6.0.1
@@ -118,6 +120,16 @@ jobs:
         run: |
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
+
+      - name: Set up Composio test dependencies when selected
+        run: |
+          python3 .github/scripts/run_checks.py --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --changed-files /tmp/changed-files.txt --output json > /tmp/selected-checks.json
+          selected="$(python3 -c 'import json; print(any(check["id"] == "composio-notion-memory-tests" for check in json.load(open("/tmp/selected-checks.json"))["checks"]))')"
+          if [[ "$selected" == "True" ]]; then
+            bash plugins/composio/setup-tests.sh
+          fi
 
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
