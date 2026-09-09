@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,7 +37,7 @@ func ParakeetWSURL(apiURL string, sampleRate int) string {
 
 type wsTranscriber struct {
 	conn            *websocket.Conn
-	ready           bool
+	ready           atomic.Bool
 	writeMu         sync.Mutex
 	stopped         bool
 	stopOnce        sync.Once
@@ -44,6 +45,7 @@ type wsTranscriber struct {
 	closeMessage    []byte
 	readDone        <-chan error
 	shutdownTimeout time.Duration
+	writeTimeout    time.Duration
 }
 
 func (t *wsTranscriber) AppendPCM(pcm []byte) error {
@@ -52,8 +54,11 @@ func (t *wsTranscriber) AppendPCM(pcm []byte) error {
 	if t.conn == nil || t.stopped {
 		return fmt.Errorf("not connected")
 	}
-	if !t.ready {
+	if !t.ready.Load() {
 		return nil
+	}
+	if err := t.conn.SetWriteDeadline(time.Now().Add(t.writeTimeout)); err != nil {
+		return err
 	}
 	return t.conn.WriteMessage(websocket.BinaryMessage, pcm)
 }
@@ -66,7 +71,7 @@ func (t *wsTranscriber) Stop() error {
 		defer t.conn.Close()
 		t.writeMu.Lock()
 		t.stopped = true
-		_ = t.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_ = t.conn.SetWriteDeadline(time.Now().Add(t.writeTimeout))
 		err := t.conn.WriteMessage(websocket.TextMessage, t.closeMessage)
 		t.writeMu.Unlock()
 		if err != nil {
@@ -92,6 +97,10 @@ func (t *wsTranscriber) Stop() error {
 }
 
 func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
+	return newDeepgram(websocket.DefaultDialer, apiKey, sampleRate, onTranscript)
+}
+
+func newDeepgram(dialer *websocket.Dialer, apiKey string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("deepgram api key required")
 	}
@@ -104,15 +113,16 @@ func NewDeepgram(apiKey string, sampleRate int, onTranscript Handler) (Streaming
 	)
 	h := http.Header{}
 	h.Set("Authorization", "Token "+apiKey)
-	conn, _, err := websocket.DefaultDialer.Dial(u, h)
+	conn, _, err := dialer.Dial(u, h)
 	if err != nil {
 		return nil, err
 	}
 	done := make(chan error, 1)
 	t := &wsTranscriber{
-		conn: conn, ready: true, closeMessage: []byte(`{"type":"CloseStream"}`),
-		readDone: done, shutdownTimeout: 5 * time.Second,
+		conn: conn, closeMessage: []byte(`{"type":"CloseStream"}`),
+		readDone: done, shutdownTimeout: 5 * time.Second, writeTimeout: 5 * time.Second,
 	}
+	t.ready.Store(true)
 	go func() { done <- readDeepgram(conn, onTranscript) }()
 	return t, nil
 }
@@ -141,6 +151,10 @@ func readDeepgram(conn *websocket.Conn, onTranscript Handler) error {
 }
 
 func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
+	return newParakeet(websocket.DefaultDialer, apiURL, sampleRate, onTranscript)
+}
+
+func newParakeet(dialer *websocket.Dialer, apiURL string, sampleRate int, onTranscript Handler) (StreamingTranscriber, error) {
 	if apiURL == "" {
 		return nil, fmt.Errorf("parakeet api url required")
 	}
@@ -151,11 +165,11 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 	if _, err := url.Parse(u); err != nil {
 		return nil, err
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(u, nil)
+	conn, _, err := dialer.Dial(u, nil)
 	if err != nil {
 		return nil, err
 	}
-	t := &wsTranscriber{conn: conn, ready: false, closeMessage: []byte("finalize"), shutdownTimeout: 5 * time.Second}
+	t := &wsTranscriber{conn: conn, closeMessage: []byte("finalize"), shutdownTimeout: 5 * time.Second, writeTimeout: 5 * time.Second}
 	// wait ready in background and stream
 	go func() {
 		for {
@@ -168,7 +182,7 @@ func NewParakeet(apiURL string, sampleRate int, onTranscript Handler) (Streaming
 				continue
 			}
 			if msg["type"] == "ready" {
-				t.ready = true
+				t.ready.Store(true)
 				continue
 			}
 			if text := extractText(msg); text != "" && onTranscript != nil {

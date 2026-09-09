@@ -6,7 +6,13 @@ Protocol helpers + optional BLE scan/listen for the Omi wearable.
 
 ```bash
 go test ./...
+go test -race ./...
 ```
+
+The race-enabled suite exercises streaming-transcriber readiness with in-memory
+WebSocket connections; it needs no device, API credentials, or network service.
+Parakeet ignores PCM until its server sends `ready`, while Deepgram accepts PCM
+as soon as its connection is established.
 
 Exports UUIDs, `StripPacketHeader`, STT helpers. `Scan` / `Listen` / `ListenPayload` / `ReadCodec` return `ErrBLEDisabled`.
 
@@ -31,7 +37,7 @@ Mirrors Python `print_devices` / `listen_to_omi` in `sdks/python/omi/bluetooth.p
 
 ### Drain deepgram results before closing the stream
 
-Deepgram `Stop()` sends `CloseStream`, waits up to five seconds for final transcript delivery, and then closes the connection. Sending the shutdown frame also has a five-second write deadline. Errors are returned to the caller. Parakeet retains its plain `finalize` frame. Run `go test -race ./...` for the hardware-free suite; repository preflight selects it for SDK changes.
+Deepgram `Stop()` sends `CloseStream`, waits up to five seconds for final transcript delivery, and then closes the connection. Audio writes and the shutdown frame each have a five-second write deadline, so a stalled audio write cannot hold shutdown indefinitely. Errors are returned to the caller. Parakeet retains its plain `finalize` frame. Run `go test -race ./...` for the hardware-free suite; repository preflight selects it for SDK changes.
 
 ### Limitations
 

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,15 +28,14 @@ func (w *pipeWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // A real WebSocket handshake over net.Pipe; no network service or credentials.
-func mockProvider(t *testing.T, handle func(*websocket.Conn) error) <-chan error {
+func mockProvider(t *testing.T, handle func(*websocket.Conn) error) (*websocket.Dialer, <-chan error) {
 	t.Helper()
 	client, server := net.Pipe()
-	original := websocket.DefaultDialer
-	websocket.DefaultDialer = &websocket.Dialer{
+	dialer := &websocket.Dialer{
 		NetDialTLSContext: func(context.Context, string, string) (net.Conn, error) { return client, nil },
 		NetDialContext:    func(context.Context, string, string) (net.Conn, error) { return client, nil },
 	}
-	t.Cleanup(func() { websocket.DefaultDialer = original; client.Close(); server.Close() })
+	t.Cleanup(func() { client.Close(); server.Close() })
 	done := make(chan error, 1)
 	go func() {
 		defer server.Close()
@@ -55,11 +55,12 @@ func mockProvider(t *testing.T, handle func(*websocket.Conn) error) <-chan error
 		defer conn.Close()
 		done <- handle(conn)
 	}()
-	return done
+	return dialer, done
 }
 
 func TestDeepgramStopDrainsFinalTranscript(t *testing.T) {
-	done := mockProvider(t, func(conn *websocket.Conn) error {
+	t.Parallel()
+	dialer, done := mockProvider(t, func(conn *websocket.Conn) error {
 		_, payload, err := conn.ReadMessage()
 		if err != nil {
 			return err
@@ -74,7 +75,7 @@ func TestDeepgramStopDrainsFinalTranscript(t *testing.T) {
 		return conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 	})
 	transcripts := make(chan string, 1)
-	stream, err := NewDeepgram("synthetic", 16000, func(text string) { transcripts <- text })
+	stream, err := newDeepgram(dialer, "synthetic", 16000, func(text string) { transcripts <- text })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,8 @@ func TestDeepgramStopDrainsFinalTranscript(t *testing.T) {
 }
 
 func TestParakeetKeepsFinalizeProtocol(t *testing.T) {
-	done := mockProvider(t, func(conn *websocket.Conn) error {
+	t.Parallel()
+	dialer, done := mockProvider(t, func(conn *websocket.Conn) error {
 		_, payload, err := conn.ReadMessage()
 		if err != nil {
 			return err
@@ -111,7 +113,7 @@ func TestParakeetKeepsFinalizeProtocol(t *testing.T) {
 		}
 		return nil
 	})
-	stream, err := NewParakeet("http://synthetic.test", 16000, nil)
+	stream, err := newParakeet(dialer, "http://synthetic.test", 16000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +126,7 @@ func TestParakeetKeepsFinalizeProtocol(t *testing.T) {
 }
 
 func TestDeepgramStopTimesOutAndClosesTransport(t *testing.T) {
-	done := mockProvider(t, func(conn *websocket.Conn) error {
+	dialer, done := mockProvider(t, func(conn *websocket.Conn) error {
 		if _, _, err := conn.ReadMessage(); err != nil {
 			return err
 		}
@@ -134,7 +136,7 @@ func TestDeepgramStopTimesOutAndClosesTransport(t *testing.T) {
 		}
 		return nil
 	})
-	stream, err := NewDeepgram("synthetic", 16000, nil)
+	stream, err := newDeepgram(dialer, "synthetic", 16000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +150,11 @@ func TestDeepgramStopTimesOutAndClosesTransport(t *testing.T) {
 }
 
 func TestDeepgramStopReportsWriteFailure(t *testing.T) {
-	done := mockProvider(t, func(conn *websocket.Conn) error {
+	dialer, done := mockProvider(t, func(conn *websocket.Conn) error {
 		_, _, _ = conn.ReadMessage()
 		return nil
 	})
-	stream, err := NewDeepgram("synthetic", 16000, nil)
+	stream, err := newDeepgram(dialer, "synthetic", 16000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,4 +165,59 @@ func TestDeepgramStopReportsWriteFailure(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+}
+
+type observedWriteConn struct {
+	net.Conn
+	armed   atomic.Bool
+	started chan struct{}
+}
+
+func (c *observedWriteConn) Write(data []byte) (int, error) {
+	if c.armed.Swap(false) {
+		close(c.started)
+	}
+	return c.Conn.Write(data)
+}
+
+func TestStopReturnsWhenAudioWriteStalls(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	dialer, done := mockProvider(t, func(conn *websocket.Conn) error {
+		<-release
+		return nil
+	})
+	originalDial := dialer.NetDialTLSContext
+	observed := &observedWriteConn{started: make(chan struct{})}
+	dialer.NetDialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := originalDial(ctx, network, address)
+		observed.Conn = conn
+		return observed, err
+	}
+	stream, err := newDeepgram(dialer, "synthetic", 16000, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcriber := stream.(*wsTranscriber)
+	transcriber.writeTimeout = 20 * time.Millisecond
+	observed.armed.Store(true)
+	audioDone := make(chan error, 1)
+	go func() { audioDone <- stream.AppendPCM([]byte{1, 2}) }()
+	<-observed.started
+	// The provider never reads frames. Both audio and shutdown must time out.
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- stream.Stop() }()
+	select {
+	case err := <-stopDone:
+		if err == nil {
+			t.Fatal("expected a write failure")
+		}
+	case <-time.After(time.Second):
+		transcriber.conn.Close()
+		t.Fatal("Stop blocked on stalled audio")
+	}
+	if err := <-audioDone; err == nil {
+		t.Fatal("expected audio write failure")
+	}
+	_ = done
 }

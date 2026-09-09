@@ -4,6 +4,12 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: go-device-sdk-tests
+    command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
+    triggers: ["sdks/device/go/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -891,11 +897,6 @@ checks:
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
 
-  - id: device-go-tests
-    command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
-    triggers: ["sdks/device/go/**"]
-    lanes: ["local", "ci"]
-    reason: "Provider shutdown must use the correct wire message and preserve final transcripts; covers issue 13023."
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"

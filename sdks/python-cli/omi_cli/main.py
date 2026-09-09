@@ -215,6 +215,8 @@ def main() -> None:
     * :class:`typer.Exit` — Typer's "clean exit at this code", e.g. from
       ``--version``. Pass through.
     * KeyboardInterrupt / EOFError — Ctrl-C / Ctrl-D. Conventional 130.
+    * :class:`click.Abort` — prompt interruption (subclasses RuntimeError, not
+      KeyboardInterrupt, so it needs its own rung). Same "Aborted." + 130.
     * Anything else — last-chance handler. Print a clean line, exit 1.
     """
     global _LAST_RENDERER
@@ -235,6 +237,13 @@ def main() -> None:
         sys.exit(exc.exit_code)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
+    except click.Abort:
+        # Ctrl-C during an interactive prompt (Click raises click.Abort, which
+        # subclasses RuntimeError — not KeyboardInterrupt — so it must be caught
+        # explicitly, otherwise it falls through to the generic handler with an
+        # empty str() and prints "unexpected error: ").
+        sys.stderr.write("\nAborted.\n")
+        sys.exit(130)
     except (KeyboardInterrupt, EOFError):
         sys.stderr.write("\nAborted.\n")
         sys.exit(130)
