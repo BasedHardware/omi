@@ -124,10 +124,12 @@ def create_action_items_batch(
     ),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not batch_file.exists():
+    if not batch_file.is_file():
         raise UsageError(message=f"File not found: {batch_file}")
     try:
         payload = load_json_input(batch_file.read_bytes())
+    except OSError as exc:
+        raise UsageError(message=f"Cannot read {batch_file}", detail=str(exc))
     except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {batch_file}", detail=str(exc))
 
@@ -143,7 +145,11 @@ def create_action_items_batch(
         raise UsageError(message="Maximum 50 action items per batch request", detail=f"Provided {len(items)} items.")
 
     for i, it in enumerate(items):
-        if not isinstance(it, dict) or not str(it.get("description", "")).strip():
+        if (
+            not isinstance(it, dict)
+            or not isinstance(it.get("description"), str)
+            or not it["description"].strip()
+        ):
             raise UsageError(
                 message=f"Item #{i + 1} must be an object with a non-empty 'description'",
                 detail="All action items in the batch must have valid non-empty descriptions.",
