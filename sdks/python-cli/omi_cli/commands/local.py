@@ -225,6 +225,18 @@ def _emit_tool(
     ctx.renderer.emit(result, title=tool_name)
 
 
+def _same_file(source: Path, output: Path) -> bool:
+    """True when source and output refer to the same existing file.
+
+    Uses ``os.path.samefile`` so hard links to the same inode are
+    detected even when their path strings differ.
+    """
+    try:
+        return source.exists() and os.path.samefile(source, output)
+    except OSError:
+        return False
+
+
 def _write_screenshot_result(result: Any, output: Path) -> Path:
     output = output.expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -232,6 +244,8 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
     if isinstance(result, str):
         source = existing_path(result)
         if source:
+            if _same_file(source, output):
+                return output
             shutil.copyfile(source, output)
         else:
             output.write_text(result, encoding="utf-8")
@@ -242,6 +256,8 @@ def _write_screenshot_result(result: Any, output: Path) -> Path:
         if source_path:
             source = existing_path(source_path)
             if source:
+                if _same_file(source, output):
+                    return output
                 shutil.copyfile(source, output)
                 return output
 
