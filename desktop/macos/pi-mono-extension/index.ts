@@ -818,6 +818,10 @@ const VISION_SCREENSHOT_BASENAME = /^omi-screen\.(?:png|jpe?g|webp)$/;
  *  vision subagent's own work rather than the main assistant's. */
 const VISION_PROVIDER_NAME = "omi-local-vision";
 
+/** The provider name pi-mono-extension registers the main local chat model
+ *  under (see the omi-local registerProvider call below). */
+const LOCAL_PROVIDER_NAME = "omi-local";
+
 /** Classify a `read` of the vision screenshot file. Returns null (allowed)
  *  for any path that isn't the fixed screenshot path, or when the currently
  *  active model is the vision subagent's own model (it legitimately reads
@@ -1134,6 +1138,16 @@ async function omiRelayCapabilityRef(): Promise<string | undefined> {
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
 export const OMI_CHAT_CONTRACT_VERSION = "1";
+
+/** Whether the currently active model's provider is a self-hosted local
+ *  provider (main chat or vision). Omi-internal `x-omi-*` telemetry headers
+ *  (correlation id, reasoning effort, JIT budget) must never reach a
+ *  user-pointed local/LAN server — they're diagnostic plumbing for Omi's own
+ *  cloud gateway, not something a self-hosted OpenAI-compatible endpoint
+ *  should ever see on the wire. */
+export function isLocalProviderName(providerName: string | undefined): boolean {
+  return providerName === LOCAL_PROVIDER_NAME || providerName === VISION_PROVIDER_NAME;
+}
 
 export function applyOmiProviderHeaders(
   headers: Record<string, string>,
@@ -1907,7 +1921,11 @@ export default async function omiProvider(pi: ExtensionAPI): Promise<void> {
 
   // Pi asks for headers once per provider request and keeps them for retries,
   // which preserves one safe correlation id across an upstream retry chain.
-  pi.on("before_provider_headers", async (event) => {
+  pi.on("before_provider_headers", async (event, ctx) => {
+    // Local/vision requests go to the user's own server, not Omi's cloud
+    // gateway — these headers are Omi-internal telemetry and must stay off
+    // that wire entirely, not just unbilled.
+    if (isLocalProviderName(ctx?.model?.provider)) return;
     const raw = await omiRelayContextRaw();
     // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
     // own thinking depth), PTT runs "fast" (thinking off, low effort). The

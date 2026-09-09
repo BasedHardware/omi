@@ -48,6 +48,7 @@ import {
   omiJitGatewayReceiptFromSSE,
   omiBuiltInToolPolicyFromRelayContext,
   applyOmiProviderHeaders,
+  isLocalProviderName,
   OMI_CHAT_CONTRACT_VERSION,
   __installOmiJitFetchGuardForTest,
   __resetOmiJitFetchGuardForTest,
@@ -3072,14 +3073,21 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
 // omiProvider — conditional "omi-local" registration
 // ---------------------------------------------------------------------------
 
-/** Minimal ExtensionAPI stub: omiProvider only calls registerProvider and on(). */
+/** Minimal ExtensionAPI stub: omiProvider only calls registerProvider and on().
+ *  `on()` records each handler by event name so a test can invoke the exact
+ *  callback omiProvider registered (e.g. "before_provider_headers") instead
+ *  of re-deriving its logic. */
 function fakePi() {
   const registered: Array<{ name: string; config: any }> = [];
+  const handlers: Record<string, (...args: any[]) => any> = {};
   return {
     registerProvider: (name: string, config: any) => registered.push({ name, config }),
     registerTool: () => {},
-    on: () => {},
+    on: (event: string, handler: (...args: any[]) => any) => {
+      handlers[event] = handler;
+    },
     registered,
+    handlers,
   };
 }
 
@@ -3190,4 +3198,56 @@ test("omiProvider: does not register omi when OMI_API_KEY is not set (local-only
       assert.ok(!pi.registered.some((r) => r.name === "omi"));
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// isLocalProviderName / before_provider_headers scoping
+//
+// Regression coverage: the before_provider_headers hook used to attach Omi's
+// internal x-omi-* telemetry headers (correlation id, reasoning effort, JIT
+// budget) to every provider request unconditionally, including omi-local and
+// omi-local-vision — sending Omi-internal telemetry to whatever self-hosted
+// or LAN endpoint the user pointed "Local" at. It must now skip local/vision.
+// ---------------------------------------------------------------------------
+
+test("isLocalProviderName: true only for the local main and vision providers", () => {
+  assert.equal(isLocalProviderName("omi-local"), true);
+  assert.equal(isLocalProviderName("omi-local-vision"), true);
+  assert.equal(isLocalProviderName("omi"), false);
+  assert.equal(isLocalProviderName(undefined), false);
+});
+
+test("before_provider_headers: skips Omi telemetry headers when the active model is the local provider", async () => {
+  let handler: ((event: any, ctx: any) => any) | undefined;
+  withEnv(
+    { OMI_LOCAL_BASE_URL: "http://100.100.100.100:1234/v1", OMI_LOCAL_MODEL_ID: "qwen3.8-27b-mlx" },
+    () => {
+      const pi = fakePi();
+      omiProvider(pi as any);
+      handler = pi.handlers["before_provider_headers"];
+    }
+  );
+  assert.ok(handler, "before_provider_headers must be registered");
+
+  const localHeaders: Record<string, string> = {};
+  await handler!({ headers: localHeaders }, { model: { provider: "omi-local" } });
+  assert.deepEqual(localHeaders, {}, "no Omi header should reach the local provider's request");
+
+  const visionHeaders: Record<string, string> = {};
+  await handler!({ headers: visionHeaders }, { model: { provider: "omi-local-vision" } });
+  assert.deepEqual(visionHeaders, {}, "no Omi header should reach the local vision provider's request");
+});
+
+test("before_provider_headers: still attaches Omi telemetry headers for the cloud provider", async () => {
+  let handler: ((event: any, ctx: any) => any) | undefined;
+  withEnv({ OMI_API_KEY: "test-key" }, () => {
+    const pi = fakePi();
+    omiProvider(pi as any);
+    handler = pi.handlers["before_provider_headers"];
+  });
+  assert.ok(handler, "before_provider_headers must be registered");
+
+  const headers: Record<string, string> = {};
+  await handler!({ headers }, { model: { provider: "omi" } });
+  assert.equal(headers["x-omi-chat-contract-version"], OMI_CHAT_CONTRACT_VERSION);
 });
