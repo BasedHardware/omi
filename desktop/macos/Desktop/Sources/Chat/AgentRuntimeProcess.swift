@@ -2597,9 +2597,14 @@ actor AgentRuntimeProcess {
     let providerMode = preferredAdapterId == .piMono ? AIProvider.currentProviderMode : "omi"
     let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
     if isLocalProvider {
-      // Local provider: talk directly to a user-configured OpenAI-compatible
-      // endpoint (e.g. LM Studio, Ollama). No Firebase auth, no Rust backend,
-      // no BYOK — this session never reaches api.omi.me at all.
+      // Local provider: chat prompts and completions go directly to a
+      // user-configured OpenAI-compatible endpoint (e.g. LM Studio, Ollama),
+      // never to Anthropic or Omi's Rust backend, and no BYOK provider key is
+      // forwarded. This subprocess still receives an OMI_AUTH_TOKEN further
+      // down (see the Firebase auth block below) — that token authenticates
+      // this session's own tool calls into Omi storage (memories,
+      // conversations), which is unrelated to the model. No prompt or
+      // completion under Local ever reaches api.omi.me or Anthropic.
       let defaults = UserDefaults.standard
       let localBaseURL = defaults.string(forKey: AIProvider.localBaseURLKey) ?? AIProvider.defaultLocalBaseURL
       let localModelID = defaults.string(forKey: AIProvider.localModelIDKey) ?? AIProvider.defaultLocalModelID
@@ -2648,6 +2653,16 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
+    // This token fetch runs unconditionally, local provider included — that
+    // is intentional, not an oversight. It is storage/tool-call auth only:
+    // OMI_AUTH_TOKEN lets this session's tool calls read/write Omi storage
+    // (memories, conversations) through Omi's backend, which is a data
+    // fetch, not a model or completion request. No prompt or completion ever
+    // goes to Omi or Anthropic under Local (see the isLocalProvider block
+    // above). requiresPiMonoCredentials below excludes isLocalProvider from
+    // the refuse-to-start gate, so a local session never blocks on Firebase
+    // reachability — it only loses tool-call storage access if the fetch
+    // fails, and still starts.
     let shouldFetchManagedToken = AgentRuntimeCredentialPolicy.requiresManagedCredentials(
       requestedCredentials: requiresCredentials,
       isNonProduction: AppBuild.isNonProduction,
@@ -2678,6 +2693,11 @@ actor AgentRuntimeProcess {
     {
       startupPermissionGrantedChecked = requiresPiMonoCredentials
       startupPermissionGranted = requiresPiMonoCredentials
+      // Storage/tool-call auth only (see the comment above), including under
+      // Local — never read by the omi-local/omi-local-vision provider paths
+      // on the Node side, and never attached to a request to the user's
+      // local server (confirmed: those registerProvider calls carry no
+      // Authorization/x-omi-* header derived from this token).
       env["OMI_AUTH_TOKEN"] = token
     } else if requiresPiMonoCredentials {
       startupPermissionGrantedChecked = true
