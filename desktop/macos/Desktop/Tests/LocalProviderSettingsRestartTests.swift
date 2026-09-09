@@ -149,6 +149,7 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
     // fetch's own 5s request timeout.
     let deadline = Date().addingTimeInterval(6)
     while view.localModelOptions.isEmpty && Date() < deadline {
+      // omi-test-quality: wall-clock-wait -- fetchLocalModelOptions has no completion signal when the coalescing fix skips onComplete; polling is the only observable signal here
       try? await Task.sleep(nanoseconds: 50_000_000)
     }
 
