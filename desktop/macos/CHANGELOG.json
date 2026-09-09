@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.327",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice turns dropping the on-screen context captured when you pressed the talk button",
+        "Fixed a push-to-talk stall so an automation voice turn starts responding immediately instead of waiting on the first screen capture."
+      ]
+    },
+    {
       "version": "0.12.326",
       "date": "2026-09-09",
       "changes": [
