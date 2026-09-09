@@ -3327,7 +3327,10 @@ class TasksStore: ObservableObject {
       return
     }
     guard isCurrent(lease) else { return }
-    let localId = inserted.id!
+    guard let localId = inserted.id else {
+      logError("TasksStore: Staged undo row has no local id", error: ActionItemStorageError.recordNotFound)
+      return
+    }
     let stagedTask = inserted.toTaskActionItem()
 
     // 2. Re-insert into the appropriate in-memory array

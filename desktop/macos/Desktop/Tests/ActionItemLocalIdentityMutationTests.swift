@@ -161,10 +161,11 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
       backendId: "old-backend-id", description: "synced task to restore", completed: true, source: "test")
     let inserted = try await ActionItemStorage.shared.insertLocalActionItem(
       syncedRecord, authorization: .unrestricted)
+    guard let insertedId = inserted.id else { return XCTFail("expected an assigned local id") }
     // insertLocalActionItem always forces backendSynced = false; mark it synced
     // explicitly to match a task that arrived from the backend.
     try await ActionItemStorage.shared.markSynced(
-      id: inserted.id!, backendId: "old-backend-id", authorization: .unrestricted)
+      id: insertedId, backendId: "old-backend-id", authorization: .unrestricted)
     guard let taskToRestore = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "old-backend-id")
     else { return XCTFail("expected the synced task") }
     XCTAssertTrue(taskToRestore.completed)
@@ -181,10 +182,11 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
     XCTAssertEqual(stagedRecord.completed, true, "completion state is preserved across restore")
     let staged = try await ActionItemStorage.shared.insertLocalActionItem(
       stagedRecord, authorization: .unrestricted)
+    guard let stagedId = staged.id else { return XCTFail("expected an assigned local id") }
 
     // Simulate the backend recreate binding a brand-new id to the SAME row.
     try await ActionItemStorage.shared.markSynced(
-      id: staged.id!, backendId: "new-backend-id", authorization: .unrestricted)
+      id: stagedId, backendId: "new-backend-id", authorization: .unrestricted)
 
     let matchesOldId = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "old-backend-id")
     XCTAssertNil(matchesOldId, "the old backend id must not resolve to a resurrected row")
