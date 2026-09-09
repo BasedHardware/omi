@@ -1649,6 +1649,12 @@ class PushToTalkManager: ObservableObject {
             turnAudioSeconds: Double(audioData.count / 2) / 16000.0,
             voicedAudioSeconds: nil,
             judgeable: true)
+          AnalyticsManager.shared.floatingBarPTTEnded(
+            mode: self.finalizedMode,
+            committed: false,
+            transcriptLength: nil,
+            turnKind: .question,
+            audioSeconds: Double(audioData.count / 2) / 16000.0)
           self.voiceTurnCoordinator.publish(
             .transcriptionFailed(turnID: turnID, message: error.localizedDescription))
           return
@@ -3596,12 +3602,13 @@ class PushToTalkManager: ObservableObject {
         if let recoveryAuthorization, let transcript = run.transcript {
           OfflinePTTQuestionRecovery.shared.capture(transcript, authorization: recoveryAuthorization)
         }
-        // Offline question kept for review — still closed by the dictation
-        // pipeline, so it stays a dictation terminal.
+        // Closing decode said this was not dictation. Offline cannot answer,
+        // but the intent is a question (kept for review/copy).
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: self.finalizedMode, committed: false, transcriptLength: nil,
-          turnKind: .dictation, audioSeconds: totalSec, dictationTranscriber: run.transcriber)
-        self.terminateVoiceTypingLifecycle(disposition: .cancelled, totalSec: totalSec)
+          turnKind: .question, audioSeconds: totalSec)
+        self.terminateVoiceTypingLifecycle(
+          disposition: .cancelled, totalSec: totalSec, turnKind: .question)
         self.voiceTurnCoordinator.publish(.finish(turnID: turnID, reason: .noNetwork))
         return
       }
@@ -3671,11 +3678,13 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func terminateVoiceTypingLifecycle(
-    disposition: PTTAttemptLifecycleRecorder.TurnDisposition, totalSec: Double
+    disposition: PTTAttemptLifecycleRecorder.TurnDisposition,
+    totalSec: Double,
+    turnKind: PTTAttemptLifecycleRecorder.TurnKind = .dictation
   ) {
     pttLifecycle.terminate(
       disposition: disposition,
-      turnKind: .dictation,
+      turnKind: turnKind,
       source: "voice_typing",
       peak: nil,
       rms: nil,

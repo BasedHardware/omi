@@ -99,6 +99,15 @@ final class FloatingBarPTTAnalyticsTests: XCTestCase {
 
     XCTAssertEqual(capturedBox.value[0].1["dictation_transcriber"] as? String, "backend_batch_stt")
     XCTAssertNil(capturedBox.value[1].1["dictation_transcriber"])
+
+    AnalyticsManager.shared.floatingBarPTTEnded(
+      mode: "hold", committed: true, transcriptLength: 3, turnKind: .question,
+      dictationTranscriber: "backend_batch_stt")
+    AnalyticsManager.shared.floatingBarPTTEnded(
+      mode: "hold", committed: true, transcriptLength: 3, turnKind: .dictation,
+      dictationTranscriber: "not-a-real-source")
+    XCTAssertNil(capturedBox.value[2].1["dictation_transcriber"])
+    XCTAssertNil(capturedBox.value[3].1["dictation_transcriber"])
   }
 
   // MARK: - privacy boundary
@@ -146,24 +155,32 @@ final class FloatingBarPTTAnalyticsTests: XCTestCase {
         call.contains("turnKind:"), "terminal call site must pass turnKind:\n\(call.prefix(200))")
     }
 
-    // The dictation close funnels through finishVoiceTypingTurn; every product
-    // event inside it is a dictation terminal.
+    // The dictation close funnels through finishVoiceTypingTurn. Offline
+    // `notADictation` is an attempted question, not a dictation terminal.
     let body = try functionBody(named: "finishVoiceTypingTurn", in: source)
     for (lineNumber, call) in balancedCalls(of: "floatingBarPTTEnded(", in: body) {
+      let isQuestion = call.contains("turnKind: .question")
+      let isDictation = call.contains("turnKind: .dictation")
       XCTAssertTrue(
-        call.contains("turnKind: .dictation"),
-        "dictation close must classify as .dictation (body line \(lineNumber))")
+        isQuestion || isDictation,
+        "dictation close must classify turnKind (body line \(lineNumber))")
+      if isQuestion {
+        XCTAssertTrue(
+          body.contains("if run.notADictation"),
+          "question classification in finishVoiceTypingTurn is only for notADictation")
+      }
     }
   }
 
   /// The lifecycle terminate inside the dictation close is the one place a
-  /// `voice_typing` snapshot is emitted — it must be `dictation`, not the
-  /// `unknown` default.
+  /// `voice_typing` snapshot is emitted — default dictation, overridable for
+  /// the offline notADictation question path.
   func testVoiceTypingLifecycleTerminateIsDictation() throws {
-    // omi-test-quality: source-inspection -- static contract: terminateVoiceTypingLifecycle is the single voice_typing lifecycle emit and must pass .dictation; the recorder field itself is covered behaviorally in PTTAttemptLifecycleRecorderTests.
+    // omi-test-quality: source-inspection -- static contract: terminateVoiceTypingLifecycle is the single voice_typing lifecycle emit and defaults to .dictation; the recorder field itself is covered behaviorally in PTTAttemptLifecycleRecorderTests.
     let source = try pushToTalkManagerSource()
     let body = try functionBody(named: "terminateVoiceTypingLifecycle", in: source)
-    XCTAssertTrue(body.contains("turnKind: .dictation"))
+    XCTAssertTrue(body.contains("= .dictation"))
+    XCTAssertTrue(body.contains("turnKind: turnKind"))
   }
 
   // MARK: - helpers

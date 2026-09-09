@@ -1702,7 +1702,10 @@ class AnalyticsManager {
     if let audioSecondsBucket = PTTAttemptLifecycleRecorder.AudioSecondsBucket.bucket(fromSeconds: audioSeconds) {
       props["audio_seconds_bucket"] = audioSecondsBucket.rawValue
     }
-    if let dictationTranscriber {
+    if turnKind == .dictation,
+      let dictationTranscriber,
+      ["route", "backend_batch_stt", "on_device_asr"].contains(dictationTranscriber)
+    {
       props["dictation_transcriber"] = dictationTranscriber
     }
     floatingBarPTTTelemetryCaptureForTests?("floating_bar_ptt_ended", props)

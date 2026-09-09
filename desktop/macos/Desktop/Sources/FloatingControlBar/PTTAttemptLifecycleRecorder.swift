@@ -525,7 +525,7 @@ final class PTTAttemptLifecycleRecorder {
       rms: rms,
       isNearZero: isNearZero,
       judgeable: judgeable,
-      telemetrySchemaVersion: 2)
+      telemetrySchemaVersion: 3)
 
     emit(snapshot)
     return snapshot
