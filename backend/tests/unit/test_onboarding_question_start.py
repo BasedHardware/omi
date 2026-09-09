@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -5,6 +6,7 @@ import pytest
 
 from routers.listen.receiver import ListenReceiver
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
+from utils.stt.speaker_identity import SpeakerProviderEpoch
 
 
 @pytest.fixture
@@ -48,6 +50,51 @@ async def test_receiver_routes_explicit_onboarding_start_to_handler():
     await receiver._handle_text('{"type":"start_onboarding"}')
 
     handler.start.assert_awaited_once_with()
+
+
+@pytest.mark.anyio
+async def test_receiver_enqueues_client_transcript_for_onboarding_only_in_custom_stt_mode():
+    """The app's on-device STT fallback for the speech-profile question flow
+    sends ``suggested_transcript`` frames instead of relying on server STT.
+    In custom-STT mode they must enter the same transcript queue the
+    OnboardingHandler is fed from (routers/listen/transcripts.py); outside it
+    a client transcript is ignored because server STT owns the session."""
+    enqueued = []
+    receiver = object.__new__(ListenReceiver)
+    receiver.speaker_provider_epoch = SpeakerProviderEpoch()
+    receiver.host = SimpleNamespace(
+        onboarding_handler=SimpleNamespace(completed=False),
+        use_custom_stt=True,
+        transcripts=SimpleNamespace(enqueue=enqueued.append),
+        stt_service=None,
+    )
+    frame = json.dumps(
+        {
+            'type': 'suggested_transcript',
+            'stt_provider': 'onDeviceWhisper',
+            'segments': [
+                {
+                    'text': 'twenty nine',
+                    'speaker': 'SPEAKER_0',
+                    'speaker_id': 0,
+                    'is_user': True,
+                    'start': 0.0,
+                    'end': 1.5,
+                }
+            ],
+        }
+    )
+
+    await receiver._handle_text(frame)
+
+    assert len(enqueued) == 1
+    assert enqueued[0][0]['text'] == 'twenty nine'
+    assert enqueued[0][0]['stt_provider'] == 'onDeviceWhisper'
+
+    enqueued.clear()
+    receiver.host.use_custom_stt = False
+    await receiver._handle_text(frame)
+    assert enqueued == []
 
 
 @pytest.mark.anyio

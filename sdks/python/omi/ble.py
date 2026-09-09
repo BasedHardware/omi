@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from dataclasses import dataclass
 from typing import Awaitable, Callable, List, Optional, Union
 
@@ -44,7 +45,7 @@ async def listen(
     async def _handler(_sender, data: bytearray) -> None:
         raw = bytes(data)
         result = on_packet(raw)
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             await result
 
     async with BleakClient(device_id) as client:
@@ -63,7 +64,7 @@ async def listen_payload(
         if len(packet) <= PACKET_HEADER_BYTES:
             return
         result = on_payload(packet[PACKET_HEADER_BYTES:])
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             await result
 
     await listen(device_id, wrapped, char_uuid=char_uuid)

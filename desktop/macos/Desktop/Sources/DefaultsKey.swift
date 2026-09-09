@@ -98,6 +98,9 @@ enum DefaultsKey: String {
   /// denied/notDetermined distinction for AX, so this is the only signal that keeps
   /// the sidebar from pulsing a deliberate skip as "denied".
   case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
+  /// System-audio process taps have no preflight API. Preserve an onboarding
+  /// skip separately so later microphone sessions do not test the tap anyway.
+  case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"

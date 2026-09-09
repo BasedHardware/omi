@@ -1,0 +1,36 @@
+version: 2
+name: chat-paste
+tier: 2
+description: "Composer paste capability: a screenshot on the clipboard classifies as an attachment paste, stages as an app-owned file, and shows up staged on the composer"
+app: non-prod
+covers:
+  # The composer is where ⌘V lands, and the classifier lives on the editor the
+  # composer embeds.
+  - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
+  - desktop/macos/Desktop/Sources/Chat/PasteboardAttachmentStaging.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+steps:
+  - id: CP1
+    name: ⌘V with a screenshot on the clipboard stages an image attachment
+    bridge.action:
+      name: paste_clipboard_into_chat
+    expect:
+      ok: true
+      result.detail.classifierAccepted: "true"
+      result.detail.staged: "true"
+      result.detail.stagedCount:
+        min: 1
+
+  - id: CP2
+    name: The staged paste is visible on the composer
+    bridge.action:
+      name: chat_composer_snapshot
+    expect:
+      ok: true
+      result.detail.placeholder: "Ask Omi"
+      result.detail.mode: "answer"
+      result.detail.mainStagedAttachments:
+        min: 1

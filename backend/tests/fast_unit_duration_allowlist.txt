@@ -233,6 +233,9 @@ tests/unit/test_rate_limit_json_failopen.py::test_partial_cache_entry_fails_open
 tests/unit/test_rate_limiting.py::TestRouterWiring::test_developer_rate_limit_failures_log_without_request
 tests/unit/test_short_audio_embedding.py::TestGetWavDuration::test_different_sample_rates
 tests/unit/test_speaker_id_pipeline.py::TestAudioRingBuffer::test_write_overwrites_oldest_when_capacity_exceeded
+# First test to build a live SpeakerMatcher amortizes importing routers.listen.speakers
+# (FastAPI router graph) into its call; later tests in this file reuse the cached import.
+tests/unit/test_speaker_match.py::test_short_clips_are_pooled_before_a_live_decision
 tests/unit/test_speaker_sample.py::test_verify_and_transcribe_sample_transcription_failure
 tests/unit/test_speaker_sample_migration.py::test_get_migration_lock_reuses_same_key
 tests/unit/test_streaming_deepgram_backoff.py::test_gated_socket_death_reason_delegates_to_safe_socket
@@ -312,6 +315,8 @@ tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
 # Suppressed-prefix expansion round walks 500 historical stubs with status batches;
 # ~0.5s CPU before and after the list-read budget threading (structural, unchanged test).
+# First test in this file-isolated suite also amortizes the memory_service reload.
+tests/unit/test_memory_offset_read_cost.py::test_fully_suppressed_offset_read_stays_within_a_bounded_scan_cost
 tests/unit/test_memory_offset_read_cost.py::test_status_lookups_are_not_repeated_across_expansion_rounds
 # 20k-row large-offset fixture intentionally crosses the legacy 10k boundary to charge
 # server-side offset() work; the in-memory doc list construction is hermetic but structural.

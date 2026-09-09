@@ -191,6 +191,19 @@ if [ -n "${FAKE_XCRUN_SLOW_SUITE:-}" ] && has_suite "$FAKE_XCRUN_SLOW_SUITE"; th
   sleep "${FAKE_XCRUN_SLOW_SECONDS:-4}"
 fi
 
+# Optional XCTest-shaped per-suite timing blocks, so the duration-harvest
+# summary can be exercised hermetically. Includes the "All tests" aggregate
+# wrapper, which the harvest must not record as a suite. Only test
+# invocations emit it — `swift build` (prebuild) never does.
+if [ -n "${FAKE_XCRUN_XCTEST_TIMING:-}" ] && [ "${#suites[@]}" -gt 0 ]; then
+  for filtered_suite in ${suites[@]+"${suites[@]}"}; do
+    echo "Test Suite '$filtered_suite' passed at 2026-09-08 00:00:00.000."
+    echo "	 Executed 2 tests, with 0 failures (0 unexpected) in 0.100 (0.250) seconds"
+  done
+  echo "Test Suite 'All tests' passed at 2026-09-08 00:00:00.000."
+  echo "	 Executed 4 tests, with 0 failures (0 unexpected) in 0.400 (0.900) seconds"
+fi
+
 for filtered_suite in ${suites[@]+"${suites[@]}"}; do
   echo "$filtered_suite passed"
 done
@@ -464,6 +477,43 @@ if [ "$fallback_invocations" != "10" ]; then
   fail "batch fallback used $fallback_invocations SwiftPM invocations, expected 1 + 6 + 3"
 fi
 
+# A red batch larger than FALLBACK_BISECT_MIN bisects before per-suite
+# isolation: on CI a straight 50-member fallback re-ran ~100 isolated
+# invocations at ~36s each and blew the job ceiling (run 34301327490).
+# The green half must settle as ONE sub-batch invocation; only the half
+# that is still red descends to singles. Six suites with the bisect floor
+# lowered to 4: h0 = {ActionItemsFTSRepairTests, AlphaTests,
+# APIClientRoutingTests} fails and isolates its 3 members; h1 passes as a
+# single invocation.
+export OMI_SWIFT_TEST_FALLBACK_BISECT_MIN=4
+export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/fallback-tests"
+: >"$FAKE_XCRUN_LOG"
+if "$RUNNER" >"$TMPDIR/bisect-runner.out" 2>"$TMPDIR/bisect-runner.err"; then
+  fail "bisect fallback runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q -- "--- BATCH worker-0-0-h0 exited 42; re-running its 3 suite(s) in isolation ---" \
+  "$TMPDIR/bisect-runner.out"; then
+  fail "bisect did not re-run the red half as its own batch"
+fi
+if ! grep -q -- "--- BATCH worker-0-0 exited 42; re-running its 6 suite(s) in isolation ---" \
+  "$TMPDIR/bisect-runner.out"; then
+  fail "bisect scenario lost the original failing batch's announcement"
+fi
+bisect_failed="$(grep -c -- "--- FAILED: " "$TMPDIR/bisect-runner.out" | tr -d ' ')"
+if [ "$bisect_failed" != "1" ] || ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/bisect-runner.out"; then
+  fail "bisect fallback attributed failures to $bisect_failed suites; expected AlphaTests alone"
+fi
+if ! awk '/swift test/ && /--filter BetaTests\// && /--filter ChatDiscoverabilityTests\// { if (gsub(/--filter/, "&") == 3) green_half = 1 } END { exit green_half ? 0 : 1 }' \
+  "$FAKE_XCRUN_LOG"; then
+  fail "green half did not settle as one sub-batch invocation"
+fi
+# 1 original batch + 2 sub-batches + 3 isolated singles (red half) + 3 serial.
+bisect_invocations="$(grep -c "swift test" "$FAKE_XCRUN_LOG" | tr -d ' ')"
+if [ "$bisect_invocations" != "9" ]; then
+  fail "bisect fallback used $bisect_invocations SwiftPM invocations, expected 1 + 2 + 3 + 3"
+fi
+unset OMI_SWIFT_TEST_FALLBACK_BISECT_MIN
+
 # The escape hatch for a diagnosis: batch size 1 must be exactly the historical
 # one-process-per-suite behaviour — no combined invocation, and no suite run
 # twice through a batch and then again in the fallback.
@@ -534,5 +584,213 @@ solo_invocations="$(grep -c "swift test" "$FAKE_XCRUN_LOG" | tr -d ' ')"
 if [ "$solo_invocations" != "5" ]; then
   fail "solo scenario used $solo_invocations SwiftPM invocations, expected 1 batch + 1 solo + 3 sequential"
 fi
+
+# --- PR-lane deferral of ratcheted slow suites ---
+#
+# The PR lane holds one hosted Mac for minutes, not tens of minutes: a suite
+# with measured slow evidence (swift-test-slow-suites.json) is deferred to the
+# full lane (pushes, scheduled health, manual dispatch, local runs) unless
+# this diff edits its own declaring files.
+mkdir -p "$TMPDIR/pr-tests"
+cp "$TMPDIR"/green-tests/*.swift "$TMPDIR/pr-tests/"
+cat >"$TMPDIR/slow-suites.json" <<'JSON'
+{
+  "max_slow_suite_count": 2,
+  "slow_suites": {
+    "BetaTests": {
+      "reason": "Fixture: measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    },
+    "ChatDiscoverabilityTests": {
+      "reason": "Fixture: second measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/pr-tests"
+export OMI_SWIFT_TEST_LANE=pr
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-defer-runner.out" 2>"$TMPDIR/pr-defer-runner.err"; then
+  fail "green PR lane with a deferred suite failed"
+fi
+if ! grep -q "Ran 6 Swift suites in isolation" "$TMPDIR/pr-defer-runner.out"; then
+  fail "PR lane did not drop both deferred suites from the executed count"
+fi
+if ! grep -q "Deferred 2 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-defer-runner.out"; then
+  fail "runner did not announce both deferred slow suites"
+fi
+if ! grep -q "BetaTests" "$TMPDIR/pr-defer-runner.out" || ! grep -q "ChatDiscoverabilityTests" "$TMPDIR/pr-defer-runner.out"; then
+  fail "deferred announcement did not name every deferred suite"
+fi
+if grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "deferred slow suite still executed in the PR lane"
+fi
+if grep -q -- "--filter ChatDiscoverabilityTests/" "$FAKE_XCRUN_LOG"; then
+  fail "second deferred slow suite still executed in the PR lane"
+fi
+
+# A diff that edits the deferred suite's own declaring file wakes it.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/BetaTests.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-wake-runner.out" 2>"$TMPDIR/pr-wake-runner.err"; then
+  fail "PR lane failed when the deferred suite's own file changed"
+fi
+if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-wake-runner.out"; then
+  fail "changed declaring file did not wake the deferred slow suite"
+fi
+if ! grep -q "Deferred 1 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-wake-runner.out"; then
+  fail "woken suite did not leave exactly one deferred suite"
+fi
+if ! grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "woken deferred suite still skipped execution"
+fi
+
+# A diff to the deferral infrastructure re-baselines the whole selection.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/scripts/swift-test-slow-suites.json"
+if ! "$RUNNER" >"$TMPDIR/pr-rebaseline-runner.out" 2>"$TMPDIR/pr-rebaseline-runner.err"; then
+  fail "PR lane failed when the deferral list itself changed"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-rebaseline-runner.out"; then
+  fail "deferral-list change did not re-baseline the full selection"
+fi
+
+# A diff to the ratchet that validates the slow list re-baselines too: its
+# selection logic (e.g. --slow-list) must not judge its own changes stale.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/scripts/swift-test-skip-ratchet.py"
+if ! "$RUNNER" >"$TMPDIR/pr-ratchet-runner.out" 2>"$TMPDIR/pr-ratchet-runner.err"; then
+  fail "PR lane failed when the slow-list ratchet itself changed"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-ratchet-runner.out"; then
+  fail "ratchet-script change did not re-baseline the full selection"
+fi
+
+# An unrelated declaring file does not wake the deferred suite...
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AlphaTests.swift"
+if ! "$RUNNER" >"$TMPDIR/pr-unrelated-runner.out" 2>"$TMPDIR/pr-unrelated-runner.err"; then
+  fail "PR lane failed on an unrelated changed test file"
+fi
+if ! grep -q "Ran 6 Swift suites in isolation" "$TMPDIR/pr-unrelated-runner.out"; then
+  fail "unrelated changed file wrongly woke the deferred suite"
+fi
+unset OMI_SWIFT_TEST_CHANGED_FILES
+
+# ...and the full lane (the default, and every non-PR CI event) runs it all.
+unset OMI_SWIFT_TEST_LANE
+if ! "$RUNNER" >"$TMPDIR/full-runner.out" 2>"$TMPDIR/full-runner.err"; then
+  fail "full lane failed with a slow list present"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/full-runner.out"; then
+  fail "full lane deferred a slow suite"
+fi
+unset OMI_SWIFT_TEST_SLOW_SUITES_FILE
+
+# --- PR-lane serial/solo deferral ---
+#
+# The serial and solo clusters pay one ~30s invocation per member for
+# sub-second tests, sequentially, after every worker exits. With
+# OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL=1 the PR lane defers them too: only
+# declaring-file changes wake a member (plus ratcheted watch prefixes for
+# slow-listed entries). pr-tests holds 5 parallel suites + 3 serial ones.
+export OMI_SWIFT_TEST_LANE=pr
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL=1
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-serial-defer-runner.out" 2>"$TMPDIR/pr-serial-defer-runner.err"; then
+  fail "green PR lane with serial deferral failed"
+fi
+# 8 suites = 5 parallel + 3 serial; deferred = both slow-listed parallel
+# suites + all three serial members, so 3 execute.
+if ! grep -q "Ran 3 Swift suites in isolation" "$TMPDIR/pr-serial-defer-runner.out"; then
+  fail "PR lane did not defer the serial cluster (expected 3 of 8 executed)"
+fi
+if ! grep -q "Deferred 5 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-serial-defer-runner.out"; then
+  fail "runner did not announce the deferred serial/slow suites"
+fi
+for deferred_name in BetaTests ChatDiscoverabilityTests AuthRefreshResilienceTests AuthTokenStorageTests OwnerAuthorityAdopterTests; do
+  if ! grep -q "$deferred_name" "$TMPDIR/pr-serial-defer-runner.out"; then
+    fail "deferred announcement did not name $deferred_name"
+  fi
+  if grep -q -- "--filter $deferred_name/" "$FAKE_XCRUN_LOG"; then
+    fail "deferred serial/slow suite $deferred_name still executed"
+  fi
+done
+
+# A serial member's own declaring file wakes it (both slow-listed suites stay
+# deferred: their own files did not change, so 1 serial wake = 4 executed).
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AuthTokenStorageTests.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-serial-wake-runner.out" 2>"$TMPDIR/pr-serial-wake-runner.err"; then
+  fail "PR lane failed when a serial member's declaring file changed"
+fi
+if ! grep -q "Ran 4 Swift suites in isolation" "$TMPDIR/pr-serial-wake-runner.out"; then
+  fail "declaring-file change did not wake the serial member (expected 4 executed)"
+fi
+if ! grep -q -- "--filter AuthTokenStorageTests/" "$FAKE_XCRUN_LOG"; then
+  fail "woken serial member did not execute"
+fi
+
+# A watched subject path wakes a slow-listed entry even though no test file
+# changed: the fixture slow list watches Desktop/Sources/Widget/ for BetaTests.
+cat >"$TMPDIR/watch-slow-suites.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "BetaTests": {
+      "reason": "Fixture: measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08",
+      "watch": ["desktop/macos/Desktop/Sources/Widget/"]
+    }
+  }
+}
+JSON
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/watch-slow-suites.json"
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Sources/Widget/WidgetRoot.swift"
+: >"$FAKE_XCRUN_LOG"
+if ! "$RUNNER" >"$TMPDIR/pr-watch-wake-runner.out" 2>"$TMPDIR/pr-watch-wake-runner.err"; then
+  fail "PR lane failed when a watched subject path changed"
+fi
+if ! grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "watched subject path did not wake the deferred slow suite"
+fi
+if ! grep -q "Ran 5 Swift suites in isolation" "$TMPDIR/pr-watch-wake-runner.out"; then
+  fail "watch-wake scenario did not report 5 executed suites (slow woken, serial deferred)"
+fi
+
+unset OMI_SWIFT_TEST_CHANGED_FILES OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL
+
+# An invalid lane value fails closed before any suite executes.
+export OMI_SWIFT_TEST_LANE=pr-fast
+if "$RUNNER" >"$TMPDIR/bad-lane.out" 2>"$TMPDIR/bad-lane.err"; then
+  fail "invalid OMI_SWIFT_TEST_LANE unexpectedly succeeded"
+fi
+if ! grep -q "OMI_SWIFT_TEST_LANE must be 'pr' or 'full'" "$TMPDIR/bad-lane.err"; then
+  fail "invalid lane value did not fail with the validation message"
+fi
+unset OMI_SWIFT_TEST_LANE
+
+# --- per-suite duration harvest on the green path ---
+#
+# Green batches used to discard their logs with the temp directory, so the
+# slow tail stayed invisible until it broke a batch budget. The runner must
+# name the slowest executed suites every run, from XCTest's own per-suite
+# timing lines, without recording the "All tests" aggregate wrapper.
+export OMI_SWIFT_TEST_LANE=pr
+export OMI_SWIFT_TEST_SLOW_SUITES_FILE="$TMPDIR/slow-suites.json"
+export FAKE_XCRUN_XCTEST_TIMING=1
+if ! "$RUNNER" >"$TMPDIR/timing-runner.out" 2>"$TMPDIR/timing-runner.err"; then
+  fail "green run with timing output failed"
+fi
+if ! grep -q "Slowest executed Swift suites this run (wall seconds):" "$TMPDIR/timing-runner.out"; then
+  fail "runner did not print the duration harvest summary"
+fi
+if ! grep -q "APIClientRoutingTests" "$TMPDIR/timing-runner.out"; then
+  fail "duration harvest summary did not name an executed suite"
+fi
+if grep -q "All tests" "$TMPDIR/timing-runner.out"; then
+  fail "duration harvest recorded the aggregate 'All tests' wrapper as a suite"
+fi
+unset FAKE_XCRUN_XCTEST_TIMING OMI_SWIFT_TEST_SLOW_SUITES_FILE OMI_SWIFT_TEST_LANE
 
 echo "swift-test-suites tests passed"

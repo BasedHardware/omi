@@ -55,7 +55,10 @@ enum MicrophoneCaptureAuthorizationPolicy {
     case .denied, .restricted:
       return .surfacePermissionAlert
     @unknown default:
-      return .proceed
+      // A future authorization state is not proof of consent. Fail closed so an
+      // automatic start cannot arm capture under a status this build does not
+      // understand, and an explicit start can surface the permission path.
+      return .surfacePermissionAlert
     }
   }
 

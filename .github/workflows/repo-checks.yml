@@ -37,35 +37,8 @@ jobs:
         with:
           python-version-file: backend/.python-version
 
-      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
-      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
-      # needs uv just like the sibling Hygiene job.
-      - name: Set up uv
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
-        with:
-          # Pin the resolved uv, not just the action commit. An unset version means
-          # "latest", which the action resolves by fetching the astral-sh/versions
-          # manifest over the network; that fetch has hard-failed a Repo Checks run.
-          # An exact version resolves locally and skips the manifest request. Keep it
-          # equal to backend/Dockerfile's UV_VERSION so CI matches the runtime image.
-          version: "0.11.13"
-          enable-cache: true
-          cache-dependency-glob: backend/openapi-requirements.txt
-
-      - name: Install runtime environment validator dependency
-        run: uv pip install --system pyyaml==6.0.1
-
-      - name: Set up Java for manifest-selected Firestore checks
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Set up Bun for manifest-selected web/app checks
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
+      # Metadata edits reuse the source verdict from Hygiene. These manifest
+      # checks consume only Python stdlib + Git; do not install code-test tools.
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -75,7 +48,7 @@ jobs:
           # days later can carry a value main has long since moved past. actions/checkout
           # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
           # above), so diff against that instead of the stale payload field.
-          scripts/pr-preflight \
+          scripts/pr-preflight --metadata-only \
             --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
