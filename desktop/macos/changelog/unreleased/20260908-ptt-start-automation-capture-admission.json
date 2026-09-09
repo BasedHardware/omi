@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a push-to-talk stall so an automation voice turn starts responding immediately instead of waiting on the first screen capture."
-}

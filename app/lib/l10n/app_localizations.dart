@@ -18578,6 +18578,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
+
+  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — this is taking longer than usual.'**
+  String get processingTakingLonger;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

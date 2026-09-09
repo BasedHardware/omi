@@ -48,6 +48,15 @@ private final class StubPresentationCoordinator: DesktopAutomationPresentationCo
 
 @MainActor
 final class DesktopAutomationBridgeRouteTests: XCTestCase {
+  func testOpenAskOmiIsRegisteredOnTheMainChatSurface() throws {
+    DesktopAutomationActionRegistry.shared.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      DesktopAutomationActionRegistry.shared.descriptors().first { $0.name == "open_ask_omi" })
+    XCTAssertEqual(descriptor.surfaces, ["main_chat"])
+    XCTAssertTrue(descriptor.summary.contains("quiet"))
+    XCTAssertFalse(descriptor.summary.contains("Ask Omi input panel"))
+  }
+
   func testQuietNavigationKeepsItsNonActivatingContractAcrossTheNotificationHandoff() {
     let payload = DesktopAutomationNavigationRequest(
       target: "settings",

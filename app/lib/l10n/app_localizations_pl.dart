@@ -10009,4 +10009,7 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.';
+
+  @override
+  String get processingTakingLonger => 'Nadal działa — trwa to dłużej niż zwykle.';
 }

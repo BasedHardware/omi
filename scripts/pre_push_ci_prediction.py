@@ -120,6 +120,7 @@ DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/scripts/run-swift-ci.sh",
     "desktop/macos/scripts/swift-test-suites.sh",
     "desktop/macos/scripts/swift-test-skips.json",
+    "desktop/macos/scripts/swift-test-slow-suites.json",
     "desktop/macos/scripts/swift-test-skip-ratchet.py",
     "desktop/macos/scripts/check_desktop_test_quality.py",
     "desktop/macos/scripts/check-main-actor-xctest-hooks.py",
@@ -407,11 +408,20 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-        # Release compile runs on PRs too, not just pushes: strict-concurrency
-        # errors that only manifest under whole-module release optimization
-        # otherwise land on main and wedge the release train (#11373/#11374 —
-        # the KG ResolveOutcome Sendable break shipped through a PR whose debug
-        # lane stayed green and blocked every candidate for three merges).
+    # A release compile holds a second scarce hosted Mac for ~25 min, and every
+    # desktop-source PR used to claim one. That doubled concurrent macos-15
+    # demand against a ~5-runner cap and was the dominant source of Desktop
+    # Swift CI queue time (60-97 min observed 2026-09-08), so the PR lane now
+    # reserves it for the inputs most likely to shift whole-module behavior —
+    # the package manifest and lockfile — while every main push, the scheduled
+    # health run, and manual dispatch still compile release evidence for the
+    # exact SHA the release planner gates on. A strict-concurrency break that
+    # only manifests under WMO (#11373/#11374) can therefore merge on a green
+    # debug lane, but the push run catches it within the hour and the release
+    # train still refuses to tag without a green Release Compile check.
+    if package_changed:
+        selected.add("desktop-swift-release-compile")
+    if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
 
     return ImpactPlan(frozenset(selected))

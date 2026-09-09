@@ -346,11 +346,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // and setProviders(deviceProvider) actually gets called on it.
           : SpeechProfileWidget(
               goNext: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
+                // All Done is not enroll success (#12765). Upload/embedding
+                // events fire from SpeechProfileProvider.finalize.
+                PlatformManager.instance.analytics.speechProfileContinued();
                 _controller!.animateTo(kKnowledgeGraphPage);
               },
               onSkip: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
+                PlatformManager.instance.analytics.speechProfileSkipped();
                 _controller!.animateTo(kKnowledgeGraphPage);
               },
             ),
