@@ -63,10 +63,11 @@ omi auth login --browser
 Buat kunci API di konsol [app.omi.me](https://app.omi.me) pada menu Developer → API Keys:
 
 ```bash
-# Mengonfigurasi langsung via perintah
+# Peringatan: Argumen baris perintah dapat tersimpan dalam riwayat shell;
+# disarankan menggunakan prompt interaktif `omi auth login` untuk keamanan.
 omi auth login --api-key omi_dev_...
 
-# Atau atur variabel lingkungan (ideal untuk CI/CD dan kontainer)
+# Untuk CI/CD dan lingkungan tanpa pengawasan, gunakan variabel lingkungan:
 export OMI_API_KEY=omi_dev_...
 ```
 
@@ -138,7 +139,7 @@ omi goal list
 
 ## 4. Pembuatan Skrip dan Output JSON (`--json`)
 
-`omi-cli` mendukung output JSON asli untuk semua perintah. Saat mengintegrasikan dengan `jq` atau skrip otomatisasi, cantumkan opsi `--json` sebagai **opsi global sebelum sub-perintah**:
+`omi-cli` mendukung output JSON asli untuk perintah API yang mengembalikan data. Perintah meta seperti `--version` dan `--help` tetap mengembalikan teks biasa. Saat mengintegrasikan dengan `jq` atau skrip otomatisasi, cantumkan opsi `--json` sebagai **opsi global sebelum sub-perintah**:
 
 ```bash
 # Mengambil memori dalam format JSON lalu mengekstrak id dan konten
@@ -164,8 +165,8 @@ Untuk penanganan galat yang andal pada skrip otomatisasi dan alur CI, perintah m
 | Kode Keluar | Arti | Keterangan |
 | :---: | :--- | :--- |
 | `0` | Sukses (*Success*) | Perintah berhasil diselesaikan |
-| `1` | Kesalahan Penggunaan (*Usage Error*) | Parameter salah atau argumen wajib tidak diberikan |
-| `2` | Kesalahan Autentikasi (*Auth Error*) | Belum masuk, kunci API tidak valid, atau sesi kedaluwarsa |
+| `1` | Kesalahan Penggunaan / Validasi (*Usage Error*) | Opsi aplikasi bertentangan atau data tidak valid |
+| `2` | Kesalahan Autentikasi / Sintaks Click (*Auth / Click Error*) | Belum masuk, kunci tidak valid, atau kesalahan parsing opsi Click |
 | `3` | Kesalahan Server (*Server Error*) | Respon 5xx, batas waktu habis, atau kegagalan jaringan |
 | `4` | Batas Permintaan (*Rate Limited*) | Kode status HTTP 429 Terlalu Banyak Permintaan |
 | `5` | Tidak Ditemukan (*Not Found*) | Kode status HTTP 404 (ID sumber daya tidak ditemukan) |
@@ -192,12 +193,13 @@ fi
 # Menyetel kunci API
 $env:OMI_API_KEY = "omi_dev_kunci_anda_di_sini"
 
-# Mengurai data JSON langsung di PowerShell
-try {
-    $memories = omi --json memory list | ConvertFrom-Json
+# Mengurai data JSON langsung di PowerShell dengan validasi kode keluar
+$rawOutput = omi --json memory list
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Perintah omi gagal dengan kode keluar $LASTEXITCODE"
+} else {
+    $memories = $rawOutput | ConvertFrom-Json
     $memories | Select-Object id, content
-} catch {
-    Write-Error "Terjadi kesalahan saat memproses data: $_"
 }
 ```
 
@@ -233,4 +235,15 @@ omi --profile work auth login
 
 # Menjalankan perintah dengan profil tertentu
 omi --profile work memory list
-```
+```---
+
+## 9. Pemecahan Masalah (Troubleshooting)
+
+* **Perintah tidak ditemukan (`command not found: omi`)**:
+  Pastikan direktori bin `pipx` atau Python berada dalam variabel lingkungan `PATH` Anda (`pipx ensurepath`).
+* **Kredensial kedaluwarsa atau tidak valid (Kode keluar 2)**:
+  Jalankan `omi auth status` untuk memeriksa kredensial lokal atau `omi auth whoami` untuk memverifikasi ke server. Lakukan login ulang via `omi auth login`.
+* **Koneksi jaringan / batas waktu habis (Kode keluar 3)**:
+  Periksa koneksi internet Anda atau status layanan Omi. Gunakan `--verbose` untuk melihat detail lalu lintas HTTP.
+* **Desktop API lokal tidak dapat dihubungi**:
+  Pastikan aplikasi Omi Desktop sedang berjalan dan port `47778` dapat diakses. Uji koneksi dengan `omi local status`.
