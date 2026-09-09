@@ -88,26 +88,22 @@ extension RealtimeHubController {
   ) {
     guard streamingJournalWriteLedger.contains(continuityKey: continuityKey) else { return }
     streamingJournalWriteLedger.enqueueUpdate(continuityKey: continuityKey) { [weak self] projection in
-      let accepted = await FloatingControlBarManager.shared.attachRealtimeUserEvidence(
+      guard let self else { return false }
+      let accepted = await self.attachResolvedNativeUserEvidence(
         surface: projection.admissionSurface,
         ownerID: projection.ownerID,
         userTurnID: projection.userTurnID,
         evidence: evidence)
-      if accepted, let self,
-        let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey)
-      {
-        let key = RealtimeTurnEvidenceLedger.Key(
-          ownerID: projection.ownerID,
-          turnID: turnID,
-          continuityKey: projection.continuityKey)
+      guard let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey) else {
+        return accepted
+      }
+      let key = RealtimeTurnEvidenceLedger.Key(
+        ownerID: projection.ownerID,
+        turnID: turnID,
+        continuityKey: projection.continuityKey)
+      if accepted {
         _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
-      } else if !accepted, let self,
-        let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey)
-      {
-        let key = RealtimeTurnEvidenceLedger.Key(
-          ownerID: projection.ownerID,
-          turnID: turnID,
-          continuityKey: projection.continuityKey)
+      } else {
         _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
       }
       return accepted
@@ -128,13 +124,14 @@ extension RealtimeHubController {
     let key = RealtimeTurnEvidenceLedger.Key(
       ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
     guard let entry = turnEvidenceLedger.entry(for: key) else { return true }
-    guard entry.state != .pending else { return true }
-    if entry.evidencePersisted { return true }
-    guard let evidence = entry.evidence else { return true }
     let userTurnID =
       entry.journalUserTurnID
       ?? KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
-    let accepted = await FloatingControlBarManager.shared.attachRealtimeUserEvidence(
+    _ = turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    guard entry.state != .pending else { return true }
+    if entry.evidencePersisted { return true }
+    guard let evidence = entry.evidence else { return true }
+    let accepted = await attachResolvedNativeUserEvidence(
       surface: entry.surface ?? FloatingControlBarManager.shared.mainChatSurfaceReference(),
       ownerID: ownerID,
       userTurnID: userTurnID,
