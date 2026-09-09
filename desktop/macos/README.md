@@ -17,7 +17,7 @@ Chat runs through one of three providers, chosen in Settings > AI Provider:
 
 - **Omi AI** — the default, routed through the Rust backend with your Omi account.
 - **Claude Code** — your own Claude OAuth session.
-- **Local** — talks directly to a self-hosted OpenAI-compatible server (e.g. LM Studio, Ollama). Set the server's base URL and pick a model from the list it fetches at `{baseURL}/models`; nothing in this mode is routed through Omi's servers. An optional second "vision" model can be configured to interpret screenshots.
+- **Local** — talks directly to a self-hosted OpenAI-compatible server (e.g. LM Studio, Ollama). Set the server's base URL and pick a model from the list it fetches at `{baseURL}/models`; no chat prompt or completion is ever routed through Omi's servers or Anthropic. An optional second "vision" model can be configured to interpret screenshots. The agent process still authenticates its own tool calls into Omi storage (memories, conversations) with your Firebase session, which is a data fetch, not a model call. Apple Notes, Calendar, and Gmail memory synthesis, and AI-profile synthesis, are off by default under Local (a "Connector synthesis" Settings field lets you opt in to sending that formatted text to Omi's cloud instead).
 
 ## Development
 
