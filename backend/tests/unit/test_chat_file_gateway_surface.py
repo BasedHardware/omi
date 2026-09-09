@@ -38,14 +38,36 @@ def _gateway_mode(monkeypatch):
 
 def _vision_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: False, is_image=lambda: True, openai_file_id='file-1', mime_type='image/png', name='pic.png'
+        is_pdf=lambda: False,
+        is_document=lambda: False,
+        is_image=lambda: True,
+        openai_file_id='file-1',
+        mime_type='image/png',
+        name='pic.png',
     )
     return [file_chat]
 
 
 def _pdf_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: True, is_image=lambda: False, openai_file_id='file-2', mime_type='application/pdf', name='a.pdf'
+        is_pdf=lambda: True,
+        is_document=lambda: True,
+        is_image=lambda: False,
+        openai_file_id='file-2',
+        mime_type='application/pdf',
+        name='a.pdf',
+    )
+    return [file_chat]
+
+
+def _txt_files():
+    file_chat = SimpleNamespace(
+        is_pdf=lambda: False,
+        is_document=lambda: True,
+        is_image=lambda: False,
+        openai_file_id='file-3',
+        mime_type='text/plain',
+        name='a.txt',
     )
     return [file_chat]
 
@@ -124,6 +146,7 @@ def test_lane_selection_splits_vision_from_documents(monkeypatch):
     assert cf.file_chat_auto_lane_id(pdf=False) == FILE_CHAT_VISION_AUTO_LANE_ID
     assert cf._completion_model(_vision_files()) == FILE_CHAT_VISION_AUTO_LANE_ID
     assert cf._completion_model(_pdf_files()) == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
+    assert cf._completion_model(_txt_files()) == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
 
 
 def test_sync_completion_uses_gateway_client_under_gateway_mode(monkeypatch):
