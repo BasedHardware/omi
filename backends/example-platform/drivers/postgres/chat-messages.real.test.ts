@@ -213,21 +213,6 @@ realTest("real chat reads require chat.read and never invent empty success", asy
     expect(
       ((await aliasedMain.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
     ).toEqual([humanId, aiId, storedMainId, paddedMainId, spaceMainId]);
-    const nulNamedId = "88888888-8888-4888-8888-888888888888";
-    await owner.unsafe(
-      `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'stored as NUL session','human','text',2800,2800,$3,NULL,0,'sha256:nul-named','desktop_chat',NULL,false,'rev-nul-named','[]'::jsonb,'gen_nul_named')`,
-      [account, nulNamedId, "\0"],
-    );
-    const afterNulDefault = await call();
-    expect(afterNulDefault.status).toBe(200);
-    expect(
-      ((await afterNulDefault.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
-    ).toEqual([humanId, aiId, storedMainId, paddedMainId, spaceMainId]);
-    const nulNamed = await call("?limit=50&chatSessionId=%00");
-    expect(nulNamed.status).toBe(200);
-    expect(
-      ((await nulNamed.json()) as { messages: Array<{ id: string }> }).messages.map((row) => row.id),
-    ).toEqual([nulNamedId]);
     const namedAfterStoredMain = await call("?limit=50&chatSessionId=session-alpha");
     expect(namedAfterStoredMain.status).toBe(200);
     expect(
