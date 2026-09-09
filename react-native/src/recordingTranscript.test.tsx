@@ -136,6 +136,50 @@ test('a completed NEXT LINE-only text keeps later speech stored on segments', as
   expect(textOf(renderer)).not.toContain('The transcript is empty.');
 });
 
+test('a completed omitted segment text keeps later speech stored on segments', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '', [
+      {start: 0, end: 0.2},
+      {start: 0.2, end: 0.4, text: null},
+      {start: 0.4, end: 0.6, text: 'Recorded words'},
+    ]),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Recorded words');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
+test('parseRecordingTranscript joins omitted segment text like production Listen GET', () => {
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'completed', '', [
+        {start: 0, end: 0.2},
+        {start: 0.2, end: 0.4, text: null},
+        {start: 0.4, end: 0.6, text: 'Recorded words'},
+      ]).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'completed',
+    text: '  Recorded words',
+  });
+});
+
+test('parseRecordingTranscript keeps empty text when a segment is not an object', () => {
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'completed', '', [
+        'invalid',
+        {start: 0.2, end: 0.4, text: 'Recorded words'},
+      ]).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'completed',
+    text: '',
+  });
+});
+
 test.each(['queued', 'running'])(
   'shows %s state truthfully and resumes a completed result',
   async state => {

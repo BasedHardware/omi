@@ -76,6 +76,71 @@ describe("device transcription client projection", () => {
     });
   });
 
+  test("completed omitted segment text keeps later speech stored on segments", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "",
+        segments: JSON.stringify([
+          { start: 0, end: 0.2 },
+          { start: 0.2, end: 0.4, text: null },
+          { start: 0.4, end: 0.6, text: "Recorded speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "  Recorded speech",
+    });
+  });
+
+  test("completed stored text stays when a later segment omits text", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "Stored speech",
+        segments: JSON.stringify([
+          { start: 0, end: 0.2 },
+          { start: 0.2, end: 0.4, text: "Later speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "Stored speech",
+    });
+  });
+
+  test("completed empty text stays when a segment is not an object", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "",
+        segments: JSON.stringify([
+          "invalid",
+          { start: 0.2, end: 0.4, text: "Recorded speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "",
+    });
+  });
+
+  test("completed empty text stays when a segment text is not a string", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "",
+        segments: JSON.stringify([
+          { start: 0, end: 0.2, text: 1 },
+          { start: 0.2, end: 0.4, text: "Recorded speech" },
+        ]),
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "",
+    });
+  });
+
   test("completed stored text stays when segments are empty", () => {
     expect(
       projectDeviceTranscription({

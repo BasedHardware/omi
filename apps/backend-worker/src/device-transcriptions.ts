@@ -231,6 +231,10 @@ function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
       return null;
     }
     const text = (segment as { text?: unknown }).text;
+    if (text === undefined || text === null) {
+      parts.push("");
+      continue;
+    }
     if (typeof text !== "string") return null;
     parts.push(text);
   }
