@@ -151,3 +151,31 @@ def profile_delete(
     config.delete_profile(name)
     cfg.save(config)
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")
+
+
+@profile_app.command("rename", help="Rename an existing profile.")
+def profile_rename(
+    typer_ctx: typer.Context,
+    old_name: str = typer.Argument(..., help="Current name of the profile."),
+    new_name: str = typer.Argument(..., help="New name for the profile."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    config = ctx.load_config()
+    clean_new = new_name.strip()
+    if not clean_new:
+        raise UsageError(message="New profile name cannot be blank")
+    if old_name not in config.profiles:
+        raise UsageError(message=f"No such profile: '{old_name}'")
+    if clean_new != old_name and clean_new in config.profiles:
+        raise UsageError(message=f"Profile '{clean_new}' already exists")
+
+    config.rename_profile(old_name, clean_new)
+    cfg.save(config)
+    ctx.renderer.success(f"Renamed profile [bold]{escape(old_name)}[/bold] to [bold]{escape(clean_new)}[/bold].")
+    if ctx.renderer.json_mode:
+        ctx.renderer.emit(
+            {
+                "active_profile": config.active_profile,
+                "profiles": config.list_profiles(),
+            }
+        )
