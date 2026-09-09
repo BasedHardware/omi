@@ -278,9 +278,11 @@ extension SettingsContentView {
           }
         }
 
-        Text("A separate vision-capable model the main model can delegate screenshot interpretation to. Leave unset to use one model for everything.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
+        Text(
+          "A separate vision-capable model the main model can delegate screenshot interpretation to. Leave unset to use one model for everything."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -291,13 +293,17 @@ extension SettingsContentView {
         TextField("https://your-backend.example.com", text: $localBackendURL)
           .textFieldStyle(.roundedBorder)
 
-        Text("Points voice transcription and memory/conversation sync at a self-hosted backend instead of api.omi.me. Leave unset to use Omi's servers. Restart the app after changing this.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
+        Text(
+          "Points voice transcription and memory/conversation sync at a self-hosted backend instead of api.omi.me. Leave unset to use Omi's servers. Restart the app after changing this."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
 
-        Text("Your backend must verify tokens against the SAME Firebase project you sign in with here — if it uses its own project (e.g. its own google-credentials.json), every request will fail with Unauthorized, since Firebase ID tokens are project-scoped. Sign-in itself is unaffected by this field either way.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
+        Text(
+          "Your backend must verify tokens against the SAME Firebase project you sign in with here — if it uses its own project (e.g. its own google-credentials.json), every request will fail with Unauthorized, since Firebase ID tokens are project-scoped. Sign-in itself is unaffected by this field either way."
+        )
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
       }
 
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {

@@ -163,7 +163,8 @@ struct AIProvider: Identifiable {
   /// what was previously a 3-4 line lookup duplicated across ChatProvider,
   /// TaskChatState, and (as of this fix) every background synthesis caller.
   static func resolveBridgeMode() -> ChatProvider.BridgeMode {
-    let modeRaw = UserDefaults.standard.string(forKey: selectedProviderRawValueKey)
+    let modeRaw =
+      UserDefaults.standard.string(forKey: selectedProviderRawValueKey)
       ?? ChatProvider.BridgeMode.piMono.rawValue
     return ChatProvider.BridgeMode(rawValue: modeRaw) ?? .piMono
   }
@@ -183,7 +184,8 @@ struct AIProvider: Identifiable {
   /// without going through ChatProvider's own bridge.
   @MainActor
   static func resolveQuickChatModel() -> String {
-    let cloudDefault = ShortcutSettings.shared.selectedModel.isEmpty
+    let cloudDefault =
+      ShortcutSettings.shared.selectedModel.isEmpty
       ? ModelQoS.Claude.defaultSelection
       : ShortcutSettings.shared.selectedModel
     return resolveModel(cloudDefault: cloudDefault)
