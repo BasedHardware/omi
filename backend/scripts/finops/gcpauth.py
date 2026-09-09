@@ -17,6 +17,7 @@ Nothing here prints or persists a token.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -67,22 +68,52 @@ def apply_writer_env() -> None:
     os.environ.pop("CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT", None)
 
 
-def assert_writer_identity() -> str:
-    """The finops-writer SA, which is what `bq load` will use."""
-    apply_writer_env()
-    p = subprocess.run(
-        ["gcloud", "config", "get-value", "account"],
-        capture_output=True,
-        text=True,
-        env=os.environ,
-    )
-    acct = (p.stdout or "").strip()
-    if p.returncode != 0 or acct != WRITER_ACCOUNT:
+def writer_key_email() -> str:
+    """The identity the writer key itself authenticates as.
+
+    This is the credential ADC (``GOOGLE_APPLICATION_CREDENTIALS``) actually presents.
+    A gcloud config account can drift independently of the key file (e.g. after key
+    rotation), so the key's ``client_email`` is the authoritative thing to verify.
+    """
+    try:
+        with open(WRITER_KEY) as f:
+            key = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SystemExit("writer key unreadable: %s (%s)" % (WRITER_KEY, e))
+    email = str(key.get("client_email", "")).strip()
+    if email != WRITER_ACCOUNT:
         raise SystemExit(
-            "BigQuery writer identity check failed: got %r, expected %r. "
+            "BigQuery writer key is for %r, expected %r. Refusing to write to omi_finops." % (email, WRITER_ACCOUNT)
+        )
+    return email
+
+
+def activate_writer_gcloud() -> None:
+    """Activate the writer key in the dedicated ``WRITER_GCLOUD`` config.
+
+    ``GOOGLE_APPLICATION_CREDENTIALS`` does not authenticate the gcloud CLI: on a
+    new or uninitialized config, ``gcloud config get-value account`` is unset and
+    ``bq`` (which reads the config credential store) has no credentials at all.
+    Activating the key is idempotent and keeps the config store pinned to the
+    same key ADC uses, so neither credential source can drift to another identity.
+    """
+    acct = _sh("gcloud config get-value account 2>/dev/null")
+    if acct != WRITER_ACCOUNT:
+        _sh('gcloud auth activate-service-account --key-file="%s"' % WRITER_KEY)
+        acct = _sh("gcloud config get-value account 2>/dev/null")
+    if acct != WRITER_ACCOUNT:
+        raise SystemExit(
+            "BigQuery writer identity check failed: gcloud config account is %r, expected %r. "
             "Refusing to write to omi_finops." % (acct, WRITER_ACCOUNT)
         )
-    return acct
+
+
+def assert_writer_identity() -> str:
+    """The finops-writer SA: verified from the key itself and active in ``WRITER_GCLOUD``."""
+    apply_writer_env()
+    email = writer_key_email()
+    activate_writer_gcloud()
+    return email
 
 
 class Token:

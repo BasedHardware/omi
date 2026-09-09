@@ -53,8 +53,10 @@ Firestore reads bill under service `App Engine`, so Firestore is matched by SKU,
   sourcing and refuses to pull under any other account.
 * The **BigQuery load** runs as `finops-writer@based-hardware.iam.gserviceaccount.com`
   (dataset `omi_finops` WRITER + project `roles/bigquery.jobUser`) and refuses to run
-  under any other account (`gcpauth.assert_writer_identity()`). The read-only bot stays
-  read-only. Human ADC is not the cron writer.
+  under any other account (`gcpauth.assert_writer_identity()`): it verifies the
+  key's `client_email` directly (ADC's credential) and activates the key into the
+  dedicated `WRITER_GCLOUD` config so `bq` uses the same identity. The read-only bot
+  stays read-only. Human ADC is not the cron writer.
 * No token, key or secret is ever printed or written to disk.
 * **No raw uid ever reaches disk.** Uids are hashed `sha256(uid)[:16]` in flight, and
   `run_unit_cost.validate()` scans the outputs for any hex run of 20+ characters before a load.
