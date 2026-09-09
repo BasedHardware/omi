@@ -216,6 +216,57 @@ test('untitled conversations keep overview speech on the open control', () => {
   ).toBeGreaterThan(0);
 });
 
+test('listen conversations keep list overview speech on the open control', () => {
+  const title = 'a'.repeat(80);
+  const summary = `${title} later speech`;
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'conversation-one',
+    title,
+    summary,
+    searchableText: `${title}\n${summary}`,
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(textOf(renderer)).toContain(title);
+  expect(textOf(renderer)).toContain(summary);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === `Open conversation ${summary}`,
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
 test('a NEXT LINE-only conversation search keeps rows instead of claiming a miss', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

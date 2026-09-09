@@ -43,6 +43,16 @@ export function conversationDisplayTitle(item: {
     : 'Conversation title unavailable';
 }
 
+function conversationListUsesListenExcerpt(id: string | undefined): boolean {
+  if (id === undefined || id.startsWith('chat:')) {
+    return false;
+  }
+  if (id.startsWith('recording:')) {
+    return id.length > 'recording:'.length;
+  }
+  return true;
+}
+
 export function conversationRecapTitle(item: {
   id?: string;
   title: string;
@@ -52,9 +62,7 @@ export function conversationRecapTitle(item: {
   const title = visibleDisplayText(item.title);
   const summary = visibleDisplayText(item.summary);
   if (
-    item.id !== undefined &&
-    item.id.startsWith('recording:') &&
-    item.id.length > 'recording:'.length &&
+    conversationListUsesListenExcerpt(item.id) &&
     title !== '' &&
     summary !== '' &&
     summary.startsWith(title)
