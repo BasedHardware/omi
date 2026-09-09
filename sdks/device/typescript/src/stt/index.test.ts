@@ -100,4 +100,60 @@ describe('createWhisperTranscriber', () => {
 
     expect(transcripts).toEqual(['final transcript']);
   });
+
+  test('rejects explicit unsupported sample rate', () => {
+    expect(() =>
+      createWhisperTranscriber({
+        runner: () => 'test',
+        onTranscript: () => {},
+        sampleRate: 8000,
+      }),
+    ).toThrow('Whisper requires 16000 Hz PCM; resample audio before transcription');
+
+    expect(() =>
+      createWhisperTranscriber({
+        runner: () => 'test',
+        onTranscript: () => {},
+        sampleRate: 44100,
+      }),
+    ).toThrow('Whisper requires 16000 Hz PCM; resample audio before transcription');
+  });
+
+  test('accepts explicit 16000 Hz or default sample rate', () => {
+    expect(() =>
+      createWhisperTranscriber({
+        runner: () => 'test',
+        onTranscript: () => {},
+        sampleRate: 16000,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      createWhisperTranscriber({
+        runner: () => 'test',
+        onTranscript: () => {},
+      }),
+    ).not.toThrow();
+  });
+
+  test('createTranscriber rejects unsupported sampleRate for whisper', () => {
+    expect(() =>
+      createTranscriber('whisper', {
+        sampleRate: 8000,
+        whisperRunner: () => 'test',
+        onTranscript: () => {},
+      }),
+    ).toThrow('Whisper requires 16000 Hz PCM; resample audio before transcription');
+  });
+
+  test('createTranscriber accepts explicit 16000 Hz sampleRate for whisper', () => {
+    expect(() =>
+      createTranscriber('whisper', {
+        sampleRate: 16000,
+        whisperRunner: () => 'test',
+        onTranscript: () => {},
+      }),
+    ).not.toThrow();
+  });
 });
+
