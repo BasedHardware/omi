@@ -647,6 +647,9 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'false'
             category: memory_rollout
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: legacy
+            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:

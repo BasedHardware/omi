@@ -486,6 +486,9 @@ overlay:
             value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+          DAILY_SUMMARY_SELECTION_MODE:
+            value: shadow
+            category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
         forbidden_env:
