@@ -44,15 +44,26 @@ export function conversationDisplayTitle(item: {
 }
 
 export function conversationRecapTitle(item: {
+  id?: string;
   title: string;
   summary: string;
   status: string;
 }): string {
   const title = visibleDisplayText(item.title);
+  const summary = visibleDisplayText(item.summary);
+  if (
+    item.id !== undefined &&
+    item.id.startsWith('recording:') &&
+    item.id.length > 'recording:'.length &&
+    title !== '' &&
+    summary !== '' &&
+    summary.startsWith(title)
+  ) {
+    return summary;
+  }
   if (title !== '') {
     return title;
   }
-  const summary = visibleDisplayText(item.summary);
   if (summary !== '') {
     return summary;
   }

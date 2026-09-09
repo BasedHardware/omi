@@ -707,6 +707,30 @@ test('compact recaps keep list overview speech when GET title is empty', () => {
       status: 'completed',
     }),
   ).toBe('Conversation title unavailable');
+  expect(
+    conversationRecapTitle({
+      id: 'recording:session-1',
+      title: `${'a'.repeat(80)}`,
+      summary: `${'a'.repeat(80)} later speech`,
+      status: 'completed',
+    }),
+  ).toBe(`${'a'.repeat(80)} later speech`);
+  expect(
+    conversationRecapTitle({
+      id: 'chat:named-session',
+      title: 'Hi',
+      summary: 'Hi there, here is the later turn',
+      status: 'in_progress',
+    }),
+  ).toBe('Hi');
+  expect(
+    conversationRecapTitle({
+      id: 'recording:',
+      title: 'Short title',
+      summary: 'Short title with later speech',
+      status: 'completed',
+    }),
+  ).toBe('Short title');
 });
 
 test('conversation status copy is not a raw wire token', () => {
