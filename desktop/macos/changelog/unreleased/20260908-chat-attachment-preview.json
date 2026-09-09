@@ -1,3 +1,0 @@
-{
-  "change": "Fixed sent chat attachments showing a blank placeholder once the picked screenshot's temporary file was removed"
-}
