@@ -1156,6 +1156,81 @@ describe("worker request contract", () => {
     ).toEqual(["padded-named"]);
   });
 
+  test("conversation list pagination continues from a space-padded named session id", async () => {
+    await insertChatMessage({
+      id: "page-named",
+      accountId: "test-account",
+      text: "named session",
+      createdAt: 3_000,
+      position: 1,
+      chatSessionId: "session-alpha",
+    });
+    await insertChatMessage({
+      id: "page-padded-named",
+      accountId: "test-account",
+      text: "padded named stays named",
+      createdAt: 2_700,
+      position: 2,
+      chatSessionId: " session-alpha ",
+    });
+    await insertChatMessage({
+      id: "page-main",
+      accountId: "test-account",
+      text: "main session",
+      createdAt: 2_600,
+      position: 3,
+      chatSessionId: null,
+    });
+
+    const first = await fetchWorker("/v1/conversations?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(first.status).toBe(200);
+    const firstPage = (await first.json()) as {
+      items: Array<{ id: string }>;
+      window: { nextCursor: string | null; hasMore: boolean };
+    };
+    expect(firstPage.items.map((item) => item.id)).toEqual([
+      "chat:session-alpha",
+    ]);
+    expect(firstPage.window.hasMore).toBe(true);
+    expect(firstPage.window.nextCursor).toBe("chat:session-alpha");
+
+    const second = await fetchWorker(
+      `/v1/conversations?limit=1&cursor=${encodeURIComponent(
+        firstPage.window.nextCursor!
+      )}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(second.status).toBe(200);
+    const secondPage = (await second.json()) as {
+      items: Array<{ id: string }>;
+      window: { nextCursor: string | null; hasMore: boolean };
+    };
+    expect(secondPage.items.map((item) => item.id)).toEqual([
+      "chat: session-alpha ",
+    ]);
+    expect(secondPage.window.hasMore).toBe(true);
+    expect(secondPage.window.nextCursor).toBe("chat: session-alpha ");
+
+    const third = await fetchWorker(
+      `/v1/conversations?limit=1&cursor=${encodeURIComponent(
+        secondPage.window.nextCursor!
+      )}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(third.status).toBe(200);
+    const thirdPage = (await third.json()) as {
+      items: Array<{ id: string }>;
+      window: { nextCursor: string | null; hasMore: boolean };
+    };
+    expect(thirdPage.items.map((item) => item.id)).toEqual([
+      MAIN_CONVERSATION_ID,
+    ]);
+    expect(thirdPage.window.hasMore).toBe(false);
+    expect(thirdPage.window.nextCursor).toBeNull();
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

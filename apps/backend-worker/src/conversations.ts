@@ -176,7 +176,7 @@ export function paginateConversations(
 ): ConversationPage | "invalid_cursor" {
   let start = 0;
   if (cursor !== undefined) {
-    if (!/^[\x21-\x7e]{1,1024}$/.test(cursor)) return "invalid_cursor";
+    if (cursor.length < 1 || cursor.length > 1024) return "invalid_cursor";
     const index = items.findIndex((item) => item.id === cursor);
     if (index === -1) return "invalid_cursor";
     start = index + 1;
