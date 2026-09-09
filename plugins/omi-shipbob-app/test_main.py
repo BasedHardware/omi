@@ -68,22 +68,22 @@ class RequestFailureTests(unittest.TestCase):
 
     def test_shared_request_reports_empty_http_errors_for_all_methods(self):
         for method in ("GET", "POST", "PUT", "DELETE"):
-            for status in (400, 500):
-                with self.subTest(method=method, status=status):
-                    response = Mock(status_code=status, text="")
+            for status, body in ((status, body) for status in (400, 500) for body in ("", " ", "\n", " \t\r\n")):
+                with self.subTest(method=method, status=status, body=body):
+                    response = Mock(status_code=status, text=body)
                     with patch.object(shipbob.requests, method.lower(), return_value=response):
                         result = shipbob.make_shipbob_request("test-user", method, "/test")
                     self.assertEqual(result["status_code"], status)
                     self.assertEqual(result["error"], f"ShipBob request failed (HTTP {status})")
 
     def test_cancellation_uses_actual_helper_and_never_confirms_http_failure(self):
-        for status, body in ((400, ""), (500, ""), (500, "upstream failure")):
+        for status, body in ((400, ""), (500, ""), (400, " "), (500, "\n"), (500, " \t\r\n"), (500, "upstream failure"), (500, " \nupstream failure\n ")):
             with self.subTest(status=status, body=body):
                 request = Mock(json=AsyncMock(return_value={"uid": "test-user", "wro_id": 12345}))
                 with patch.object(shipbob.requests, "post", return_value=Mock(status_code=status, text=body)) as post:
                     result = asyncio.run(shipbob.tool_cancel_wro(request))
                 self.assertIsNone(result.result)
-                self.assertEqual(result.error, "Failed to cancel WRO: " + (body or f"ShipBob request failed (HTTP {status})"))
+                self.assertEqual(result.error, "Failed to cancel WRO: " + (body if body.strip() else f"ShipBob request failed (HTTP {status})"))
                 post.assert_called_once()
                 self.assertTrue(post.call_args.args[0].endswith("/2.0/receiving/12345/cancel"))
 
