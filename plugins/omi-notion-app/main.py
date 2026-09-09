@@ -513,6 +513,10 @@ async def tool_get_page(request: Request):
 
         # Get page content (blocks)
         blocks = notion_api_request(uid, "GET", f"/blocks/{page_id}/children", params={"page_size": 50})
+        if not blocks or "error" in blocks:
+            status = blocks.get("status_code") if blocks else None
+            detail = f" (HTTP {status})" if isinstance(status, int) else ""
+            return ChatToolResponse(error=f"Failed to retrieve page content{detail}. Please try again.")
 
         title = extract_title(page)
         url = page.get("url", "")
