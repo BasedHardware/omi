@@ -28,10 +28,7 @@ from models import (
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 SOLAR_URL = "https://api.sunrise-sunset.org/json"
 REQUEST_TIMEOUT_SECONDS = 15.0
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 (Omi-World-Time/1.0)"
-)
+USER_AGENT = "omi-world-time-app/1.0 (https://omi.me)"
 
 
 # ---------------------------------------------------------------------------
