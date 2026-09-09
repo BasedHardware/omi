@@ -1020,6 +1020,9 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
+            DAILY_SUMMARY_SELECTION_MODE:
+              value: shadow
+              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
@@ -2243,6 +2246,9 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
+            DAILY_SUMMARY_SELECTION_MODE:
+              value: legacy
+              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
