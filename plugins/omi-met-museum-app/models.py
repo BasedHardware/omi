@@ -125,4 +125,3 @@ class ChatToolResponse(BaseModel):
         if "response" in data and "result" not in data:
             data["result"] = data.pop("response")
         super().__init__(**data)
-

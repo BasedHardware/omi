@@ -460,6 +460,3 @@ def test_rate_limiter_spoof_prevention(client, monkeypatch):
 
     # Ensure the spoofed IP was never tracked or exhausted
     assert spoofed_ip not in rate_limiter._records
-
-
-
