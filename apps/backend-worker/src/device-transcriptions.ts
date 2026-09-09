@@ -22,6 +22,44 @@ class TranscriptionInputError extends Error {
   }
 }
 
+const DEVICE_AUDIO_FAILURE_CODES = new Set([
+  "unsupported_codec",
+  "invalid_packet",
+  "packet_gap",
+  "invalid_opus",
+  "audio_too_large",
+  "empty_audio",
+  "invalid_session",
+  "invalid_audio_size",
+  "missing_audio",
+  "invalid_audio",
+]);
+
+export function projectListenTranscriptErrorCode(
+  code: string | null
+): string | null {
+  if (code === null) return null;
+  if (code === "attempt_limit" || code === "transcription_unavailable") {
+    return code;
+  }
+  if (code === "invalid_transcript" || code === "transcript_too_large") {
+    return "invalid_transcript";
+  }
+  if (DEVICE_AUDIO_FAILURE_CODES.has(code)) return "invalid_audio";
+  return "transcription_unavailable";
+}
+
+function persistListenTranscriptErrorCode(error: unknown): string {
+  if (error instanceof TranscriptionInputError) {
+    return (
+      projectListenTranscriptErrorCode(error.code) ??
+      "transcription_unavailable"
+    );
+  }
+  if (error instanceof DeviceAudioError) return "invalid_audio";
+  return "transcription_unavailable";
+}
+
 type Job = {
   session_id: string;
   account_id: string;
@@ -178,10 +216,7 @@ export async function processDeviceTranscriptions(
         )
         .bind(
           terminal ? "failed" : "queued",
-          error instanceof DeviceAudioError ||
-            error instanceof TranscriptionInputError
-            ? error.code
-            : "transcription_unavailable",
+          persistListenTranscriptErrorCode(error),
           Date.now() + Math.min(900_000, 30_000 * 2 ** job.attempts),
           Date.now(),
           job.session_id,
@@ -321,7 +356,7 @@ export function projectDeviceTranscription(
     segments,
     language: row.language,
     discardedLeadingPackets: row.discardedLeadingPackets,
-    errorCode: row.errorCode,
+    errorCode: projectListenTranscriptErrorCode(row.errorCode),
     updatedAt: row.updatedAt,
   };
 }

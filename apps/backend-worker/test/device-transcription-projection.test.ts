@@ -186,4 +186,80 @@ describe("device transcription client projection", () => {
     );
     expect(recordingListSpeech("", segments)).toBe("First words Later speech");
   });
+
+  test("GET maps DeviceAudioError codes to invalid_audio like production Listen", () => {
+    const failed = {
+      ...completed,
+      state: "failed" as const,
+      text: null,
+      segments: null,
+    };
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "unsupported_codec",
+      })
+    ).toMatchObject({
+      state: "failed",
+      text: null,
+      errorCode: "invalid_audio",
+    });
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "audio_too_large",
+      })?.errorCode
+    ).toBe("invalid_audio");
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "invalid_audio_size",
+      })?.errorCode
+    ).toBe("invalid_audio");
+  });
+
+  test("GET maps oversized transcripts to invalid_transcript like production TypeError", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        state: "failed",
+        text: null,
+        segments: null,
+        errorCode: "transcript_too_large",
+      })?.errorCode
+    ).toBe("invalid_transcript");
+  });
+
+  test("GET keeps production Listen error codes and does not leak unknown codes", () => {
+    const failed = {
+      ...completed,
+      state: "failed" as const,
+      text: null,
+      segments: null,
+    };
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "attempt_limit",
+      })?.errorCode
+    ).toBe("attempt_limit");
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "invalid_audio",
+      })?.errorCode
+    ).toBe("invalid_audio");
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "transcription_unavailable",
+      })?.errorCode
+    ).toBe("transcription_unavailable");
+    expect(
+      projectDeviceTranscription({
+        ...failed,
+        errorCode: "private unknown upstream detail",
+      })?.errorCode
+    ).toBe("transcription_unavailable");
+  });
 });

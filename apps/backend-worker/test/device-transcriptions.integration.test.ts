@@ -7,6 +7,7 @@ import {
 } from "../src/device-sessions";
 import {
   processDeviceTranscriptions,
+  projectDeviceTranscription,
   readDeviceTranscription,
 } from "../src/device-transcriptions";
 import { readConversations, toLegacyConversation } from "../src/conversations";
@@ -350,7 +351,12 @@ test("incomplete uploads never queue and malformed audio fails without provider 
   expect(calls).toBe(0);
   expect(
     await readDeviceTranscription(env.DB, "record-owner", session.id)
-  ).toMatchObject({ state: "failed", errorCode: "unsupported_codec" });
+  ).toMatchObject({ state: "failed", errorCode: "invalid_audio" });
+  expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({ state: "failed", errorCode: "invalid_audio" });
 });
 
 test("provider failures retry durably and expired leases fence late results", async () => {
@@ -415,7 +421,7 @@ test("non-ASCII oversized output terminates within D1 byte limits", async () => 
     await readDeviceTranscription(env.DB, "record-owner", session.id)
   ).toMatchObject({
     state: "failed",
-    errorCode: "transcript_too_large",
+    errorCode: "invalid_transcript",
     text: null,
   });
 });
