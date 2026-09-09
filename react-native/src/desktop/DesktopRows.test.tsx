@@ -1,11 +1,13 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
-import type {
-  ConversationProjection,
-  MemoryProjection,
+import {
+  formatTaskDue,
+  type ConversationProjection,
+  type MemoryProjection,
+  type TaskProjection,
 } from '../desktopReadClient';
-import {ConversationRow, ReadRow} from './DesktopRows';
+import {ConversationRow, ReadRow, TaskRow} from './DesktopRows';
 
 function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -163,4 +165,67 @@ test('Library rows keep chat last-turn overview off the timestamp meta', () => {
         node.props.children.includes(item.summary),
     ).length,
   ).toBe(0);
+});
+
+function taskItem(dueAt: number | null, completed = false): TaskProjection {
+  return {
+    kind: 'task',
+    id: 'task-due',
+    title: 'Review notes',
+    summary: '',
+    searchableText: 'Review notes',
+    completed,
+    completedAt: null,
+    dueAt,
+    owner: null,
+    source: 'omi',
+    provenance: [],
+    sortOrder: 0,
+    indentLevel: 0,
+    createdAt: null,
+    updatedAt: null,
+    revision: null,
+  };
+}
+
+test('Home and Tasks rows keep GET due dates instead of title-only', () => {
+  const dueAt = 1_767_225_600;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(dueAt)} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Review notes');
+  expect(copy).toContain(formatTaskDue(dueAt));
+  expect(copy).not.toContain('Completed');
+});
+
+test('completed Home and Tasks rows keep GET due dates', () => {
+  const dueAt = 1_767_225_600;
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TaskRow item={taskItem(dueAt, true)} />,
+    );
+  });
+  expect(textOf(renderer)).toContain(`Completed · ${formatTaskDue(dueAt)}`);
+});
+
+test('Home and Tasks rows with no due date say No due date', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(null)} />);
+  });
+  expect(textOf(renderer)).toContain('No due date');
+});
+
+test('a zero task due timestamp on Home and Tasks rows says Date unavailable instead of 1970', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<TaskRow item={taskItem(0)} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Date unavailable');
+  expect(copy).not.toContain('1970');
+  expect(copy).not.toContain('No due date');
 });

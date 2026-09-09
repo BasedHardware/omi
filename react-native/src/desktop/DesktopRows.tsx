@@ -8,6 +8,7 @@ import {
   conversationDisplayTitle,
   conversationListUsesListenOverview,
   conversationRecapTitle,
+  formatTaskDue,
   memoryDisplayBody,
   memoryDisplayTitle,
   projectionClockLabel,
@@ -138,9 +139,16 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
       <View
         style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
       />
-      <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
-        {taskDisplayTitle(item)}
-      </Text>
+      <View style={styles.rowCopy}>
+        <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
+          {taskDisplayTitle(item)}
+        </Text>
+        <Text style={styles.rowMeta}>
+          {item.completed
+            ? `Completed · ${formatTaskDue(item.dueAt)}`
+            : formatTaskDue(item.dueAt)}
+        </Text>
+      </View>
     </View>
   );
 });
