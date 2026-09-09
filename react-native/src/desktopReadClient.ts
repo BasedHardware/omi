@@ -295,12 +295,66 @@ export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }
 
+const CHAT_ATTACHMENT_MEDIA_COPY: Readonly<Record<string, string>> = {
+  'application/pdf': 'PDF',
+  'image/gif': 'GIF',
+  'image/jpeg': 'JPEG',
+  'image/png': 'PNG',
+  'image/webp': 'WebP',
+  'text/markdown': 'Markdown',
+  'text/plain': 'Text',
+};
+
+export function chatAttachmentMediaCopy(mediaType: string | undefined): string {
+  if (mediaType === undefined) {
+    return '';
+  }
+  const trimmed = visibleDisplayText(mediaType);
+  return trimmed === '' ? '' : CHAT_ATTACHMENT_MEDIA_COPY[trimmed] ?? '';
+}
+
+export function chatAttachmentSizeCopy(sizeBytes: number | undefined): string {
+  if (sizeBytes === undefined) {
+    return '';
+  }
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1) {
+    return 'Size unavailable';
+  }
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    const kb = sizeBytes / 1024;
+    return Number.isInteger(kb) ? `${kb} KB` : `${kb.toFixed(1)} KB`;
+  }
+  const mb = sizeBytes / (1024 * 1024);
+  return Number.isInteger(mb) ? `${mb} MB` : `${mb.toFixed(1)} MB`;
+}
+
+export function chatAttachmentCopy(attachment: {
+  displayName: string;
+  mediaType?: string;
+  sizeBytes?: number;
+}): string {
+  return [
+    chatAttachmentDisplayName(attachment.displayName),
+    chatAttachmentMediaCopy(attachment.mediaType),
+    chatAttachmentSizeCopy(attachment.sizeBytes),
+  ]
+    .filter(part => part !== '')
+    .join(' · ');
+}
+
 export function chatMessageDisplayText(
   message: {
     text: string;
     generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
     generationRetryable?: boolean;
-    attachments?: readonly {displayName: string}[];
+    attachments?: readonly {
+      displayName: string;
+      mediaType?: string;
+      sizeBytes?: number;
+    }[];
   },
   cancelledEmptyCopy = 'Response stopped',
 ): string {
@@ -311,7 +365,7 @@ export function chatMessageDisplayText(
   }
   const text = visibleDisplayText(message.text);
   const attachmentLines = (message.attachments ?? []).map(attachment =>
-    chatAttachmentDisplayName(attachment.displayName),
+    chatAttachmentCopy(attachment),
   );
   if (text !== '') {
     return attachmentLines.length > 0

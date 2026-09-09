@@ -1071,6 +1071,45 @@ test('empty chat bodies still show attachment names from history', () => {
       ],
     }),
   ).toBe('Response stopped');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'notes.txt',
+          mediaType: 'text/plain',
+          sizeBytes: 12,
+        },
+      ],
+    }),
+  ).toBe('notes.txt · Text · 12 B');
+  expect(
+    chatMessageDisplayText({
+      text: '  Hello  ',
+      generationOutcome: null,
+      attachments: [
+        {
+          displayName: 'meeting-notes.pdf',
+          mediaType: 'application/pdf',
+          sizeBytes: 2048,
+        },
+      ],
+    }),
+  ).toBe('Hello\nmeeting-notes.pdf · PDF · 2 KB');
+  expect(
+    chatMessageDisplayText({
+      text: '',
+      generationOutcome: 'completed',
+      attachments: [
+        {
+          displayName: ' \t\n',
+          mediaType: 'application/octet-stream',
+          sizeBytes: 0,
+        },
+      ],
+    }),
+  ).toBe('Attachment name unavailable · Size unavailable');
 });
 
 test('unknown chat senders stay visible instead of failing the history page', () => {
