@@ -4,3 +4,4 @@
   the CLI.
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`quickstart.zh-TW.md`](quickstart.zh-TW.md) — 繁體中文快速入門指南 (Traditional Chinese Quickstart).
