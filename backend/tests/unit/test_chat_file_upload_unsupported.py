@@ -169,7 +169,8 @@ def test_unsupported_archive_is_rejected_at_attach(chat_client, route, monkeypat
         ),
     ],
 )
-def test_documented_documents_upload_as_user_data(chat_client, monkeypatch, filename, mime, payload):
+@pytest.mark.parametrize('route', ['/v2/files', '/v1/files'])
+def test_documented_documents_upload_as_user_data(chat_client, monkeypatch, route, filename, mime, payload):
     client, module = chat_client
     chat_file = sys.modules['utils.other.chat_file']
     created: dict[str, object] = {}
@@ -180,7 +181,7 @@ def test_documented_documents_upload_as_user_data(chat_client, monkeypatch, file
 
     monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=_create))
 
-    response = client.post('/v2/files', files={'files': (filename, payload, mime)})
+    response = client.post(route, files={'files': (filename, payload, mime)})
 
     assert response.status_code == 200
     assert response.json()[0]['openai_file_id'] == 'file-doc'

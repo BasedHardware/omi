@@ -113,6 +113,70 @@ CHAT_FILE_DOCUMENT_EXTENSIONS: frozenset[str] = frozenset(
         'vcf',
         'vtt',
         'xml',
+        # The provider's Text-and-code MIME column also documents types whose
+        # canonical suffixes are missing from its Extensions column (e.g.
+        # 'text/x-rust' -> 'rs', 'text/x-yaml' -> 'yaml'). Keep them
+        # allowlisted so the extension-first branch cannot reject a file whose
+        # MIME the provider explicitly documents.
+        'astro',
+        'awk',
+        'c++',
+        'clj',
+        'cmake',
+        'cs',
+        'dart',
+        'diff',
+        'dockerfile',
+        'ejs',
+        'elixir',
+        'erb',
+        'erlang',
+        'go',
+        'gradle',
+        'graphql',
+        'groovy',
+        'hbs',
+        'hcl',
+        'hs',
+        'ini',
+        'j2',
+        'jade',
+        'java',
+        'jl',
+        'json5',
+        'jsx',
+        'kt',
+        'lisp',
+        'liquid',
+        'lua',
+        'm',
+        'mk',
+        'mustache',
+        'ndjson',
+        'patch',
+        'php',
+        'ps1',
+        'proto',
+        'pug',
+        'r',
+        'rb',
+        'rs',
+        'sass',
+        'scala',
+        'scss',
+        'sh',
+        'swift',
+        'terraform',
+        'tf',
+        'tex',
+        'tmpl',
+        'toml',
+        'ts',
+        'tsx',
+        'vbs',
+        'yaml',
+        'yml',
+        'zsh',
     }
 )
 CHAT_FILE_DOCUMENT_MIME_TYPES: frozenset[str] = frozenset(
@@ -258,19 +322,6 @@ def _chat_file_normalized_mime(mime_type: Optional[str]) -> str:
     return mime
 
 
-def chat_file_is_pdf(name: str, mime_type: Optional[str]) -> bool:
-    """True when the filename extension or MIME identifies a PDF.
-
-    Extension is checked first and wins when present; MIME is the fallback.
-    ``mimetypes.guess_type`` returning None is stored as the string ``'None'``
-    by ``File.get_mime_type`` and must not count as a MIME match.
-    """
-    ext = Path(name or '').suffix.lower()
-    if ext:
-        return ext == '.pdf'
-    return _chat_file_normalized_mime(mime_type) == 'application/pdf'
-
-
 def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
     """True for any OpenAI-allowlisted chat document type, including PDF.
 
@@ -296,9 +347,6 @@ class FileChat(BaseModel):
 
     def is_image(self):
         return self.mime_type.startswith("image")
-
-    def is_pdf(self) -> bool:
-        return chat_file_is_pdf(self.name, self.mime_type)
 
     def is_document(self) -> bool:
         return chat_file_is_document(self.name, self.mime_type)

@@ -15,7 +15,7 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
-from models.chat import ChatSession, FileChat, chat_file_is_document, chat_file_is_pdf
+from models.chat import ChatSession, FileChat, chat_file_is_document
 from utils.executors import db_executor, run_blocking
 from utils.llm.gateway_client import (
     file_chat_auto_lane_id,
@@ -206,9 +206,6 @@ class File:
 
     def is_image(self) -> bool:
         return self.mime_type.startswith("image")
-
-    def is_pdf(self) -> bool:
-        return chat_file_is_pdf(str(self.file_path), self.mime_type)
 
     def is_document(self) -> bool:
         return chat_file_is_document(str(self.file_path), self.mime_type)

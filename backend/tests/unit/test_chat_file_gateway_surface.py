@@ -38,7 +38,6 @@ def _gateway_mode(monkeypatch):
 
 def _vision_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: False,
         is_document=lambda: False,
         is_image=lambda: True,
         openai_file_id='file-1',
@@ -50,7 +49,6 @@ def _vision_files():
 
 def _pdf_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: True,
         is_document=lambda: True,
         is_image=lambda: False,
         openai_file_id='file-2',
@@ -62,7 +60,6 @@ def _pdf_files():
 
 def _txt_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: False,
         is_document=lambda: True,
         is_image=lambda: False,
         openai_file_id='file-3',
