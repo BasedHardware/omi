@@ -70,21 +70,27 @@ static NSView *OmiMakeLiquidGlass(NSRect frame, CGFloat radius)
 {
   [super layout];
   self.wantsLayer = YES;
-  if (!self.fadeVisible || NSHeight(self.bounds) <= 0) {
+  CGFloat height = NSHeight(self.bounds);
+  if (!self.fadeVisible || height <= 0) {
     self.layer.mask = nil;
     return;
   }
   if (self.contentMask == nil) {
     self.contentMask = [CAGradientLayer layer];
-    self.contentMask.colors = @[(id)NSColor.blackColor.CGColor,
-        (id)NSColor.blackColor.CGColor, (id)NSColor.clearColor.CGColor];
+    self.contentMask.colors = @[
+      (id)NSColor.clearColor.CGColor, (id)NSColor.blackColor.CGColor,
+      (id)NSColor.blackColor.CGColor, (id)NSColor.clearColor.CGColor
+    ];
   }
+  CGFloat fade = MIN(48.0, height / 4.0);
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
   self.contentMask.frame = self.bounds;
   self.contentMask.startPoint = CGPointMake(0.5, self.isFlipped ? 0 : 1);
   self.contentMask.endPoint = CGPointMake(0.5, self.isFlipped ? 1 : 0);
-  self.contentMask.locations = @[@0, @(MAX(0, 1 - 40 / NSHeight(self.bounds))), @1];
+  self.contentMask.locations = @[
+    @0, @(fade / height), @(MAX(fade / height, 1 - fade / height)), @1
+  ];
   self.layer.mask = self.contentMask;
   [CATransaction commit];
 }

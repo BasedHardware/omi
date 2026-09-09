@@ -409,7 +409,7 @@ test('keyboard search from Chat focuses the persistent omnibar', () => {
   const renderer = renderDesktop();
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -464,7 +464,7 @@ test('Chat shows disabled Sending until there is an actual cancellable request',
   });
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
   const pending = renderer.root.find(
@@ -498,7 +498,7 @@ test('a task search with no matches does not claim there are no tasks', () => {
   expect(renderedText(renderer)).not.toContain('No tasks yet');
 });
 
-test('empty Ask is disabled and Enter cannot send, while its mode icon still opens Chat', () => {
+test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () => {
   const onSend = jest.fn();
   const renderer = renderDesktop({draft: '   ', onSend});
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -519,6 +519,12 @@ test('empty Ask is disabled and Enter cannot send, while its mode icon still ope
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
     'Ask Omi',
   );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Screen history');
 });
 
 test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
@@ -678,7 +684,7 @@ test('only an explicit Ask submission resumes following after reading earlier me
     });
     act(() =>
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+        .find(node => node.props.accessibilityLabel === 'Chat')
         .props.onPress(),
     );
     const list = () => renderer.root.findByType(FlatList);
@@ -862,7 +868,11 @@ test('desktop chat renders a truthful failed terminal state', () => {
       },
     ],
   });
-  act(() => pressText(renderer, 'Continue chat'));
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Chat')
+      .props.onPress(),
+  );
   expect(renderedText(renderer)).toContain('Response failed. Try again.');
   expect(
     renderer.root.findAll(
@@ -876,7 +886,7 @@ test('desktop chat can load earlier messages', () => {
   const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
   act(() => {
@@ -887,7 +897,7 @@ test('desktop chat can load earlier messages', () => {
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
 });
 
-test('Continue chat opens full loaded history with one persistent omnibar', () => {
+test('Chat destination opens full loaded history with one persistent omnibar', () => {
   const messages = Array.from({length: 5}, (_, index) => ({
     id: `chat-${index}`,
     text: `Loaded message ${index}`,
@@ -897,7 +907,11 @@ test('Continue chat opens full loaded history with one persistent omnibar', () =
   }));
   const renderer = renderDesktop({messages});
   expect(renderedText(renderer)).not.toContain('Loaded message');
-  act(() => pressText(renderer, 'Continue chat'));
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Chat')
+      .props.onPress(),
+  );
   for (const message of messages) {
     expect(renderedText(renderer)).toContain(message.text);
   }
@@ -1150,7 +1164,7 @@ test('chat transport errors appear only in the lower Chat view', () => {
   );
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
   expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');

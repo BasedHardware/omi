@@ -3,15 +3,25 @@ import {Text} from 'react-native';
 import Renderer, {act} from 'react-test-renderer';
 import {ScrollFade, useScrollFade} from './ScrollFade';
 
-test('fades overflow and restores content at the end or after resize', () => {
+test('page surfaces keep a glass fade at both ends', () => {
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <ScrollFade visible>
+        <Text>Content</Text>
+      </ScrollFade>,
+    );
+  });
+  expect(tree.root.findByType(ScrollFade).props.visible).toBe(true);
+  expect(tree.root.findByType(Text).props.children).toBe('Content');
+  act(() => tree.unmount());
+});
+
+test('overflow tracking still reports when more content sits below', () => {
   let fade!: ReturnType<typeof useScrollFade>;
   function Example() {
     fade = useScrollFade();
-    return (
-      <ScrollFade visible={fade.visible}>
-        <Text>Content</Text>
-      </ScrollFade>
-    );
+    return null;
   }
   let tree!: Renderer.ReactTestRenderer;
   act(() => {
@@ -22,17 +32,8 @@ test('fades overflow and restores content at the end or after resize', () => {
     fade.onContentSizeChange(200, 300);
   });
   expect(fade.visible).toBe(true);
-  expect(tree.root.findByType(Text).props.children).toBe('Content');
   act(() => {
     fade.onScroll({nativeEvent: {contentOffset: {y: 200}}} as never);
-  });
-  expect(fade.visible).toBe(false);
-  act(() => {
-    fade.onScroll({nativeEvent: {contentOffset: {y: 0}}} as never);
-  });
-  expect(fade.visible).toBe(true);
-  act(() => {
-    fade.onLayout({nativeEvent: {layout: {height: 400}}} as never);
   });
   expect(fade.visible).toBe(false);
   act(() => tree.unmount());

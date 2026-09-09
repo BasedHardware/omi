@@ -149,7 +149,7 @@ async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
   }
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .find(node => node.props.accessibilityLabel === 'Chat')
       .props.onPress(),
   );
 }

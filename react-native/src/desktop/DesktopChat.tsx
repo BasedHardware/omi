@@ -137,7 +137,7 @@ export function DesktopChat({
           <X size={18} color={token.color.ink} />
         </FocusPressable>
       </View>
-      <ScrollFade visible={fade.visible} style={styles.history}>
+      <ScrollFade visible style={styles.history}>
         <FlatList
           maintainVisibleContentPosition={
             following ? undefined : {minIndexForVisible: 1}
