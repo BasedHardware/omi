@@ -62,6 +62,7 @@ omi --json memory list | jq '.[] | {id, content}'
 Pretty output displays returned text literally, including square brackets and
 emoji-like codes such as `:warning:`. Styling applies to the table layout, not
 to the contents of your memories or conversations.
+Tables without predefined columns include fields from every row, in first-seen order.
 
 > Looking for localized guides? See the [🇯🇵 日本語クイックスタート (Japanese Quickstart)](examples/quickstart.ja.md).
 
