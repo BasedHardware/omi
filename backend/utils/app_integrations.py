@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import List
 import os
 import time
@@ -18,6 +19,7 @@ from utils.http_client import (
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
+import database.mentor_gate_state as mentor_gate_state
 
 import database.dev_api_key as dev_api_key_db
 from database import mem_db
@@ -497,6 +499,165 @@ def _proactive_daily_cap_reached(uid: str) -> bool:
 
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 
+# ---------------------------------------------------------------------------
+# Mentor gate debounce (kill switch: MENTOR_GATE_DEBOUNCE_ENABLED, default off)
+# ---------------------------------------------------------------------------
+#
+# MENTOR_RATE_LIMIT_SECONDS above throttles what the user SEES; it starts only
+# after a notification is actually sent, so it does not bound the gate LLM call
+# that decides whether to send one. Nothing did. The gate ran on every buffered
+# segment batch, which for a user in a long meeting is a ~22k-token evaluation
+# every time ten new segments land, and in the gateway ledger for
+# 2026-09-01..09-06 that was 34,806 calls/day — the largest paid-tier OpenAI
+# line in the product.
+#
+# This adds the missing throttle on the evaluation itself: a minimum amount of
+# genuinely new speech AND a minimum wall-clock gap since the last evaluation
+# for this user, plus a per-user daily ceiling for the heavy tail (the top 10%
+# of mentor-active paid users produce 44% of all gate calls). Developers are
+# exempt from the daily ceiling for the same reason they are exempt from the
+# notification cap (#3346): building an app must not be throttled.
+MENTOR_GATE_DEBOUNCE_ENABLED_ENV = 'MENTOR_GATE_DEBOUNCE_ENABLED'
+MENTOR_GATE_MIN_NEW_WORDS_ENV = 'MENTOR_GATE_MIN_NEW_WORDS'
+MENTOR_GATE_MIN_SECONDS_ENV = 'MENTOR_GATE_MIN_SECONDS'
+MENTOR_GATE_DAILY_CAP_ENV = 'MENTOR_GATE_DAILY_CAP'
+
+MENTOR_GATE_MIN_NEW_WORDS_DEFAULT = 120
+MENTOR_GATE_MIN_SECONDS_DEFAULT = 90
+MENTOR_GATE_DAILY_CAP_DEFAULT = 60
+
+
+def _mentor_gate_debounce_enabled() -> bool:
+    """Default OFF. This changes when the user is evaluated, so it ships dark."""
+    value = os.getenv(MENTOR_GATE_DEBOUNCE_ENABLED_ENV)
+    if value is None:
+        return False
+    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def _mentor_gate_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    """Read a tuning knob, clamped. A typo must not disable the mentor entirely."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
+def _mentor_conversation_word_count(conversation_messages: list[dict]) -> int:
+    # User speech only. The gate evaluates what THE USER said, and the buffer
+    # carries the other speaker too: a long other-speaker exchange must not
+    # satisfy MIN_NEW_WORDS on its own.
+    return sum(
+        len(str(message.get('text') or '').split()) for message in conversation_messages if message.get('is_user')
+    )
+
+
+def _mentor_gate_tail_anchor(conversation_messages: list[dict]) -> list | None:
+    """[timestamp, word_count] of the buffer's last user message, or None."""
+    for message in reversed(conversation_messages):
+        if message.get('is_user'):
+            return [float(message.get('timestamp') or 0), len(str(message.get('text') or '').split())]
+    return None
+
+
+def _mentor_gate_new_words(conversation_messages: list[dict], state: dict, word_count: int) -> int:
+    """User words that arrived after the last evaluation.
+
+    The buffer's tail user message at record time is the anchor. If it is still
+    present, everything after it — plus whatever 2-second coalescing appended to
+    it — is the new speech, and nothing else is. If it is gone, the buffer either
+    restarted (silence clears it) or evicted it from the 50-message cap — and an
+    evicted tail anchor means every retained message is newer than it, so the
+    whole buffer is post-evaluation speech either way. Both read as all-new. A
+    bare word-count delta cannot tell these apart from retained history, which
+    is exactly how a shrinking buffer used to replay old speech as new.
+    """
+    anchor = state.get('anchor')
+    if isinstance(anchor, (list, tuple)) and len(anchor) == 2:
+        anchor_ts, anchor_words = float(anchor[0]), int(anchor[1])
+        for index in range(len(conversation_messages) - 1, -1, -1):
+            message = conversation_messages[index]
+            if not message.get('is_user'):
+                continue
+            if float(message.get('timestamp') or 0) != anchor_ts:
+                continue
+            current_words = len(str(message.get('text') or '').split())
+            if current_words < anchor_words:
+                # Same recording offset but less speech: a restarted
+                # conversation that happens to reuse the offset, not the anchor.
+                continue
+            appended = current_words - anchor_words
+            after = sum(
+                len(str(m.get('text') or '').split()) for m in conversation_messages[index + 1 :] if m.get('is_user')
+            )
+            return appended + after
+        return word_count
+    # Pre-anchor record (or malformed state): keep the old delta heuristic.
+    previous_words = int(state.get('words') or 0)
+    return word_count - previous_words if word_count >= previous_words else word_count
+
+
+def _record_mentor_gate_evaluation(
+    uid: str, *, now: float, word_count: int, previous: dict | None, conversation_messages: list[dict]
+) -> None:
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    count = 1
+    if previous and previous.get('day') == today:
+        count = int(previous.get('count') or 0) + 1
+    mentor_gate_state.record(
+        uid,
+        {
+            'ts': int(now),
+            'words': word_count,
+            'day': today,
+            'count': count,
+            'anchor': _mentor_gate_tail_anchor(conversation_messages),
+        },
+    )
+
+
+def _mentor_gate_debounce_skip_reason(
+    uid: str, state: dict | None, *, now: float, word_count: int, conversation_messages: list[dict]
+) -> str | None:
+    """Why this evaluation should be skipped, or None to evaluate.
+
+    Returns a reason string rather than a bool so the caller can emit it: the
+    whole point of the change is that its effect is measurable from the logs
+    before anyone trusts the ledger delta.
+    """
+    min_new_words = _mentor_gate_int_env(
+        MENTOR_GATE_MIN_NEW_WORDS_ENV, MENTOR_GATE_MIN_NEW_WORDS_DEFAULT, minimum=0, maximum=10000
+    )
+
+    if state is None:
+        # First evaluation for this user: there is no prior evaluation time to
+        # wait out, but a handful of words is still not "genuinely new speech"
+        # worth a ~22k-token evaluation — apply the word floor to this batch too.
+        if word_count < min_new_words:
+            return 'min_new_words'
+        return None
+
+    elapsed = now - float(state.get('ts') or 0)
+    if elapsed < _mentor_gate_int_env(
+        MENTOR_GATE_MIN_SECONDS_ENV, MENTOR_GATE_MIN_SECONDS_DEFAULT, minimum=0, maximum=3600
+    ):
+        return 'min_seconds'
+
+    new_words = _mentor_gate_new_words(conversation_messages, state, word_count)
+    if new_words < min_new_words:
+        return 'min_new_words'
+
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if state.get('day') == today:
+        cap = _mentor_gate_int_env(MENTOR_GATE_DAILY_CAP_ENV, MENTOR_GATE_DAILY_CAP_DEFAULT, minimum=1, maximum=100000)
+        if int(state.get('count') or 0) >= cap and not _is_developer(uid):
+            return 'daily_eval_cap'
+
+    return None
+
 
 def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
     """
@@ -532,6 +693,60 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     if _proactive_daily_cap_reached(uid):
         logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
         return None
+
+    # 3b. Debounce the LLM evaluation itself (dark by default). The checks above
+    # only bound what is SENT; without this the gate is evaluated on every buffered
+    # segment batch even when nothing new was said.
+    gate_state = None
+    gate_now = time.time()
+    gate_word_count = _mentor_conversation_word_count(conversation_messages)
+    debounce_enabled = _mentor_gate_debounce_enabled()
+    if debounce_enabled:
+        gate_state = mentor_gate_state.read(uid)
+        skip_reason = _mentor_gate_debounce_skip_reason(
+            uid, gate_state, now=gate_now, word_count=gate_word_count, conversation_messages=conversation_messages
+        )
+        if skip_reason:
+            # Structured so the saved evaluations are countable in Cloud Logging
+            # without waiting for the billing ledger.
+            logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
+            return None
+        # Serialize eligibility + recording across concurrent same-user workers
+        # (two hosts, or two threads of one). The mirror-read above answers only
+        # "evaluated recently?"; the authoritative decision below runs under a
+        # short-lived claim so two workers cannot both pass and double-bill the
+        # gate LLM call. Contention (claim held) skips this batch — the buffer
+        # keeps accumulating, so the words are only delayed, not lost — while a
+        # claim *error* falls open: a Redis hiccup must not silence the mentor,
+        # and the TTL bounds a holder that crashes.
+        if not mentor_gate_state.claim(uid):
+            logger.info(f"mentor_gate_debounce skipped uid={uid} reason=claim_busy words={gate_word_count}")
+            return None
+        try:
+            # Always re-read the authority under the claim — the mirror answer
+            # (including "no record") can be stale the moment another host
+            # records, and this re-check is what makes the decision genuinely
+            # single-writer.
+            gate_state = mentor_gate_state.read_authoritative(uid)
+            skip_reason = _mentor_gate_debounce_skip_reason(
+                uid,
+                gate_state,
+                now=gate_now,
+                word_count=gate_word_count,
+                conversation_messages=conversation_messages,
+            )
+            if skip_reason:
+                logger.info(f"mentor_gate_debounce skipped uid={uid} reason={skip_reason} words={gate_word_count}")
+                return None
+            _record_mentor_gate_evaluation(
+                uid,
+                now=gate_now,
+                word_count=gate_word_count,
+                previous=gate_state,
+                conversation_messages=conversation_messages,
+            )
+        finally:
+            mentor_gate_state.release(uid)
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
     try:
