@@ -3052,6 +3052,9 @@ test("registerUserMcpTools: a connecting server gets neutral frozen wording, and
     if (previous === undefined) delete process.env.OMI_LOCAL_MCP_FILE; else process.env.OMI_LOCAL_MCP_FILE = previous;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
 // omiProvider — conditional "omi-local" registration
 // ---------------------------------------------------------------------------
 

@@ -134,7 +134,7 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         default:
           return .failed(.agentRuntime)
         }
-      case .failedToStart:
+      case .failedToStart, .localConfigMissing:
         return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
         .processExited, .restarting:

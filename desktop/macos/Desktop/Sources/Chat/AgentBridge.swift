@@ -2126,7 +2126,7 @@ enum BridgeError: LocalizedError {
       return failure.userMessage == exactCode || failure.technicalMessage == exactCode
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
-      .requestAlreadyActive, .quotaExceeded, .authMissing:
+      .requestAlreadyActive, .quotaExceeded, .authMissing, .localConfigMissing:
       return false
     }
   }
@@ -2145,7 +2145,7 @@ enum BridgeError: LocalizedError {
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
-      .requestAlreadyActive, .quotaExceeded:
+      .requestAlreadyActive, .quotaExceeded, .localConfigMissing:
       return false
     }
   }

@@ -1254,7 +1254,11 @@ describe("PiMonoAdapter local provider", () => {
     );
   });
 
-  it("regression: default provider still maps Claude ids to omi-sonnet/omi-opus", async () => {
+  it("regression: default provider still maps Claude ids to omi-sonnet", async () => {
+    // MODEL_MAP consolidated every claude-* id (including opus variants) to
+    // "omi-sonnet" upstream of this branch — pi-mono-extension's "omi"
+    // provider registers only that one model now. This asserts the local
+    // provider addition didn't disturb that existing mapping.
     const config: HarnessConfig = { authToken: "test-token" };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
     const sendCommand = vi.fn();
@@ -1266,7 +1270,7 @@ describe("PiMonoAdapter local provider", () => {
       expect.objectContaining({
         type: "set_model",
         provider: "omi",
-        modelId: "omi-opus",
+        modelId: "omi-sonnet",
       })
     );
   });

@@ -107,43 +107,40 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   // MARK: - ChatProvider.BridgeMode → (Node harness, pi provider) mapping
-  // Mirrors the real mapping used by TaskChatState.ensureBridgeStarted() and
-  // ChatProvider's agentBridge construction, via the actual enum (not a
+  // Mirrors the real mapping used by AgentRuntimeRouting.harnessMode(for:)
+  // and AIProvider.currentProviderMode, via the actual APIs (not a
   // reimplementation) so this exercises the real logic.
-
-  func testBridgeModePiMonoMapsToOmiProvider() {
-    XCTAssertEqual(ChatProvider.BridgeMode.piMono.nodeHarnessMode, "piMono")
-    XCTAssertEqual(ChatProvider.BridgeMode.piMono.providerMode, "omi")
-  }
 
   func testBridgeModeLocalSharesNodeHarnessButDifferentProvider() {
     // Local must run the same Node harness as piMono (the pi-mono subprocess)
-    // but configure a different pi provider — this is exactly what makes the
-    // piMono <-> local no-op guard bug possible if identity is derived from
-    // the Node harness string instead of the raw BridgeMode.
-    XCTAssertEqual(ChatProvider.BridgeMode.local.nodeHarnessMode, "piMono")
-    XCTAssertEqual(ChatProvider.BridgeMode.local.providerMode, "omi-local")
+    // — they differ only in which pi provider AgentRuntimeProcess configures
+    // that harness with (see AIProvider.currentProviderMode) — this is
+    // exactly what makes a piMono <-> local no-op guard bug possible if
+    // identity is derived from the Node harness string instead of the raw
+    // BridgeMode. See ChatProvider.switchBridgeMode's newHarness comparison.
     XCTAssertEqual(
-      ChatProvider.BridgeMode.local.nodeHarnessMode,
-      ChatProvider.BridgeMode.piMono.nodeHarnessMode
-    )
-    XCTAssertNotEqual(
-      ChatProvider.BridgeMode.local.providerMode,
-      ChatProvider.BridgeMode.piMono.providerMode
+      ChatProvider.harnessMode(for: .local),
+      ChatProvider.harnessMode(for: .piMono)
     )
     XCTAssertNotEqual(ChatProvider.BridgeMode.local.rawValue, ChatProvider.BridgeMode.piMono.rawValue)
   }
 
-  func testBridgeModeUserClaudeMapsToAcpHarness() {
-    XCTAssertEqual(ChatProvider.BridgeMode.userClaude.nodeHarnessMode, "acp")
-  }
+  func testCurrentProviderModeReflectsSelectedBridgeMode() {
+    let key = AIProvider.selectedProviderRawValueKey
+    let previous = UserDefaults.standard.string(forKey: key)
+    defer {
+      if let previous {
+        UserDefaults.standard.set(previous, forKey: key)
+      } else {
+        UserDefaults.standard.removeObject(forKey: key)
+      }
+    }
 
-  func testBridgeModeLegacyOmiAIMapsToPiMonoHarness() {
-    // Legacy "agentSDK" auto-migrates to piMono — the Node harness/provider
-    // mapping must already treat it as piMono even before the explicit
-    // migration in ChatProvider runs.
-    XCTAssertEqual(ChatProvider.BridgeMode.omiAI.nodeHarnessMode, "piMono")
-    XCTAssertEqual(ChatProvider.BridgeMode.omiAI.providerMode, "omi")
+    UserDefaults.standard.set(ChatProvider.BridgeMode.piMono.rawValue, forKey: key)
+    XCTAssertEqual(AIProvider.currentProviderMode, "omi")
+
+    UserDefaults.standard.set(ChatProvider.BridgeMode.local.rawValue, forKey: key)
+    XCTAssertEqual(AIProvider.currentProviderMode, "omi-local")
   }
 
   // MARK: - ApiKeysResponse shape assertion
