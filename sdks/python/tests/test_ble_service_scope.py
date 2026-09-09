@@ -112,10 +112,15 @@ def test_listen_disambiguates_between_multiple_services(monkeypatch):
     asyncio.run(_test())
 
 
-def test_listen_raises_bleak_error_when_service_missing():
+def test_listen_raises_bleak_error_when_service_missing(monkeypatch):
     async def _test():
         collection = FakeServiceCollection()
         client = MockBleakClientWithServices("dev-1", collection)
+
+        async def fake_sleep(sec):
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
 
         with patch("omi.ble.BleakClient", return_value=client):
             with pytest.raises(BleakError, match="Service .* was not found"):
@@ -124,16 +129,40 @@ def test_listen_raises_bleak_error_when_service_missing():
     asyncio.run(_test())
 
 
-def test_listen_raises_bleak_error_when_characteristic_missing():
+def test_listen_raises_bleak_error_when_characteristic_missing(monkeypatch):
     async def _test():
         collection = FakeServiceCollection()
         srv = FakeService(OMI_SERVICE_UUID)
         collection.add_service(srv)
         client = MockBleakClientWithServices("dev-1", collection)
 
+        async def fake_sleep(sec):
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
         with patch("omi.ble.BleakClient", return_value=client):
             with pytest.raises(BleakError, match="Characteristic .* was not found in service"):
                 await listen("dev-1", lambda data: None, service_uuid=OMI_SERVICE_UUID, char_uuid="missing-char")
+
+    asyncio.run(_test())
+
+
+def test_listen_unscoped_by_default_preserves_backward_compatibility(monkeypatch):
+    async def _test():
+        collection = FakeServiceCollection()
+        client = MockBleakClientWithServices("dev-1", collection)
+
+        async def fake_sleep(sec):
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+        with patch("omi.ble.BleakClient", return_value=client):
+            with pytest.raises(asyncio.CancelledError):
+                await listen("dev-1", lambda data: None, char_uuid=AUDIO_DATA_UUID)
+
+        assert client.notified_target == AUDIO_DATA_UUID
 
     asyncio.run(_test())
 

@@ -39,7 +39,7 @@ async def listen(
     on_packet: AsyncPacketHandler,
     *,
     char_uuid: str = AUDIO_DATA_UUID,
-    service_uuid: str = OMI_SERVICE_UUID,
+    service_uuid: Optional[str] = None,
 ) -> None:
     """Connect and notify on audio characteristic until cancelled."""
 
@@ -70,7 +70,7 @@ async def listen_payload(
     on_payload: AsyncPacketHandler,
     *,
     char_uuid: str = AUDIO_DATA_UUID,
-    service_uuid: str = OMI_SERVICE_UUID,
+    service_uuid: Optional[str] = None,
 ) -> None:
     async def wrapped(packet: bytes) -> None:
         if len(packet) <= PACKET_HEADER_BYTES:
