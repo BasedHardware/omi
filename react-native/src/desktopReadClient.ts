@@ -282,6 +282,15 @@ export function appDisplaySource(app: {
   return description !== '' ? description : 'App details unavailable';
 }
 
+export function appDisplayAttribution(app: {
+  author: string;
+  category: string;
+}): string {
+  return [appCategoryCopy(app.category), visibleDisplayText(app.author)]
+    .filter(part => part !== '')
+    .join(' · ');
+}
+
 export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }

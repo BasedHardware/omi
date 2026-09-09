@@ -11,6 +11,7 @@ import {
 import {
   appDisplayName,
   appDisplaySource,
+  appDisplayAttribution,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -318,15 +319,24 @@ function tilesFromCatalog(
   apps: CloudApp[],
   installKnown: boolean,
 ): AppTileModel[] {
-  return apps.map(app => ({
-    Icon: Puzzle,
-    id: app.id,
-    name: appDisplayName(app.name),
-    description: visibleDisplayText(app.description),
-    source: appDisplaySource(app),
-    status: cloudAppStatus(app, installKnown),
-    enabled: app.enabled,
-  }));
+  return apps.map(app => {
+    const description = visibleDisplayText(app.description);
+    const attribution = appDisplayAttribution(app);
+    return {
+      Icon: Puzzle,
+      id: app.id,
+      name: appDisplayName(app.name),
+      description,
+      source:
+        attribution !== ''
+          ? attribution
+          : description !== ''
+          ? ''
+          : appDisplaySource(app),
+      status: cloudAppStatus(app, installKnown),
+      enabled: app.enabled,
+    };
+  });
 }
 
 function AppTile({

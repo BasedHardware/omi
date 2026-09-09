@@ -14,6 +14,7 @@ import {
   developerWebhookTypeCopy,
   appCategoryCopy,
   appDisplaySource,
+  appDisplayAttribution,
   appDisplayName,
   deviceDisplayName,
   accountFieldCopy,
@@ -927,6 +928,33 @@ test('empty app source stays visible instead of a blank meta line', () => {
       description: '  Calendar sync  ',
     }),
   ).toBe('Calendar sync');
+});
+
+test('app attribution keeps category when an author is present', () => {
+  expect(
+    appDisplayAttribution({
+      author: '  Omi  ',
+      category: 'productivity',
+    }),
+  ).toBe('Productivity · Omi');
+  expect(
+    appDisplayAttribution({
+      author: '',
+      category: 'productivity',
+    }),
+  ).toBe('Productivity');
+  expect(
+    appDisplayAttribution({
+      author: 'Omi',
+      category: '',
+    }),
+  ).toBe('Omi');
+  expect(
+    appDisplayAttribution({
+      author: ' \t\n',
+      category: ' \t',
+    }),
+  ).toBe('');
 });
 
 test('empty app names stay visible instead of a blank title', () => {

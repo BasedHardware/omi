@@ -1917,6 +1917,46 @@ test('Apps gallery keeps GET description when an author is present', async () =>
   ).toBe(0);
 });
 
+test('Apps gallery keeps GET category when an author is present', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-1',
+        name: 'Catalog fixture app',
+        description: 'Calendar sync for the workday.',
+        category: 'productivity',
+        author: 'Omi',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Productivity · Omi');
+  expect(tree).toContain('Calendar sync for the workday.');
+  expect(tree).not.toContain('productivity');
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(
