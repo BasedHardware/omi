@@ -50,6 +50,32 @@ def test_local_configure_persists_profile_config(config_path: Path, cli_runner) 
     assert profile.local_token == FAKE_LOCAL_TOKEN
 
 
+def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli_runner) -> None:
+    """Rich markup in a profile name must be escaped in the configure message.
+
+    `omi local configure` prints the profile name inside a Rich-markup
+    message; a profile named 'bad[/bold]' would otherwise crash the render
+    after the config had already been saved.
+    """
+    tricky = "bad[/bold]"
+    result = cli_runner.invoke(
+        app,
+        [
+            "--profile",
+            tricky,
+            "local",
+            "configure",
+            "--url",
+            FAKE_LOCAL_URL,
+            "--token",
+            FAKE_LOCAL_TOKEN,
+        ],
+    )
+    assert result.exit_code == 0, repr(result.exception)
+    assert "bad[/bold]" in result.output
+    assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
+
+
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--json", "local", "status"])
 
