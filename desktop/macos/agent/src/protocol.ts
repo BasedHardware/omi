@@ -1100,6 +1100,9 @@ export interface ContextSnapshotProjection {
     createdAtMs: number;
     /** Text of what the user's screen showed when this turn was asked (historical). */
     screenContext?: string;
+    /** Present when the desktop journaled this assistant turn's answer text as
+     *  complete even though spoken delivery was cut (e.g. a PTT barge-in). */
+    answerTextCompleted?: true;
     /** Bounded historical evidence references attached to this turn. */
     evidence?: ConversationEvidenceProjection[];
     /** True when an authorized evidence read is needed for complete detail. */

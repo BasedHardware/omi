@@ -180,7 +180,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var isAppActive: Bool
   var mainWindowTitle: String?
   var floatingBarVisible: Bool
+  /// True when the chat-first Chat route is selected, so the main-window composer is the typed Ask Omi surface.
   var askOmiOpen: Bool
+  /// True when that composer’s text view is first responder.
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
@@ -586,8 +588,8 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     let floating = FloatingControlBarManager.shared.automationState
     return (
       isVisible: floating.isVisible,
-      isAskOmiOpen: floating.isAskOmiOpen,
-      isAskOmiFocused: floating.isAskOmiFocused,
+      isAskOmiOpen: OpenAskOmiAutomation.isComposerPresented(),
+      isAskOmiFocused: OpenAskOmiAutomation.isComposerFocused(),
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
       isVoiceDictating: floating.isVoiceDictating,
@@ -811,6 +813,8 @@ final class DesktopAutomationActionRegistry {
     // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
     registerActivationActions()
+    registerOpenAskOmiActions()
+    registerCloseAskOmiActions()
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     register(
@@ -1268,7 +1272,14 @@ final class DesktopAutomationActionRegistry {
       name: "memory_log_import_probe",
       summary:
         "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
-      params: ["source", "text", "fixture"]
+      params: ["source", "text", "fixture"],
+      category: "write",
+      surfaces: ["import_connectors"],
+      safety: "remote_write",
+      sideEffects: [
+        "may call model/backend services",
+        "may save imported memory data",
+      ]
     ) { params in
       guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
         throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
@@ -1573,7 +1584,8 @@ final class DesktopAutomationActionRegistry {
     // the shortcut handler calls, so no synthetic key events or cursor are involved.
     register(
       name: "ptt_start",
-      summary: "Begin a push-to-talk capture (mirrors the PTT shortcut key-down)"
+      summary:
+        "Begin a push-to-talk capture after admission (mirrors the PTT shortcut key-down). Returns after capture admission; provider/hub readiness and screen evidence are polled via ptt_turn_snapshot"
     ) { _ in
       PushToTalkManager.shared.beginPushToTalkForAutomation()
     }
@@ -1772,29 +1784,6 @@ final class DesktopAutomationActionRegistry {
         "was_signed_in": "true",
         "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
       ]
-    }
-
-    // Send a typed query through the real floating-bar AI path
-    // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
-    // Used to drive cache/latency benchmarks without a mic or the cursor.
-    register(
-      name: "open_ask_omi",
-      summary: "Open the Ask Omi input panel and return app-side open/focus timing",
-      params: ["reset", "wait"]
-    ) { params in
-      let reset = boolParam(params["reset"], default: false)
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.openAskOmiForAutomation(
-        reset: reset, wait: wait)
-    }
-
-    register(
-      name: "close_ask_omi",
-      summary: "Close the Ask Omi input panel if it is open",
-      params: ["wait"]
-    ) { params in
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
     register(
@@ -2300,7 +2289,14 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "clear_owner_surface_state",
       summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
-      params: ["chatId"]
+      params: ["chatId"],
+      category: "write",
+      surfaces: ["main_chat"],
+      safety: "remote_write",
+      sideEffects: [
+        "clears the local non-production main-chat projection",
+        "may delete the active owner's main-chat journal turns from the backend",
+      ]
     ) { params in
       guard AppBuild.isNonProduction else {
         return ["error": "clear_owner_surface_state is disabled on production bundles"]
@@ -3791,6 +3787,7 @@ final class DesktopAutomationActionRegistry {
 
     registerNotificationActions()
     registerRatingPromptActions()
+    registerGlassTransparencyActions()
     registerRemotePromptActions()
     registerRealtimeHubActions()
     register(

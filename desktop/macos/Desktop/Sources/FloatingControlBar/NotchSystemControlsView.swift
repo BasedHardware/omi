@@ -8,8 +8,15 @@ import SwiftUI
 /// and audio — without going to the menu bar. Those are the same two toggles the status
 /// item owns; both surfaces route through `SystemCaptureControls` so the paywall and
 /// permission gates cannot drift between them.
+///
+/// The third control hides the notch itself. It is the same durable preference as the
+/// "Show floating bar" switch in Settings — the notch stays hidden across launches until
+/// the next Push-to-Talk press or the switch brings it back — so it must go through the
+/// caller's hide path rather than merely ordering the window out.
 struct NotchSystemControlsView: View {
   let progress: CGFloat
+  /// Hides the notch and persists that preference; wired by the bar to its own hide path.
+  let onHide: () -> Void
 
   @ObservedObject private var shortcuts = ShortcutSettings.shared
   /// Toggle state lives in UserDefaults and plugin state rather than in an observable, so
@@ -30,6 +37,9 @@ struct NotchSystemControlsView: View {
       shortcutLegend
 
       HStack(spacing: OmiSpacing.xs) {
+        // Hide leads: it acts on the notch itself, so it sits apart from the two capture
+        // toggles rather than reading as a third input the user could switch on.
+        hideButton
         controlButton(
           icon: "rectangle.dashed.badge.record",
           label: "Screen",
@@ -146,6 +156,30 @@ struct NotchSystemControlsView: View {
     .accessibilityValue(isOn ? "On" : "Off")
     .accessibilityHint("Toggles whether Omi captures \(label.lowercased())")
     .help("\(label) capture is \(isOn ? "on" : "off")")
+  }
+
+  /// Hides the notch. Styled as the capture toggles' quiet sibling rather than as an "on"
+  /// pill: it is an action, not a state, so it never reads as lit.
+  private var hideButton: some View {
+    Button(action: onHide) {
+      HStack(spacing: OmiSpacing.xxs) {
+        Image(systemName: "eye.slash")
+          .font(.system(size: 9, weight: .semibold))
+        Text("Hide")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+      }
+      .foregroundColor(NotchGlass.controlLabel(isActive: false))
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xxs)
+      .background(
+        Capsule().fill(NotchGlass.controlFill(isActive: false, isHovering: false))
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Hide notch")
+    .accessibilityHint("Hides Omi until you press Push-to-Talk or turn the floating bar back on in Settings")
+    .help("Hide the notch. Push-to-Talk or the Settings switch brings it back.")
   }
 
   // MARK: - Actions

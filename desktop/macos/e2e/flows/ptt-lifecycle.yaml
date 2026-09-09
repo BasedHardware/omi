@@ -89,6 +89,7 @@ steps:
       name: ptt_start
     expect:
       result.detail.listening: "true"
+      result.detail.screen_evidence: "skipped"
 
   - id: S2
     name: Assert typed turn is recording without anomalies

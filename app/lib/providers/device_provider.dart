@@ -557,6 +557,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isConnected: false,
     );
 
+    // #3328: do not create a user-facing disconnect / "wear your Omi" push.
+    // Onboard storage keeps recording across BLE drops; backend daily wear
+    // reminder is also off.
+
     // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
   }
