@@ -10028,4 +10028,7 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
 }
