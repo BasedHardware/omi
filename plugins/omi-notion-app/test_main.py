@@ -277,6 +277,13 @@ class PageWriteTests(unittest.TestCase):
                 self.assertIn("before retrying", result.error)
                 self.assertNotIn("private", result.error)
 
+    def test_write_logs_omit_content_and_upstream_error_details(self):
+        content = "private synthetic note contents"
+        for failure in (Mock(status_code=400, text=content), RuntimeError(content)):
+            with self.subTest(failure=type(failure).__name__):
+                self.write(content, create=True, fail_at=1, failure=failure)
+                self.assertNotIn(content, str(self.write_logs))
+
     def test_unusable_create_result_does_not_append_or_claim_success(self):
         for payload in (None, {}, {"error": ""}, {"url": "https://www.notion.so/unknown"}, {"id": ""}):
             with self.subTest(payload=payload):

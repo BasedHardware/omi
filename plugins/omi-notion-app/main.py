@@ -100,11 +100,11 @@ def notion_api_request(uid: str, method: str, endpoint: str, params: dict = None
         if response.status_code in [200, 201]:
             return response.json()
         else:
-            log(f"Notion API error: {response.status_code} - {response.text}")
+            log(f"Notion API error: HTTP {response.status_code}")
             return {"error": response.text, "status_code": response.status_code}
 
     except Exception as e:
-        log(f"Notion API request error: {e}")
+        log(f"Notion API request error: {type(e).__name__}")
         return {"error": str(e)}
 
 
