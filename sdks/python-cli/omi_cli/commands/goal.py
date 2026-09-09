@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import typer
 
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
 from omi_cli.output import shorten
@@ -133,10 +134,11 @@ def update_goal(
     max_value: Optional[float] = typer.Option(None, "--max"),
     unit: Optional[str] = typer.Option(None, "--unit"),
     clear_unit: bool = typer.Option(False, "--clear-unit", help="Remove the existing unit label."),
-    horizon_at: Optional[str] = typer.Option(
+    horizon_at: Optional[datetime] = typer.Option(
         None,
         "--horizon-at",
-        help="Target horizon datetime with explicit timezone (ISO-8601).",
+        formats=ISO_DATETIME_FORMATS,
+        help="Target horizon datetime with explicit timezone.",
     ),
     clear_horizon: bool = typer.Option(
         False,
@@ -170,22 +172,12 @@ def update_goal(
     if clear_horizon:
         body["horizon_at"] = None
     elif horizon_at is not None:
-        iso_str = horizon_at
-        if iso_str.endswith("Z") or iso_str.endswith("z"):
-            iso_str = iso_str[:-1] + "+00:00"
-        try:
-            dt = datetime.fromisoformat(iso_str)
-        except Exception as exc:
-            raise UsageError(
-                message="Invalid datetime",
-                detail=f"Invalid ISO datetime for --horizon-at: {exc}",
-            ) from exc
-        if dt.tzinfo is None:
+        if horizon_at.tzinfo is None:
             raise UsageError(
                 message="Missing timezone",
                 detail="--horizon-at requires an explicit timezone (e.g. +00:00 or Z).",
             )
-        body["horizon_at"] = dt.isoformat()
+        body["horizon_at"] = horizon_at.isoformat()
     if not body:
         raise UsageError(
             message="No fields to update",

@@ -259,9 +259,7 @@ def test_goal_update_rejects_invalid_horizon(authed_profile, respx_mock, monkeyp
     monkeypatch.setattr(sys, "argv", ["omi", "--json", "goal", "update", "g1", "--horizon-at", "not-a-datetime"])
     with pytest.raises(SystemExit) as exc:
         main()
-    assert exc.value.code == 1
+    assert exc.value.code == 2
     output = capsys.readouterr()
-    assert output.out == ""
-    error = json.loads(output.err)
-    assert "invalid iso datetime" in error["detail"].lower()
+    assert "Invalid value for '--horizon-at'" in output.err
     assert not respx_mock.calls
