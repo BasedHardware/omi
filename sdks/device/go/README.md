@@ -34,6 +34,11 @@ err = omidevice.ListenPayload(ctx, devices[0].ID, func(payload []byte) {
 
 Mirrors Python `print_devices` / `listen_to_omi` in `sdks/python/omi/bluetooth.py`.
 
+
+### Drain deepgram results before closing the stream
+
+Deepgram `Stop()` sends `CloseStream`, waits up to five seconds for final transcript delivery, and then closes the connection. Audio writes and the shutdown frame each have a five-second write deadline, so a stalled audio write cannot hold shutdown indefinitely. Errors are returned to the caller. Parakeet retains its plain `finalize` frame. Run `go test -race ./...` for the hardware-free suite; repository preflight selects it for SDK changes.
+
 ### Limitations
 
 - Needs Bluetooth permission/adapter; CI and headless hosts stay on default build.

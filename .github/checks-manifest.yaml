@@ -6,7 +6,7 @@
 checks:
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
-    triggers: ["sdks/device/go/**"]
+    triggers: ["sdks/device/go/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
@@ -896,6 +896,7 @@ checks:
     triggers: [".github/scripts/check_duplicate_routes.py", ".github/scripts/test_check_duplicate_routes.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "hermetic fixture coverage for the duplicate-route scanner: shadowed duplicate fails with the colliding path, unique routes pass, same path on different apps is not a duplicate, api_route methods expand"
+
 
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
