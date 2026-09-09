@@ -505,11 +505,9 @@ def _query_has_any(query: Any) -> bool:
 
 
 def _aggregation_count(query: Any) -> Optional[int]:
-    count_fn: Any = getattr(query, 'count', None)
-    if not callable(count_fn):
-        return None
     try:
-        rows = count_fn().get()
+        aggregation: Any = query.count()
+        rows = aggregation.get()
         return int(rows[0][0].value)
     except Exception:
         return None
