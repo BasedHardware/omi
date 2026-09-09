@@ -99,7 +99,14 @@ struct AIProvider: Identifiable {
   /// Only used as the initial value of an editable Settings field, never
   /// hardcoded into a request path.
   static let defaultLocalBaseURL = "http://localhost:1234/v1"
-  static let defaultLocalModelID = "qwen3.8-27b-optiq"
+  /// No default model id: every LM Studio (or other OpenAI-compatible)
+  /// server serves a different set of models, so a hardcoded id here would
+  /// be a real value on only one machine and a broken one everywhere else.
+  /// Empty means "not yet configured"; Settings picks the first id the
+  /// server reports at `{baseURL}/models` once the fetch succeeds, and
+  /// AgentBridge already refuses to start the local provider while this is
+  /// empty rather than silently sending a model id that doesn't exist.
+  static let defaultLocalModelID = ""
 
   /// UserDefaults key for which provider is selected. Mirrors
   /// `ChatProvider.BridgeMode`'s raw-value space (not referenced directly
