@@ -1295,6 +1295,13 @@ describe("static PostgreSQL schema contract", () => {
     expect(visibleTitleSql).toContain("chr(133)");
     const visibleOverviewSql = migrationSql.find((migration) => migration.version === 64)!.sql;
     expect(visibleOverviewSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_chat_conversation_sessions");
+    expect(visibleOverviewSql).toContain(
+      "WHEN char_length(btrim(title_text, v_ws))>240 THEN left(btrim(title_text, v_ws),237)||'...'",
+    );
+    expect(visibleOverviewSql).toContain(
+      "WHEN char_length(btrim(last_text, v_ws))>240 THEN left(btrim(last_text, v_ws),237)||'...'",
+    );
+    expect(visibleOverviewSql).not.toContain("octet_length(btrim(title_text");
     expect(visibleOverviewSql).toContain("WHEN length(btrim(m.text,v_ws))>0 THEN 0 ELSE 1 END, m.created_at DESC");
     expect(visibleOverviewSql).not.toContain("(array_agg(m.text ORDER BY m.created_at DESC, m.id DESC))[1] AS last_text");
     expect(visibleOverviewSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");

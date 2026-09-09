@@ -1367,14 +1367,62 @@ describe("worker request contract", () => {
     });
     expect(listed.status).toBe(200);
     const page = (await listed.json()) as {
-      items: Array<{ id: string; title: string; overview: string; updatedAt: number }>;
+      items: Array<{
+        id: string;
+        title: string;
+        overview: string;
+        updatedAt: number;
+      }>;
     };
-    expect(page.items.find((item) => item.id === "chat:overview-visible")).toEqual(
+    expect(
+      page.items.find((item) => item.id === "chat:overview-visible")
+    ).toEqual(
       expect.objectContaining({
         id: "chat:overview-visible",
         title: "Title speech",
         overview: "Later speech",
         updatedAt: 200,
+      })
+    );
+  });
+
+  test("conversation list bounds chat titles by Unicode characters", async () => {
+    await insertChatMessage({
+      id: "emoji-fit",
+      accountId: "test-account",
+      text: "😀".repeat(121),
+      createdAt: 11,
+      position: 1,
+      chatSessionId: "emoji-fit",
+    });
+    await insertChatMessage({
+      id: "emoji-over",
+      accountId: "test-account",
+      text: "😀".repeat(241),
+      createdAt: 12,
+      position: 1,
+      chatSessionId: "emoji-over",
+    });
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string; overview: string }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:emoji-fit")).toEqual(
+      expect.objectContaining({
+        id: "chat:emoji-fit",
+        title: "😀".repeat(121),
+        overview: "😀".repeat(121),
+      })
+    );
+    expect(page.items.find((item) => item.id === "chat:emoji-over")).toEqual(
+      expect.objectContaining({
+        id: "chat:emoji-over",
+        title: `${"😀".repeat(237)}...`,
+        overview: `${"😀".repeat(237)}...`,
       })
     );
   });

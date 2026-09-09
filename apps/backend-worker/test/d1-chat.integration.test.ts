@@ -653,7 +653,7 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       id: "chat:large",
-      title: `${title.trim().slice(0, 237)}...`,
+      title: `${"😀".repeat(130)}${" ".repeat(107)}...`,
       overview: `${overview.trim().slice(0, 237)}...`,
       createdAt: 900,
       updatedAt: 500,
@@ -779,6 +779,43 @@ describe("D1 chat projects an honest conversation list", () => {
     });
   });
 
+  test("chat titles bound Unicode characters matching production left()", async () => {
+    const accountId = "emoji-char-bound-chat-title";
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "emoji-char-bound-fitting",
+        accountId,
+        "😀".repeat(121),
+        1,
+        1,
+        JSON.stringify({ chatSessionId: "fitting" })
+      )
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO chat_messages (id, account_id, text, sender, created_at, generation_outcome, position, payload) VALUES (?, ?, ?, 'human', ?, NULL, ?, ?)"
+    )
+      .bind(
+        "emoji-char-bound-oversized",
+        accountId,
+        "😀".repeat(241),
+        2,
+        2,
+        JSON.stringify({ chatSessionId: "oversized" })
+      )
+      .run();
+    const rows = await readConversations(env.DB, accountId);
+    expect(rows.find((row) => row.id === "chat:fitting")).toMatchObject({
+      title: "😀".repeat(121),
+      overview: "😀".repeat(121),
+    });
+    expect(rows.find((row) => row.id === "chat:oversized")).toMatchObject({
+      title: `${"😀".repeat(237)}...`,
+      overview: `${"😀".repeat(237)}...`,
+    });
+  });
+
   test("chat overviews skip a NEXT LINE-only last turn", async () => {
     const accountId = "nel-last-chat-overview";
     await env.DB.prepare(
@@ -851,7 +888,11 @@ describe("D1 chat projects an honest conversation list", () => {
     expect(rows).toHaveLength(fixtures.length);
     for (const fixture of fixtures) {
       const text = fixture.text.trim();
-      const display = text.length > 240 ? `${text.slice(0, 237)}...` : text;
+      const characters = Array.from(text);
+      const display =
+        characters.length > 240
+          ? `${characters.slice(0, 237).join("")}...`
+          : text;
       expect(
         rows.find((row) => row.id === `chat:${fixture.session}`)
       ).toMatchObject({ title: display, overview: display });

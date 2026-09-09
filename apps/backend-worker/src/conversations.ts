@@ -294,7 +294,10 @@ function boundedDisplayText(bytes: number[]): string {
   const text = new TextDecoder().decode(new Uint8Array(bytes), {
     stream: true,
   });
-  return text.length > 240 ? `${text.slice(0, 237)}...` : text;
+  const characters = Array.from(text);
+  return characters.length > 240
+    ? `${characters.slice(0, 237).join("")}...`
+    : text;
 }
 
 function displayText(text: string): string {
