@@ -1,0 +1,3 @@
+{
+  "change": "Stopped developer macOS builds from asking for Keychain access on every rebuild"
+}
