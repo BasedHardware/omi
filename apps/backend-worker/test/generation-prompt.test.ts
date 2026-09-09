@@ -1052,6 +1052,36 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("keeps visible speech from an oversized prior turn after a NEXT LINE prefix longer than the history budget", async () => {
+    const oversized = `${"\u0085".repeat(
+      GENERATION_HISTORY_TEXT_BUDGET / 2
+    )}Recorded words`;
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 1, 1, NULL)"
+      )
+      .bind("message-oversize-nel", oversized)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload) VALUES (?, 'acct-a', 'human', ?, 2, 1, NULL)"
+      )
+      .bind("message-now", "current")
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "message-now",
+      "current"
+    );
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.history).toEqual([
+      { role: "user", content: "Recorded words" },
+    ]);
+  });
+
   test("appends a bound text/plain R2 object to the prompt", async () => {
     await insertBound(db, {
       id: "att-text",

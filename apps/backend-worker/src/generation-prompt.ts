@@ -112,7 +112,9 @@ async function readGenerationHistory(
     .all<{ sender: "human" | "ai"; text: string }>();
   const history: GenerationHistoryMessage[] = [];
   let remaining = GENERATION_HISTORY_TEXT_BUDGET;
-  for (const row of result.results) {
+  const rows = result.results;
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index]!;
     if (!isVisibleGenerationText(row.text)) continue;
     const size = utf8Bytes(row.text);
     if (size > remaining) {
@@ -121,6 +123,17 @@ async function readGenerationHistory(
         history.push({
           role: row.sender === "human" ? "user" : "assistant",
           content: prefix,
+        });
+        break;
+      }
+      const visiblePrefix = utf8Prefix(
+        visibleGenerationTrim(row.text),
+        remaining
+      );
+      if (isVisibleGenerationText(visiblePrefix) && index === rows.length - 1) {
+        history.push({
+          role: row.sender === "human" ? "user" : "assistant",
+          content: visiblePrefix,
         });
         break;
       }
