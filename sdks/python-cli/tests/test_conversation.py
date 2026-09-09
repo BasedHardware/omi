@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from omi_cli.main import app
 
 
@@ -76,3 +78,31 @@ def test_conversation_from_segments_reads_file(authed_profile, respx_mock, cli_r
     body = json.loads(route.calls.last.request.content)
     assert len(body["transcript_segments"]) == 2
     assert body["source"] == "phone"
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16", "utf-32"])
+def test_conversation_from_segments_preserves_unicode(
+    authed_profile, respx_mock, cli_runner, tmp_path, encoding
+) -> None:
+    segments = [{"text": "Caf\u00e9, \u65e5\u672c\u8a9e \U0001f642", "start": 0.0, "end": 1.0}]
+    source = tmp_path / "segments.json"
+    source.write_bytes(json.dumps(segments, ensure_ascii=False).encode(encoding))
+    route = respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": "c1", "status": "completed", "discarded": False}
+    )
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "from-segments", str(source)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content)["transcript_segments"] == segments
+
+
+def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_mock, cli_runner, tmp_path) -> None:
+    source = tmp_path / "segments.json"
+    source.write_bytes(b'[{"text": "\xff", "start": 0, "end": 1}]')
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "from-segments", str(source)])
+
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.stderr
+    assert not respx_mock.calls

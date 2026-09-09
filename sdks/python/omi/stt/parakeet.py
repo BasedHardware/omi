@@ -59,7 +59,20 @@ class ParakeetTranscriber:
                         else:
                             print(text)
 
-            await asyncio.gather(send_audio(), receive())
+            tasks = (
+                asyncio.create_task(send_audio()),
+                asyncio.create_task(receive()),
+            )
+            try:
+                done, _ = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    task.result()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def _extract_text(data: object) -> str:

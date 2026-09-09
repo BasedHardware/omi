@@ -12,7 +12,6 @@ covers:
   - desktop/macos/Desktop/Sources/ScreenRecordingPermissionPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/PermissionDragGuidance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
-  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionIntentPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AnimatedGIFView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPageChrome.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift

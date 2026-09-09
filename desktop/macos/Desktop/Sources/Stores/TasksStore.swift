@@ -2476,23 +2476,15 @@ class TasksStore: ObservableObject {
           category: item.category,
           metadataBox: ActionItemMetadataBox(metadata),
           relevanceScore: item.relevanceScore,
+          // Carry completion in the create call itself — a separate follow-up
+          // PATCH here could fail silently (try?) while markSynced still ran,
+          // permanently stranding the backend row as incomplete since a
+          // synced item is never revisited by this retry loop.
+          completed: item.completed ? true : nil,
           expectedOwnerId: ownerID,
           authorizationSnapshot: lease.authorizationSnapshot
         )
         guard isCurrent(lease) else { return }
-        // createActionItem always posts completed:nil, so a task the user
-        // completed while it was still unsynced (offline / failed create) would
-        // be recreated on the backend as incomplete and resurrected on the next
-        // refresh. Push the completed state with a follow-up update.
-        if item.completed {
-          _ = try? await APIClient.shared.updateActionItem(
-            id: response.id,
-            completed: true,
-            expectedOwnerId: ownerID,
-            authorizationSnapshot: lease.authorizationSnapshot
-          )
-          guard isCurrent(lease) else { return }
-        }
         try await ActionItemStorage.shared.markSynced(
           id: localId,
           backendId: response.id,
