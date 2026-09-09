@@ -10,7 +10,11 @@ extension AppState {
       AssistantSettings.shared.audioRecordingMode = .off
     } else {
       let selected = AssistantSettings.shared.audioRecordingMode
-      AssistantSettings.shared.audioRecordingMode = selected == .off ? .onlyMeetings : selected
+      let requested: AssistantSettings.AudioRecordingMode = selected == .off ? .onlyMeetings : selected
+      if !AudioCaptureService.checkPermission() {
+        requestMicrophonePermission()
+      }
+      AssistantSettings.shared.audioRecordingMode = requested
     }
   }
 
@@ -170,7 +174,7 @@ extension AppState {
       // Local (Parakeet) mode has no WebSocket — start capture immediately instead.
       if sttSession.useLocalSTT {
         Task { [weak self] in
-          await self?.startAudioCapture(source: effectiveSource)
+          await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
         }
       } else {
         transcriptionService?.start(
@@ -202,7 +206,7 @@ extension AppState {
             Task { @MainActor in
               log("Transcription: Connected to Python backend")
               // Start audio capture once connected
-              await self?.startAudioCapture(source: effectiveSource)
+              await self?.startAudioCapture(source: effectiveSource, userInitiated: userInitiated)
             }
           },
           onDisconnected: {
@@ -374,13 +378,16 @@ extension AppState {
 
   /// Start audio capture and pipe to transcription service
   /// - Parameter source: Audio source to capture from
-  func startAudioCapture(source: AudioSource = .microphone) async {
+  func startAudioCapture(
+    source: AudioSource = .microphone,
+    userInitiated: Bool = false
+  ) async {
     if source == .bleDevice {
       // Use BLE device audio
       await startBleAudioCapture()
     } else {
       // Use microphone (+ optional system audio)
-      await startMicrophoneAudioCapture()
+      await startMicrophoneAudioCapture(userInitiated: userInitiated)
     }
   }
 
@@ -410,7 +417,7 @@ extension AppState {
     }
   }
 
-  func startMicrophoneAudioCapture() async {
+  func startMicrophoneAudioCapture(userInitiated: Bool = false) async {
     guard let audioCaptureService = audioCaptureService else { return }
 
     // Authorization first, capture second. CoreAudio HAL capture never triggers the
@@ -421,14 +428,18 @@ extension AppState {
     // a hardware costume. startTranscription() has its own guard, but resume, the meeting
     // gate, and the watchdog's own rebuild all arm capture through here without passing it.
     var gateAction = MicrophoneCaptureAuthorizationPolicy.action(
-      for: AudioCaptureService.authorizationStatus())
+      for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
     if gateAction == .requestPermission {
       log("Transcription: microphone permission undetermined — requesting before capture")
       gateAction = MicrophoneCaptureAuthorizationPolicy.action(
         afterRequestGranted: await AudioCaptureService.requestPermission())
     }
     guard gateAction == .proceed else {
-      surfaceMicrophonePermissionAlert()
+      if gateAction == .surfacePermissionAlert {
+        surfaceMicrophonePermissionAlert()
+      } else {
+        log("Transcription: automatic capture abandoned after microphone authorization changed")
+      }
       stopTranscription()
       return
     }

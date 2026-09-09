@@ -83,6 +83,10 @@ Export uses at most 101 requests for the 100,000-item ceiling. Memory reads shar
 the API’s hourly request quota with other clients, so earlier requests or concurrent
 activity can still cause HTTP 429. Wait for the quota to reset before retrying.
 
+Pretty output displays returned text literally, including square brackets and
+emoji-like codes such as `:warning:`. Styling applies to the table layout, not
+to the contents of your memories or conversations.
+
 ## Auth
 
 Two auth methods, both fully wired:
@@ -109,6 +113,12 @@ omi auth refresh                # force a Firebase refresh (no-op for API keys)
 omi auth logout                 # wipe the credential
 ```
 
+An API-key login candidate is checked before replacing the saved credentials.
+If verification rejects it with HTTP 401 or 403, the existing profile and active
+profile selection remain unchanged. Other HTTP errors retain the existing
+store-and-warn behavior. A transport failure leaves saved credentials unchanged;
+browser OAuth is a separate flow.
+
 You can also set `OMI_API_KEY` in the environment to bypass on-disk config
 entirely — handy in containers and CI:
 
@@ -121,6 +131,8 @@ omi memory list
 
 State lives at `~/.omi/config.toml` (overridable via `$OMI_CONFIG`). The file
 holds one or more named profiles, each with its own auth method and API base.
+Saving configuration preserves unknown settings at both the root and profile
+levels, so editing a known setting does not discard extensions from newer clients.
 Switch between them with `--profile`:
 
 ```bash
@@ -176,6 +188,11 @@ Agent screen-history workflow:
    `omi --json local screenshot <id> --output /tmp/omi-shot.jpg`.
 5. Validate the file before handing it to vision tooling, for example
    `file /tmp/omi-shot.jpg`.
+
+When semantic search returns no results, JSON mode also tries a literal
+substring search across app names, window titles, and OCR text. In this
+fallback, `%` and `_` in the query or `--app` filter match those characters
+literally, rather than acting as SQL wildcards.
 
 If pixels are not available, JSON-mode errors preserve Desktop's structured
 fields such as `status_code`, `error`, `reason`, `hint`, and `screenshot_id`.
@@ -247,11 +264,14 @@ omi
     ├── list [--limit N] [--include-inactive]
     ├── get <id>
     ├── create <title> --target N [--type ...] [--current N] [--unit ...]
-    ├── update <id> [...]
+    ├── update <id> [--unit ... | --clear-unit] [...]
     ├── progress <id> <value>
     ├── history <id> [--days N]
     └── delete <id> [-y]
 ```
+
+`conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
+UTF-16, or UTF-32, independently of the system's default text encoding.
 
 ## Global flags
 
@@ -284,6 +304,8 @@ The CLI is built so an LLM can use it without a wrapper:
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
 * Stable exit codes (above) let an agent disambiguate retryable vs terminal
   errors.
+* Successful resource `delete --yes` commands preserve the API response in
+  JSON mode. A successful response without a body is emitted as JSON `null`.
 * Rate-limit errors include a `Retry-After` window in the message and surface
   the policy name (`dev:conversations`, etc.) so an agent can back off
   intelligently.
@@ -307,6 +329,14 @@ The dev API enforces per-policy hourly limits:
 The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
+
+## Datetime options
+Conversation and action-item datetime options accept ISO timestamps with `Z`
+(UTC), numeric offsets, and optional fractional seconds, for example
+`--due-at 2026-09-08T12:30:00Z` or
+`--start-date 2026-09-08T12:30:00.123456+05:30`. Offsets are preserved in API
+requests. Date-only values and timestamps without an offset remain supported;
+the CLI does not assign a timezone to those inputs.
 
 ## Development
 

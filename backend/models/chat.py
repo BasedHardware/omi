@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
@@ -34,6 +35,307 @@ class MessageConversation(BaseModel):
     created_at: datetime
 
 
+# Chat Completions `file` content parts (purpose=user_data) accept these document
+# types. Images stay on the separate vision / image_url path and are not listed here.
+# Source: https://platform.openai.com/docs/guides/pdf-files
+# (File inputs → "Accepted file types" and "Full list of accepted file types").
+# Read 2026-09-08 from a saved copy of that page. Non-PDF documents are
+# text-extracted only; spreadsheets use a 1,000-row augmentation flow.
+CHAT_FILE_DOCUMENT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        # PDF
+        'pdf',
+        # Spreadsheets
+        'xla',
+        'xlb',
+        'xlc',
+        'xlm',
+        'xls',
+        'xlsx',
+        'xlt',
+        'xlw',
+        'csv',
+        'tsv',
+        'iif',
+        # Rich documents
+        'doc',
+        'docx',
+        'dot',
+        'odt',
+        'rtf',
+        # Presentations
+        'pot',
+        'ppa',
+        'pps',
+        'ppt',
+        'pptx',
+        'pwz',
+        'wiz',
+        # Text and code
+        'asm',
+        'bat',
+        'c',
+        'cc',
+        'conf',
+        'cpp',
+        'css',
+        'cxx',
+        'def',
+        'dic',
+        'eml',
+        'h',
+        'hh',
+        'htm',
+        'html',
+        'ics',
+        'ifb',
+        'in',
+        'js',
+        'json',
+        'ksh',
+        'list',
+        'log',
+        'markdown',
+        'md',
+        'mht',
+        'mhtml',
+        'mime',
+        'mjs',
+        'nws',
+        'pl',
+        'py',
+        'rst',
+        's',
+        'sql',
+        'srt',
+        'text',
+        'txt',
+        'vcf',
+        'vtt',
+        'xml',
+        # The provider's Text-and-code MIME column also documents types whose
+        # canonical suffixes are missing from its Extensions column (e.g.
+        # 'text/x-rust' -> 'rs', 'text/x-yaml' -> 'yaml'). Keep them
+        # allowlisted so the extension-first branch cannot reject a file whose
+        # MIME the provider explicitly documents.
+        'astro',
+        'awk',
+        'c++',
+        'clj',
+        'cmake',
+        'cs',
+        'dart',
+        'diff',
+        'dockerfile',
+        'ejs',
+        'elixir',
+        'erb',
+        'erlang',
+        'go',
+        'gradle',
+        'graphql',
+        'groovy',
+        'hbs',
+        'hcl',
+        'hs',
+        'ini',
+        'j2',
+        'jade',
+        'java',
+        'jl',
+        'json5',
+        'jsx',
+        'kt',
+        'lisp',
+        'liquid',
+        'lua',
+        'm',
+        'mk',
+        'mustache',
+        'ndjson',
+        'patch',
+        'php',
+        'ps1',
+        'proto',
+        'pug',
+        'r',
+        'rb',
+        'rs',
+        'sass',
+        'scala',
+        'scss',
+        'sh',
+        'swift',
+        'terraform',
+        'tf',
+        'tex',
+        'tmpl',
+        'toml',
+        'ts',
+        'tsx',
+        'vbs',
+        'yaml',
+        'yml',
+        'zsh',
+    }
+)
+CHAT_FILE_DOCUMENT_MIME_TYPES: frozenset[str] = frozenset(
+    {
+        'application/csv',
+        'application/graphql',
+        'application/javascript',
+        'application/json',
+        'application/json5',
+        'application/msword',
+        'application/pdf',
+        'application/rtf',
+        'application/toml',
+        'application/typescript',
+        'application/vnd.apple.iwork',
+        'application/vnd.apple.keynote',
+        'application/vnd.apple.pages',
+        'application/vnd.google-apps.document',
+        'application/vnd.google-apps.presentation',
+        'application/vnd.google-apps.spreadsheet',
+        'application/vnd.ms-excel',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/x-awk',
+        'application/x-bash',
+        'application/x-graphql',
+        'application/x-httpd-php',
+        'application/x-httpd-php-source',
+        'application/x-iif',
+        'application/x-json5',
+        'application/x-ndjson',
+        'application/x-patch',
+        'application/x-php',
+        'application/x-powershell',
+        'application/x-protobuf',
+        'application/x-rust',
+        'application/x-scala',
+        'application/x-sql',
+        'application/x-subrip',
+        'application/x-terraform',
+        'application/x-toml',
+        'application/x-yaml',
+        'application/yaml',
+        'message/rfc822',
+        'text/calendar',
+        'text/css',
+        'text/csv',
+        'text/html',
+        'text/javascript',
+        'text/jsx',
+        'text/markdown',
+        'text/plain',
+        'text/rtf',
+        'text/srt',
+        'text/tsv',
+        'text/tsx',
+        'text/vbscript',
+        'text/vtt',
+        'text/x-R',
+        'text/x-asm',
+        'text/x-astro',
+        'text/x-awk',
+        'text/x-bash',
+        'text/x-c',
+        'text/x-c++',
+        'text/x-clojure',
+        'text/x-cmake',
+        'text/x-csharp',
+        'text/x-dart',
+        'text/x-diff',
+        'text/x-dockerfile',
+        'text/x-ejs',
+        'text/x-elixir',
+        'text/x-erb',
+        'text/x-erlang',
+        'text/x-go',
+        'text/x-golang',
+        'text/x-gradle',
+        'text/x-graphql',
+        'text/x-groovy',
+        'text/x-handlebars',
+        'text/x-haskell',
+        'text/x-hcl',
+        'text/x-iif',
+        'text/x-ini',
+        'text/x-jade',
+        'text/x-java',
+        'text/x-jinja2',
+        'text/x-julia',
+        'text/x-kotlin',
+        'text/x-less',
+        'text/x-lisp',
+        'text/x-liquid',
+        'text/x-lua',
+        'text/x-makefile',
+        'text/x-mustache',
+        'text/x-objectivec',
+        'text/x-objectivec++',
+        'text/x-patch',
+        'text/x-perl',
+        'text/x-php',
+        'text/x-properties',
+        'text/x-protobuf',
+        'text/x-pug',
+        'text/x-python',
+        'text/x-r',
+        'text/x-rst',
+        'text/x-ruby',
+        'text/x-rust',
+        'text/x-sass',
+        'text/x-scala',
+        'text/x-script.python',
+        'text/x-scss',
+        'text/x-sh',
+        'text/x-shellscript',
+        'text/x-sql',
+        'text/x-subrip',
+        'text/x-swift',
+        'text/x-terraform',
+        'text/x-tex',
+        'text/x-tmpl',
+        'text/x-toml',
+        'text/x-twig',
+        'text/x-typescript',
+        'text/x-vcard',
+        'text/x-yaml',
+        'text/x-zsh',
+        'text/xml',
+    }
+)
+
+
+def _chat_file_normalized_mime(mime_type: Optional[str]) -> str:
+    """Lowercase MIME, treating missing values and str(None)=='None' as empty."""
+    if mime_type is None:
+        return ''
+    mime = str(mime_type).strip().lower()
+    if mime in ('', 'none', 'null'):
+        return ''
+    return mime
+
+
+def chat_file_is_document(name: str, mime_type: Optional[str]) -> bool:
+    """True for any OpenAI-allowlisted chat document type, including PDF.
+
+    Images are not in this allowlist. Extension is checked first and wins when
+    present; MIME is the fallback so a missing MIME neither admits nor rejects
+    on its own.
+    """
+    ext = Path(name or '').suffix.lower().lstrip('.')
+    if ext:
+        return ext in CHAT_FILE_DOCUMENT_EXTENSIONS
+    mime = _chat_file_normalized_mime(mime_type)
+    return bool(mime) and mime in CHAT_FILE_DOCUMENT_MIME_TYPES
+
+
 class FileChat(BaseModel):
     id: str
     name: str
@@ -46,10 +348,8 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
-    def is_pdf(self) -> bool:
-        if (self.mime_type or '').lower() == 'application/pdf':
-            return True
-        return (self.name or '').lower().endswith('.pdf')
+    def is_document(self) -> bool:
+        return chat_file_is_document(self.name, self.mime_type)
 
     def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}

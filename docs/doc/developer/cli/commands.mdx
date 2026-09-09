@@ -143,6 +143,10 @@ cat meeting_notes.md | omi conversation create --text - --text-source message
 | `omi goal history ID [--days N]`                       | `GET /v1/dev/user/goals/{id}/history`                   |
 | `omi goal delete ID [-y]`                              | `DELETE /v1/dev/user/goals/{id}`                        |
 
+Use `omi goal update ID --unit liters` to set a unit label or
+`omi goal update ID --clear-unit` to remove it. These options are mutually
+exclusive. Omitting both leaves the unit unchanged.
+
 Goal types: `boolean`, `scale`, `numeric`. Up to **3 active goals per user**;
 the oldest is deactivated automatically when you create a fourth.
 
