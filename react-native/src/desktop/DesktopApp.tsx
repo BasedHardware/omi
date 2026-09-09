@@ -198,11 +198,15 @@ export function DesktopApp({
         onDraftChange={onDraftChange}
         mode={mode}
         onModeChange={next => {
-          if (next === 'Ask') {
-            openChat();
-          } else {
-            setMode(next);
-            setRoute(next === 'Recall' ? 'Rewind' : 'Home');
+          setMode(next);
+          if (next === 'Recall') {
+            setRoute('Rewind');
+          } else if (next === 'Search') {
+            if (route === 'Chat' || route === 'Rewind') {
+              setRoute('Home');
+            }
+          } else if (route === 'Rewind') {
+            setRoute('Home');
           }
         }}
         onNavigate={navigate}
@@ -227,16 +231,10 @@ export function DesktopApp({
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
           <DesktopHome
-            chatBusy={chatBusy}
             draft={mode === 'Search' ? draft : ''}
-            hasOlderChat={hasOlderChat}
-            loadingOlderChat={loadingOlderChat}
-            messages={messages}
-            onOpenChat={openChat}
             onOpenRewind={() => navigate('Rewind')}
             onOpenTasks={() => setRoute('Tasks')}
             onOpenConversations={() => setRoute('Conversations')}
-            onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
             outcomes={outcomes}
             reads={reads}

@@ -136,7 +136,7 @@ export function LibraryPage({
           )}
         </ScrollView>
       ) : (
-        <ScrollFade visible={fade.visible} style={styles.list}>
+        <ScrollFade visible style={styles.list}>
           <FlatList
             data={items}
             keyExtractor={item => `${item.kind}:${item.id}`}

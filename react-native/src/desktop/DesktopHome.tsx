@@ -6,29 +6,22 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {ChatMessage} from '../chatClient';
 import type {
   DesktopReadOutcomes,
   DesktopReadProjection,
 } from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {FocusPressable} from '../ui/Pressable';
-import {ScrollFade, useScrollFade} from './ScrollFade';
+import {ScrollFade} from './ScrollFade';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {desktopTokens as token} from './tokens';
 
 type Props = {
-  chatBusy: boolean;
   draft: string;
-  hasOlderChat: boolean;
-  loadingOlderChat: boolean;
-  messages: ChatMessage[];
-  onLoadOlderChat: () => void;
   onRefresh: () => void;
   onOpenRewind?: () => void;
-  onOpenChat?: () => void;
   onOpenTasks?: () => void;
   onOpenConversations?: () => void;
   outcomes: DesktopReadOutcomes | null;
@@ -72,20 +65,15 @@ export function DesktopReadBanner({
 }
 
 export function DesktopHome({
-  chatBusy,
   draft,
-  hasOlderChat,
-  messages,
   onRefresh,
   onOpenRewind,
-  onOpenChat,
   onOpenTasks,
   onOpenConversations,
   outcomes,
   reads,
   readsPhase,
 }: Props) {
-  const fade = useScrollFade();
   const query = draft.trim();
   const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
@@ -133,22 +121,8 @@ export function DesktopHome({
   return (
     <View style={styles.home}>
       <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
-      {messages.length > 0 || chatBusy || hasOlderChat ? (
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Continue chat"
-          onPress={onOpenChat}
-          style={styles.banner}>
-          <Text style={styles.bannerAction}>
-            {chatBusy ? 'Omi is replying…' : 'Continue chat'}
-          </Text>
-        </FocusPressable>
-      ) : null}
-      <ScrollFade visible={fade.visible} style={styles.scroll}>
+      <ScrollFade visible style={styles.scroll}>
         <ScrollView
-          onLayout={fade.onLayout}
-          onScroll={fade.onScroll}
-          onContentSizeChange={fade.onContentSizeChange}
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           style={styles.list}>

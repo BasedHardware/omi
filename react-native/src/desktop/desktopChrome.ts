@@ -28,7 +28,7 @@ export const desktopSearchPlaceholder = "Search what you've seen and heard…";
 // AppDelegate.mm mirrors the nav-row numbers.
 export const desktopWindowInset = 12;
 export const desktopNavBarHeight = 52;
-export const desktopOmnibarHeight = 40;
+export const desktopOmnibarHeight = 44;
 export const desktopTrafficLightButton = 14;
 export const desktopTrafficLightSpacing = 8;
 export const desktopTrafficLightTrailing = 16;

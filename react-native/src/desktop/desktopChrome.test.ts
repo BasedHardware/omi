@@ -118,7 +118,7 @@ test('settings IA keeps wired panes and drops no-op duplicates', () => {
 });
 
 test('omnibar sits on its own row under the nav', () => {
-  expect(desktopOmnibarHeight).toBe(40);
+  expect(desktopOmnibarHeight).toBe(44);
   expect(desktopNavBarHeight).toBe(52);
 });
 

@@ -248,7 +248,7 @@ export function DesktopRewind({
         </Text>
       ) : null}
       <View style={styles.content}>
-        <ScrollFade visible={fade.visible} style={styles.list}>
+        <ScrollFade visible style={styles.list}>
           <FlatList
             data={frames}
             keyExtractor={frame => frame.id}

@@ -23,6 +23,61 @@ static const CGFloat OmiChromeRowHeight = 52.0;
 
 @end
 
+static NSView *OmiTrafficLightHit(NSView *fromView, NSPoint point)
+{
+  NSWindow *window = fromView.window;
+  if (window == nil) {
+    return nil;
+  }
+  for (NSNumber *kind in @[
+         @(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)
+       ]) {
+    NSButton *button = [window standardWindowButton:(NSWindowButton)kind.unsignedIntegerValue];
+    if (button == nil || button.hidden) {
+      continue;
+    }
+    NSPoint inButton = [fromView convertPoint:point toView:button];
+    if (NSMouseInRect(inButton, button.bounds, button.flipped)) {
+      NSView *hit = [button hitTest:inButton];
+      return hit != nil ? hit : button;
+    }
+  }
+  return nil;
+}
+
+static void OmiSwizzleContentHitTest(NSView *contentView)
+{
+  static NSMutableSet<NSString *> *swizzled;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    swizzled = [NSMutableSet new];
+  });
+  Class cls = contentView.class;
+  if (cls == Nil) {
+    return;
+  }
+  NSString *name = NSStringFromClass(cls);
+  if ([swizzled containsObject:name]) {
+    return;
+  }
+  [swizzled addObject:name];
+  SEL selector = @selector(hitTest:);
+  Method method = class_getInstanceMethod(cls, selector);
+  if (method == NULL) {
+    return;
+  }
+  NSView *(*original)(id, SEL, NSPoint) =
+      (NSView * (*)(id, SEL, NSPoint)) method_getImplementation(method);
+  IMP replacement = imp_implementationWithBlock(^NSView *(NSView *self, NSPoint point) {
+    NSView *light = OmiTrafficLightHit(self, point);
+    if (light != nil) {
+      return light;
+    }
+    return original(self, selector, point);
+  });
+  method_setImplementation(method, replacement);
+}
+
 static void OmiSwizzleTitlebarHitTest(Class cls)
 {
   static NSMutableSet<NSString *> *swizzled;
@@ -211,6 +266,7 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   [self installOmiTitlebarAccessory:window];
   [self hideOmiTitlebarMaterial:window];
   [self installOmiTitlebarClickThrough:window];
+  OmiSwizzleContentHitTest(window.contentView);
   [window standardWindowButton:NSWindowCloseButton].hidden = NO;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;

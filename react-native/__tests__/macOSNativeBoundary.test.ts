@@ -107,6 +107,8 @@ test('titlebar and drag monitor do not steal chrome clicks', () => {
   expect(source).toContain('NSAccessibilitySearchFieldSubrole');
   expect(source).toContain('installOmiTitlebarClickThrough');
   expect(source).toContain('OmiSwizzleTitlebarHitTest');
+  expect(source).toContain('OmiTrafficLightHit');
+  expect(source).toContain('OmiSwizzleContentHitTest');
   expect(source).toContain('OmiViewBlocksWindowDrag');
   expect(source).toContain('NSAccessibilityButtonRole');
   expect(source).toContain('RCTText');
