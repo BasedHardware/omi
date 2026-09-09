@@ -814,6 +814,7 @@ final class DesktopAutomationActionRegistry {
     registerHomeStageActions()
     registerActivationActions()
     registerOpenAskOmiActions()
+    registerCloseAskOmiActions()
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     register(
@@ -1776,15 +1777,6 @@ final class DesktopAutomationActionRegistry {
         "was_signed_in": "true",
         "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
       ]
-    }
-
-    register(
-      name: "close_ask_omi",
-      summary: "Close the Ask Omi input panel if it is open",
-      params: ["wait"]
-    ) { params in
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
     register(

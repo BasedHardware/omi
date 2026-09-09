@@ -192,8 +192,15 @@ final class DesktopAutomationWindowPresentationTests: XCTestCase {
   @MainActor
   func testOpenAskOmiLeavesQuietWindowsMountedAndUnrevealed() async throws {
     DesktopAutomationActionRegistry.shared.registerBuiltins()
-    defer { DesktopAutomationWindowPresentation.setMode(.normal) }
+    let previousMode = DesktopAutomationWindowPresentation.currentMode
+    defer { DesktopAutomationWindowPresentation.setMode(previousMode) }
     _ = DesktopAutomationWindowPresentation.setMode(.quiet)
+    // The composer is presented only once the Chat destination has mounted and
+    // acknowledged (`markRouteVisible` from its `onAppear`).
+    let navigation = ChatFirstShellNavigation.shared
+    navigation.selectMore(.rewind)
+    navigation.selectPrimary(.chat, origin: .chatDeeplink)
+    navigation.markRouteVisible(.chat)
 
     let window = NSWindow(
       contentRect: NSRect(x: 120, y: 120, width: 960, height: 700),
@@ -212,6 +219,8 @@ final class DesktopAutomationWindowPresentationTests: XCTestCase {
     XCTAssertTrue(window.isVisible, "quiet automation must keep the window mounted")
     XCTAssertEqual(detail?["presentation"], "quiet")
     XCTAssertEqual(detail?["target"], "main_chat")
-    XCTAssertNotEqual(detail?["focusMs"], "timeout")
+    XCTAssertNil(
+      detail?["focusMs"],
+      "quiet omits the focus field entirely; it must not be reported as a focus timeout")
   }
 }

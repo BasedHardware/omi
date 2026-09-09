@@ -21,7 +21,12 @@ enum OpenAskOmiAutomation {
   static func isComposerPresented(
     _ navigation: ChatFirstShellNavigation = .shared
   ) -> Bool {
-    navigation.route == .chat
+    // `route` is the navigation command; `visibleRoute` is the mounted
+    // destination's acknowledgement (`markRouteVisible` from `onAppear`). On a
+    // cold shell or a switch from another route, `selectPrimary` sets `route`
+    // before SwiftUI mounts Chat, so reporting on `route` would claim an open
+    // composer that is not on screen yet — the same lie this PR fixes (#13201).
+    navigation.visibleRoute == .chat
   }
 
   static func isComposerFocused(
@@ -114,6 +119,32 @@ extension DesktopAutomationActionRegistry {
       return await openAskOmiForAutomation(wait: wait)
     }
   }
+
+  /// The close half of the Ask Omi pair, kept next to the open action so the two
+  /// cannot drift apart again (`open_ask_omi` opens `main_chat`, this closes the
+  /// floating panel and discloses the resting main-chat surface).
+  func registerCloseAskOmiActions() {
+    register(
+      name: "close_ask_omi",
+      summary:
+        "Close the floating Ask Omi input panel if it is open; the chat-first main-window "
+        + "composer is the resting Chat surface, so when it is presented the result reports "
+        + "mainChatPresented=true / mainChatClosed=false instead of implying a floating-bar-only close",
+      params: ["wait"]
+    ) { params in
+      let wait = boolParam(params["wait"], default: true)
+      var result = await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
+      // `open_ask_omi` opens the chat-first main-window composer. That composer
+      // is the resting Chat destination (INV-NAV-1): it has no close, so a
+      // paired flow must not read a floating-bar-only result as "Ask Omi is
+      // closed" while the main-chat surface is presented. Name it instead.
+      if OpenAskOmiAutomation.isComposerPresented() {
+        result["mainChatPresented"] = "true"
+        result["mainChatClosed"] = "false"
+      }
+      return result
+    }
+  }
 }
 
 @MainActor
@@ -131,15 +162,28 @@ private func openAskOmiForAutomation(wait: Bool) async -> [String: String] {
     )
   }
 
+  // `selectPrimary` completes the navigation command, not the mount: Chat is
+  // on screen only after the destination acknowledges via `markRouteVisible`.
+  // Wait (bounded) for that acknowledgement before recording the open result,
+  // so `openMs` never measures a composer that is not actually open.
   let presentedImmediately = OpenAskOmiAutomation.isComposerPresented()
-  let openMs = presentedImmediately ? start.duration(to: .now).askOmiMillisecondsString : "timeout"
+  let openMs: String
+  if presentedImmediately {
+    openMs = start.duration(to: .now).askOmiMillisecondsString
+  } else {
+    let mounted = await waitForAskOmiAutomationCondition {
+      OpenAskOmiAutomation.isComposerPresented()
+    }
+    openMs = mounted ?? "timeout"
+  }
+  let presented = OpenAskOmiAutomation.isComposerPresented()
   let quiet = presentation == .quiet
   let canWaitForFocus = !quiet && OpenAskOmiAutomation.shellWindowIfAppRunning() != nil
   if !canWaitForFocus {
     return OpenAskOmiAutomation.detail(
       wait: true,
       presentation: presentation,
-      presented: presentedImmediately,
+      presented: presented,
       focused: OpenAskOmiAutomation.isComposerFocused(),
       openMs: openMs,
       elapsedMs: start.duration(to: .now).askOmiMillisecondsString
