@@ -11,6 +11,7 @@ import {
 import type {ChatMessage} from '../chatClient';
 import {
   chatClockLabel,
+  chatDaySummaryCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   desktopBackendUnavailableCopy,
@@ -140,6 +141,9 @@ function AskExchange({
           {item.generationOutcome === 'cancelled' &&
           visibleDisplayText(item.text) !== '' ? (
             <Text style={styles.rowMeta}>Response stopped</Text>
+          ) : null}
+          {chatDaySummaryCopy(item.type) !== '' ? (
+            <Text style={styles.rowMeta}>{chatDaySummaryCopy(item.type)}</Text>
           ) : null}
           <Text style={styles.rowMeta}>
             {chatClockLabel(item.createdAt, Date.now()) || 'Time unavailable'}

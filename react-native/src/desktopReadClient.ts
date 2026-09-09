@@ -422,6 +422,12 @@ export function chatSenderCopy(sender: 'human' | 'ai' | 'unknown'): string {
   return 'Sender unavailable';
 }
 
+export function chatDaySummaryCopy(
+  type: 'text' | 'day_summary' | 'unknown' | undefined,
+): string {
+  return type === 'day_summary' ? 'Day Summary' : '';
+}
+
 export function memoryDisplayTitle(item: {
   title: string;
   summary: string;

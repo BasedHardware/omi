@@ -24,6 +24,7 @@ import {
   connectionIdentityCopy,
   chatMessageDisplayText,
   chatSenderCopy,
+  chatDaySummaryCopy,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendForbiddenCopy,
@@ -1152,6 +1153,13 @@ test('unknown chat senders stay visible instead of failing the history page', ()
   expect(chatSenderCopy('human')).toBe('You');
   expect(chatSenderCopy('ai')).toBe('Omi');
   expect(chatSenderCopy('unknown')).toBe('Sender unavailable');
+});
+
+test('chat day_summary GET type names Day Summary instead of a normal turn', () => {
+  expect(chatDaySummaryCopy('day_summary')).toBe('Day Summary');
+  expect(chatDaySummaryCopy('text')).toBe('');
+  expect(chatDaySummaryCopy('unknown')).toBe('');
+  expect(chatDaySummaryCopy(undefined)).toBe('');
 });
 
 test('empty memory text stays visible instead of a blank row', () => {

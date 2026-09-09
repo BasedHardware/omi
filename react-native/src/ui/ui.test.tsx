@@ -1280,6 +1280,44 @@ test('a cancelled chat message with text still says Response stopped', () => {
   });
 });
 
+test('a day_summary chat message names Day Summary instead of a normal Omi turn', () => {
+  const renderer = render(
+    <ChatMessageRow
+      animate={false}
+      compact
+      message={{
+        id: 'chat-summary',
+        text: 'Yesterday you captured two meetings.',
+        sender: 'ai',
+        type: 'day_summary',
+        createdAt: Date.now(),
+        generationOutcome: 'completed',
+      }}
+      reduceMotion
+    />,
+  );
+  const copies = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .flatMap(node => {
+      const children = node.props.children;
+      if (typeof children === 'string') {
+        return [children];
+      }
+      if (Array.isArray(children)) {
+        return children.filter(
+          (child): child is string => typeof child === 'string',
+        );
+      }
+      return [];
+    });
+  expect(copies).toContain('Day Summary');
+  expect(copies).toContain('Yesterday you captured two meetings.');
+  expect(copies).not.toContain('day_summary');
+  act(() => {
+    renderer.unmount();
+  });
+});
+
 test('an unknown chat sender says Sender unavailable instead of looking like a quiet AI turn', () => {
   const renderer = render(
     <ChatMessageRow

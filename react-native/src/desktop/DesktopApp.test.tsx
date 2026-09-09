@@ -661,6 +661,25 @@ test('desktop chat keeps Response stopped when a cancelled reply already has tex
   expect(copy).toContain('Response stopped');
 });
 
+test('desktop chat names GET day_summary instead of a normal Omi turn', () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'summary-1',
+        text: 'Yesterday you captured two meetings.',
+        sender: 'ai',
+        type: 'day_summary',
+        createdAt: Date.parse('2026-09-07T12:00:00.000Z'),
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Day Summary');
+  expect(copy).toContain('Yesterday you captured two meetings.');
+  expect(copy).not.toContain('day_summary');
+});
+
 test('desktop chat treats a whitespace-only reply as Message text unavailable', () => {
   const renderer = renderDesktop({
     messages: [

@@ -21,6 +21,7 @@ export type ChatMessage = {
   id: string;
   text: string;
   sender: 'human' | 'ai' | 'unknown';
+  type?: 'text' | 'day_summary' | 'unknown';
   createdAt: number;
   generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
   generationId?: string;
@@ -232,6 +233,7 @@ function desktopChatMessage(message: ParsedChatMessage): ChatMessage {
     sender: message.sender,
     createdAt: message.createdAt,
     generationOutcome: message.generationOutcome,
+    ...(message.type === 'day_summary' ? {type: 'day_summary' as const} : {}),
     ...(message.attachments.length > 0
       ? {
           attachments: message.attachments.map(attachment => ({

@@ -3,6 +3,7 @@ import {Animated, Easing, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {
   chatClockLabel,
+  chatDaySummaryCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   visibleDisplayText,
@@ -45,6 +46,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
     ]).start();
   }, [animate, opacity, reduceMotion, translateY]);
   const human = message.sender === 'human';
+  const daySummary = chatDaySummaryCopy(message.type);
   return (
     <Animated.View
       accessibilityLabel={
@@ -85,6 +87,9 @@ const ChatMessageRow = memo(function ChatMessageRow({
           visibleDisplayText(message.text) !== '' && (
             <Text style={styles.cancelledLabel}>Response stopped</Text>
           )}
+        {daySummary !== '' && (
+          <Text style={styles.cancelledLabel}>{daySummary}</Text>
+        )}
         {message.sender === 'unknown' && (
           <Text style={styles.cancelledLabel}>
             {chatSenderCopy(message.sender)}

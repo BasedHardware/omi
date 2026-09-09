@@ -21,6 +21,7 @@ export function parseOmiMessage(value: unknown): ChatMessage {
     id: row.id,
     text: row.text,
     sender: row.sender,
+    ...(row.type === 'day_summary' ? {type: 'day_summary' as const} : {}),
     createdAt,
     generationOutcome: null,
   };

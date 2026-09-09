@@ -30,6 +30,7 @@ function historyResponse(
     sender: 'human' | 'ai' | 'unknown';
     createdAt?: number;
     generationOutcome?: 'completed' | 'cancelled' | null;
+    type?: 'text' | 'day_summary' | 'unknown';
     attachments?: Array<{
       id: string;
       displayName: string;
@@ -53,7 +54,7 @@ function historyResponse(
         generationOutcome:
           message.generationOutcome ??
           (message.sender === 'ai' ? 'completed' : null),
-        type: 'text',
+        type: message.type ?? 'text',
         updatedAt: message.createdAt ?? Date.parse('2026-09-07T12:00:00.000Z'),
         chatSessionId: null,
         appId: null,
@@ -857,6 +858,41 @@ test('conversation-detail history keeps attachment names on empty message text',
   );
   expect(textOf(renderer)).toContain('You · notes.txt · Text · 12 B');
   expect(textOf(renderer)).not.toContain('You · Message text unavailable');
+});
+
+test('conversation-detail history names GET day_summary instead of a normal Omi turn', async () => {
+  mockRequest.mockResolvedValue(
+    historyResponse([
+      {
+        id: 'summary-1',
+        text: 'Yesterday you captured two meetings.',
+        sender: 'ai',
+        type: 'day_summary',
+        generationOutcome: 'completed',
+      },
+      {
+        id: 'text-1',
+        text: 'hello',
+        sender: 'human',
+        type: 'text',
+        generationOutcome: null,
+      },
+    ]),
+  );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  const tree = textOf(renderer);
+  expect(tree).toContain('Day Summary');
+  expect(tree).toContain('Omi · Yesterday you captured two meetings.');
+  expect(tree).toContain('You · hello');
+  expect(tree).not.toContain('day_summary');
 });
 
 test('an unknown conversation-detail chat sender stays visible instead of hiding the thread', async () => {

@@ -29,7 +29,7 @@ const capabilities = {
 function wireMessage(message: ChatMessage) {
   return {
     ...message,
-    type: 'text',
+    type: message.type ?? 'text',
     updatedAt: message.createdAt,
     chatSessionId: null,
     appId: null,
@@ -139,6 +139,36 @@ test('keeps unknown chat senders instead of failing history', async () => {
   ).resolves.toEqual([
     expect.objectContaining({id: 'human-1', sender: 'human'}),
     expect.objectContaining({id: 'empty-1', sender: 'unknown', text: 'kept'}),
+  ]);
+});
+
+test('keeps GET chat day_summary type instead of dropping it as a normal turn', async () => {
+  const summary = {
+    id: 'summary-1',
+    text: 'Yesterday you captured two meetings.',
+    sender: 'ai' as const,
+    type: 'day_summary' as const,
+    createdAt: 200,
+    generationOutcome: 'completed' as const,
+  };
+  const backendFor = (body: string): OmiBackend => ({
+    request: async (request: NativeHttpRequest) => ({
+      id: request.id,
+      status: 200,
+      body,
+    }),
+    generationEvents: async () => ({id: 'events', status: 200, body: ''}),
+    cancelGenerationEvents: async () => {},
+  });
+
+  await expect(
+    loadChatHistory(backendFor(historyBody([summary]))),
+  ).resolves.toEqual([
+    expect.objectContaining({
+      id: 'summary-1',
+      type: 'day_summary',
+      text: 'Yesterday you captured two meetings.',
+    }),
   ]);
 });
 

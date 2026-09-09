@@ -40,3 +40,29 @@ test('old custom done frame decodes Unicode and actual message identity without 
   expect(() => parseOmiChatStream('data: incomplete\n\n')).toThrow();
   expect(() => parseOmiChatStream('done: broken\n\n')).toThrow();
 });
+
+test('old chat history keeps GET day_summary type instead of dropping it as a normal turn', () => {
+  const page = parseOmiHistory(
+    JSON.stringify([
+      {
+        id: 'summary-1',
+        sender: 'ai',
+        text: 'Yesterday you captured two meetings.',
+        created_at: '2026-09-07T01:02:03Z',
+        type: 'day_summary',
+      },
+      {
+        id: 'text-1',
+        sender: 'human',
+        text: 'hello',
+        created_at: '2026-09-07T01:02:04Z',
+        type: 'plugin_event',
+      },
+    ]),
+    0,
+  );
+  expect(page.messages.find(row => row.id === 'summary-1')).toEqual(
+    expect.objectContaining({id: 'summary-1', type: 'day_summary'}),
+  );
+  expect(page.messages.find(row => row.id === 'text-1')?.type).toBeUndefined();
+});

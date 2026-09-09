@@ -4,6 +4,7 @@ import {chatHistoryHasOlder} from '../chatClient';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {
   chatClockLabel,
+  chatDaySummaryCopy,
   chatMessageDisplayText,
   chatSenderCopy,
   visibleDisplayText,
@@ -89,6 +90,7 @@ export function ChatConversationHistory({
             result.messages.map(message => {
               const sender = chatSenderCopy(message.sender);
               const body = chatMessageDisplayText(message);
+              const daySummary = chatDaySummaryCopy(message.type);
               return (
                 <View key={message.id}>
                   <Text
@@ -100,6 +102,11 @@ export function ChatConversationHistory({
                   visibleDisplayText(message.text) !== '' ? (
                     <Text style={[styles.conversationDetailField, ink]}>
                       Response stopped
+                    </Text>
+                  ) : null}
+                  {daySummary !== '' ? (
+                    <Text style={[styles.conversationDetailField, ink]}>
+                      {daySummary}
                     </Text>
                   ) : null}
                   <Text style={[styles.conversationDetailField, ink]}>
