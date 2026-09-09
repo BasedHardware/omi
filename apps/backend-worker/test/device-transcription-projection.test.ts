@@ -97,7 +97,7 @@ describe("device transcription client projection", () => {
     });
   });
 
-  test("completed stored text stays when a later segment omits text", () => {
+  test("completed GET uses production Listen segment join when stored text disagrees", () => {
     expect(
       projectDeviceTranscription({
         ...completed,
@@ -109,7 +109,7 @@ describe("device transcription client projection", () => {
       })
     ).toMatchObject({
       state: "completed",
-      text: "Stored speech",
+      text: " Later speech",
     });
   });
 
@@ -174,7 +174,13 @@ describe("device transcription client projection", () => {
     expect(recordingListSpeech("Stored speech", segments)).toBe(
       "First words Later speech"
     );
-    expect(recordingTranscriptSpeech("Stored speech", segments)).toBe(
+    expect(recordingTranscriptSpeech("Stored speech", segments)).toContain(
+      "\u0085"
+    );
+    expect(recordingTranscriptSpeech("Stored speech", segments)).toContain(
+      "Later speech"
+    );
+    expect(recordingTranscriptSpeech("Stored speech", segments)).not.toBe(
       "Stored speech"
     );
   });

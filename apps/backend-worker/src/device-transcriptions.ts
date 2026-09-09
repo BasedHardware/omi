@@ -306,15 +306,8 @@ function recordingSpeech(
 ): string | null {
   const joined = joinWellFormedSegmentTexts(segments, skipEmptyAfterTrim);
   if (joined === null) return storedText;
-  if (skipEmptyAfterTrim && visibleTranscriptText(joined) !== "") {
-    return joined;
-  }
-  const storedVisible =
-    storedText === null ? "" : visibleTranscriptText(storedText);
-  if (storedVisible === "" && visibleTranscriptText(joined) !== "") {
-    return joined;
-  }
-  return storedText;
+  if (!skipEmptyAfterTrim) return joined;
+  return visibleTranscriptText(joined) !== "" ? joined : storedText;
 }
 
 export function parseStoredTranscriptSegments(

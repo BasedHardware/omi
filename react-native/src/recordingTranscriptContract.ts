@@ -10,10 +10,6 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function visibleTranscriptText(value: string): string {
-  return value.replace(/^[\s\u0085]+|[\s\u0085]+$/gu, '');
-}
-
 function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
   if (segments.length === 0) {
     return null;
@@ -45,15 +41,7 @@ function recordingTranscriptSpeech(
   segments: unknown[],
 ): string | null {
   const joined = joinWellFormedSegmentTexts(segments);
-  if (joined === null) {
-    return storedText;
-  }
-  const storedVisible =
-    storedText === null ? '' : visibleTranscriptText(storedText);
-  if (storedVisible === '' && visibleTranscriptText(joined) !== '') {
-    return joined;
-  }
-  return storedText;
+  return joined === null ? storedText : joined;
 }
 
 export function parseRecordingTranscript(
