@@ -239,7 +239,12 @@ function joinWellFormedSegmentTexts(
       continue;
     }
     if (typeof text !== "string") return null;
-    if (skipEmptyAfterTrim && visibleTranscriptText(text) === "") continue;
+    if (skipEmptyAfterTrim) {
+      const visible = visibleTranscriptText(text);
+      if (visible === "") continue;
+      parts.push(visible);
+      continue;
+    }
     parts.push(text);
   }
   return parts.length === 0 ? null : parts.join(" ");

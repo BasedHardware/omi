@@ -248,6 +248,34 @@ test("recording titles skip empty-after-trim segment windows that would hide lat
   });
 });
 
+test("recording titles visible-trim kept Whisper segments before join", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ?, segments = ? WHERE session_id = ?"
+  )
+    .bind(
+      "",
+      JSON.stringify([
+        { start: 0, end: 0.1, text: "First words\u0085" },
+        { start: 0.1, end: 0.2, text: "\u0085Later speech" },
+      ]),
+      session.id
+    )
+    .run();
+  const rows = await readConversations(env.DB, "record-owner");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "First words Later speech",
+    overview: "First words Later speech",
+    source: "omi",
+    status: "completed",
+  });
+  expect(rows[0]?.title).not.toContain("\u0085");
+  expect(rows[0]?.overview).not.toContain("\u0085");
+});
+
 test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", async () => {
   const session = await recording();
   await completeDeviceSession(env.DB, "record-owner", session.id, 102);

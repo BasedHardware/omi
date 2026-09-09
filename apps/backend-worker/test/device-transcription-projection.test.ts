@@ -175,4 +175,15 @@ describe("device transcription client projection", () => {
       "Stored speech"
     );
   });
+
+  test("list titles visible-trim kept Whisper segments before join", () => {
+    const segments = [
+      { start: 0, end: 0.1, text: "First words\u0085" },
+      { start: 0.1, end: 0.2, text: "\u0085Later speech" },
+    ];
+    expect(recordingTranscriptSpeech("", segments)).toBe(
+      "First words\u0085 \u0085Later speech"
+    );
+    expect(recordingListSpeech("", segments)).toBe("First words Later speech");
+  });
 });
