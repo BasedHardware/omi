@@ -52,6 +52,42 @@ final class VoiceTypeCommandParserTests: XCTestCase {
       .typing(payload: "Buy milk"))
   }
 
+  func testAnOpeningThisBelongsToTheSpeakerNotTheWakePhrase() {
+    // Reported live: "type this is a test" came out as "Is a test". The
+    // longest-match wake phrase "type this" ate the speaker's own first word,
+    // and "this" is about the commonest word an English sentence opens with.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("type this is a test"),
+      .typing(payload: "This is a test"))
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("Type this looks wrong to me"),
+      .typing(payload: "This looks wrong to me"))
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Type this is a test"), "This is a test")
+    // The same word is still the speaker's after a misheard wake word.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Typed this is a test"), "This is a test")
+    XCTAssertEqual(
+      VoiceTypeCommandParser.payloadAssumingDictation("Tie, this is a test"), "This is a test")
+  }
+
+  func testAPauseOrColonStillMarksTypeThisAsTheInstruction() {
+    // Spoken as an instruction, the phrase keeps its word: what tells the two
+    // apart is the punctuation a speaker's pause leaves behind.
+    for opening in ["type this: buy milk", "Type this, buy milk", "Type this. Buy milk"] {
+      XCTAssertEqual(
+        VoiceTypeCommandParser.decide(opening), .typing(payload: "Buy milk"), opening)
+    }
+    // Straight-through phrasings are untouched: nobody dictates text opening
+    // on "out", and "type out an email" is how people speak the instruction.
+    XCTAssertEqual(
+      VoiceTypeCommandParser.decide("type out the address"), .typing(payload: "The address"))
+    // And the turn is still claimed either way.
+    for opening in ["type this is a test", "type this: buy milk"] {
+      XCTAssertTrue(VoiceTypeCommandParser.opensLikeDictation(opening), opening)
+    }
+  }
+
   func testAClaimedTurnReadsAMisheardWakeWordLeniently() {
     // The closing transcript comes from a stronger recognizer than the probe
     // that claimed the turn, and it may spell the wake word its own way.

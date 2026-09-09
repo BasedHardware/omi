@@ -475,4 +475,59 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       captured.capturedAt,
       "a release stamp older than the capture must never shorten the budget")
   }
+
+  @MainActor
+  func testUnavailableFactoryDoesNotRequireCompositorPixels() {
+    let evidence = RealtimeScreenEvidenceCapture.unavailable(
+      for: turnID, failure: .automationBypass)
+    XCTAssertEqual(evidence.descriptor.target, .unavailable)
+    XCTAssertEqual(evidence.descriptor.captureFailure, .automationBypass)
+    XCTAssertNil(evidence.preOverlayImage)
+    XCTAssertTrue(evidence.encodingFinished)
+    XCTAssertFalse(evidence.descriptor.canVerifyCurrentScreen)
+  }
+
+  @MainActor
+  func testInstallScreenEvidenceDropsACompletedCaptureFromAnEndedTurn() {
+    let coordinator = VoiceTurnCoordinator.shared
+    coordinator.reset()
+    RealtimeHubController.shared.clearScreenGrounding()
+    defer {
+      coordinator.reset()
+      RealtimeHubController.shared.clearScreenGrounding()
+    }
+
+    let firstTurnID = coordinator.begin(intent: .hold)
+    let lateEvidence = RealtimeScreenEvidence(
+      descriptor: RealtimeScreenEvidenceDescriptor(
+        evidenceID: "late-ended-turn",
+        turnID: firstTurnID,
+        capturedAt: Date(),
+        target: .frontmostDisplay,
+        frontmostApp: "TestApp",
+        frontmostBundleID: "com.test.app",
+        windowID: 1,
+        displayID: 1,
+        imageByteCount: 64,
+        imageDigest: "late"),
+      preOverlayImage: nil,
+      jpeg: Data([9]),
+      encodingFinished: true)
+    RealtimeHubController.shared.installScreenEvidence(lateEvidence)
+    XCTAssertEqual(
+      RealtimeHubController.shared.screenEvidence?.descriptor.evidenceID, "late-ended-turn")
+    coordinator.publish(.cancel(turnID: firstTurnID, reason: .cancelled))
+
+    let secondTurnID = coordinator.begin(intent: .hold)
+    XCTAssertNotEqual(firstTurnID, secondTurnID)
+    RealtimeHubController.shared.installScreenEvidence(
+      RealtimeScreenEvidenceCapture.unavailable(for: secondTurnID, failure: .automationBypass))
+    RealtimeHubController.shared.installScreenEvidence(lateEvidence)
+    XCTAssertEqual(
+      RealtimeHubController.shared.screenEvidence?.descriptor.turnID,
+      secondTurnID)
+    XCTAssertEqual(
+      RealtimeHubController.shared.screenEvidence?.descriptor.captureFailure,
+      .automationBypass)
+  }
 }

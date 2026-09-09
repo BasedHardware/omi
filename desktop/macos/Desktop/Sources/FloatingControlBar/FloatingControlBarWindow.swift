@@ -3331,50 +3331,6 @@ class FloatingControlBarManager {
     )
   }
 
-  func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
-    guard let window else {
-      return ["error": "floating_bar_window_unavailable"]
-    }
-    if reset {
-      if let provider = sharedFloatingProvider {
-        if let error = await provider.automationResetMainChatForHarness() {
-          return ["error": error]
-        }
-      }
-      if window.state.showingAIConversation {
-        window.closeAIConversation()
-        _ = await waitForAskOmiClosed(in: window)
-      }
-    }
-
-    let start = ContinuousClock.now
-    openAIInput()
-    guard wait else {
-      return [
-        "triggered": "true",
-        "frame": NSStringFromRect(window.frame),
-        "focused": (window.firstResponder is NSTextView) ? "true" : "false",
-      ]
-    }
-    let openMs = await waitForAutomationCondition {
-      window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
-    }
-    if !(window.firstResponder is NSTextView) {
-      _ = window.focusInputField()
-    }
-    let focusMs = await waitForAutomationCondition {
-      window.firstResponder is NSTextView
-    }
-    let elapsedMs = start.duration(to: .now).millisecondsString
-    return [
-      "openMs": openMs ?? "timeout",
-      "focusMs": focusMs ?? "timeout",
-      "elapsedMs": elapsedMs,
-      "frame": NSStringFromRect(window.frame),
-      "focused": (window.firstResponder is NSTextView) ? "true" : "false",
-    ]
-  }
-
   // MARK: - Reach error (actionable "Couldn't reach Omi" card)
 
   private var reachRetryAction: (() -> Void)?
@@ -4949,6 +4905,7 @@ class FloatingControlBarManager {
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
     userScreenContext: String? = nil,
     userEvidence: [ConversationEvidence] = []
   ) async -> Bool {
@@ -4960,6 +4917,7 @@ class FloatingControlBarManager {
       continuityKey: continuityKey,
       assistantStatus: assistantStatus,
       terminalReason: terminalReason,
+      answerTextCompleted: answerTextCompleted,
       userScreenContext: userScreenContext,
       userEvidence: userEvidence,
       ownerID: ownerID

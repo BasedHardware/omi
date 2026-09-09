@@ -10070,4 +10070,7 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.';
+
+  @override
+  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
 }
