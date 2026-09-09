@@ -13,6 +13,7 @@ import {
   memoryCitationCopy,
   memoryDisplayBody,
   memoryDisplayTitle,
+  memorySynthesisCopy,
   projectionClockLabel,
   conversationHasFinishClock,
   taskDisplayTitle,
@@ -101,6 +102,7 @@ export const ReadRow = memo(function ReadRow({
       </View>
     );
   }
+  const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
   const meta =
     item.kind === 'memory'
       ? [timeLabel(item), memoryCitationCopy(item.citations)]
@@ -117,6 +119,9 @@ export const ReadRow = memo(function ReadRow({
         <Text numberOfLines={1} style={styles.rowMeta}>
           {meta.filter(part => part !== '').join(' · ')}
         </Text>
+        {synthesis !== null ? (
+          <Text style={styles.rowMeta}>{synthesis}</Text>
+        ) : null}
       </View>
     </View>
   );

@@ -48,6 +48,7 @@ test('a zero Home current timestamp says Time unavailable instead of omitting th
   expect(copy).toContain('Time unavailable');
   expect(copy).toContain('Undated memory');
   expect(copy).toContain('0 citations');
+  expect(copy).not.toContain('Synthesized memory');
   expect(copy).not.toContain('1970');
   expect(copy).not.toMatch(/(^| )Memory( |$)/);
 });
@@ -75,8 +76,37 @@ test('Home currents keep memory citation counts instead of a Memory kind label',
   const copy = textOf(renderer);
   expect(copy).toContain('A walk.');
   expect(copy).toContain('2 citations');
+  expect(copy).toContain('Synthesized memory');
   expect(copy).not.toContain('citation-v1:launch');
+  expect(copy).not.toContain('input');
+  expect(copy).not.toContain('output');
   expect(copy).not.toMatch(/(^| )Memory( |$)/);
+});
+
+test('Home currents omit synthesized-memory chrome when GET synthesisVersion is missing', () => {
+  const item: MemoryProjection = {
+    kind: 'memory',
+    id: 'memory-plain',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: ['citation-v1:launch'],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: ' \t\n',
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(<ReadRow item={item} />);
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('A walk.');
+  expect(copy).toContain('1 citation');
+  expect(copy).not.toContain('Synthesized memory');
 });
 
 test('Home currents omit whitespace-only memory citations from the count', () => {
@@ -464,7 +494,9 @@ test('Home and Library rows keep GET failed status instead of title-only', () =>
   let plain!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     plain = ReactTestRenderer.create(
-      <ReadRow item={{...item, status: 'completed', title: 'Kept recording'}} />,
+      <ReadRow
+        item={{...item, status: 'completed', title: 'Kept recording'}}
+      />,
     );
   });
   expect(textOf(plain)).not.toContain('Failed');
