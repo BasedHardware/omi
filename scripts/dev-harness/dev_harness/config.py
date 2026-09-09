@@ -84,6 +84,9 @@ class HarnessConfig:
     redis_port: int = REDIS_PORT
     typesense_port: int = TYPESENSE_PORT
     dev_bind_host: str = "127.0.0.1"
+    # Address clients on other machines (a phone) reach the backend at; only
+    # used for URLs the backend hands out, such as local-storage file links.
+    dev_advertise_host: str = "127.0.0.1"
     llm_gateway_port: int = LLM_GATEWAY_PORT
 
     @property
@@ -109,6 +112,11 @@ class HarnessConfig:
     @property
     def backend_url(self) -> str:
         return f"http://{self.backend_host}"
+
+    @property
+    def backend_public_url(self) -> str:
+        """Backend URL as reachable from a physical device (see OMI_DEV_HOST)."""
+        return f"http://{self.dev_advertise_host}:{self.backend_port}"
 
     @property
     def desktop_backend_url(self) -> str:
@@ -164,6 +172,23 @@ def dev_bind_host_from_env(env: Mapping[str, str] | None = None) -> str:
     if safety.is_loopback_host(requested):
         return "127.0.0.1"
     return "0.0.0.0"
+
+
+def dev_advertise_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve the address the backend advertises itself at in generated URLs.
+
+    A phone built against OMI_DEV_HOST cannot fetch a local-storage file (the
+    saved speech profile, say) from a 127.0.0.1 link, so when OMI_DEV_HOST names
+    a LAN/tailnet address the backend hands out links on that address instead.
+    Loopback stays the default for simulator-only setups.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested or safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=APP_DEV_HOST_ENV)
+    return requested
 
 
 def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
@@ -287,6 +312,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     )
     ports = harness_ports_from_env(source)
     dev_bind_host = dev_bind_host_from_env(source)
+    dev_advertise_host = dev_advertise_host_from_env(source)
     cfg = HarnessConfig(
         repo_root=repo_root.resolve(),
         instance=instance,
@@ -300,6 +326,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         typesense_port=ports["typesense"],
         llm_gateway_port=ports["llm_gateway"],
         dev_bind_host=dev_bind_host,
+        dev_advertise_host=dev_advertise_host,
     )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
@@ -317,6 +344,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             typesense_port=cfg.typesense_port,
             llm_gateway_port=cfg.llm_gateway_port,
             dev_bind_host=cfg.dev_bind_host,
+            dev_advertise_host=cfg.dev_advertise_host,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
@@ -335,7 +363,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
         "OMI_LOCAL_STORAGE_ROOT": str(cfg.layout.services_dir / "storage"),
-        "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_url}/_local/storage",
+        "OMI_LOCAL_STORAGE_BASE_URL": f"{cfg.backend_public_url}/_local/storage",
         "FIRESTORE_EMULATOR_HOST": cfg.firestore_host,
         "FIREBASE_AUTH_EMULATOR_HOST": cfg.auth_host,
         "FIREBASE_AUTH_PROJECT_ID": cfg.project_id,

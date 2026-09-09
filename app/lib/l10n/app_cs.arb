@@ -3224,5 +3224,15 @@
     "chatBlockUnavailable": "Již není k dispozici",
     "chatBlockRecommendedNextSteps": "Doporučené další kroky",
     "couldNotLoadMemories": "Nepodařilo se načíst vzpomínky",
-    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí"
+    "couldNotLoadKnowledgeGraph": "Nepodařilo se načíst graf znalostí",
+    "speechProfileOwnerTitle": "Hlasový profil: {name}",
+    "play": "Přehrát",
+    "redo": "Nahrát znovu",
+    "answerWithYourVoice": "Odpovězte hlasem:",
+    "speechProfileTopicLocation": "Kde bydlíte?",
+    "speechProfileTopicWork": "Čím se živíte?",
+    "speechProfileTopicGoal": "Jaký je váš dlouhodobý cíl?",
+    "speechToTextUnavailableDesc": "Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.",
+    "memoryHistoryPartial": "Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.",
+    "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat"
 }

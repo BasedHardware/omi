@@ -1602,6 +1602,8 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     save_knowledge_graph: [],
     get_conversations: [],
     search_conversations: ["query"],
+    read_conversation_evidence: ["evidence_id", "turn_id"],
+    search_conversation_evidence: ["query"],
     get_memories: [],
     search_memories: ["query"],
     get_action_items: [],
@@ -1621,6 +1623,19 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
       `${tool.name} required fields mismatch`,
     );
   }
+});
+
+test("OMI_TOOLS: evidence retrieval keeps its required identifiers and integer cursors", () => {
+  const read = OMI_TOOLS.find((tool) => tool.name === "read_conversation_evidence") as any;
+  const search = OMI_TOOLS.find((tool) => tool.name === "search_conversation_evidence") as any;
+  assert.ok(read, "read_conversation_evidence missing from OMI_TOOLS");
+  assert.ok(search, "search_conversation_evidence missing from OMI_TOOLS");
+  assert.deepEqual([...read.parameters.required].sort(), ["evidence_id", "turn_id"]);
+  assert.deepEqual([...search.parameters.required].sort(), ["query"]);
+  assert.equal(firstTypedSchema(read.parameters.properties.offset).type, "integer");
+  assert.equal(firstTypedSchema(read.parameters.properties.max_chars).type, "integer");
+  assert.equal(firstTypedSchema(search.parameters.properties.offset).type, "integer");
+  assert.equal(firstTypedSchema(search.parameters.properties.limit).type, "integer");
 });
 
 test("OMI_TOOLS: top-level schemas keep the object contract", () => {

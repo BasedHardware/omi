@@ -3246,5 +3246,15 @@
     "chatBlockUnavailable": "Nu mai este disponibil",
     "chatBlockRecommendedNextSteps": "Pașii următori recomandați",
     "couldNotLoadMemories": "Nu s-au putut încărca amintirile",
-    "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe"
+    "couldNotLoadKnowledgeGraph": "Nu s-a putut încărca graful de cunoștințe",
+    "speechProfileOwnerTitle": "Profilul vocal al lui {name}",
+    "play": "Redă",
+    "redo": "Înregistrează din nou",
+    "answerWithYourVoice": "Răspunde cu vocea ta:",
+    "speechProfileTopicLocation": "Unde locuiești?",
+    "speechProfileTopicWork": "Cu ce te ocupi?",
+    "speechProfileTopicGoal": "Care este obiectivul tău pe termen lung?",
+    "speechToTextUnavailableDesc": "Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.",
+    "memoryHistoryPartial": "O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.",
+    "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea"
 }

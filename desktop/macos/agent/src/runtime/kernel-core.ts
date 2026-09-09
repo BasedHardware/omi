@@ -36,7 +36,9 @@ import {
 } from "./external-surface-journal.js";
 import {
   bindProducingJournalTurn,
+  readConversationEvidence,
   searchJournalConversation,
+  searchConversationEvidence,
   validateProducingJournalTurnAdmission,
 } from "./conversation-journal.js";
 import type {
@@ -353,6 +355,122 @@ export class KernelCore {
     } finally {
       lease.release();
     }
+  }
+
+  /**
+   * Read evidence through the caller's mounted conversation. The model only
+   * supplies stable evidence/turn references; owner and conversation scope
+   * come from the live run capability and exact surface mapping.
+   */
+  readAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "read_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("read_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceReadToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("read_conversation_evidence requires an exact conversation binding");
+      const read = readConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        turnId: toolInput.turnId,
+        evidenceId: toolInput.evidenceId,
+        maxChars: Math.min(
+          toolInput.maxChars,
+          invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 5_000 : 12_000,
+        ),
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      if (!read) {
+        return {
+          found: false,
+          available: false,
+          readable: false,
+          complete: true,
+          availability: "unavailable",
+          turnId: toolInput.turnId,
+          evidenceId: toolInput.evidenceId,
+        };
+      }
+      // `found` means the stable descriptor was present. `available` is the
+      // descriptor's source availability, while `readable` means this local
+      // mirror actually yielded extracted body content. Keep these separate:
+      // an unavailable/bodyless descriptor must never look like a successful
+      // body read merely because its metadata was found.
+      const readable = read.availability !== "unavailable"
+        && read.extractionCompleteness !== "none"
+        && (read.chunk.length > 0 || read.nextOffset !== null);
+      const { conversationId: _conversationId, ...readResult } = read;
+      return {
+        found: true,
+        readable,
+        ...readResult,
+        available: read.available,
+      };
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Search evidence through the caller's mounted conversation. */
+  searchAuthorizedConversationEvidence(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }): Record<string, unknown> {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_conversation_evidence"
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_conversation_evidence requires a node tool capability");
+    }
+    const toolInput = conversationEvidenceSearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      const conversationId = this.authorizedConversationId(invocation, session.surfaceKind);
+      if (!conversationId) throw new Error("search_conversation_evidence requires an exact conversation binding");
+      const result = searchConversationEvidence(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        query: toolInput.query,
+        limit: toolInput.limit,
+        maxChars: invocation.surfaceKind === "realtime_voice" || invocation.surfaceKind === "realtime" ? 280 : 320,
+        offset: toolInput.offset,
+      });
+      lease.assertCurrentAuthority();
+      const { matches, offset, nextOffset, hasMore, scanned } = result;
+      return { matches, offset, nextOffset, hasMore, scanned };
+    } finally {
+      lease.release();
+    }
+  }
+
+  private authorizedConversationId(invocation: AuthorizedRunToolInvocation, surfaceKind: string): string | null {
+    if (!invocation.externalRefKind || !invocation.externalRefId) return null;
+    return conversationIdForOwnedSurfaceSession(this.store, {
+      ownerId: invocation.ownerId,
+      sessionId: invocation.sessionId,
+      surfaceKind,
+      externalRefKind: invocation.externalRefKind,
+      externalRefId: invocation.externalRefId,
+    });
   }
 
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
@@ -2943,6 +3061,55 @@ function chatHistorySearchToolInput(input: Record<string, unknown>): {
     startDate: readOptionalString(input.start_date, "start_date"),
     endDate: readOptionalString(input.end_date, "end_date"),
     ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  };
+}
+
+function conversationEvidenceReadToolInput(input: Record<string, unknown>): {
+  evidenceId: string;
+  turnId: string;
+  offset: number;
+  maxChars: number;
+} {
+  const required = (value: unknown, field: string): string => {
+    if (typeof value !== "string" || !value.trim() || value.length > 160) {
+      throw new Error(`read_conversation_evidence ${field} must be a bounded string`);
+    }
+    return value.trim();
+  };
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`read_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    evidenceId: required(input.evidence_id, "evidence_id"),
+    turnId: required(input.turn_id, "turn_id"),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 64 * 1024),
+    maxChars: boundedInteger(input.max_chars, "max_chars", 5_000, 128, 12_000),
+  };
+}
+
+function conversationEvidenceSearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  offset: number;
+  limit: number;
+} {
+  if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 512) {
+    throw new Error("search_conversation_evidence query must be a bounded non-empty string");
+  }
+  const boundedInteger = (value: unknown, field: string, fallback: number, min: number, max: number): number => {
+    if (value === undefined) return fallback;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`search_conversation_evidence ${field} is out of bounds`);
+    }
+    return value;
+  };
+  return {
+    query: input.query.trim(),
+    offset: boundedInteger(input.offset, "offset", 0, 0, 1_000_000_000),
+    limit: boundedInteger(input.limit, "limit", 10, 1, 20),
   };
 }
 

@@ -3281,5 +3281,15 @@
     "chatBlockUnavailable": "Больше недоступно",
     "chatBlockRecommendedNextSteps": "Рекомендуемые следующие шаги",
     "couldNotLoadMemories": "Не удалось загрузить воспоминания",
-    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний"
+    "couldNotLoadKnowledgeGraph": "Не удалось загрузить граф знаний",
+    "speechProfileOwnerTitle": "Голосовой профиль: {name}",
+    "play": "Воспроизвести",
+    "redo": "Записать заново",
+    "answerWithYourVoice": "Ответьте голосом:",
+    "speechProfileTopicLocation": "Где вы живёте?",
+    "speechProfileTopicWork": "Кем вы работаете?",
+    "speechProfileTopicGoal": "Какова ваша долгосрочная цель?",
+    "speechToTextUnavailableDesc": "Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.",
+    "memoryHistoryPartial": "Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.",
+    "tapPlusToStartRecording": "Нажмите +, чтобы начать запись"
 }

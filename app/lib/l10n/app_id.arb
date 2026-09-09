@@ -3288,5 +3288,15 @@
     "chatBlockUnavailable": "Tidak lagi tersedia",
     "chatBlockRecommendedNextSteps": "Langkah berikutnya yang disarankan",
     "couldNotLoadMemories": "Tidak dapat memuat kenangan",
-    "couldNotLoadKnowledgeGraph": "Tidak dapat memuat graf pengetahuan"
+    "couldNotLoadKnowledgeGraph": "Tidak dapat memuat graf pengetahuan",
+    "speechProfileOwnerTitle": "Profil Suara {name}",
+    "play": "Putar",
+    "redo": "Rekam ulang",
+    "answerWithYourVoice": "Jawab dengan suara Anda:",
+    "speechProfileTopicLocation": "Di mana Anda tinggal?",
+    "speechProfileTopicWork": "Apa pekerjaan Anda?",
+    "speechProfileTopicGoal": "Apa tujuan jangka panjang Anda?",
+    "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
+    "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
+    "tapPlusToStartRecording": "Ketuk + untuk mulai merekam"
 }

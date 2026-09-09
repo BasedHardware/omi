@@ -16,7 +16,7 @@ from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.auth import get_user_name
 from utils.conversations.transcript_for_llm import (
-    conversation_transcript_for_action_items,
+    conversation_transcript_and_speaker_map,
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
 )
@@ -64,6 +64,7 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
@@ -481,7 +482,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
+        transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
         # For re-processing, we don't discard, just re-structure.
@@ -496,6 +497,7 @@ def _get_structured(
                     language_code=language_code,
                     calendar_context=calendar_context,
                     photos=main_conv.photos,
+                    speaker_map=speaker_map,
                 )
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                     structured = get_conversation_notes(
@@ -534,10 +536,9 @@ def _get_structured(
                 )
             return structured, False
 
-        # Compute conversation duration for discard heuristics
-        duration_seconds: Optional[float] = None
-        if main_conv.started_at and main_conv.finished_at:
-            duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
+        # Transcript span, not the wall window: `started_at` is the streaming-session
+        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -575,6 +576,7 @@ def _get_structured(
                 language_code=language_code,
                 calendar_context=calendar_context,
                 photos=main_conv.photos,
+                speaker_map=speaker_map,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -804,14 +806,16 @@ def trigger_conversation_apps(
             transcript = conversation_transcript_for_llm(uid, conversation, people)
             prompt_prefix = None
             if _conversation_notes_v2_enabled() and conversation.started_at:
+                app_transcript, app_speaker_map = conversation_transcript_and_speaker_map(uid, conversation, people)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
-                    transcript=conversation_transcript_for_action_items(uid, conversation, people),
+                    transcript=app_transcript,
                     started_at=conversation.started_at,
                     timezone_name=notification_db.get_user_time_zone(uid) or '',
                     language_code=language_code,
                     calendar_context=_stored_meeting_context(conversation),
                     photos=conversation.photos,
+                    speaker_map=app_speaker_map,
                 )
             result = get_app_result(
                 transcript,
@@ -1402,14 +1406,18 @@ def _extract_memories_canonical(
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
             prompt_people = [Person(**record) for record in people_records]
             calendar_context = _stored_meeting_context(conversation)
+            prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
+                uid, conversation, prompt_people
+            )
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
-                transcript=conversation_transcript_for_action_items(uid, conversation, prompt_people),
+                transcript=prompt_transcript,
                 started_at=conversation.started_at,
                 timezone_name=notification_db.get_user_time_zone(uid) or '',
                 language_code=conversation.language or 'en',
                 calendar_context=calendar_context,
                 photos=conversation.photos,
+                speaker_map=prompt_speaker_map,
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(

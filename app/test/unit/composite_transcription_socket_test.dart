@@ -132,6 +132,27 @@ void main() {
       expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
     });
 
+    test('speech-profile on-device fallback honors the raw-audio setting too', () {
+      // A local-only config must not leak raw audio to the Omi secondary in
+      // the speech-profile flow either; suggested transcripts still flow.
+      const config = CustomSttConfig(
+        provider: SttProvider.custom,
+        url: 'https://stt.example.test/poll',
+        requestType: SttRequestType.multipartForm,
+        sendRawAudioToOmi: false,
+      );
+
+      final service = TranscriptSocketServiceFactory.createSpeechProfileOnDevice(
+        16000,
+        BleAudioCodec.pcm16,
+        'en',
+        config,
+      );
+
+      expect(service.socket, isA<CompositeTranscriptionSocket>());
+      expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
+    });
+
     test('blocks unsupported-codec Omi fallback when raw audio forwarding is disabled', () {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,

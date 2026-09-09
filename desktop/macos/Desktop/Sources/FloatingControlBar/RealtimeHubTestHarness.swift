@@ -136,6 +136,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchMemories: stub = "Your dog's name is Rex."
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
+    case .readConversationEvidence: stub = "Evidence body: visible text from the captured turn."
+    case .searchConversationEvidence: stub = "Found 1 matching evidence item."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
     case .checkPermissionStatus: stub = "Screen Recording: not granted."
     case .requestPermission: stub = "Screen Recording permission request opened."

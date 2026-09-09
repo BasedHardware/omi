@@ -811,6 +811,7 @@ final class DesktopAutomationActionRegistry {
     // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
     registerActivationActions()
+    registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     register(
       name: "refresh_all_data",
@@ -2080,9 +2081,19 @@ final class DesktopAutomationActionRegistry {
       params: ["query"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       // Report the provider's own admission decision. This used to answer
       // `sent` unconditionally, so a send the busy guard refused was reported
@@ -2114,9 +2125,19 @@ final class DesktopAutomationActionRegistry {
       params: ["query", "hold_busy_ms"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !query.isEmpty else { return ["error": "missing 'query'"] }
       guard let provider = ChatProvider.mainInstance else {
-        return ["error": "main ChatProvider not yet initialized"]
+        return query.isEmpty
+          ? ["error": "missing 'query'"]
+          : ["error": "main ChatProvider not yet initialized"]
+      }
+      guard
+        ChatProvider.hasSendableSubject(
+          text: query,
+          attachmentCount: provider.pendingAttachments.count,
+          referenceCount: provider.pendingComposerReferences.count
+        )
+      else {
+        return ["error": "missing 'query'"]
       }
       let isSending = provider.isSending
       let isStreaming = provider.messages.contains(where: { $0.isStreaming })

@@ -7,6 +7,150 @@ import VoiceTurnDomain
 extension RealtimeHubController {
   // MARK: - PTT integration
 
+  /// Reserves the native OCR result before the asynchronous extractor starts.
+  /// The reservation is independent of Gemini's JPEG/report protocol and is
+  /// therefore still valid when the model never asks for a screenshot.
+  @discardableResult
+  func beginNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    capturedAt: Date = Date()
+  ) -> RealtimeTurnEvidenceLedger.Key? {
+    guard let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID,
+      VoiceTurnCoordinator.shared.activeTurnID == turnID,
+      RuntimeOwnerIdentity.currentOwnerId() == ownerID
+    else { return nil }
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let pendingEvidence = ConversationEvidence.pendingNativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      turnID: turnID,
+      frontmostApp: screenEvidence?.descriptor.frontmostApp,
+      frontmostBundleID: screenEvidence?.descriptor.frontmostBundleID)
+    return turnEvidenceLedger.begin(
+      ownerID: ownerID,
+      turnID: turnID,
+      continuityKey: continuityKey,
+      surface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      screenDescriptor: screenEvidence?.descriptor,
+      initialEvidence: pendingEvidence,
+      createdAt: capturedAt)
+  }
+
+  /// Resolves one native OCR result. The journal update is queued through the
+  /// same streaming write tail when available and otherwise targets the exact
+  /// stable user turn ID; no active-turn lookup can redirect it to a later PTT.
+  func resolveNativeTurnEvidence(
+    turnID: VoiceTurnID,
+    ownerID: String,
+    capturedAt: Date,
+    text: String?,
+    textWasTruncated: Bool = false
+  ) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+      _ = turnEvidenceLedger.revoke(ownerID: ownerID)
+      return
+    }
+    guard let entry = turnEvidenceLedger.entry(for: key) else { return }
+    let evidence = ConversationEvidence.nativeScreenOCR(
+      evidenceID: "ptt-ocr:\(turnID.rawValue.uuidString.lowercased())",
+      capturedAt: capturedAt,
+      text: text,
+      turnID: turnID,
+      frontmostApp: entry.screenDescriptor?.frontmostApp,
+      frontmostBundleID: entry.screenDescriptor?.frontmostBundleID,
+      textWasTruncated: textWasTruncated)
+    let state: RealtimeTurnEvidenceLedger.CaptureState =
+      evidence.availability == .unavailable
+      ? .unavailable
+      : (evidence.extractionCompleteness == .partial ? .partial : .complete)
+    guard turnEvidenceLedger.resolve(key: key, evidence: evidence, state: state) else { return }
+    guard let surface = entry.surface else { return }
+    let userTurnID =
+      entry.journalUserTurnID
+      ?? KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    if streamingJournalWriteLedger.contains(continuityKey: continuityKey) {
+      enqueueNativeEvidenceUpdate(continuityKey: continuityKey, evidence: evidence)
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self,
+        RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+        let current = self.turnEvidenceLedger.evidence(for: key)
+      else { return }
+      let accepted = await FloatingControlBarManager.shared.attachRealtimeUserEvidence(
+        surface: surface,
+        ownerID: ownerID,
+        userTurnID: userTurnID,
+        evidence: current)
+      guard accepted else {
+        _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
+        return
+      }
+      _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+      _ = self.turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    }
+  }
+
+  /// Terminal OCR already bound to this exact owner/turn reservation, if any.
+  /// Pending placeholders are not a source body and must not be copied onto a
+  /// later producing row as if extraction had finished.
+  func resolvedNativeTurnEvidence(for turnID: VoiceTurnID) -> ConversationEvidence? {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(),
+      let key = turnEvidenceLedger.key(
+        turnID: turnID, continuityKey: Self.voiceContinuityKey(for: turnID)),
+      let entry = turnEvidenceLedger.entry(for: key),
+      entry.key.ownerID == ownerID,
+      entry.state != .pending
+    else { return nil }
+    return entry.evidence
+  }
+
+  /// Point a reserved native source at the journal row that actually recorded
+  /// this voice turn. Dictation and typed fallback use different continuity keys
+  /// than `voice:<uuid>`; late OCR must still append to that producing row.
+  func bindNativeTurnEvidenceToProducingRow(
+    turnID: VoiceTurnID,
+    journalUserTurnID: String
+  ) {
+    let trimmed = journalUserTurnID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty,
+      let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    else { return }
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: trimmed)
+    else { return }
+    Task { @MainActor [weak self] in
+      guard let self, RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      _ = await self.persistNativeEvidenceAfterJournalAdmission(
+        ownerID: ownerID, continuityKey: continuityKey)
+      self.fenceNativeTurnEvidence(ownerID: ownerID, continuityKey: continuityKey)
+    }
+  }
+
+  /// The allowed producing write was rejected or the owner is no longer current.
+  /// Fence immediately so a late callback cannot invent an admission.
+  func retireNativeTurnEvidenceAfterRejectedWrite(turnID: VoiceTurnID) {
+    let continuityKey = Self.voiceContinuityKey(for: turnID)
+    guard let key = turnEvidenceLedger.key(turnID: turnID, continuityKey: continuityKey) else {
+      return
+    }
+    _ = RealtimeTurnEvidenceTerminalPolicy.retireRejectedWrite(
+      ledger: turnEvidenceLedger, key: key)
+  }
+
+  func fenceNativeTurnEvidence(ownerID: String, continuityKey: String) {
+    guard let turnID = Self.turnID(forVoiceContinuityKey: continuityKey) else { return }
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    _ = turnEvidenceLedger.markPersistenceFence(key: key)
+  }
+
   /// PTT-down: make sure the socket is warm and reset per-turn state. The typed
   /// result is the caller's fail-closed gate for buffered audio replay.
   @discardableResult

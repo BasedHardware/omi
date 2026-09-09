@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { structuredTurnFallbackText } from "./content-block-fallback.js";
+import { conversationEvidenceForBackend } from "./conversation-evidence.js";
 import type { ConversationContentBlock, ConversationTurn } from "./types.js";
 
 const MAX_JOURNAL_REVISION = 2_147_483_647;
@@ -21,7 +22,7 @@ export function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson);
   const { content_blocks: _legacyContentBlocks, ...messageMetadata } = metadata;
   const backendMetadata = {
-    ...messageMetadata,
+    ...conversationEvidenceForBackend(messageMetadata),
     ...(turn.resources.length > 0 ? { resources: turn.resources } : {}),
   };
   const projectedText = turn.content.trim()

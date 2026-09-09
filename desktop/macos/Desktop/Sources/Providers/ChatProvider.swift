@@ -817,6 +817,15 @@ extension ChatMessage {
     visibleAnswerText
   }
 
+  /// `!copyableText.isEmpty` without deriving the text.
+  var hasCopyableText: Bool {
+    ChatAssistantAnswerText.hasVisible(
+      contentBlocks: contentBlocks,
+      fallback: text,
+      isStreaming: isStreaming
+    )
+  }
+
   var displayResources: [ChatResource] {
     if !resources.isEmpty {
       return resources
@@ -3829,7 +3838,20 @@ class ChatProvider: ObservableObject {
       .init(message: userMessage, status: .completed),
       .init(message: assistantMessage, status: .streaming),
     ]
-    return await recordCanonicalExchange(turns) != nil
+    guard await recordCanonicalExchange(turns) != nil else { return false }
+    // The journal publishes this user row without the attachment bytes it
+    // never persists, so a first publication renders its tile from the picked
+    // file's path — blank once that path is an app-owned temp export the OS or
+    // a Quick Look purge removes. Put the just-sent bytes back on the row;
+    // later echoes keep them through `carryingLocalOnlyFields`.
+    if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+      let carried = ChatResource.carryingImageData(
+        messages[index].resources, from: userMessage.resources)
+      if carried != messages[index].resources {
+        messages[index].resources = carried
+      }
+    }
+    return true
   }
 
   /// Behavioral seam for the journal-first admission contract. Tests inject a
@@ -3874,33 +3896,6 @@ class ChatProvider: ObservableObject {
     mainChatSurfaceReference().realtimeVoiceCompanion()
   }
 
-  /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
-  /// two identical messages with distinct turn IDs are distinct journal rows.
-  /// Some `ChatMessage` fields live only in the in-memory row and are never
-  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
-  /// reconstruct them and a journal projection can never be their authority:
-  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
-  /// completion, rendered in the message footer), `notificationScreenshot`,
-  /// and in-memory kind-only citation rewrites until the journal catches up.
-  /// Replacing a row wholesale with the projection would drop them, so carry
-  /// them forward from the row being replaced. A field the projection *does*
-  /// carry (non-nil) wins, so this stays correct if the journal schema later
-  /// starts persisting one of them.
-  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
-    var merged = projected
-    if merged.rating == nil { merged.rating = existing.rating }
-    if merged.metadata == nil { merged.metadata = existing.metadata }
-    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
-    // Kind-only binding rewrites markers and appends citation blocks in memory.
-    // A stale journal echo still has `[memory]` and no citation blocks; keep the
-    // already-bound row so chips do not vanish between hydrate and the next bind.
-    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
-      merged.text = existing.text
-      merged.contentBlocks = existing.contentBlocks
-    }
-    return merged
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
@@ -3921,9 +3916,13 @@ class ChatProvider: ObservableObject {
     // would regress the turn back to streaming), so it stays gated by
     // terminalization. Every other update is a durable, non-regressing content
     // mutation and must remain journalable after the turn terminalizes.
+    // A streaming flush is a snapshot the next flush supersedes: coalesced,
+    // so a slow kernel round trip leaves the newest row waiting rather than
+    // every flush since. Durable mutations keep their own place in line.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescing: status == .streaming
     ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(
@@ -4941,11 +4940,17 @@ class ChatProvider: ObservableObject {
       attachments: attachmentsForMessage,
       references: composerReferencesForMessage
     )
+    let attachmentEvidence = await ChatAttachmentEvidence.capture(
+      attachments: attachmentsForMessage
+    )
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
       text: effectivePrompt,
       sender: .user,
+      metadata: attachmentEvidence.isEmpty
+        ? nil
+        : MessageMetadata(evidence: attachmentEvidence),
       attachments: attachmentsForMessage,
       resources: userMessageResources,
       turnOwner: turnOwner
@@ -6400,78 +6405,6 @@ class ChatProvider: ObservableObject {
         messages[index].text = text
       }
     }
-  }
-
-  /// What a streaming assistant message shows right now.
-  ///
-  /// The grounded follow-up tail streams in like any other token, so without
-  /// stripping it here the chip's words appear in the prose first and are
-  /// removed only when the turn finalizes. Composed with sentence spacing
-  /// because both are projections of the same accumulated text.
-  static func normalizeStreamingAssistantText(_ text: String) -> String {
-    normalizeAssistantSentenceSpacing(ChatFollowUpTail.strippingPendingTail(text))
-  }
-
-  /// Normalize missing spaces after sentence punctuation in assistant messages.
-  /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
-  ///
-  /// Code spans are preserved verbatim so identifiers, file paths, and method
-  /// chains like `pd.DataFrame`, `System.IO`, or `foo.Bar()` are never mangled
-  /// into `pd. DataFrame`. Both fenced code blocks (``` / ~~~) and inline
-  /// backtick spans are skipped. Applied on every streaming flush, so it must
-  /// treat an unterminated span (fence or backtick still open mid-stream) as
-  /// code to avoid corrupting code that is still arriving.
-  static func normalizeAssistantSentenceSpacing(_ text: String) -> String {
-    let lines = text.components(separatedBy: "\n")
-    var output: [String] = []
-    output.reserveCapacity(lines.count)
-    var inFencedBlock = false
-
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-        inFencedBlock.toggle()
-        output.append(line)  // fence marker line, verbatim
-      } else if inFencedBlock {
-        output.append(line)  // code content, verbatim
-      } else {
-        output.append(normalizeInlinePreservingCode(line))
-      }
-    }
-
-    return output.joined(separator: "\n")
-  }
-
-  /// Apply sentence-spacing normalization to a single line, leaving inline
-  /// backtick code spans untouched. An odd number of backticks (an unterminated
-  /// span) leaves its trailing content treated as code.
-  private static func normalizeInlinePreservingCode(_ line: String) -> String {
-    guard line.contains("`") else { return applySentenceSpacing(line) }
-
-    let parts = line.split(separator: "`", omittingEmptySubsequences: false)
-    let normalizedParts = parts.enumerated().map { index, part -> String in
-      // Even segments are outside inline code; odd segments are inside.
-      index.isMultiple(of: 2) ? applySentenceSpacing(String(part)) : String(part)
-    }
-    return normalizedParts.joined(separator: "`")
-  }
-
-  private static func applySentenceSpacing(_ text: String) -> String {
-    var normalized = text
-
-    if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationQuotedUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    return normalized
   }
 
   /// Append text to a streaming message via a buffer that flushes at ~35ms intervals.

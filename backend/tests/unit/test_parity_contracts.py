@@ -8,6 +8,8 @@ The backend owns two legs:
   self-consistent. The client suites all trust these files, so a malformed or
   self-contradictory fixture would let every platform pass vacuously at once;
   this suite is the independent check that the vectors themselves are true.
+- The conversation-duration rule (`conversation_duration.json`), run through the
+  production helper `utils.conversations.duration.conversation_duration_seconds`.
 - The serialization side of the action-item wire contract: ActionItemResponse
   timestamps always serialize with an explicit UTC offset. Dart and JS interpret
   a naive ISO string as LOCAL wall time while Swift's ISO8601 decoder rejects it
@@ -25,6 +27,7 @@ import pytest
 from pydantic import ValidationError
 
 from models.action_item import ActionItemResponse
+from utils.conversations.duration import conversation_duration_seconds
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 PARITY_DIR = ROOT_DIR / 'contracts' / 'parity'
@@ -176,3 +179,69 @@ def test_semantically_naive_tzinfo_serializes_with_an_explicit_utc_offset():
     emitted = item.model_dump(mode='json')['due_at']
     assert emitted.endswith('Z') or '+00:00' in emitted, f'no offset emitted: {emitted!r}'
     assert datetime.fromisoformat(emitted.replace('Z', '+00:00')) == semi_naive.replace(tzinfo=timezone.utc)
+
+
+def _duration_conversation(case: dict):
+    """Build the real Conversation model from a fixture case."""
+    from models.conversation import Conversation
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    def _instant(value):
+        return None if value is None else datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+    started_at = _instant(case['started_at'])
+    return Conversation(
+        id=case['name'],
+        created_at=started_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=started_at,
+        finished_at=_instant(case['finished_at']),
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id=f'seg-{index}',
+                text=segment['text'],
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=segment['start'],
+                end=segment['end'],
+            )
+            for index, segment in enumerate(case['segments'])
+        ],
+    )
+
+
+def test_duration_fixture_expectations_are_well_formed():
+    """The fixture is the shared source of truth for three suites; a case that
+    contradicts itself would let every platform pass vacuously."""
+    cases = _fixture('conversation_duration.json')['cases']
+    assert cases, 'duration fixture must not be empty'
+    seen = set()
+    for case in cases:
+        assert case['name'] not in seen, f"duplicate case name {case['name']}"
+        seen.add(case['name'])
+        assert isinstance(case['segments'], list), case['name']
+        assert isinstance(case['expected_seconds'], int), case['name']
+        assert case['expected_seconds'] >= 0, case['name']
+        assert isinstance(case['expected_unavailable'], bool), case['name']
+        if case['expected_unavailable']:
+            # Clients return a non-optional integer, so an unknowable duration
+            # can only be published as 0.
+            assert case['expected_seconds'] == 0, case['name']
+            assert not case['segments'], case['name']
+        for segment in case['segments']:
+            assert segment['text'].strip(), f"{case['name']}: fixture vectors carry only well-formed segments"
+            assert segment['end'] >= segment['start'], case['name']
+
+
+def test_backend_duration_helper_matches_the_shared_vectors():
+    for case in _fixture('conversation_duration.json')['cases']:
+        measured = conversation_duration_seconds(_duration_conversation(case))
+        if case['expected_unavailable']:
+            assert measured is None, f"{case['name']}: expected an unknowable duration, got {measured}"
+            continue
+        assert measured is not None, case['name']
+        assert (
+            int(measured) == case['expected_seconds']
+        ), f"{case['name']}: helper says {measured}, fixture says {case['expected_seconds']}"

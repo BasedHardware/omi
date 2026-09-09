@@ -1825,9 +1825,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openSettings => '設定を開く';
 
   @override
-  String get wantDifferentName => '別の名前を使いますか？';
-
-  @override
   String get whatsYourName => 'お名前は何ですか？';
 
   @override
@@ -2004,7 +2001,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryDeleted => '記憶を削除しました';
 
   @override
-  String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+  String get memoryHistoryPartial => '記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。';
 
   @override
   String get undo => '元に戻す';
@@ -9745,10 +9742,33 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String speechProfileOwnerTitle(String name) {
+    return '$nameさんの音声プロフィール';
+  }
+
+  @override
+  String get play => '再生';
+
+  @override
+  String get redo => '録り直す';
+
+  @override
+  String get answerWithYourVoice => '声で答えてください：';
+
+  @override
+  String get speechProfileTopicLocation => 'どこに住んでいますか？';
+
+  @override
+  String get speechProfileTopicWork => 'どんな仕事をしていますか？';
+
+  @override
+  String get speechProfileTopicGoal => '長期的な目標は何ですか？';
+
+  @override
   String get transcriptionNoAudio => '文字起こしが音声を受信していません';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => '＋をタップして録音を開始';
 
   @override
   String get chatBlockTask => 'タスク';
@@ -9785,4 +9805,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotLoadKnowledgeGraph => 'ナレッジグラフを読み込めませんでした';
+
+  @override
+  String get speechToTextUnavailableDesc => '現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。';
 }
