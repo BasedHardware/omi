@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: usgs-earthquake-tests
+    command: ["python3", "plugins/omi-usgs-earthquake-app/test_main.py"]
+    triggers: ["plugins/omi-usgs-earthquake-app/**"]
+    lanes: ["local", "ci"]
+    reason: "#13250: execute both production search handlers so valid negative magnitude filters cannot silently become zero"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
