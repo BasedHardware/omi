@@ -145,11 +145,7 @@ def create_action_items_batch(
         raise UsageError(message="Maximum 50 action items per batch request", detail=f"Provided {len(items)} items.")
 
     for i, it in enumerate(items):
-        if (
-            not isinstance(it, dict)
-            or not isinstance(it.get("description"), str)
-            or not it["description"].strip()
-        ):
+        if not isinstance(it, dict) or not isinstance(it.get("description"), str) or not it["description"].strip():
             raise UsageError(
                 message=f"Item #{i + 1} must be an object with a non-empty 'description'",
                 detail="All action items in the batch must have valid non-empty descriptions.",
