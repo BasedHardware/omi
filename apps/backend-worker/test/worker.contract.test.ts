@@ -1231,6 +1231,54 @@ describe("worker request contract", () => {
     expect(thirdPage.window.nextCursor).toBeNull();
   });
 
+  test("conversation list tie-breaks equal updatedAt with UTF-16 id order", async () => {
+    await insertChatMessage({
+      id: "tie-macron",
+      accountId: "test-account",
+      text: "macron session",
+      createdAt: 4_000,
+      position: 1,
+      chatSessionId: "Ā",
+    });
+    await insertChatMessage({
+      id: "tie-ascii",
+      accountId: "test-account",
+      text: "ascii session",
+      createdAt: 4_000,
+      position: 2,
+      chatSessionId: "session-ascii",
+    });
+
+    const first = await fetchWorker("/v1/conversations?limit=1", {
+      headers: authenticatedHeaders,
+    });
+    expect(first.status).toBe(200);
+    const firstPage = (await first.json()) as {
+      items: Array<{ id: string }>;
+      window: { nextCursor: string | null; hasMore: boolean };
+    };
+    expect(firstPage.items.map((item) => item.id)).toEqual([
+      "chat:session-ascii",
+    ]);
+    expect(firstPage.window.hasMore).toBe(true);
+    expect(firstPage.window.nextCursor).toBe("chat:session-ascii");
+
+    const second = await fetchWorker(
+      `/v1/conversations?limit=1&cursor=${encodeURIComponent(
+        firstPage.window.nextCursor!
+      )}`,
+      { headers: authenticatedHeaders }
+    );
+    expect(second.status).toBe(200);
+    const secondPage = (await second.json()) as {
+      items: Array<{ id: string }>;
+      window: { nextCursor: string | null; hasMore: boolean };
+    };
+    expect(secondPage.items.map((item) => item.id)).toEqual(["chat:Ā"]);
+    expect(secondPage.window.hasMore).toBe(false);
+    expect(secondPage.window.nextCursor).toBeNull();
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

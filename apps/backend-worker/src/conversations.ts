@@ -164,7 +164,7 @@ export async function readConversations(
   conversations.sort((left, right) => {
     if (right.updatedAt !== left.updatedAt)
       return right.updatedAt - left.updatedAt;
-    return left.id.localeCompare(right.id);
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
   });
   return conversations;
 }

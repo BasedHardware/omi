@@ -218,6 +218,45 @@ describe("conversation union pagination", () => {
     expect(unionSecond?.hasMore).toBe(workerSecond.hasMore);
   });
 
+  test("tie-breaks equal updatedAt with UTF-16 id order, matching Worker list paging", () => {
+    const macron = session({
+      id: "chat:Ā",
+      title: "macron prompt",
+      overview: "macron answer",
+      createdAt: 4000,
+      updatedAt: 4000,
+      startedAt: 4000,
+    });
+    const ascii = session({
+      id: "chat:session-ascii",
+      title: "ascii prompt",
+      overview: "ascii answer",
+      createdAt: 4000,
+      updatedAt: 4000,
+      startedAt: 4000,
+    });
+    expect("chat:Ā" < "chat:session-ascii").toBe(false);
+    const first = composeConversationUnionPage([], [macron, ascii], 1, null);
+    expect(first?.items.map((item) => item.id)).toEqual(["chat:session-ascii"]);
+    expect(first?.hasMore).toBe(true);
+    const second = composeConversationUnionPage(
+      [],
+      [macron, ascii],
+      1,
+      { id: "chat:session-ascii", updatedAt: 4000 },
+    );
+    expect(second?.items.map((item) => item.id)).toEqual(["chat:Ā"]);
+    expect(second?.hasMore).toBe(false);
+    const workerFirst = workerPaginate(
+      [macron, ascii].map((item) => ({ id: item.id, updatedAt: item.updatedAt })),
+      1,
+      undefined,
+    );
+    expect(workerFirst).not.toBe("invalid_cursor");
+    if (workerFirst === "invalid_cursor") return;
+    expect(workerFirst.items.map((item) => item.id)).toEqual(["chat:session-ascii"]);
+  });
+
   test("rejects a malformed listen row instead of dropping or inventing rows", () => {
     expect(composeConversationUnionPage(
       [{ id: "recording:one", updatedAt: "later" }],
