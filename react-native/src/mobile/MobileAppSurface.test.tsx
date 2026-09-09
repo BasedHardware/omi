@@ -765,6 +765,42 @@ test('Daily Recaps name starred conversations without an empty star toggle', () 
   ).toHaveLength(0);
 });
 
+test('Daily Recaps name locked and discarded conversations without empty badges', () => {
+  const flagged = render({
+    recaps: [
+      {
+        id: 'recap-locked',
+        title: 'Product review',
+        dateLabel: 'Yesterday',
+        locked: true,
+        discarded: true,
+      },
+    ],
+  });
+  expect(renderedText(flagged)).toContain('Locked');
+  expect(renderedText(flagged)).toContain('Discarded');
+  expect(
+    flagged.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Locked conversation' &&
+        node.props.children === 'Locked',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    flagged.root.findAll(
+      node => node.props.accessibilityLabel === 'Not locked',
+    ),
+  ).toHaveLength(0);
+
+  const plain = render({
+    recaps: [
+      {id: 'recap-plain-lock', title: 'Omi gets simpler', dateLabel: 'Yesterday'},
+    ],
+  });
+  expect(renderedText(plain)).not.toContain('Locked');
+  expect(renderedText(plain)).not.toContain('Discarded');
+});
+
 test('untitled processing recaps stay visible instead of rendering a blank card', () => {
   const renderer = render({
     recaps: [

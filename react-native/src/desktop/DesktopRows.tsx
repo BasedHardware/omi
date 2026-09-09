@@ -68,6 +68,13 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
           .filter(part => part !== '')
           .join(' · ')}
       </Text>
+      {item.locked || item.discarded ? (
+        <Text style={styles.rowMeta}>
+          {[item.locked ? 'Locked' : '', item.discarded ? 'Discarded' : '']
+            .filter(part => part !== '')
+            .join(' · ')}
+        </Text>
+      ) : null}
       {conversationHasFinishClock(item) ? (
         <Text style={styles.rowMeta}>
           {formatConversationDuration(item.startedAt, item.finishedAt)}

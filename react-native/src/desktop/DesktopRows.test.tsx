@@ -390,3 +390,43 @@ test('a zero task due timestamp on Home and Tasks rows says Date unavailable ins
   expect(copy).not.toContain('1970');
   expect(copy).not.toContain('No due date');
 });
+
+test('Home and Library rows keep GET locked and discarded flags instead of title-only', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'listen:locked-row',
+    title: 'Kept recording',
+    summary: 'Saved words',
+    searchableText: 'Kept recording\nSaved words',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'processing',
+    source: 'listen',
+    visibility: 'private',
+    folderId: null,
+    locked: true,
+    discarded: true,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('Kept recording');
+    expect(copy).toContain('Locked');
+    expect(copy).toContain('Discarded');
+  }
+  let plain!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    plain = ReactTestRenderer.create(
+      <ReadRow item={{...item, locked: false, discarded: false}} />,
+    );
+  });
+  expect(textOf(plain)).not.toContain('Locked');
+  expect(textOf(plain)).not.toContain('Discarded');
+});

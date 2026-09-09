@@ -1014,3 +1014,76 @@ test('a zero conversation createdAt groups as Date unavailable instead of 1970',
   expect(copy).toContain('Time unavailable');
   expect(copy).not.toContain('1970');
 });
+
+test('conversation list names locked and discarded conversations without empty badges', () => {
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Kept recording',
+    summary: 'Saved words',
+    searchableText: 'Kept recording\nSaved words',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: '2026-09-07T00:01:00.000Z',
+    starred: false,
+    status: 'processing',
+    source: 'listen' as const,
+    visibility: 'private' as const,
+    folderId: null,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        loading={false}
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...base,
+                id: 'listen:locked-one',
+                locked: true,
+                discarded: true,
+              },
+              {
+                ...base,
+                id: 'listen:open-one',
+                title: 'Open recording',
+                searchableText: 'Open recording\nSaved words',
+                status: 'completed',
+                locked: false,
+                discarded: false,
+              },
+            ],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+      />,
+    );
+  });
+  const copy = textOf(renderer);
+  expect(copy).toContain('Locked');
+  expect(copy).toContain('Discarded');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Locked conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Discarded conversation',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Not locked',
+    ),
+  ).toHaveLength(0);
+});

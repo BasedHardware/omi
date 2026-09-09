@@ -1074,6 +1074,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ),
             id: item.id,
             starred: item.starred,
+            locked: item.locked,
+            discarded: item.discarded,
             title: conversationRecapTitle(item),
           }))
         : [];

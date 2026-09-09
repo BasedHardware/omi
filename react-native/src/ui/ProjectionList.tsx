@@ -91,6 +91,16 @@ export const ProjectionRow = memo(function ProjectionRow({
             Starred
           </Text>
         )}
+        {item.kind === 'conversation' && item.locked ? (
+          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            Locked
+          </Text>
+        ) : null}
+        {item.kind === 'conversation' && item.discarded ? (
+          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            Discarded
+          </Text>
+        ) : null}
       </View>
       <Text
         numberOfLines={listenOverview ? 3 : 2}

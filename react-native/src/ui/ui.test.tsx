@@ -899,6 +899,8 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain("emptyLibraryCopy(\n          'Memories'");
   expect(orchestrator).toContain('onOpenRecap=');
   expect(orchestrator).toContain('starred: item.starred');
+  expect(orchestrator).toContain('locked: item.locked');
+  expect(orchestrator).toContain('discarded: item.discarded');
   expect(orchestrator).not.toContain('onOpenCalls=');
   expect(orchestrator).toContain('conversationDayLabel(');
   expect(orchestrator).not.toContain("weekday: 'long'");
@@ -1789,4 +1791,58 @@ test('wide Home search rows date task dues instead of a raw epoch', () => {
   expect(tree).toContain('Prepare launch notes');
   expect(tree).toContain(expected);
   expect(tree).not.toContain('Due 1786000000');
+});
+
+test('wide Home search rows keep GET locked and discarded flags instead of title-only', () => {
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:locked-home-search',
+        title: 'Kept recording',
+        summary: 'Saved words',
+        searchableText: 'Kept recording\nSaved words',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'processing',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: true,
+        discarded: true,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Kept recording');
+  expect(tree).toContain('Locked');
+  expect(tree).toContain('Discarded');
+  const plain = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'listen:plain-home-search',
+        title: 'Open recording',
+        summary: 'Saved words',
+        searchableText: 'Open recording\nSaved words',
+        createdAt: '2026-09-07T12:00:00.000Z',
+        updatedAt: '2026-09-07T12:00:20.000Z',
+        startedAt: '2026-09-07T12:00:00.000Z',
+        finishedAt: '2026-09-07T12:00:20.000Z',
+        starred: false,
+        status: 'completed',
+        source: 'listen',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const plainTree = JSON.stringify(plain.toJSON());
+  expect(plainTree).not.toContain('Locked');
+  expect(plainTree).not.toContain('Discarded');
 });

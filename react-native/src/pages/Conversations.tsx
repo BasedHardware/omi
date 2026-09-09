@@ -64,6 +64,20 @@ const ConversationRow = memo(function ConversationRow({
             ★
           </Text>
         ) : null}
+        {item.locked ? (
+          <Text
+            accessibilityLabel="Locked conversation"
+            style={styles.conversationRowTime}>
+            Locked
+          </Text>
+        ) : null}
+        {item.discarded ? (
+          <Text
+            accessibilityLabel="Discarded conversation"
+            style={styles.conversationRowTime}>
+            Discarded
+          </Text>
+        ) : null}
       </View>
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.resultTitle}>
         {listenOverview
