@@ -21,6 +21,7 @@ jest.mock('../desktopReadClient', () => {
 jest.mock('../omiNative', () => ({omiBackend: {}}));
 import {MemoriesPage} from './Memories';
 import {
+  clockLabel,
   desktopBackendUnavailableCopy,
   MemoryCursorExpiredError,
 } from '../desktopReadClient';
@@ -560,6 +561,41 @@ test('a zero memory timestamp says Date unavailable instead of 1970', () => {
   try {
     expect(textOf(view)).toContain('Date unavailable');
     expect(textOf(view)).not.toContain('1970');
+  } finally {
+    act(() => view.unmount());
+  }
+});
+
+test('Memories rows keep GET timestamps with the same clock as Home', () => {
+  const timestamp = Date.parse('2026-09-07T12:00:00.000Z') / 1000;
+  const expected = clockLabel(timestamp * 1000, Date.now());
+  let view!: Renderer.ReactTestRenderer;
+  act(() => {
+    view = Renderer.create(
+      <MemoriesPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [
+              {
+                ...memory('dated'),
+                title: 'Visible memory',
+                summary: 'Visible memory',
+                searchableText: 'Visible memory',
+                timestamp,
+              },
+            ],
+            page: page(null),
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  try {
+    expect(expected).not.toBe('');
+    expect(textOf(view)).toContain(expected);
+    expect(textOf(view)).not.toContain('Date unavailable');
   } finally {
     act(() => view.unmount());
   }

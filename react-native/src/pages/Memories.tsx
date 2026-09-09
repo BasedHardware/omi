@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  clockLabel,
   desktopBackendUnavailableCopy,
   loadMemories,
   MemoryCursorExpiredError,
@@ -31,11 +32,8 @@ function formatMemoryDate(timestamp: number | null): string {
   if (timestamp === null || !Number.isFinite(timestamp) || timestamp <= 0) {
     return 'Date unavailable';
   }
-  return new Date(timestamp * 1000).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  const label = clockLabel(timestamp * 1000, Date.now());
+  return label === '' ? 'Date unavailable' : label;
 }
 
 export function MemoriesPage({
