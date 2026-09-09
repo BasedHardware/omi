@@ -1,0 +1,3 @@
+{
+  "change": "Fixed voice typing losing a dictation in browsers and Electron apps, where it reported \"Insertion unconfirmed\" instead of typing the text"
+}
