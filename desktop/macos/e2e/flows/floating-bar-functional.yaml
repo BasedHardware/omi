@@ -98,7 +98,7 @@ steps:
         reset: "true"
         wait: "true"
     expect:
-      result.detail.focused: "true"
+      result.detail.target: "main_chat"
 
   - id: S3
     name: Send stubbed floating-bar query

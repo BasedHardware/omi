@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "note": "Internal analytics: turn_kind (dictation/question/unknown) on floating_bar_ptt_ended and ptt_audio_capture_lifecycle, plus bounded audio_seconds_bucket and dictation_transcriber dimensions. No user-facing behavior change."
-}

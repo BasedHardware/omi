@@ -623,6 +623,7 @@ environment_shared:
       notifications-job:
         flags:
           --task-timeout: 3600s
+          --memory: 2Gi
         secrets:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN

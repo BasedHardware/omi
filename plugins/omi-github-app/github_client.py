@@ -85,20 +85,24 @@ class GitHubClient:
         """
         try:
             repos = []
-            
-            # Get user's own repos
-            response = requests.get(
-                f"{self.api_base}/user/repos",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                },
-                params={"per_page": per_page, "sort": "updated"}
-            )
-            
-            if response.status_code == 200:
-                user_repos = response.json()
-                for repo in user_repos:
+            page = 1
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+
+            while True:
+                response = requests.get(
+                    f"{self.api_base}/user/repos",
+                    headers=headers,
+                    params={"per_page": per_page, "sort": "updated", "page": page}
+                )
+
+                if response.status_code != 200:
+                    print(f"⚠️  Could not fetch repositories: {response.status_code}")
+                    return []
+
+                for repo in response.json():
                     repos.append({
                         "name": repo["name"],
                         "full_name": repo["full_name"],
@@ -107,7 +111,12 @@ class GitHubClient:
                         "description": repo.get("description", ""),
                         "url": repo["html_url"]
                     })
-            
+
+                if "next" not in response.links:
+                    break
+
+                page += 1
+
             return repos
             
         except Exception as e:

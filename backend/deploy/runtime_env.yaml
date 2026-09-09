@@ -999,6 +999,7 @@ environments:
         notifications-job:
           flags:
             --task-timeout: 3600s
+            --memory: 2Gi
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -1024,7 +1025,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
@@ -2228,6 +2229,7 @@ environments:
         notifications-job:
           flags:
             --task-timeout: 3600s
+            --memory: 2Gi
           secrets:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
@@ -2253,7 +2255,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations

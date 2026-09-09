@@ -192,7 +192,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "chat_composer_snapshot",
-      summary: "Main composer state: draft text plus staged-attachment count and first file name",
+      summary: "Main composer state: draft, staged attachments, placeholder, and query-shell mode",
       params: [],
       category: "chat",
       surfaces: ["main_chat"],
@@ -201,14 +201,13 @@ extension DesktopAutomationActionRegistry {
       guard AppBuild.isNonProduction else {
         return ["error": "chat_composer_snapshot is disabled on production bundles"]
       }
-      return [
-        "main": ChatProvider.mainInstance?.draftText
+      return ChatComposerAutomationSnapshot.detail(
+        draft: ChatProvider.mainInstance?.draftText
           ?? ChatDraftStore.shared.text(for: .mainChat(contextID: "omi:default")),
-        // Staged image frames ride the composer between the prefill handoff and
-        // the send; the count is what a flow asserts (never bytes or content).
-        "mainStagedAttachments": String(ChatProvider.mainInstance?.pendingAttachments.count ?? 0),
-        "mainStagedFirstAttachment": ChatProvider.mainInstance?.pendingAttachments.first?.fileName ?? "",
-      ]
+        stagedAttachments: ChatProvider.mainInstance?.pendingAttachments.count ?? 0,
+        firstAttachment: ChatProvider.mainInstance?.pendingAttachments.first?.fileName ?? "",
+        mode: QueryShellComposerAutomation.mode
+      )
     }
 
     register(

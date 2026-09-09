@@ -9988,4 +9988,7 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.';
+
+  @override
+  String get processingTakingLonger => 'Ainda a trabalhar — isto está a demorar mais do que o habitual.';
 }

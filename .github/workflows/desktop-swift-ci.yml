@@ -36,6 +36,8 @@ jobs:
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
+      desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
+      swift_test_effective_lane: ${{ steps.changed.outputs.swift_test_effective_lane }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -96,6 +98,35 @@ jobs:
           )
           echo "should_run_static=$SHOULD_RUN_STATIC" >> "$GITHUB_OUTPUT"
 
+          # The PR test lane defers ratcheted slow suites to the full lane
+          # (every main push and the scheduled health run) unless this diff
+          # touches their own inputs. Ship the exact deferral-relevant subset
+          # to the runner: test sources, the package manifest, and the runner
+          # scripts whose change must re-baseline the whole suite selection.
+          DESKTOP_SWIFT_CHANGED=$(printf '%s\n' "$FILES" | grep -Ex \
+            'desktop/macos/(Desktop/Tests/[^ ]+\.swift|Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))' \
+            || true)
+          {
+            echo "desktop_swift_changed_files<<DESKTOP_SWIFT_CHANGED_EOF"
+            printf '%s\n' "$DESKTOP_SWIFT_CHANGED"
+            echo "DESKTOP_SWIFT_CHANGED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          # The effective lane must be ONE decision shared by the runner and
+          # the step budget: a diff that touches the runner, the deferral
+          # list, the ratchet, the package manifest, or test.sh re-baselines
+          # the PR lane to the full suite (the runner applies the same rule
+          # from the forwarded file list). Keying the budget on the event
+          # type alone made a re-baselined PR run the full suite against the
+          # tight PR number and false-red at 2013s vs 1800s (run
+          # 34369508858).
+          SWIFT_TEST_EFFECTIVE_LANE=pr
+          if [ "${{ github.event_name }}" != "pull_request" ] || printf '%s\n' "$DESKTOP_SWIFT_CHANGED" | grep -qxE \
+            'desktop/macos/(Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))'; then
+            SWIFT_TEST_EFFECTIVE_LANE=full
+          fi
+          echo "swift_test_effective_lane=$SWIFT_TEST_EFFECTIVE_LANE" >> "$GITHUB_OUTPUT"
+
   # Hosted macOS capacity is deliberately scarce. Run static contracts and the
   # optional full suite as steps in one selected job, rather than claiming two
   # runners in parallel. The stable Ubuntu aggregate below remains the exact
@@ -105,11 +136,12 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    # Bounds manifest checks, launcher coverage, and the full debug suite.
-    # (The release-mode UserNotifications regression lives in the Release
-    # Compile job, next to the release build it consumes.) Generous headroom
-    # so a successful final link is not cancelled by the job deadline.
-    timeout-minutes: 90
+    # Bounds manifest checks, launcher coverage, and the debug suite — a
+    # wedge-guard, not a lane budget: the ceiling must admit one legitimate
+    # cold-tools run (~15 min from-source bootstrap ahead of the full lane,
+    # which still executes every suite on this branch's own runner-changing
+    # diffs). Two runs were cancelled by tighter ceilings before completing.
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -124,16 +156,45 @@ jobs:
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Restore Swift formatter and linter tools
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
+        # Restored for the tests lane too, not only static: the launcher
+        # script tests exercise the pinned swift-format binary, and without
+        # the restore a tests-only diff pays a ~15 min from-source rebuild.
+        # The -v3 prefix caches ONLY the built binaries (globbed files,
+        # ~100 MB): the v2 full-build-tree archives were GB-scale and lost
+        # every eviction race against the lingering 5.3 GB release .build
+        # entries, so warm-ups kept paying the from-source rebuild (run
+        # 34330641589-era measurements: 8-9 min, twice in one day).
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
         id: swift-tools-cache
         uses: actions/cache/restore@v6
         with:
           path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-tools-xcode164-
+            ${{ runner.os }}-desktop-swift-tools-v3-xcode164-
+
+      - name: Warm pinned formatter and linter tools
+        # One explicit bootstrap instead of whichever launcher test happens
+        # to touch a wrapper first. A cache miss pays the ~15 min from-source
+        # build here, visibly, and the save right below captures the built
+        # binary before any launcher test runs (three #13219 runs each
+        # rebuilt the tools inside the launcher step and lost them).
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
+        id: swift_tools_warm
+        run: |
+          desktop/macos/scripts/swift-format-wrapper.sh bootstrap
+          desktop/macos/scripts/swiftlint-wrapper.sh bootstrap
+
+      - name: Save Swift formatter and linter tools after warm-up
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/omi-swift-format/*/.build/release/swift-format
+            ~/.cache/omi-swiftlint/*/swiftlint
+          key: ${{ runner.os }}-desktop-swift-tools-v3-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
       - name: Install uv for manifest checks
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
@@ -164,15 +225,10 @@ jobs:
             --skip-pr-body-checks \
             "${MANIFEST_ARGS[@]}"
 
-      - name: Save Swift formatter and linter tools after checks
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ~/.cache/omi-swift-format
-            ~/.cache/omi-swiftlint
-          key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
-
+      # The formatter/linter tools cache save waits until after the launcher
+      # tests below: on a tests-only diff the manifest lane never runs and the
+      # from-source bootstrap happens inside the launcher tests, so a save
+      # placed here would cache nothing and every run would rebuild.
       # A Desktop/.build archive is about 5.3 GB. GitHub scopes those archives
       # to a PR ref, so they miss for normal new commits and spend over a minute
       # uploading without reducing a subsequent run. Retain only SwiftPM's
@@ -192,11 +248,104 @@ jobs:
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         run: brew install actionlint pkg-config webp
 
+      # Debug build+test only on the PR critical path. Release compile is a
+      # separate job (main push, scheduled health, manual dispatch, or a PR
+      # that touches Package.swift/Package.resolved) so ordinary PRs do not
+      # pay for a second configuration — or a second hosted Mac — that tests
+      # never consume. This step runs BEFORE the launcher tests on purpose:
+      # its prebuild leaves a warm Desktop/.build, so the launcher suite's
+      # `swift build --build-tests` fixtures (feature-sentinel negative
+      # control) compile incrementally instead of paying a second cold
+      # package build (measured 21 min on run 34301327490-era shapes).
+      - name: Test desktop Swift app
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        id: desktop_swift_tests
+        working-directory: desktop/macos
+        env:
+          # Each isolated worker receives a copy-on-write clone of the prebuilt
+          # SwiftPM scratch directory, so filtered suites do not contend on the
+          # shared Desktop/.build lock. Batching collapsed per-invocation
+          # SwiftPM startup (the reason two workers were the measured ceiling),
+          # so three workers now match the runner's three cores; measure-block
+          # suites carry a doubled per-suite budget to absorb the added CPU
+          # contention. Evidence: PR #12247's runs. Drop back to "2" if the
+          # performance harness starts timing out.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "3"
+          OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
+          # Per-invocation overhead (SwiftPM startup + xctest host launch,
+          # ~36s flat) dominates the suite step; batching amortizes it and
+          # the bisect fallback bounds a flaky batch's cost to ~3
+          # invocations, so CI carries 100 suites per invocation (measured
+          # fast lane at 50: 17 batches/3 workers ≈ 9 min of invocation
+          # overhead). The uncapped scaled budget (300s + 30s/suite) would
+          # be 3270s at batch 100 — 54.5 minutes inside this job's
+          # 60-minute ceiling, leaving a wedged batch no room for its
+          # bisect fallback — so the batch watchdog is independently capped
+          # at 25 minutes: a stalled batch fails over to isolation with
+          # half the job still ahead of it. The local default stays 25 and
+          # every invocation logs its wall seconds, so a regression is
+          # visible in the run log.
+          OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"
+          OMI_SWIFT_TEST_BATCH_CEILING_SECONDS: "1500"
+          # PRs defer ratcheted slow suites (swift-test-slow-suites.json) to
+          # the full lane unless this diff touches their own inputs; pushes,
+          # scheduled health runs, and manual dispatch always run everything.
+          # The changes job resolves the EFFECTIVE lane with the runner's own
+          # re-baseline rule so the lane and the budget below always agree.
+          OMI_SWIFT_TEST_LANE: ${{ needs.changes.outputs.swift_test_effective_lane }}
+          OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
+          # The PR lane also defers the serial and solo clusters: their
+          # isolation contract costs one ~30s invocation per member for
+          # sub-second tests, sequentially, after every worker exits
+          # (24 invocations / 12.9 min on run 34306382692). Declaring files
+          # and ratcheted subject watch paths still wake them; the full lane
+          # always executes them.
+          OMI_SWIFT_TEST_PR_LANE_DEFER_SERIAL: "1"
+          # ---- regression guards -------------------------------------------
+          # Desktop Swift CI once drifted silently to 27-42 min suite steps
+          # and 60-120 min verdicts because nothing flagged duration. These
+          # budgets turn drift into a red run instead — the very first
+          # guarded run caught a 37m07s full lane (run 34363659680) that
+          # would previously have published green. Lane-aware via the
+          # changes job's effective-lane output (same re-baseline rule as
+          # the runner): the PR fast lane measured 15m42s at batch 50
+          # (~12m at 100; ~24m worst case for auth PRs that wake the serial
+          # cluster), so 1800s holds it with headroom. The full lane
+          # (re-baselined runner diffs, main pushes, scheduled health)
+          # legitimately spans ~28-40m on a slow runner day — 9.7m prebuild
+          # + ~3.5m parallel batches + 15.3m sequential serial/solo tail —
+          # so it carries 2700s to catch the 50m+ drift class without
+          # failing quiet-day variance. Raise either only with measured
+          # evidence in the PR that raises it.
+          OMI_SWIFT_TEST_STEP_BUDGET_SECONDS: ${{ needs.changes.outputs.swift_test_effective_lane == 'pr' && '1800' || '2700' }}
+          # Any PR-lane suite whose own test time exceeds this and is not
+          # ratcheted in swift-test-slow-suites.json fails the run: the fast
+          # lane cannot silently grow a slow tail. Deferred suites that woke
+          # (their files or watched subjects changed) are exempt by
+          # membership in the slow list.
+          OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS: "60"
+        run: |
+          step_started=$SECONDS
+          ./scripts/run-swift-ci.sh --test
+          elapsed=$((SECONDS - step_started))
+          echo "swift suite step wall: ${elapsed}s (budget ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s)"
+          if [ "${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}" ]; then
+            echo "FAIL: the Desktop Swift suite step took ${elapsed}s, over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget. Fix the regression (the per-invocation and slowest-suite lines above name the cost centers), or raise the budget in desktop-swift-ci.yml with measured evidence." >&2
+            exit 1
+          fi
+
       - name: Desktop launcher script tests
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: desktop_launcher_tests
         working-directory: desktop/macos
+        env:
+          # Regression guard, same rationale as the suite step's budget: this
+          # step measured 1m55s-2m27s once the sentinel build went incremental
+          # and the reclaim fixture went hermetic, after previously costing
+          # 17-21 min. 360s catches that class of drift with headroom.
+          OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS: "360"
         run: |
+          step_started=$SECONDS
           # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
           # Three-way parallel (the hosted runner has 3 cores): the serial loop
@@ -214,17 +363,23 @@ jobs:
             esac
             printf '%s\n' "$t"
           done \
-            | xargs -P 3 -I{} bash -c '
-                t="$1"
-                log_dir="$2"
-                log="$log_dir/$(basename "$t").log"
-                if bash "$t" >"$log" 2>&1; then
-                  echo "== PASS $t"
-                else
-                  echo "== FAIL $t"
-                  touch "$log.failed"
-                fi
-              ' _ {} "$log_dir"
+          | xargs -P 3 -I{} bash -c '
+              t="$1"
+              log_dir="$2"
+              log="$log_dir/$(basename "$t").log"
+              started=$SECONDS
+              if bash "$t" >"$log" 2>&1; then
+                echo "== PASS $t ($((SECONDS - started))s)"
+                # Per-test logs are replayed only on failure, so a passing
+                # test that paid a from-source bootstrap (~15 min) or another
+                # hidden slow path was invisible: test-swift-format-wrapper
+                # passed in 1240s on run 34301327490 with a warm tools cache.
+                grep -m1 -E "Bootstrapping swift|cache (HIT|stale)" "$log" | sed "s|^|   [$t] |" || true
+              else
+                echo "== FAIL $t ($((SECONDS - started))s)"
+                touch "$log.failed"
+              fi
+            ' _ {} "$log_dir"
           failed=0
           for marker in "$log_dir"/*.failed; do
             [ -e "$marker" ] || continue
@@ -233,27 +388,13 @@ jobs:
             echo "--- $(basename "$log" .log) output ---"
             cat "$log"
           done
+          elapsed=$((SECONDS - step_started))
+          echo "launcher step wall: ${elapsed}s (budget ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s)"
+          if [ "${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}" -gt 0 ] && [ "$elapsed" -gt "${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}" ]; then
+            echo "FAIL: the launcher script test step took ${elapsed}s, over its ${OMI_SWIFT_LAUNCHER_STEP_BUDGET_SECONDS}s regression budget. The per-test PASS lines above name the slow test; fix it or raise the budget with measured evidence." >&2
+            exit 1
+          fi
           exit "$failed"
-
-      # Debug build+test only on the PR critical path. Release compile is a
-      # separate job (main push, or PRs that touch Package.swift) so we do not
-      # pay for a second configuration that tests never consume.
-      - name: Test desktop Swift app
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
-        id: desktop_swift_tests
-        working-directory: desktop/macos
-        env:
-          # Each isolated worker receives a copy-on-write clone of the prebuilt
-          # SwiftPM scratch directory, so filtered suites do not contend on the
-          # shared Desktop/.build lock. Batching collapsed per-invocation
-          # SwiftPM startup (the reason two workers were the measured ceiling),
-          # so three workers now match the runner's three cores; measure-block
-          # suites carry a doubled per-suite budget to absorb the added CPU
-          # contention. Evidence: PR #12247's runs. Drop back to "2" if the
-          # performance harness starts timing out.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "3"
-          OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
-        run: ./scripts/run-swift-ci.sh --test
 
       # Preserve resolved dependency downloads after a failed test command, but
       # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
@@ -330,9 +471,14 @@ jobs:
     # Literal for the same reason as `desktop-swift` above.
     name: Desktop Swift Release Compile
     needs: changes
-    # The notification flag is structurally a subset of should_release_compile
-    # (every notification input is a releasable desktop path), but gate on both
-    # so a future pathspec change cannot silently skip the regression's runner.
+    # Ordinary PRs no longer claim this second hosted Mac: a release compile
+    # holds it for ~25 min, and one runner per PR halved concurrent macos-15
+    # demand against the ~5-runner cap that was producing 60-97 min queues
+    # (2026-09-08). The lane still runs for every main push, the scheduled
+    # health run, manual dispatch, PRs that change the package manifest (the
+    # inputs most likely to shift whole-module behavior), and notification
+    # boundary paths — the notification flag is gated on both outputs so a
+    # future pathspec change cannot silently skip the regression's runner.
     if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
     runs-on: macos-15
     timeout-minutes: 60
@@ -357,19 +503,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode164-
 
-      # Unlike the verify job's Desktop/.build (PR-scoped, always misses), this
-      # cache is written from main pushes, so it is readable by every PR and
-      # every later main push. A warm restore turns the ~20 min cold release
-      # build into an incremental one.
-      - name: Restore release build products
-        id: release-build-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-
-            ${{ runner.os }}-desktop-swift-release-xcode164-
+      # No Desktop/.build build-products cache, by measurement: the release
+      # compile step took 23-25 min on every recent run whether a 5.3 GB
+      # archive hit exactly, partially, or not at all (whole-module
+      # optimization recompiles on any source change, and runners are
+      # ephemeral). Worse, each main-push save of that 5.3 GB archive evicted
+      # the small swift-format/swiftlint tool caches from the repository's
+      # 10 GB cache budget, which made the verify job's launcher tests rebuild
+      # swift-format from source (~15 min) on cache misses.
 
       - name: Install Swift system dependencies
         run: brew install pkg-config webp
@@ -396,12 +537,3 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
-
-      # Save only from main pushes: PR-scoped saves are unreadable by other
-      # refs and would spend upload minutes for nothing.
-      - name: Save release build products
-        if: ${{ github.event_name == 'push' }}
-        uses: actions/cache/save@v6
-        with:
-          path: desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-release-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}-${{ github.sha }}
