@@ -100,7 +100,9 @@ export async function readConversations(
          SELECT *,
            row_number() OVER (PARTITION BY session_id ORDER BY position) AS first_rank,
            row_number() OVER (PARTITION BY session_id ORDER BY position DESC) AS last_rank,
-           row_number() OVER (PARTITION BY session_id ORDER BY sender = 'human' DESC, position) AS title_rank
+           row_number() OVER (PARTITION BY session_id ORDER BY CASE WHEN sender = 'human' AND length(${visibleStoredTextTrimSql(
+             "text"
+           )}) > 0 THEN 0 WHEN sender = 'human' THEN 1 ELSE 2 END, position) AS title_rank
          FROM sessions
        ), selected AS (
          SELECT *, ${visibleStoredTextTrimSql("text")} AS display_text

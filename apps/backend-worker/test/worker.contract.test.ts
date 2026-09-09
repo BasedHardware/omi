@@ -1279,6 +1279,62 @@ describe("worker request contract", () => {
     expect(secondPage.window.nextCursor).toBeNull();
   });
 
+  test("conversation list titles skip a NEXT LINE-only first human turn", async () => {
+    await insertChatMessage({
+      id: "title-nel",
+      accountId: "test-account",
+      text: "\u0085",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: "title-visible",
+    });
+    await insertChatMessage({
+      id: "title-visible",
+      accountId: "test-account",
+      text: "Visible later",
+      createdAt: 2,
+      position: 2,
+      chatSessionId: "title-visible",
+    });
+    await insertChatMessage({
+      id: "title-nel-ai",
+      accountId: "test-account",
+      text: "\u0085",
+      createdAt: 1,
+      position: 1,
+      chatSessionId: "title-ai",
+    });
+    await insertChatMessage({
+      id: "title-ai",
+      accountId: "test-account",
+      text: "Assistant words",
+      createdAt: 2,
+      position: 2,
+      chatSessionId: "title-ai",
+      sender: "ai",
+    });
+
+    const listed = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+    expect(listed.status).toBe(200);
+    const page = (await listed.json()) as {
+      items: Array<{ id: string; title: string }>;
+    };
+    expect(page.items.find((item) => item.id === "chat:title-visible")).toEqual(
+      expect.objectContaining({
+        id: "chat:title-visible",
+        title: "Visible later",
+      })
+    );
+    expect(page.items.find((item) => item.id === "chat:title-ai")).toEqual(
+      expect.objectContaining({
+        id: "chat:title-ai",
+        title: "",
+      })
+    );
+  });
+
   test("conversation pagination and query validation match neighboring list routes", async () => {
     await insertChatMessage({
       id: "page-a",

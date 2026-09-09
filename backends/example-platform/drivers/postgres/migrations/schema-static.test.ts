@@ -1287,5 +1287,11 @@ describe("static PostgreSQL schema contract", () => {
     expect(unionLastIdSql).toContain("m.chat_session_id=substr(p_last_id,6)");
     expect(unionLastIdSql).not.toContain("p_last_id !~ '^[!-~]+$'");
     expect(unionLastIdSql).not.toContain("{1,256}");
+    const visibleTitleSql = migrationSql.find((migration) => migration.version === 63)!.sql;
+    expect(visibleTitleSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_chat_conversation_sessions");
+    expect(visibleTitleSql).toContain("WHEN m.sender='human' AND length(btrim(m.text,v_ws))>0 THEN 0");
+    expect(visibleTitleSql).toContain("WHEN m.sender='human' THEN 1 ELSE 2 END");
+    expect(visibleTitleSql).not.toContain("THEN 'Chat'");
+    expect(visibleTitleSql).toContain("chr(133)");
   });
 });

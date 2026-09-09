@@ -677,6 +677,23 @@ realTest(
         })
       );
       await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,$3,'human','text',300,300,'session-nel-title',NULL,0,'sha256:nel-title','desktop_chat',NULL,false,'rev-nel-title','[]'::jsonb,'gen_nel_title')`,
+        [account, "88888888-8888-4888-8888-888888888888", "\u0085"]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.chat_messages(account_id,id,text,sender,message_type,created_at,updated_at,chat_session_id,app_id,journal_revision,payload_hash,message_source,rating,reported,server_revision,attachments_json,generation_id) VALUES($1,$2,'Visible later','human','text',301,301,'session-nel-title',NULL,0,'sha256:visible-title','desktop_chat',NULL,false,'rev-visible-title','[]'::jsonb,'gen_visible_title')`,
+        [account, "99999999-9999-4999-8999-999999999999"]
+      );
+      const visibleTitle = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(visibleTitle.items.find((item) => item.id === "chat:session-nel-title")).toEqual(
+        expect.objectContaining({
+          id: "chat:session-nel-title",
+          title: "Visible later",
+        })
+      );
+      await owner.unsafe(
         "DELETE FROM omi_memory.application_grant_heads WHERE account_id=$1 AND capability='chat.read'",
         [account]
       );
@@ -685,6 +702,7 @@ realTest(
       expect(ids(revoked)).not.toContain("chat:session-alpha");
       expect(ids(revoked)).not.toContain("chat:session-blank");
       expect(ids(revoked)).not.toContain("chat:session-nbsp");
+      expect(ids(revoked)).not.toContain("chat:session-nel-title");
       expect(revoked.items).toHaveLength(1);
     } finally {
       await pool.close();
