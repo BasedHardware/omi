@@ -89,59 +89,68 @@ export function TasksPage({
         contentContainerStyle={styles.listContent}
         style={styles.list}>
         {tasks.length > 0 ? (
-          tasks.map(item => (
-            <ShippingListInsert itemKey={item.id} key={item.id}>
-              <View style={styles.taskActions}>
-                <FocusPressable
-                  accessibilityRole={
-                    writesAvailable && onTaskToggle ? 'checkbox' : 'text'
-                  }
-                  accessibilityLabel={`${
-                    item.completed ? 'Reopen' : 'Complete'
-                  } task: ${item.title}`}
-                  accessibilityState={{
-                    checked: item.completed,
-                    disabled:
+          tasks.map(item => {
+            const editable =
+              outcome?.status === 'success' &&
+              (outcome.value.apiContract === 'omi' || item.revision !== null);
+            return (
+              <ShippingListInsert itemKey={item.id} key={item.id}>
+                <View style={styles.taskActions}>
+                  <FocusPressable
+                    accessibilityRole={
+                      writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                    }
+                    accessibilityLabel={`${
+                      item.completed ? 'Reopen' : 'Complete'
+                    } task: ${item.title}`}
+                    accessibilityState={{
+                      checked: item.completed,
+                      disabled:
+                        !writesAvailable ||
+                        !onTaskToggle ||
+                        !editable ||
+                        busyTaskId !== null,
+                      busy:
+                        busyTaskId === item.id && taskMutationError === null,
+                    }}
+                    disabled={
                       !writesAvailable ||
                       !onTaskToggle ||
-                      item.revision === null ||
-                      busyTaskId !== null,
-                    busy: busyTaskId === item.id && taskMutationError === null,
-                  }}
-                  disabled={
-                    !writesAvailable ||
-                    !onTaskToggle ||
-                    item.revision === null ||
-                    busyTaskId !== null
-                  }
-                  onPress={() => onTaskToggle?.(item.id)}
-                  style={styles.taskToggle}>
-                  <TaskRow item={item} />
-                </FocusPressable>
-                {writesAvailable && onTaskEdit && item.revision !== null && (
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit task: ${item.title}`}
-                    disabled={busyTaskId !== null}
-                    accessibilityState={{disabled: busyTaskId !== null}}
-                    onPress={() => setEditingId(item.id)}
-                    style={styles.taskEdit}>
-                    <Text style={styles.rowMeta}>Edit</Text>
+                      !editable ||
+                      busyTaskId !== null
+                    }
+                    onPress={() => onTaskToggle?.(item.id)}
+                    style={styles.taskToggle}>
+                    <TaskRow item={item} />
                   </FocusPressable>
-                )}
-              </View>
-              {editingId === item.id && writesAvailable && onTaskEdit && (
-                <TaskEditor
-                  id={item.id}
-                  title={item.title}
-                  busy={busyTaskId !== null}
-                  failed={taskMutationError !== null}
-                  onSave={onTaskEdit}
-                  onClose={() => setEditingId(null)}
-                />
-              )}
-            </ShippingListInsert>
-          ))
+                  {writesAvailable && onTaskEdit && editable && (
+                    <FocusPressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit task: ${item.title}`}
+                      disabled={busyTaskId !== null}
+                      accessibilityState={{disabled: busyTaskId !== null}}
+                      onPress={() => setEditingId(item.id)}
+                      style={styles.taskEdit}>
+                      <Text style={styles.rowMeta}>Edit</Text>
+                    </FocusPressable>
+                  )}
+                </View>
+                {editingId === item.id &&
+                  writesAvailable &&
+                  onTaskEdit &&
+                  editable && (
+                    <TaskEditor
+                      id={item.id}
+                      title={item.title}
+                      busy={busyTaskId !== null}
+                      failed={taskMutationError !== null}
+                      onSave={onTaskEdit}
+                      onClose={() => setEditingId(null)}
+                    />
+                  )}
+              </ShippingListInsert>
+            );
+          })
         ) : (
           <EmptyCopy>{emptyCopy}</EmptyCopy>
         )}
