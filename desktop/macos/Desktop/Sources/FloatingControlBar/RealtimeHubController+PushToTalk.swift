@@ -210,7 +210,8 @@ extension RealtimeHubController {
             terminal: .interruptedByBargeIn,
             idempotencyKey: interruptedTurn.idempotencyKey,
             acceptedSpawnOwnerID: interruptedTurn.acceptedSpawnOwnerID,
-            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered) ?? false
+            delivery: interruptedTurn.answerDelivered ? .delivered : .notDelivered,
+            answerTextCompleted: interruptedTurn.answerTextCompleted ? true : nil) ?? false
         }
       }
     }
@@ -375,13 +376,16 @@ extension RealtimeHubController {
     // state of the superseded turn survives on the coordinator's last terminal.
     let coordinator = VoiceTurnCoordinator.shared
     let answerDelivered: Bool
+    let answerTextCompleted: Bool
     if let superseded = coordinator.model.lastTerminal,
       superseded.reason == .interruptedByBargeIn,
       superseded.turnID != activeTurn.id
     {
       answerDelivered = coordinator.lastTerminalAnswerDelivered
+      answerTextCompleted = coordinator.lastTerminalAnswerTextCompleted
     } else {
       answerDelivered = coordinator.fullAnswerDrained(turnID: activeTurn.id)
+      answerTextCompleted = coordinator.providerResponseFinished(turnID: activeTurn.id)
     }
     return Task {
       let resolution = await Self.resolveTranscript(
@@ -396,7 +400,8 @@ extension RealtimeHubController {
           partialAssistantText: partialAssistantText),
         idempotencyKey: idempotencyKey,
         acceptedSpawnOwnerID: acceptedSpawnOwnerID,
-        answerDelivered: answerDelivered)
+        answerDelivered: answerDelivered,
+        answerTextCompleted: answerTextCompleted)
     }
   }
 

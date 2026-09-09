@@ -4949,6 +4949,7 @@ class FloatingControlBarManager {
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
     terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil,
     userScreenContext: String? = nil,
     userEvidence: [ConversationEvidence] = []
   ) async -> Bool {
@@ -4960,6 +4961,7 @@ class FloatingControlBarManager {
       continuityKey: continuityKey,
       assistantStatus: assistantStatus,
       terminalReason: terminalReason,
+      answerTextCompleted: answerTextCompleted,
       userScreenContext: userScreenContext,
       userEvidence: userEvidence,
       ownerID: ownerID
