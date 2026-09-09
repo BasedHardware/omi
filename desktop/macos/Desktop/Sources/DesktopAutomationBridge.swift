@@ -180,7 +180,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var isAppActive: Bool
   var mainWindowTitle: String?
   var floatingBarVisible: Bool
+  /// True when the chat-first Chat route is selected, so the main-window composer is the typed Ask Omi surface.
   var askOmiOpen: Bool
+  /// True when that composer’s text view is first responder.
   var askOmiFocused: Bool
   var floatingBarFrame: String?
   var floatingBarVoiceListening: Bool
@@ -586,8 +588,8 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
     let floating = FloatingControlBarManager.shared.automationState
     return (
       isVisible: floating.isVisible,
-      isAskOmiOpen: floating.isAskOmiOpen,
-      isAskOmiFocused: floating.isAskOmiFocused,
+      isAskOmiOpen: OpenAskOmiAutomation.isComposerPresented(),
+      isAskOmiFocused: OpenAskOmiAutomation.isComposerFocused(),
       frame: floating.frame,
       isVoiceListening: floating.isVoiceListening,
       isVoiceDictating: floating.isVoiceDictating,
@@ -811,6 +813,8 @@ final class DesktopAutomationActionRegistry {
     // Cursor-free Home-stage and first-use-popup drivers: see their own files for the shared failure mode.
     registerHomeStageActions()
     registerActivationActions()
+    registerOpenAskOmiActions()
+    registerCloseAskOmiActions()
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
     register(
@@ -1773,29 +1777,6 @@ final class DesktopAutomationActionRegistry {
         "was_signed_in": "true",
         "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
       ]
-    }
-
-    // Send a typed query through the real floating-bar AI path
-    // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
-    // Used to drive cache/latency benchmarks without a mic or the cursor.
-    register(
-      name: "open_ask_omi",
-      summary: "Open the Ask Omi input panel and return app-side open/focus timing",
-      params: ["reset", "wait"]
-    ) { params in
-      let reset = boolParam(params["reset"], default: false)
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.openAskOmiForAutomation(
-        reset: reset, wait: wait)
-    }
-
-    register(
-      name: "close_ask_omi",
-      summary: "Close the Ask Omi input panel if it is open",
-      params: ["wait"]
-    ) { params in
-      let wait = boolParam(params["wait"], default: true)
-      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
     register(
