@@ -10,6 +10,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Parakeet readiness is written by the WebSocket reader and read by PCM submission; execute the in-memory handshake with the race detector"
+  - id: python-sdk-public-api
+    command: ["python3", "sdks/python/tests/test_public_api.py"]
+    triggers: ["sdks/python/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#12950: the documented transcribe import returned its same-named submodule rather than the callable; fresh-process public API tests execute transcript delivery without optional packages"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/dev-harness/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
