@@ -85,15 +85,17 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
-5. JIT empty watchlist. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
+5. JIT empty watchlist — **converged**. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
    `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
    routes a complete *empty* watchlist to the bounded ambient lane (owner decision
    2026-09-01: an account with no standing trigger must not go silent). Windows
-   (`desktop/windows/src/shared/jitTriggerRuntime.ts`, `desktop/windows/src/main/jit/jitRuntime.ts`)
-   still returns `none` and suppresses `empty_watchlist`; its ambient lane is
-   caller-controlled and not wired. The beta cohort is macOS-only and the Windows JIT
-   client floor is unmet, so the losing platform is Windows and must adopt the macOS
-   behavior before any Windows cohort activates (JIT decision 19).
+   (`desktop/windows/src/shared/jitTriggerRuntime.ts` `evaluateJitWatchlist`,
+   `desktop/windows/src/main/jit/jitRuntime.ts`) now does the same: an empty complete
+   watchlist evaluates to `ambient_fallback` and admits as `no_eligible_planned_trigger`,
+   the one planned outcome `WindowsJitAssistant` hands to `admitAmbient`; the
+   `empty_watchlist` suppression reason is retired on both platforms. Still open on
+   Windows and tracked as the JIT client floor (decision 19): the budget day is
+   `localBudgetDay(now)` rather than the server's `budget_timezone` (macOS #12798).
 6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
    vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS
    (`ServerConversation.durationInSeconds`) validate each segment — empty text,

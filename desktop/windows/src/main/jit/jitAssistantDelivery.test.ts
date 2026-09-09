@@ -253,11 +253,14 @@ describe('ambient agent-turn prompt', () => {
     expect(admitAmbient).not.toHaveBeenCalled()
   })
 
-  it('does not admit ambient on an empty complete watchlist', async () => {
+  it('does not admit ambient on a suppression reason it does not own', async () => {
+    // The only planned outcome that reaches ambient is no_eligible_planned_trigger;
+    // an empty complete watchlist now produces exactly that (parity item 5), so
+    // this guards the remaining suppressions rather than a retired reason.
     const admitAmbient = vi.fn()
     const runtime = fakeRuntime({
       observationForFrame: async (f: RewindFrame) => ({ appName: f.app }),
-      admit: async () => ({ kind: 'suppressed', reason: 'empty_watchlist' }),
+      admit: async () => ({ kind: 'suppressed', reason: 'planned_runtime_rejected' }),
       admitAmbient
     })
     const assistant = new WindowsJitAssistant(runtime, () => T0)
