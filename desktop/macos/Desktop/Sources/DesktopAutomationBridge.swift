@@ -1573,7 +1573,8 @@ final class DesktopAutomationActionRegistry {
     // the shortcut handler calls, so no synthetic key events or cursor are involved.
     register(
       name: "ptt_start",
-      summary: "Begin a push-to-talk capture (mirrors the PTT shortcut key-down)"
+      summary:
+        "Begin a push-to-talk capture after admission (mirrors the PTT shortcut key-down). Returns after capture admission; provider/hub readiness and screen evidence are polled via ptt_turn_snapshot"
     ) { _ in
       PushToTalkManager.shared.beginPushToTalkForAutomation()
     }
