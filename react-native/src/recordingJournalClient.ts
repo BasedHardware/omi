@@ -1,3 +1,4 @@
+import {decodeBase64} from './base64';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
 import type {
   OmiBackend,
@@ -22,19 +23,14 @@ export function hasRecordingJournal(backend: OmiBackend): boolean {
 }
 
 export function decodeJournalPacket(value: string): Uint8Array {
-  if (
-    value.length > Math.ceil(maxBytes / 3) * 4 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value,
-    )
-  ) {
+  if (value.length > Math.ceil(maxBytes / 3) * 4) {
     throw new Error('Saved recording packet is invalid');
   }
-  const binary = globalThis.atob(value);
-  if (binary.length === 0) {
+  const bytes = decodeBase64(value);
+  if (bytes.length === 0) {
     throw new Error('Saved recording packet is empty');
   }
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
+  return bytes;
 }
 
 export type RestoredRecording = {
