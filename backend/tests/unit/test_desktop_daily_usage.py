@@ -140,7 +140,14 @@ def test_set_user_time_zone_if_missing_writes_for_a_document_without_one():
     fake_db, user_ref = _user_doc_db({'email': 'desktop-only@example.com'})
     with patch.object(notifications_db, 'db', fake_db):
         assert notifications_db.set_user_time_zone_if_missing('uid1', 'America/New_York') is True
-    user_ref.set.assert_called_once_with({'time_zone': 'America/New_York'}, merge=True)
+    user_ref.set.assert_called_once_with(
+        {
+            'time_zone': 'America/New_York',
+            'daily_summary_enabled': True,
+            'daily_summary_hour_local': 22,
+        },
+        merge=True,
+    )
 
 
 def test_set_user_time_zone_if_missing_leaves_a_mobile_written_zone_alone():
