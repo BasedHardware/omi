@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.330",
+      "date": "2026-09-09",
+      "changes": [
+        "Fixed voice typing dropping the first word when a dictation starts with \"this\" — \"type this is a test\" now types \"This is a test\", not \"Is a test\""
+      ]
+    },
+    {
       "version": "0.12.329",
       "date": "2026-09-09",
       "changes": [
