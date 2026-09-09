@@ -1,8 +1,16 @@
 version: 2
 name: ask-omi-open-benchmark
 tier: 3
-description: Repeated cursor-free Ask Omi input-feedback gate for the floating pill (100 ms maximum to open and focus).
+description: Repeated cursor-free Ask Omi input-feedback gate for the chat-first main-window composer.
 app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationAskOmiActions.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationActivationActions.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
 preconditions:
   - automation_bridge_ready
 
@@ -18,11 +26,11 @@ steps:
       name: open_ask_omi
       reset: true
     expect:
+      result.detail.target: "main_chat"
       result.detail.elapsedMs:
         max: 100
     wait:
       state.askOmiOpen: true
-      state.askOmiFocused: true
 
   - id: S3
     name: Close Ask Omi 1
@@ -35,11 +43,11 @@ steps:
       name: open_ask_omi
       reset: true
     expect:
+      result.detail.target: "main_chat"
       result.detail.elapsedMs:
         max: 100
     wait:
       state.askOmiOpen: true
-      state.askOmiFocused: true
 
   - id: S5
     name: Close Ask Omi 2
@@ -52,23 +60,22 @@ steps:
       name: open_ask_omi
       reset: true
     expect:
+      result.detail.target: "main_chat"
       result.detail.elapsedMs:
         max: 100
     wait:
       state.askOmiOpen: true
-      state.askOmiFocused: true
 
   - id: S7
     name: Capture Ask Omi Visual
     visual.export:
       name: ask-omi-open
-      target: floating
+      target: main
 
   - id: S8
     name: Assert Ask Omi State
     state.expect:
       state.askOmiOpen: true
-      state.askOmiFocused: true
 
   - id: S9
     name: Assert Logs Are Clean

@@ -95,6 +95,84 @@ final class HomeStageCloseSemanticsTests: XCTestCase {
     await fulfillment(of: [posted], timeout: 2.0)
   }
 
+  // MARK: open_ask_omi reports the chat-first composer (#13201)
+
+  /// `open_ask_omi` used to poll the retired notch composer (`showingAIConversation`), so
+  /// wait=true always timed out and wait=false's triggered=true was a lie. The action now names
+  /// the main-window composer and returns `target=main_chat`.
+  func testOpenAskOmiDescriptorNamesTheMainChatComposer() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let descriptor = try XCTUnwrap(
+      registry.descriptors().first { $0.name == "open_ask_omi" })
+    XCTAssertTrue(descriptor.summary.contains("main-window composer"), descriptor.summary)
+    XCTAssertTrue(descriptor.summary.contains("quiet"), descriptor.summary)
+    XCTAssertEqual(descriptor.surfaces, ["main_chat"])
+  }
+
+  func testOpenAskOmiWaitFalseReturnsMainChatTarget() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let posted = expectation(forNotification: .homeStageOpenChat, object: nil)
+
+    let detail = try await registry.perform("open_ask_omi", params: ["wait": "false"])
+
+    XCTAssertEqual(detail?["target"], "main_chat")
+    XCTAssertEqual(detail?["triggered"], "true")
+    XCTAssertNotNil(detail?["presentation"])
+    XCTAssertNil(detail?["error"])
+    await fulfillment(of: [posted], timeout: 2.0)
+  }
+
+  /// Quiet must not be reported as a focus timeout. A timeout made every harness wait
+  /// indistinguishable from an expand regression (#13201).
+  func testOpenAskOmiUnderQuietDoesNotTimeOutOrExitQuiet() async throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.registerBuiltins()
+    let previous = DesktopAutomationWindowPresentation.currentMode
+    defer { DesktopAutomationWindowPresentation.setMode(previous == .quiet ? .normal : previous) }
+    _ = DesktopAutomationWindowPresentation.setMode(.quiet)
+
+    let detail = try await registry.perform("open_ask_omi", params: ["wait": "true"])
+
+    XCTAssertEqual(DesktopAutomationWindowPresentation.currentMode, .quiet)
+    XCTAssertEqual(detail?["target"], "main_chat")
+    XCTAssertEqual(detail?["presentation"], "quiet")
+    XCTAssertNotEqual(detail?["openMs"], "timeout")
+    XCTAssertNotEqual(detail?["focusMs"], "timeout")
+    XCTAssertEqual(detail?["focused"], "false")
+  }
+
+  func testOpenAskOmiRequestSelectsChatWithoutReveal() throws {
+    let suiteName = "HomeStageCloseSemanticsTests.open-ask-omi.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectMore(.settings)
+    XCTAssertNotEqual(navigation.route, .chat)
+
+    OpenAskOmiAutomation.requestComposer(navigation: navigation, ensureWindow: false)
+
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertTrue(OpenAskOmiAutomation.isComposerPresented(navigation))
+  }
+
+  func testOpenAskOmiContractOmitsFocusTimeoutWhenQuietBlocksFocus() {
+    let detail = OpenAskOmiAutomation.detail(
+      wait: true,
+      presentation: .quiet,
+      presented: true,
+      focused: false,
+      openMs: "1.2"
+    )
+    XCTAssertEqual(detail["target"], "main_chat")
+    XCTAssertEqual(detail["presentation"], "quiet")
+    XCTAssertEqual(detail["focused"], "false")
+    XCTAssertEqual(detail["openMs"], "1.2")
+    XCTAssertNil(detail["focusMs"])
+    XCTAssertNil(detail["error"])
+  }
+
   // MARK: Flow (static contract over DashboardPage wiring)
 
 }

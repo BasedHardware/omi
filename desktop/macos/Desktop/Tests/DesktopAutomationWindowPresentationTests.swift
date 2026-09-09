@@ -188,4 +188,30 @@ final class DesktopAutomationWindowPresentationTests: XCTestCase {
       }
     }
   }
+
+  @MainActor
+  func testOpenAskOmiLeavesQuietWindowsMountedAndUnrevealed() async throws {
+    DesktopAutomationActionRegistry.shared.registerBuiltins()
+    defer { DesktopAutomationWindowPresentation.setMode(.normal) }
+    _ = DesktopAutomationWindowPresentation.setMode(.quiet)
+
+    let window = NSWindow(
+      contentRect: NSRect(x: 120, y: 120, width: 960, height: 700),
+      styleMask: [.titled, .closable, .resizable],
+      backing: .buffered,
+      defer: true)
+    NonintrusiveTestWindow.prepareForOrdering(window, lockPosition: false)
+    window.orderFrontRegardless()
+    defer { window.orderOut(nil) }
+
+    let detail = try await DesktopAutomationActionRegistry.shared.perform(
+      "open_ask_omi",
+      params: ["wait": "true"])
+
+    XCTAssertEqual(DesktopAutomationWindowPresentation.currentMode, .quiet)
+    XCTAssertTrue(window.isVisible, "quiet automation must keep the window mounted")
+    XCTAssertEqual(detail?["presentation"], "quiet")
+    XCTAssertEqual(detail?["target"], "main_chat")
+    XCTAssertNotEqual(detail?["focusMs"], "timeout")
+  }
 }
