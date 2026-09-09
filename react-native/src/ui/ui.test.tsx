@@ -90,7 +90,7 @@ import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
-import {projectionClockLabel} from '../desktopReadClient';
+import {clockLabel, projectionClockLabel} from '../desktopReadClient';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
 import {
@@ -1899,6 +1899,91 @@ test('wide Home search rows with no due date say No due date instead of Pending'
   const currentsTree = JSON.stringify(currents.toJSON());
   expect(currentsTree).toContain('No due date');
   expect(currentsTree).not.toContain('Pending');
+});
+
+test('wide Home search rows keep GET capture time instead of started-only', () => {
+  const captured = new Date(2025, 7, 10, 12, 0);
+  const expected = `Captured (device time) · ${clockLabel(
+    captured.getTime(),
+    Date.now(),
+  )}`;
+  const renderer = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:captured-home-search',
+        title: 'Device capture',
+        summary: 'Recorded on the wearable.',
+        searchableText: 'Device capture\nRecorded on the wearable.',
+        createdAt: captured.toISOString(),
+        updatedAt: captured.toISOString(),
+        startedAt: captured.toISOString(),
+        finishedAt: captured.toISOString(),
+        capturedAtMs: captured.getTime(),
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Device capture');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('1970');
+  const compact = render(
+    <ProjectionRow
+      home
+      item={{
+        kind: 'conversation',
+        id: 'recording:captured-home-search',
+        title: 'Device capture',
+        summary: 'Recorded on the wearable.',
+        searchableText: 'Device capture\nRecorded on the wearable.',
+        createdAt: captured.toISOString(),
+        updatedAt: captured.toISOString(),
+        startedAt: captured.toISOString(),
+        finishedAt: captured.toISOString(),
+        capturedAtMs: captured.getTime(),
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  expect(JSON.stringify(compact.toJSON())).toContain(expected);
+  const plain = render(
+    <ProjectionRow
+      item={{
+        kind: 'conversation',
+        id: 'recording:plain-home-search',
+        title: 'Untimed recording',
+        summary: 'Recorded on the wearable.',
+        searchableText: 'Untimed recording\nRecorded on the wearable.',
+        createdAt: captured.toISOString(),
+        updatedAt: captured.toISOString(),
+        startedAt: captured.toISOString(),
+        finishedAt: captured.toISOString(),
+        starred: false,
+        status: 'completed',
+        source: 'omi',
+        visibility: 'private',
+        folderId: null,
+        locked: false,
+        discarded: false,
+      }}
+    />,
+  );
+  expect(JSON.stringify(plain.toJSON())).not.toContain(
+    'Captured (device time)',
+  );
 });
 
 test('wide Home search rows keep GET locked and discarded flags instead of title-only', () => {

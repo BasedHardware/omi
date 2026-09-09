@@ -2,6 +2,7 @@ import React from 'react';
 import {ActivityIndicator, Text, View} from 'react-native';
 import {
   clockLabel,
+  conversationCaptureCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -35,16 +36,12 @@ function ConversationClockFields({
   locked?: boolean;
 }) {
   const showLocked = locked === true || conversation.locked;
+  const captureCopy = conversationCaptureCopy(conversation.capturedAtMs);
   return (
     <View style={styles.conversationDetailFields}>
-      {conversation.capturedAtMs !== undefined && (
-        <Text style={[styles.conversationDetailField, ink]}>
-          Captured (device time) ·{' '}
-          {formatConversationDate(
-            new Date(conversation.capturedAtMs).toISOString(),
-          )}
-        </Text>
-      )}
+      {captureCopy !== null ? (
+        <Text style={[styles.conversationDetailField, ink]}>{captureCopy}</Text>
+      ) : null}
       <Text style={[styles.conversationDetailField, ink]}>
         Started · {formatConversationDate(conversation.startedAt)}
       </Text>

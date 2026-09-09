@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Search from 'lucide-react-native/icons/search';
 import {
+  conversationCaptureCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationHasFinishClock,
@@ -42,6 +43,7 @@ const ConversationRow = memo(function ConversationRow({
   onPress: () => void;
 }) {
   const listenOverview = conversationListUsesListenOverview(item);
+  const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   return (
     <FocusPressable
       accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
@@ -57,6 +59,9 @@ const ConversationRow = memo(function ConversationRow({
         <Text style={styles.conversationRowTime}>
           {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
+        {captureCopy !== null ? (
+          <Text style={styles.conversationRowTime}>{captureCopy}</Text>
+        ) : null}
         {item.starred ? (
           <Text
             accessibilityLabel="Starred conversation"

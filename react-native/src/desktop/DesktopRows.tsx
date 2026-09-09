@@ -4,6 +4,7 @@ import CheckCircle2 from 'lucide-react-native/icons/circle-check';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import {
+  conversationCaptureCopy,
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationListUsesListenOverview,
@@ -52,6 +53,7 @@ export function EmptyCopy({children}: {children: string}) {
 
 function ConversationCopy({item}: {item: ConversationProjection}) {
   const listenOverview = conversationListUsesListenOverview(item);
+  const captureCopy = conversationCaptureCopy(item.capturedAtMs);
   return (
     <View style={styles.rowCopy}>
       <Text numberOfLines={listenOverview ? 3 : 1} style={styles.rowTitle}>
@@ -69,6 +71,9 @@ function ConversationCopy({item}: {item: ConversationProjection}) {
           .filter(part => part !== '')
           .join(' · ')}
       </Text>
+      {captureCopy !== null ? (
+        <Text style={styles.rowMeta}>{captureCopy}</Text>
+      ) : null}
       {item.locked || item.discarded || item.status === 'failed' ? (
         <Text style={styles.rowMeta}>
           {[

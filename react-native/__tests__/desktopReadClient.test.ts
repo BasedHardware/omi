@@ -7,6 +7,7 @@ import {
   conversationRecapTitle,
   conversationDayLabel,
   conversationGroupLabel,
+  conversationCaptureCopy,
   conversationStatusCopy,
   dataProtectionCopy,
   developerWebhookRowCopy,
@@ -46,6 +47,7 @@ import {
   memorySynthesisCopy,
   parseMemoryText,
   chatClockLabel,
+  clockLabel,
   formatTaskDue,
   projectionClockLabel,
   projectionTimestamp,
@@ -1298,6 +1300,19 @@ test('groups validated UTC conversation timestamps by local calendar day', () =>
       year: 'numeric',
     }),
   );
+});
+
+test('conversation capture copy names GET capturedAtMs and never shows 1970', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const captured = new Date(2026, 7, 10, 12, 0).getTime();
+  expect(conversationCaptureCopy(undefined, now)).toBeNull();
+  expect(conversationCaptureCopy(captured, now)).toBe(
+    `Captured (device time) · ${clockLabel(captured, now)}`,
+  );
+  expect(conversationCaptureCopy(0, now)).toBe(
+    'Captured (device time) · Time unavailable',
+  );
+  expect(conversationCaptureCopy(0, now)).not.toContain('1970');
 });
 
 test('conversation day labels prefer startedAt and keep Today/Yesterday/date', () => {

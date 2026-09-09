@@ -1015,6 +1015,81 @@ test('a zero conversation createdAt groups as Date unavailable instead of 1970',
   expect(copy).not.toContain('1970');
 });
 
+test('conversation list names GET capture time without inventing it on untimed rows', () => {
+  const native = require('react-native') as typeof import('react-native');
+  const dimensions = jest.spyOn(native, 'useWindowDimensions').mockReturnValue({
+    width: 390,
+    height: 844,
+    scale: 1,
+    fontScale: 1,
+  });
+  const captured = new Date(2025, 7, 10, 12, 0);
+  const expected = `Captured (device time) · ${clockLabel(
+    captured.getTime(),
+    Date.now(),
+  )}`;
+  const base = {
+    kind: 'conversation' as const,
+    title: 'Device capture',
+    summary: 'Recorded on the wearable.',
+    searchableText: 'Device capture\nRecorded on the wearable.',
+    createdAt: captured.toISOString(),
+    updatedAt: captured.toISOString(),
+    startedAt: captured.toISOString(),
+    finishedAt: captured.toISOString(),
+    starred: false,
+    status: 'completed' as const,
+    source: 'omi' as const,
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  try {
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = ReactTestRenderer.create(
+        <ConversationsPage
+          loading={false}
+          outcome={{
+            status: 'success',
+            value: {
+              items: [
+                {
+                  ...base,
+                  id: 'recording:captured-one',
+                  capturedAtMs: captured.getTime(),
+                },
+                {
+                  ...base,
+                  id: 'recording:plain-one',
+                  title: 'Untimed recording',
+                  searchableText:
+                    'Untimed recording\nRecorded on the wearable.',
+                },
+              ],
+              page: {
+                ...incompletePage,
+                windowStatus: 'complete',
+                complete: true,
+                completenessStatus: 'complete',
+                reasons: [],
+              },
+            },
+          }}
+        />,
+      );
+    });
+    const copy = textOf(renderer);
+    expect(copy).toContain(expected);
+    expect(copy).toContain('Untimed recording');
+    expect(copy).not.toContain('1970');
+    expect((copy.match(/Captured \(device time\)/g) ?? []).length).toBe(1);
+  } finally {
+    dimensions.mockRestore();
+  }
+});
+
 test('conversation list names locked and discarded conversations without empty badges', () => {
   const base = {
     kind: 'conversation' as const,

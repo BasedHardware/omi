@@ -594,6 +594,19 @@ export function clockLabel(
   return day === 'Today' ? time : `${day} · ${time}`;
 }
 
+export function conversationCaptureCopy(
+  capturedAtMs: number | undefined,
+  nowEpochMilliseconds: number = Date.now(),
+): string | null {
+  if (capturedAtMs === undefined) {
+    return null;
+  }
+  const label = clockLabel(capturedAtMs, nowEpochMilliseconds);
+  return `Captured (device time) · ${
+    label === '' ? 'Time unavailable' : label
+  }`;
+}
+
 export function chatClockLabel(
   createdAt: number,
   nowEpochMilliseconds: number,

@@ -3,6 +3,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
 import {
   formatTaskDue,
+  clockLabel,
   type ConversationProjection,
   type MemoryProjection,
   type TaskProjection,
@@ -419,6 +420,51 @@ test('a zero task due timestamp on Home and Tasks rows says Date unavailable ins
   expect(copy).toContain('Date unavailable');
   expect(copy).not.toContain('1970');
   expect(copy).not.toContain('No due date');
+});
+
+test('Home and Library rows keep GET capture time instead of started-only', () => {
+  const captured = new Date(2025, 7, 10, 12, 0);
+  const expected = `Captured (device time) · ${clockLabel(
+    captured.getTime(),
+    Date.now(),
+  )}`;
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'recording:captured-row',
+    title: 'Device capture',
+    summary: 'Recorded on the wearable.',
+    searchableText: 'Device capture\nRecorded on the wearable.',
+    createdAt: captured.toISOString(),
+    updatedAt: captured.toISOString(),
+    startedAt: captured.toISOString(),
+    finishedAt: captured.toISOString(),
+    capturedAtMs: captured.getTime(),
+    starred: false,
+    status: 'completed',
+    source: 'omi',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let home!: ReactTestRenderer.ReactTestRenderer;
+  let library!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    home = ReactTestRenderer.create(<ReadRow item={item} />);
+    library = ReactTestRenderer.create(<ConversationRow item={item} />);
+  });
+  for (const copy of [textOf(home), textOf(library)]) {
+    expect(copy).toContain('Device capture');
+    expect(copy).toContain(expected);
+    expect(copy).not.toContain('1970');
+  }
+  let plain!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    plain = ReactTestRenderer.create(
+      <ReadRow item={{...item, capturedAtMs: undefined}} />,
+    );
+  });
+  expect(textOf(plain)).not.toContain('Captured (device time)');
 });
 
 test('Home and Library rows keep GET locked and discarded flags instead of title-only', () => {
