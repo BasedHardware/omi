@@ -170,7 +170,8 @@ class Config:
 def load(path: Optional[Path] = None) -> Config:
     """Load the config from disk, returning an empty Config if the file is missing.
 
-    A malformed or undecodable TOML file also yields an empty Config rather
+    A malformed or undecodable TOML file, or non-table profile containers,
+    also yield an empty Config rather
     than raising, so read-only diagnostics such as ``omi version`` and
     ``omi config path`` keep working precisely when the config needs repair.
     The parse failure is recorded on :attr:`Config.load_error`, and
@@ -201,6 +202,13 @@ def load(path: Optional[Path] = None) -> Config:
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
     profiles_data = data.get("profiles", {})
+    if not isinstance(profiles_data, dict) or any(not isinstance(raw, dict) for raw in profiles_data.values()):
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error="config profiles and each named profile must be TOML tables",
+        )
     profiles = {name: Profile.from_toml_dict(name, raw) for name, raw in profiles_data.items()}
 
     extra = {key: value for key, value in data.items() if key not in {"active_profile", "profiles"}}
