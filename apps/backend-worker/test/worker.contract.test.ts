@@ -2684,6 +2684,24 @@ describe("worker request contract", () => {
 });
 
 describe("settings entitlement admission contract", () => {
+  test("Settings rejects every query and does not add shell-local appearance", async () => {
+    const extra = {
+      error: { code: "bad_request", retryable: false, action: "edit_request" },
+    };
+    for (const query of ["?unknown=1", "?x=1&x=2", "?appearance=dark"]) {
+      const response = await fetchWorker(`/v1/settings${query}`, {
+        headers: authenticatedHeaders,
+      });
+      expect(response.status).toBe(400);
+      expect((await response.json()) as unknown).toEqual(extra);
+    }
+    const valid = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect(valid.status).toBe(200);
+    expect(JSON.stringify(await valid.json())).not.toContain("appearance");
+  });
+
   test("Settings renders the same entitlement consumed by chat admission", async () => {
     const before = await fetchWorker("/v1/settings", {
       headers: authenticatedHeaders,

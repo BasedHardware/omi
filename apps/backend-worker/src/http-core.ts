@@ -398,6 +398,17 @@ export function handleReady(context: CoreContext): Response {
 }
 
 export async function handleSettings(context: CoreContext): Promise<Response> {
+  const url = new URL(context.req.url);
+  if ([...url.searchParams].length > 0) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const contentLength = context.req.header("content-length");
+  if (contentLength !== undefined && contentLength !== "0") {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  if (context.req.header("transfer-encoding") !== undefined) {
+    return backendError("bad_request", "edit_request", 400);
+  }
   const db = context.env.DB;
   if (db === undefined)
     return backendError("service_unavailable", "retry", 503, true);
