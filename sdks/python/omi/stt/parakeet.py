@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from asyncio import Queue
 from typing import Callable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -11,14 +12,24 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 def parakeet_ws_url(api_url: str, sample_rate: int = 16000) -> str:
     """Build Parakeet WebSocket URL with proper path and query composition."""
     api_url = api_url.strip()
-    parsed = urlsplit(api_url)
+    if not api_url:
+        raise ValueError("api_url cannot be empty")
 
-    # Scheme mapping: http -> ws, https -> wss
+    if api_url.startswith("//"):
+        normalized_url = "https:" + api_url
+    elif not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", api_url):
+        normalized_url = "https://" + api_url
+    else:
+        normalized_url = api_url
+
+    parsed = urlsplit(normalized_url)
+    if not parsed.netloc:
+        raise ValueError(f"Invalid Parakeet API URL, missing host: {api_url!r}")
+
+    # Scheme mapping: http/ws -> ws, otherwise wss
     scheme = parsed.scheme.lower()
-    if scheme == "http":
+    if scheme in ("http", "ws"):
         new_scheme = "ws"
-    elif scheme in ("https", "wss", "ws"):
-        new_scheme = "wss" if scheme == "https" else scheme
     else:
         new_scheme = "wss"
 

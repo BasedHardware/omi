@@ -30,6 +30,30 @@ def test_parakeet_ws_url():
     )
     assert parakeet_ws_url(url_with_nested) == expected_nested
 
+    # Scheme-less URLs normalized to wss
+    assert parakeet_ws_url("parakeet.example") == "wss://parakeet.example/v3/stream?sample_rate=16000"
+    assert (
+        parakeet_ws_url("parakeet.example/gateway?region=eu")
+        == "wss://parakeet.example/gateway/v3/stream?region=eu&sample_rate=16000"
+    )
+    assert (
+        parakeet_ws_url("//parakeet.example/gateway")
+        == "wss://parakeet.example/gateway/v3/stream?sample_rate=16000"
+    )
+
+    # Empty or host-less inputs raise ValueError
+    try:
+        parakeet_ws_url("")
+        assert False, "Expected ValueError for empty api_url"
+    except ValueError:
+        pass
+
+    try:
+        parakeet_ws_url("   ")
+        assert False, "Expected ValueError for blank api_url"
+    except ValueError:
+        pass
+
 
 def test_whisper_requires_dep_or_runner():
     try:
