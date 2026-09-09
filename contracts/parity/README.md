@@ -15,24 +15,24 @@ cross-platform decision instead of a single-platform drive-by.
 
 ## Fixture files
 
-| File | Rule under contract |
-|---|---|
-| `task_due_buckets.json` | Task due-date bucketing (Today / Tomorrow / Later / No deadline, and the overdue handling models) |
-| `day_keys.json` | Local-calendar-day identity of a UTC instant (conversation day grouping) |
-| `wire_action_item.json` | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
-| `section_labels.json` | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days |
-| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads |
-| `conversation_duration.json` | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records |
+| File                               | Rule under contract                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `task_due_buckets.json`            | Task due-date bucketing (Today / Tomorrow / Later / No deadline, and the overdue handling models)                            |
+| `day_keys.json`                    | Local-calendar-day identity of a UTC instant (conversation day grouping)                                                     |
+| `wire_action_item.json`            | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
+| `section_labels.json`              | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days              |
+| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
+| `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
 
 ## Conformance suites
 
-| Platform | Suite | Runs |
-|---|---|---|
-| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py` | Backend unit suite and Desktop Backend Contracts CI |
-| Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
-| Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter remains pending. | Desktop Swift CI |
-| Web app | `web/app/src/lib/__tests__/knowledgeLedger.test.ts` | `web/app/test.sh`, CI Web App checks |
+| Platform                       | Suite                                                                                                                                                                                    | Runs                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py`                                                                           | Backend unit suite and Desktop Backend Contracts CI       |
+| Flutter app                    | `app/test/parity/parity_contracts_test.dart`                                                                                                                                             | `app/test.sh`, CI Flutter tests                           |
+| Windows desktop                | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts`                                                                     | `npm test` in `desktop/windows`, CI Desktop Windows tests |
+| macOS desktop                  | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter remains pending. | Desktop Swift CI                                          |
+| Web app                        | `web/app/src/lib/__tests__/knowledgeLedger.test.ts`                                                                                                                                      | `web/app/test.sh`, CI Web App checks                      |
 
 The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,
 Windows, and web adapters plus the backend and standalone MCP suites. It proves
@@ -85,17 +85,41 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
-5. JIT empty watchlist — **converged**. macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
+5. JIT empty watchlist — **routing converged; ambient pacing missing on Windows**.
+   macOS (`KnowledgeLedgerTriggerWatchlistRuntime`,
    `desktop/macos/Desktop/Sources/ProactiveAssistants/Core/KnowledgeLedgerTriggerRuntime.swift`)
-   routes a complete *empty* watchlist to the bounded ambient lane (owner decision
+   routes a complete _empty_ watchlist to the bounded ambient lane (owner decision
    2026-09-01: an account with no standing trigger must not go silent). Windows
    (`desktop/windows/src/shared/jitTriggerRuntime.ts` `evaluateJitWatchlist`,
-   `desktop/windows/src/main/jit/jitRuntime.ts`) now does the same: an empty complete
-   watchlist evaluates to `ambient_fallback` and admits as `no_eligible_planned_trigger`,
-   the one planned outcome `WindowsJitAssistant` hands to `admitAmbient`; the
-   `empty_watchlist` suppression reason is retired on both platforms. Still open on
-   Windows and tracked as the JIT client floor (decision 19): the budget day is
-   `localBudgetDay(now)` rather than the server's `budget_timezone` (macOS #12798).
+   `desktop/windows/src/main/jit/jitRuntime.ts`) now routes the same way: an empty
+   complete watchlist evaluates to `ambient_fallback` and admits as
+   `no_eligible_planned_trigger`, the one planned outcome `WindowsJitAssistant` hands
+   to `admitAmbient`; the `empty_watchlist` suppression reason is retired on both
+   platforms. **Routing is not the whole item**: what the two platforms then spend in
+   the ambient lane still differs, so item 5 is NOT converged. Open on Windows and
+   tracked as the JIT client floor (decision 19):
+   - No ambient pacing. macOS gates every ambient nano spend on
+     `JITAmbientPacingPolicy` (`desktop/macos/.../JITAmbientPacingPolicy.swift`:
+     burst 2, then one per `activeDaySeconds / budget` — two hours at the default
+     eight — with 2 triages reserved for derived-intent matches), reached from
+     `JITProactivityRuntime.swift:640-670`. Windows `admitAmbient`
+     (`desktop/windows/src/main/jit/jitRuntime.ts`) has no pacing at all: the local
+     nano claim passes `budget: null`, so the whole daily allowance can be consumed
+     in the first minutes after local midnight — the exact failure measured on the
+     owner account 2026-08-30/31 that produced the macOS policy.
+   - No `ambient_server_denied` backoff. macOS records a per-budget-day denial and
+     suppresses for `ambientServerDenialBackoff` after the server refuses; Windows
+     returns `reservation_already_consumed` and retries on the next settled context.
+   - No local per-day nano usage read before spend (macOS `readAmbientNanoUsage`);
+     Windows learns its position in the budget only from the server's answer.
+   - Ambient context cooldown keys on an OCR-derived semantic fingerprint
+     (`WindowsJitAssistant.analyze` hashes app + window title + OCR text), so a
+     context whose text keeps changing produces a new fingerprint each frame and the
+     `reserveProactivity` RPCs are unbounded per settled context — they continue
+     after the server answers `reserved: false`. Pre-existing, not introduced by the
+     routing change; it is what makes the missing pacing cost real money.
+   - Budget day is `localBudgetDay(now)` rather than the server's `budget_timezone`
+     (macOS #12798).
 6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
    vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS
    (`ServerConversation.durationInSeconds`) validate each segment — empty text,
