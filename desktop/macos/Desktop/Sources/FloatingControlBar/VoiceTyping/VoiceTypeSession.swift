@@ -39,15 +39,26 @@ final class VoiceTypeSession: ObservableObject {
   /// dictation joins the conversation history; a turn that never dictated has
   /// nothing to record.
   enum Completion: Equatable {
+    /// Why a turn ended on the clipboard. The two reasons need different words:
+    /// one is a permission the user can turn on, the other is a race with their
+    /// own focus that nothing needs fixing for.
+    enum CopyReason: Equatable {
+      /// No Accessibility grant, so no insertion was attempted at all.
+      case accessibilityDenied
+      /// Omi was allowed to type, but the destination was not there to type
+      /// into: focus moved, or no insertion could be dispatched. The text is on
+      /// the clipboard rather than in the wrong app.
+      case insertionUnavailable
+    }
+
     case none
     /// The exact insertion was read back from the captured field.
     case pasted(String)
     /// Paste was dispatched to the captured app and the editor never showed it
     /// landing. Clipboard restoration still belongs to the sink.
     case pasteRequested(String)
-    /// Focus moved (or the paste could not be posted), so the text was left on
-    /// the clipboard for the user instead of being pasted into the wrong app.
-    case copied(String)
+    /// The text was left on the clipboard instead of being inserted.
+    case copied(String, CopyReason)
     /// The editor may contain a partial insertion. The clipboard is unchanged;
     /// inspect the destination before deciding whether to retry manually.
     case insertionUncertain(String)
@@ -55,7 +66,8 @@ final class VoiceTypeSession: ObservableObject {
     var statusHint: String? {
       switch self {
       case .none, .pasted: return nil
-      case .copied: return "Copied — press ⌘V to paste"
+      case .copied(_, .accessibilityDenied): return "Copied: turn on Accessibility to paste automatically"
+      case .copied(_, .insertionUnavailable): return "Copied: press ⌘V to paste"
       // Plain enough to act on. "Insertion unconfirmed" read to people as an
       // error the dictation had hit, rather than as the one thing it means:
       // the words were sent and Omi could not watch them arrive.
@@ -68,7 +80,15 @@ final class VoiceTypeSession: ObservableObject {
       case .none: return nil
       case .pasted(let text): return "Typed: \(text)"
       case .pasteRequested(let text): return "Paste requested; check the editor: \(text)"
-      case .copied(let text): return "Copied to clipboard: \(text)"
+      // A dictation that lands on the clipboard because the permission is off
+      // reads as Omi failing. Say what to turn on, in the transcript the user
+      // is already looking at — the status hint is gone a moment later, and
+      // nothing else in the turn mentions Accessibility.
+      case .copied(let text, .accessibilityDenied):
+        return "Copied to clipboard: \(text)\n\nTurn on Accessibility for this Omi app "
+          + "(System Settings → Privacy & Security → Accessibility) to have dictation "
+          + "paste at your cursor automatically."
+      case .copied(let text, .insertionUnavailable): return "Copied to clipboard: \(text)"
       case .insertionUncertain(let text):
         return "Dictation insertion unconfirmed; check the editor: \(text)"
       }
@@ -84,7 +104,8 @@ final class VoiceTypeSession: ObservableObject {
     var text: String? {
       switch self {
       case .none: return nil
-      case .pasted(let text), .pasteRequested(let text), .copied(let text), .insertionUncertain(let text): return text
+      case .pasted(let text), .pasteRequested(let text), .copied(let text, _), .insertionUncertain(let text):
+        return text
       }
     }
   }
@@ -226,12 +247,12 @@ final class VoiceTypeSession: ObservableObject {
     guard !blocked, isAccessibilityTrusted() else {
       log("VoiceTypeSession: Accessibility not granted — copied \(trimmed.count) chars instead of pasting")
       copyFallback(trimmed)
-      return .copied(trimmed)
+      return .copied(trimmed, .accessibilityDenied)
     }
     guard let aimed = releaseFocusTarget, sink.focusTarget() == aimed else {
       log("VoiceTypeSession: dictation target unavailable or changed — copied \(trimmed.count) chars instead")
       copyFallback(trimmed)
-      return .copied(trimmed)
+      return .copied(trimmed, .insertionUnavailable)
     }
     let separator = aimed.needsSeparatingSpace ? " " : ""
     switch await sink.paste(separator + trimmed, into: aimed) {
@@ -248,7 +269,7 @@ final class VoiceTypeSession: ObservableObject {
       // Preserve line continuation only when the destination is still the
       // exact unchanged capture.
       copyFallback(sink.focusTarget() == aimed ? separator + trimmed : trimmed)
-      return .copied(trimmed)
+      return .copied(trimmed, .insertionUnavailable)
     case .uncertain:
       log("VoiceTypeSession: insertion could not be verified for \(trimmed.count) chars")
       DesktopDiagnosticsManager.shared.recordFallback(

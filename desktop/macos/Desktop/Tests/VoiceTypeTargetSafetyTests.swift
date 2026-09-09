@@ -141,7 +141,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     fixture.begin()
     fixture.editor.field = "second-field"
     let delivered = await fixture.session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(fixture.editor.writes.isEmpty)
     XCTAssertTrue(fixture.postedPastes.isEmpty)
     XCTAssertEqual(fixture.clipboard, "Hello")
@@ -153,7 +153,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       fixture.begin()
       if moveCaret { fixture.editor.selection.location = 2 } else { fixture.editor.value = "Changed! " }
       let delivered = await fixture.session.deliver("Hello")
-      XCTAssertEqual(delivered, .copied("Hello"))
+      XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
       XCTAssertTrue(fixture.editor.writes.isEmpty)
       XCTAssertTrue(fixture.postedPastes.isEmpty)
     }
@@ -166,7 +166,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       fixture.begin()
       if denied { fixture.trusted = false }
       let delivered = await fixture.session.deliver("Hello")
-      XCTAssertEqual(delivered, .copied("Hello"))
+      XCTAssertEqual(delivered, .copied("Hello", denied ? .accessibilityDenied : .insertionUnavailable))
       XCTAssertTrue(fixture.editor.writes.isEmpty)
       XCTAssertTrue(fixture.postedPastes.isEmpty)
       XCTAssertFalse(fixture.session.canUndoLastDictation)
@@ -298,7 +298,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     fixture.begin()
     fixture.editor.writeSucceeds = false
     let delivered = await fixture.session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(fixture.postedPastes.isEmpty)
     XCTAssertFalse(fixture.session.canUndoLastDictation)
   }
@@ -310,7 +310,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     fixture.begin()
     fixture.editor.writeSucceeds = false
     let delivered = await fixture.session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertEqual(fixture.clipboard, " Hello")
     XCTAssertEqual(fixture.editor.value, "Original")
     XCTAssertTrue(fixture.postedPastes.isEmpty)
@@ -590,10 +590,22 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     XCTAssertEqual(requested.text, "Hello")
     XCTAssertFalse(requested.isConfirmedDelivery)
 
-    let copied = VoiceTypeSession.Completion.copied("Hello")
-    XCTAssertEqual(copied.statusHint, "Copied — press ⌘V to paste")
+    let copied = VoiceTypeSession.Completion.copied("Hello", .insertionUnavailable)
+    XCTAssertEqual(copied.statusHint, "Copied: press ⌘V to paste")
     XCTAssertEqual(copied.journalAcknowledgement, "Copied to clipboard: Hello")
     XCTAssertTrue(copied.isConfirmedDelivery)
+
+    // The permission is the one thing here the user can act on, and the status
+    // hint is gone a moment later — so the transcript has to carry it.
+    let blocked = VoiceTypeSession.Completion.copied("Hello", .accessibilityDenied)
+    XCTAssertEqual(blocked.statusHint, "Copied: turn on Accessibility to paste automatically")
+    XCTAssertEqual(
+      blocked.journalAcknowledgement,
+      "Copied to clipboard: Hello\n\nTurn on Accessibility for this Omi app "
+        + "(System Settings → Privacy & Security → Accessibility) to have dictation "
+        + "paste at your cursor automatically.")
+    XCTAssertEqual(blocked.text, "Hello")
+    XCTAssertTrue(blocked.isConfirmedDelivery)
 
     let pasted = VoiceTypeSession.Completion.pasted("Hello")
     XCTAssertNil(pasted.statusHint)

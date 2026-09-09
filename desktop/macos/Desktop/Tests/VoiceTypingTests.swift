@@ -215,8 +215,11 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertEqual(session.payload(from: "Type hello again"), "Hello again", "one denied turn stays denied")
     XCTAssertTrue(session.claimsTurn)
     let delivered = await session.deliver("Hello again")
-    XCTAssertEqual(delivered, .copied("Hello again"))
+    XCTAssertEqual(delivered, .copied("Hello again", .accessibilityDenied))
     XCTAssertTrue(sink.pasted.isEmpty, "no Accessibility grant means no paste is even attempted")
+    XCTAssertEqual(
+      delivered.journalAcknowledgement?.contains("Turn on Accessibility"), true,
+      "the transcript is where the user finds out why their dictation did not land at the cursor")
     XCTAssertEqual(sink.copied, ["Hello again"])
   }
 
@@ -258,7 +261,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertNotNil(session.payload(from: "Type hello world"))
     sink.focus = "2:com.omi.desktop-dev"
     let delivered = await session.deliver("Hello world")
-    XCTAssertEqual(delivered, .copied("Hello world"))
+    XCTAssertEqual(delivered, .copied("Hello world", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello world"])
   }
@@ -271,7 +274,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     session.noteRelease()
     XCTAssertNotNil(session.payload(from: "Type hello"))
     let delivered = await session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello"])
   }
@@ -281,7 +284,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     XCTAssertNotNil(session.payload(from: "Type hello"))
     sink.focus = nil
     let delivered = await session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertTrue(sink.pasted.isEmpty)
     XCTAssertEqual(sink.copied, ["Hello"])
   }
@@ -291,7 +294,7 @@ final class VoiceTypeSessionTests: XCTestCase {
     sink.pasteSucceeds = false
     XCTAssertNotNil(session.payload(from: "Type hello"))
     let delivered = await session.deliver("Hello")
-    XCTAssertEqual(delivered, .copied("Hello"))
+    XCTAssertEqual(delivered, .copied("Hello", .insertionUnavailable))
     XCTAssertEqual(sink.copied, ["Hello"])
   }
 
