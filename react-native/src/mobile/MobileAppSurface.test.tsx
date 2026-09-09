@@ -1144,3 +1144,42 @@ test('compact Home task previews stay title-only', () => {
   expect(copy).not.toContain('No due date');
   expect(copy).not.toContain('Completed ·');
 });
+
+test('compact Tasks tab keeps GET indent instead of a flat list', () => {
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {id: 'task-1', title: 'Parent task', completed: false, indentLevel: 0},
+      {id: 'task-2', title: 'Nested child', completed: false, indentLevel: 2},
+    ],
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ).length,
+  ).toBeGreaterThan(0);
+});
+
+test('compact Home task previews keep GET indent without due copy', () => {
+  const dueAt = 1_767_225_600;
+  const renderer = render({
+    tasks: [
+      {
+        id: 'task-1',
+        title: 'Prepare product demo',
+        completed: false,
+        dueAt,
+        indentLevel: 2,
+      },
+    ],
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ).length,
+  ).toBeGreaterThan(0);
+  const copy = renderedText(renderer);
+  expect(copy).toContain('Prepare product demo');
+  expect(copy).not.toContain(formatTaskDue(dueAt));
+  expect(copy).not.toContain('No due date');
+});

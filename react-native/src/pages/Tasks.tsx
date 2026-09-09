@@ -14,6 +14,7 @@ import {
   formatTaskDue,
   taskDisplayTitle,
   taskGroup,
+  taskIndentPadding,
   visibleDisplayText,
   type DesktopReadProjection,
   type DomainReadOutcome,
@@ -163,13 +164,21 @@ export function TasksPage({
                 </View>
                 {group.tasks.map(task => {
                   const selected = task.id === selectedId;
+                  const indentPad = taskIndentPadding(task.indentLevel);
                   return (
                     <View key={task.id}>
                       <View
                         style={[
                           styles.taskCard,
                           selected && styles.taskCardSelected,
+                          indentPad > 0 ? {paddingLeft: 14 + indentPad} : null,
                         ]}>
+                        {indentPad > 0 ? (
+                          <View
+                            accessibilityLabel="Nested task"
+                            style={taskStyles.indentLead}
+                          />
+                        ) : null}
                         <FocusPressable
                           accessibilityLabel={`${
                             writesAvailable
@@ -278,5 +287,12 @@ const taskStyles = StyleSheet.create({
     minWidth: 44,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  indentLead: {
+    backgroundColor: '#555555',
+    borderRadius: 1,
+    height: 20,
+    marginRight: 8,
+    width: 1.5,
   },
 });

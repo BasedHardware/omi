@@ -18,6 +18,7 @@ import {
   projectionClockLabel,
   conversationHasFinishClock,
   taskDisplayTitle,
+  taskIndentPadding,
   type ConversationProjection,
   type DesktopReadProjection,
   type MemoryProjection,
@@ -165,8 +166,13 @@ export const MemoryRow = memo(function MemoryRow({
 });
 
 export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
+  const indentPad = taskIndentPadding(item.indentLevel);
   return (
-    <View style={styles.taskRow}>
+    <View
+      style={[styles.taskRow, indentPad > 0 ? {paddingLeft: indentPad} : null]}>
+      {indentPad > 0 ? (
+        <View accessibilityLabel="Nested task" style={styles.taskIndentLead} />
+      ) : null}
       <View
         style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
       />
@@ -249,6 +255,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     minHeight: 44,
+  },
+  taskIndentLead: {
+    backgroundColor: token.color.inkMuted,
+    borderRadius: 1,
+    height: 20,
+    width: 1.5,
   },
   taskCircle: {
     borderColor: token.color.inkMuted,

@@ -19,6 +19,7 @@ import {
   memorySynthesisCopy,
   taskDisplaySummary,
   taskDisplayTitle,
+  taskIndentPadding,
   projectionClockLabel,
   type DesktopReadProjection,
 } from '../desktopReadClient';
@@ -63,13 +64,18 @@ export const ProjectionRow = memo(function ProjectionRow({
       ? conversationCaptureCopy(conversation.capturedAtMs)
       : null;
   const synthesis = item.kind === 'memory' ? memorySynthesisCopy(item) : null;
+  const indentPad =
+    item.kind === 'task' ? taskIndentPadding(item.indentLevel) : 0;
+  const rowPad = spine ? 18 : 16;
   return (
     <View
       style={[
         styles.resultRow,
         home && styles.homeCurrentRow,
         spine && styles.homeSpineRow,
+        indentPad > 0 ? {paddingLeft: rowPad + indentPad} : null,
       ]}>
+      {indentPad > 0 ? <View accessibilityLabel="Nested task" /> : null}
       <View style={styles.resultKindRow}>
         {home ? (
           <View style={styles.homeCurrentKindLead}>

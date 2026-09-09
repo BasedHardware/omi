@@ -56,6 +56,7 @@ import {
   taskDisplaySummary,
   taskDisplayTitle,
   taskGroup,
+  taskIndentPadding,
   timelineGroups,
 } from '../src/desktopReadClient';
 import type {
@@ -1236,6 +1237,18 @@ test('empty task titles stay visible instead of a blank row', () => {
   expect(taskDisplayTitle({title: '\u0085'})).toBe('Task title unavailable');
   expect(taskDisplayTitle({title: 'Prepare demo'})).toBe('Prepare demo');
   expect(taskDisplayTitle({title: '  Prepare demo  '})).toBe('Prepare demo');
+});
+
+test('task indent padding uses Flutter 28px steps instead of a flat list', () => {
+  expect(taskIndentPadding(0)).toBe(0);
+  expect(taskIndentPadding(-1)).toBe(0);
+  expect(taskIndentPadding(Number.NaN)).toBe(0);
+  expect(taskIndentPadding(Number.POSITIVE_INFINITY)).toBe(0);
+  expect(taskIndentPadding(1)).toBe(28);
+  expect(taskIndentPadding(2)).toBe(56);
+  expect(taskIndentPadding(3)).toBe(84);
+  expect(taskIndentPadding(4)).toBe(84);
+  expect(taskIndentPadding(1.9)).toBe(28);
 });
 
 test('empty conversation summaries stay visible instead of a blank subtitle', () => {

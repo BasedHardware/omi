@@ -422,6 +422,35 @@ test('a zero task due timestamp on Home and Tasks rows says Date unavailable ins
   expect(copy).not.toContain('No due date');
 });
 
+test('Home and Tasks rows keep GET indent instead of a flat list', () => {
+  let nested!: ReactTestRenderer.ReactTestRenderer;
+  let sibling!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    nested = ReactTestRenderer.create(
+      <TaskRow item={{...taskItem(null), indentLevel: 2}} />,
+    );
+    sibling = ReactTestRenderer.create(
+      <TaskRow item={{...taskItem(null), indentLevel: 0}} />,
+    );
+  });
+  const nestedLead = nested.root.findAll(
+    node => node.props.accessibilityLabel === 'Nested task',
+  );
+  expect(nestedLead.length).toBeGreaterThan(0);
+  expect(
+    nested.root.findAll(node =>
+      [node.props.style].flat(Infinity).some(
+        (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 56,
+      ),
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    sibling.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ),
+  ).toHaveLength(0);
+});
+
 test('Home and Library rows keep GET capture time instead of started-only', () => {
   const captured = new Date(2025, 7, 10, 12, 0);
   const expected = `Captured (device time) · ${clockLabel(

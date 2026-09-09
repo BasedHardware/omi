@@ -26,6 +26,7 @@ import {
   desktopBackendUnavailableCopy,
   formatTaskDue,
   taskDisplayTitle,
+  taskIndentPadding,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {
@@ -49,6 +50,7 @@ export type MobileTask = {
   title: string;
   completed: boolean;
   dueAt?: number | null;
+  indentLevel?: number;
 };
 
 export type MobileRecap = {
@@ -171,8 +173,13 @@ const TaskRow = memo(function TaskRow({
   busy: boolean;
   showDue?: boolean;
 }) {
+  const indentPad = taskIndentPadding(task.indentLevel ?? 0);
   return (
-    <View style={styles.taskRow}>
+    <View
+      style={[styles.taskRow, indentPad > 0 ? {paddingLeft: indentPad} : null]}>
+      {indentPad > 0 ? (
+        <View accessibilityLabel="Nested task" style={styles.taskIndentLead} />
+      ) : null}
       <Pressable
         accessibilityLabel={`${
           onToggle
@@ -980,6 +987,13 @@ const styles = StyleSheet.create({
     gap: mobileSpace.md,
     minHeight: 64,
     paddingVertical: mobileSpace.md,
+  },
+  taskIndentLead: {
+    backgroundColor: mobileColor.textSubtle,
+    borderRadius: 1,
+    height: 20,
+    marginTop: 4,
+    width: 1.5,
   },
   taskToggle: {
     flex: 1,

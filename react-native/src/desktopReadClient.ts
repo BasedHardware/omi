@@ -458,6 +458,16 @@ export function taskDisplayTitle(item: {title: string}): string {
   return title !== '' ? title : 'Task title unavailable';
 }
 
+export const TASK_INDENT_STEP = 28;
+export const TASK_INDENT_MAX = 3;
+
+export function taskIndentPadding(indentLevel: number): number {
+  if (!Number.isFinite(indentLevel) || indentLevel <= 0) {
+    return 0;
+  }
+  return Math.min(Math.trunc(indentLevel), TASK_INDENT_MAX) * TASK_INDENT_STEP;
+}
+
 function visibleMemoryText(text: string): string {
   const parsed = parseMemoryText(text);
   const body = visibleDisplayText(parsed.body);

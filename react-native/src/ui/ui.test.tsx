@@ -2132,3 +2132,51 @@ test('wide Home search completed tasks keep GET due dates instead of Completed-o
   expect(tree).toContain(expected);
   expect(tree).not.toContain('"Completed"');
 });
+
+test('wide Home search rows keep GET task indent instead of a flat list', () => {
+  const item = {
+    kind: 'task' as const,
+    id: 'task-indent-home-search',
+    title: 'Nested child',
+    summary: 'No due date',
+    searchableText: 'Nested child',
+    completed: false,
+    completedAt: null,
+    dueAt: null,
+    owner: null,
+    source: 'assistant',
+    provenance: [],
+    sortOrder: 1,
+    indentLevel: 2,
+    createdAt: 1785900000,
+    updatedAt: 1785900100,
+    revision: null,
+  };
+  const renderer = render(<ProjectionRow item={item} />);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(node =>
+      [node.props.style].flat(Infinity).some(
+        (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 72,
+      ),
+    ).length,
+  ).toBeGreaterThan(0);
+  const currents = render(<ProjectionRow home item={item} />);
+  expect(
+    currents.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ).length,
+  ).toBeGreaterThan(0);
+  const sibling = render(
+    <ProjectionRow item={{...item, id: 'task-sibling', indentLevel: 0}} />,
+  );
+  expect(
+    sibling.root.findAll(
+      node => node.props.accessibilityLabel === 'Nested task',
+    ),
+  ).toHaveLength(0);
+});

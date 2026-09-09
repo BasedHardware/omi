@@ -306,6 +306,44 @@ test('a zero task due timestamp says Date unavailable instead of 1970', () => {
   expect(copy).not.toContain('No due date');
 });
 
+test('task rows keep GET indent instead of a flat list', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <TasksPage
+        loading={false}
+        outcome={{
+          ...outcome,
+          value: {
+            ...outcome.value,
+            items: [
+              {...task, id: 'task-parent', title: 'Parent task', indentLevel: 0},
+              {
+                ...task,
+                id: 'task-child',
+                title: 'Nested child',
+                indentLevel: 2,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+  });
+  const nested = renderer.root.findAll(
+    node => node.props.accessibilityLabel === 'Nested task',
+  );
+  expect(nested.length).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(node =>
+      [node.props.style].flat(Infinity).some(
+        (entry: {paddingLeft?: number} | null) => entry?.paddingLeft === 70,
+      ),
+    ).length,
+  ).toBeGreaterThan(0);
+  act(() => renderer.unmount());
+});
+
 test('conflict refresh preserves dirty description while untouched descriptions follow server state', () => {
   const props = {writesAvailable: true, onTaskEdit: jest.fn()};
   const renderer = render(props);
