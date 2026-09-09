@@ -158,3 +158,13 @@ requests==2.31.0
 ## License
 
 MIT License
+
+## Offline list-discovery regression
+
+From the repository root, run `python3 plugins/omi-clickup-app/test_clickup_client.py`.
+The stdlib suite imports the production client with fixture-only HTTP and dotenv
+doubles. It covers folder-only and mixed workspaces, multiple spaces, empty folders,
+and failed folder requests while preserving successfully discovered lists.
+The same command runs through the local/CI checks manifest. No credentials or
+provider access are needed. OAuth setup and refresh both consume `get_all_lists`,
+which now includes folder-contained lists with their folder and space IDs.

@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: clickup-list-discovery-tests
+    command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
+    triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #13130: exercise production list discovery across folderless and folder-contained ClickUp lists"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
