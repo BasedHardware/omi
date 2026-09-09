@@ -123,16 +123,13 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
-  # The pusher is the third host of process_conversation (routers/pusher.py
-  # -> process_conversation_task). Its managed calls travel through the LLM
-  # gateway, which writes llm_gateway_attempts under its own identity; this
-  # switch is what utils/llm/managed_spend_ledger.py reads for any direct-
-  # provider surface that adopts that writer (none is mounted here today;
-  # the embeddings route-absent degrade in utils/llm/clients.py calls the
-  # provider directly and is unledgered on every host). Identical to
-  # backend-listen so a
-  # co-host env diff cannot silently leave one process_conversation host
-  # ledger-blind (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
+  # Read by utils/llm/managed_spend_ledger.py for direct-provider surfaces
+  # (desktop_proxy, omni_relay). Neither is mounted on the pusher today, so
+  # this is pre-positioning, not a fix for lost rows: pusher-hosted
+  # process_conversation spends through the LLM gateway, which ledgers under
+  # its own identity. Declared here so a co-host env diff cannot leave one
+  # process_conversation host silently unable to ledger if a direct surface
+  # is ever mounted (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
   - name: LLM_GATEWAY_ACCOUNTING_ENABLED
     value: "true"
   - name: OMI_LLM_GATEWAY_URL
