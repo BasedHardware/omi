@@ -175,14 +175,16 @@ extension RealtimeHubController {
     assistantText: String,
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) async -> RealtimeStreamingJournalWriteLedger.FinalizationResult {
     streamingJournalFlushTasks.removeValue(forKey: continuityKey)?.cancel()
     return await streamingJournalWriteLedger.finalize(continuityKey: continuityKey) { projection in
       guard projection.ownerID == ownerID else { return false }
       return await FloatingControlBarManager.shared.completeStreamingRealtimeExchange(
         projection: projection, userText: userText, assistantText: assistantText,
-        assistantStatus: assistantStatus, terminalReason: terminalReason)
+        assistantStatus: assistantStatus, terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted)
     }
   }
 
