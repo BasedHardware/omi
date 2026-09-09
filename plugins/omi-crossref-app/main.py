@@ -1,4 +1,5 @@
 import html
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import quote
 
@@ -25,6 +26,38 @@ def clean(text: Any) -> str:
     if text is None:
         return ""
     return html.unescape(str(text)).strip()
+
+
+class AbstractTextParser(HTMLParser):
+    """Read JATS/HTML character data without interpreting escaped literal tags."""
+
+    BLOCKS = {"p", "title", "sec", "div", "br", "li"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.rsplit(":", 1)[-1] in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag.rsplit(":", 1)[-1] in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def clean_abstract(text: Any) -> str:
+    if text is None:
+        return ""
+    parser = AbstractTextParser()
+    # Parse before decoding entities: &lt;sample&gt; is text, not a tag.
+    parser.feed(str(text))
+    parser.close()
+    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 def extract_year(item: dict[str, Any]) -> str:
@@ -196,7 +229,7 @@ async def get_crossref_work(payload: GetWorkInput):
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
-    abstract = clean(item.get("abstract"))
+    abstract = clean_abstract(item.get("abstract"))
     year = extract_year(item)
 
     parts = [
