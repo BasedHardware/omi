@@ -20,6 +20,7 @@ from routers import pusher, metrics
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.http_client import close_all_clients
 from utils.executors import drain_background_tasks, log_executor_health, start_background_task
+from utils.readiness import ReadinessGate
 from utils.stt.streaming import validate_streaming_stt_env
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
