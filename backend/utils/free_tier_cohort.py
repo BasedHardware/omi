@@ -30,10 +30,13 @@ Stops (both revoke admission for everyone, including listed uids):
   / PostHog down never blocks by itself, matching the JIT precedent, so an
   outage cannot re-light or un-light a cohort. The remote read happens only
   after the environment cohort admits the account, so a dark fleet makes no
-  provider calls; after any provider failure the reader backs off for
+  provider calls; after a genuine provider failure (timeout, unconfigured,
+  malformed, unexpected exception) the reader backs off for
   ``_PROVIDER_BACKOFF_SECONDS`` process-wide, so a sweep over hundreds of
-  admitted accounts pays one timeout, not one per account. Failures are
-  logged once per class.
+  admitted accounts pays one timeout, not one per account. Hitting the
+  in-flight cap is **not** a failure and never arms that backoff, so ordinary
+  concurrency cannot blind the stop fleet-wide. Failures are logged once per
+  class.
 
 Callers that cannot name the account are never admitted: the policy modules
 answer ``False`` for a lit flag when given no uid and log once. That is the
@@ -73,10 +76,14 @@ _KILL_SWITCH_CACHE_SECONDS = 20.0
 _KILL_SWITCH_UNKNOWN_CACHE_SECONDS = 5.0
 _KILL_SWITCH_CACHE_ENTRIES = 4096
 _POSTHOG_TIMEOUT_SECONDS = 2.0
+# Must stay above the SDK's own timeout, and the in-flight cap must not exceed
+# the worker count: a caller queued behind a busy worker would otherwise wait
+# its predecessor's full client timeout plus its own and be misread as a
+# provider timeout, arming the process-wide backoff on a healthy provider.
 _POSTHOG_RESULT_TIMEOUT_SECONDS = 2.5
 _PROVIDER_BACKOFF_SECONDS = 30.0
 _PROVIDER_MAX_WORKERS = 2
-_PROVIDER_MAX_IN_FLIGHT = 4
+_PROVIDER_MAX_IN_FLIGHT = _PROVIDER_MAX_WORKERS
 
 # Closed vocabulary; low cardinality so it can be logged and counted.
 COHORT_REASONS: frozenset[str] = frozenset(
@@ -296,7 +303,14 @@ def _kill_switch_state(uid: str) -> TriState:
     state = TriState.UNKNOWN
     if not backing_off:
         if not _in_flight.acquire(blocking=False):
-            _note_provider_failure('saturated')
+            # Concurrency, not ill health. Arming the process-wide backoff here
+            # would let ordinary load blind the kill switch fleet-wide for
+            # 30 s at a time; this caller alone answers UNKNOWN (cached for the
+            # short unknown TTL) and the next one re-reads.
+            _warn_once(
+                'kill_switch:saturated',
+                'free-tier cohort: remote kill switch at its in-flight cap; treating as unknown for this call',
+            )
         else:
             future: Future[TriState] | None = None
             try:
@@ -344,7 +358,26 @@ def cohort_decision(flag: str, uid: str | None) -> CohortDecision:
     Order: environment stop, then environment cohort, then the remote kill
     switch (only for an admitted account). Every non-admitting answer is
     fail-closed and carries a reason from ``COHORT_REASONS``.
+
+    Total by construction: a lit flag sits on the finalization and sweep
+    paths, so nothing this module can do may raise into them. The inner
+    function is written to be total; this wrapper is the guarantee, because
+    "the grammar is total" was already believed once about a narrower guard
+    (a non-ASCII ``pct`` digit, a uid whose ``__str__`` or UTF-8 encode
+    raises) and was wrong.
     """
+    try:
+        return _cohort_decision(flag, uid)
+    except Exception:
+        _warn_once(
+            f'{flag}:decision_error',
+            'free-tier cohort: %s decision raised; admitting nobody',
+            flag,
+        )
+        return CohortDecision(admitted=False, reason='cohort_malformed')
+
+
+def _cohort_decision(flag: str, uid: str | None) -> CohortDecision:
     if uid is None or not str(uid).strip():
         _warn_once(
             f'{flag}:no_uid',

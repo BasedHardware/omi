@@ -2258,3 +2258,58 @@ def test_flag_off_admits_a_basic_account_exactly_as_today(monkeypatch):
         monkeypatch, suppression_on=False, allowed=False, reason="basic_not_entitled"
     )
     assert source_calls != []
+
+
+# --- free-tier cohort gate, driven through the real scheduler ---------------
+#
+# `_run_sweep_for_plan` stubs `free_tier_memory_suppression_enabled`, so it
+# proves the scheduler honours *a* boolean but never executes the real reader
+# or the cohort gate behind it. These two drive the production reader inside
+# the real scheduler, which is the only place the wiring can be observed.
+# red-proof: revert `free_tier_memory_suppression_enabled(uid)` in the
+# scheduler to a uid-less call and the admitted case stops suppressing.
+
+
+def _run_sweep_with_the_real_cohort_gate(monkeypatch, *, cohort_value: str, uid: str = "user-1"):
+    from utils import free_tier_cohort, free_tier_memory_policy
+    from utils.jit_rollout import TriState
+
+    db = _Db()
+    _ledger_control(monkeypatch)
+    source_calls = []
+    monkeypatch.setattr(free_tier_memory_policy, "FREE_TIER_MEMORY_SUPPRESSION", True)
+    # Hermetic: no PostHog from a unit test, and no ambient kill.
+    monkeypatch.setattr(free_tier_cohort, "_kill_switch_state", lambda _uid: TriState.DISABLED)
+    monkeypatch.delenv(free_tier_cohort.EMERGENCY_STOP_ENV_VAR, raising=False)
+    monkeypatch.setenv(free_tier_cohort.cohort_env_name("FREE_TIER_MEMORY_SUPPRESSION"), cohort_value)
+    free_tier_cohort.reset_kill_switch_cache_for_tests()
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.authorize_managed_compute",
+        lambda *_args, **_kwargs: _plan_decision(allowed=False, reason="basic_not_entitled"),
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=(uid,),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        timezone_reconciler=lambda *_args: True,
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    return summary, source_calls, db
+
+
+def test_real_cohort_gate_suppresses_the_admitted_account_in_the_scheduler(monkeypatch):
+    summary, source_calls, db = _run_sweep_with_the_real_cohort_gate(monkeypatch, cohort_value="uid:user-1")
+    assert source_calls == [], "an admitted basic account must not reach the candidate producer"
+    assert summary.completed_uids == ("user-1",)
+    assert summary.blocked_users == 1
+    assert db.store == {}
+
+
+def test_real_cohort_gate_leaves_a_non_admitted_account_alone_in_the_scheduler(monkeypatch):
+    """A lit flag whose cohort does not name this account is byte-identical to flag-off."""
+    _summary, source_calls, _db = _run_sweep_with_the_real_cohort_gate(monkeypatch, cohort_value="uid:someone-else")
+    assert source_calls != [], "a lit flag alone must not suppress an account outside the cohort"

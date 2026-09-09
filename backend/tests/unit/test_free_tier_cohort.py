@@ -415,3 +415,84 @@ def test_coordinator_sites_still_read_the_flag_without_a_uid() -> None:
     source = (_BACKEND / 'utils' / 'conversations' / 'process_conversation.py').read_text(encoding='utf-8')
     assert re.search(r'free_tier_local_processing_enabled\(\)', source)
     assert re.search(r'free_tier_memory_suppression_enabled\(\)', source)
+
+
+# --------------------------------------------- concurrency is not ill health
+
+
+def test_hitting_the_in_flight_cap_never_blinds_the_kill_switch_process_wide(monkeypatch) -> None:
+    """A healthy provider under concurrency must not arm the outage backoff.
+
+    Found by adversarial review 2026-09-09: `saturated` armed the same
+    process-wide backoff as a real outage, so ordinary load made every
+    subsequent account read UNKNOWN — i.e. admitted — for 30 s at a time, with
+    the remote stop definitively ENABLED at the provider. The in-flight cap is
+    a concurrency signal; only a provider failure may arm the backoff.
+    """
+    import threading
+
+    monkeypatch.undo()
+    cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+    release = threading.Event()
+    entered = threading.Semaphore(0)
+
+    def blocking(_uid: str):
+        entered.release()
+        release.wait(5)
+        return TriState.ENABLED
+
+    monkeypatch.setattr(cohort, '_fetch_kill_switch', blocking)
+    holders = [
+        threading.Thread(target=cohort._kill_switch_state, args=(f'hold-{i}',))
+        for i in range(cohort._PROVIDER_MAX_IN_FLIGHT)
+    ]
+    try:
+        for t in holders:
+            t.start()
+        for _ in holders:
+            assert entered.acquire(timeout=5)
+        # Every worker slot is busy: this caller is refused a slot.
+        assert cohort._kill_switch_state('saturating-uid') is TriState.UNKNOWN
+        assert 'kill_switch:saturated' in cohort._warned
+        assert cohort._backoff_until == 0.0, 'saturation must not arm the process-wide outage backoff'
+    finally:
+        release.set()
+        for t in holders:
+            t.join(timeout=5)
+    # With the slots free again the very next read is definitive, not backed off.
+    cohort.reset_kill_switch_cache_for_tests()
+    monkeypatch.setattr(cohort, '_fetch_kill_switch', lambda _uid: TriState.ENABLED)
+    assert cohort._kill_switch_state('after-burst') is TriState.ENABLED
+
+
+def test_the_in_flight_cap_never_makes_a_caller_wait_for_another_call(monkeypatch) -> None:
+    """The result timeout only has to cover one provider call, not a queue.
+
+    If the cap exceeded the worker count a queued caller would wait its
+    predecessor's full client timeout plus its own, be classified `timeout`,
+    and arm the outage backoff on a healthy provider.
+    """
+    assert cohort._PROVIDER_MAX_IN_FLIGHT <= cohort._PROVIDER_MAX_WORKERS
+    assert cohort._POSTHOG_RESULT_TIMEOUT_SECONDS > cohort._POSTHOG_TIMEOUT_SECONDS
+
+
+# ------------------------------------------------------- the decision is total
+
+
+class _UnprintableUid:
+    def __str__(self) -> str:  # pragma: no cover - the point is that it raises
+        raise RuntimeError('uid __str__ exploded')
+
+
+@pytest.mark.parametrize(
+    'uid',
+    [_UnprintableUid(), 'lone-surrogate-\ud800'],
+    ids=['str_raises', 'surrogate'],
+)
+def test_a_uid_that_cannot_be_hashed_or_printed_admits_nobody_instead_of_raising(uid, monkeypatch) -> None:
+    """A lit flag sits on finalization and the sweep; it must never raise there."""
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), 'pct:100')
+    decision = cohort.cohort_decision(FLAG, uid)
+    assert decision.admitted is False
+    assert decision.reason in {'cohort_malformed', 'no_uid'}
