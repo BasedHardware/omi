@@ -30,6 +30,19 @@ test("completed Listen transcripts keep errorCode null for the recording client 
   });
 });
 
+test("completed empty segments join to empty text like production Listen GET", () => {
+  expect(
+    deviceTranscriptionProjection({
+      ...completed,
+      providerResult: { durationSeconds: 1, segments: [] },
+    })
+  ).toMatchObject({
+    state: "completed",
+    text: "",
+    segments: [],
+  });
+});
+
 test("failed Listen transcripts keep the stored errorCode without inventing empty success text", () => {
   expect(
     deviceTranscriptionProjection({

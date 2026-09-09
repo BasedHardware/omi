@@ -29,7 +29,7 @@ function response(
   sessionId: string,
   state: string,
   text: string | null = null,
-  segments: unknown[] = [],
+  segments?: unknown[],
 ): NativeHttpResponse {
   return {
     id: 'test',
@@ -39,7 +39,9 @@ function response(
         sessionId,
         state,
         text,
-        segments,
+        segments:
+          segments ??
+          (typeof text === 'string' ? [{start: 0, end: 1, text}] : []),
         language: null,
         errorCode: null,
         updatedAt: 123,
@@ -180,6 +182,18 @@ test('parseRecordingTranscript uses production Listen segment join when stored t
   });
 });
 
+test('parseRecordingTranscript hides leftover stored text when completed segments are empty', () => {
+  expect(
+    parseRecordingTranscript(
+      response('session-one', 'completed', 'Stored speech', []).body,
+      'session-one',
+    ),
+  ).toMatchObject({
+    state: 'completed',
+    text: '',
+  });
+});
+
 test('parseRecordingTranscript hides leftover speech when state is not completed', () => {
   expect(
     parseRecordingTranscript(
@@ -216,6 +230,15 @@ test('a completed stored text keeps later speech stored on segments', async () =
   expect(textOf(renderer)).toContain('Later speech');
   expect(textOf(renderer)).not.toContain('Stored speech');
   expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
+test('a completed leftover stored text with empty segments says empty', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', 'Stored speech', []),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('The transcript is empty.');
+  expect(textOf(renderer)).not.toContain('Stored speech');
 });
 
 test('parseRecordingTranscript keeps empty text when a segment is not an object', () => {

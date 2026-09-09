@@ -360,6 +360,15 @@ test("recording titles stay empty when a stored segment array has no visible spe
     status: "completed",
   });
   expect(empty[0]?.title).not.toContain("Stored speech");
+  expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({
+    state: "completed",
+    text: "",
+    segments: [],
+  });
   await env.DB.prepare(
     "UPDATE device_transcriptions SET segments = ? WHERE session_id = ?"
   )

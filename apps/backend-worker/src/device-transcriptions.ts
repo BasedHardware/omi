@@ -258,7 +258,7 @@ function joinWellFormedSegmentTexts(
   segments: unknown[],
   skipEmptyAfterTrim = false
 ): string | null {
-  if (segments.length === 0) return null;
+  if (segments.length === 0) return "";
   const parts: string[] = [];
   for (const segment of segments) {
     if (

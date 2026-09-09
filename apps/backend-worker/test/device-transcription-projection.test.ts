@@ -173,7 +173,7 @@ describe("device transcription client projection", () => {
     });
   });
 
-  test("completed stored text stays when segments are empty", () => {
+  test("completed empty segments hide leftover stored text like production Listen GET", () => {
     expect(
       projectDeviceTranscription({
         ...completed,
@@ -182,8 +182,11 @@ describe("device transcription client projection", () => {
       })
     ).toMatchObject({
       state: "completed",
-      text: "Stored speech",
+      text: "",
+      segments: [],
     });
+    expect(recordingTranscriptSpeech("Stored speech", [])).toBe("");
+    expect(recordingListSpeech("Stored speech", [])).toBe("");
   });
 
   test("GET speech keeps interstitial NEXT LINE segments that list titles skip", () => {
