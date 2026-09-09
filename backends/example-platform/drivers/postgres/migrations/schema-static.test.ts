@@ -1270,5 +1270,15 @@ describe("static PostgreSQL schema contract", () => {
     expect(chatMainSql).toContain("chr(133)");
     expect(chatMainSql).toContain("chr(160)");
     expect(chatMainSql).toContain("chr(65279)");
+    const listenExcerptSql = migrationSql.find((migration) => migration.version === 61)!.sql;
+    expect(listenExcerptSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_page");
+    expect(listenExcerptSql).toContain("CREATE OR REPLACE FUNCTION omi_memory.read_listen_conversation_union_page");
+    expect(listenExcerptSql).toContain("left(btrim(segment.text_content,v_ws),240)");
+    expect(listenExcerptSql).toContain("left(btrim(segment.value->>'text',v_ws),240)");
+    expect(listenExcerptSql).not.toContain("left(string_agg(left(segment.text_content,240)");
+    expect(listenExcerptSql).not.toContain("left(string_agg(left(segment.value->>'text',240)");
+    expect(listenExcerptSql).toContain("chr(133)");
+    expect(listenExcerptSql).toContain("chr(160)");
+    expect(listenExcerptSql).toContain("chr(65279)");
   });
 });

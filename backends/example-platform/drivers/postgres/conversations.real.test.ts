@@ -693,3 +693,188 @@ realTest(
   },
   60000
 );
+
+realTest(
+  "real conversation reads visible-trim Listen excerpts before the title budget",
+  async () => {
+    const endpoint = new URL(url!);
+    if (endpoint.hostname !== "127.0.0.1" || endpoint.protocol !== "postgres:")
+      throw Error("postgres_test_not_loopback_only");
+    const owner = postgres(url!, { max: 1 });
+    const pool = createPostgresJsTransactionPool({
+      connectionString: url!,
+      maxConnections: 2,
+    });
+    const suffix = randomUUID(),
+      generation = createHash("sha256").update(suffix).digest("hex"),
+      now = () => Math.floor(Date.now() / 1000);
+    const project = "synthetic-listen-excerpt-project",
+      app = "synthetic-listen-excerpt-app",
+      uid = `uid-${suffix}`,
+      account = `account-${suffix}`,
+      principal = `principal-${suffix}`,
+      credential = `credential-${suffix}`;
+    try {
+      await owner.unsafe(`DO $roles$ BEGIN
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_application') THEN CREATE ROLE omi_platform_application NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_cleanup') THEN CREATE ROLE omi_platform_cleanup NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore') THEN CREATE ROLE omi_platform_restore NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+      IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='omi_platform_restore_operator') THEN CREATE ROLE omi_platform_restore_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT; END IF;
+    END $roles$;`);
+      await runPostgresMigrations(owner);
+      for (const statement of seedProdLocalFirebaseAuthorizationSql(
+        {
+          firebase_project_id: project,
+          firebase_uid: uid,
+          application_id: app,
+          account_id: account,
+          principal_id: principal,
+          credential_id: credential,
+          grant_id: `memory-${suffix}`,
+        },
+        now()
+      ))
+        await owner.unsafe(statement.text, [...statement.values]);
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
+        [account, app, credential, "conversations.read", `conversations.read-${suffix}`, "3".repeat(64)]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "conversations.read", `conversations.read-${suffix}`]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.postgres_restore_admission_revisions(database_generation_digest,release_revision,state,restore_id,restored_snapshot_digest,checkpoint_candidate_digest,checkpoint_evidence_digest,first_approval_subject_digest,first_approval_receipt_digest,second_approval_subject_digest,second_approval_receipt_digest,manual_release_receipt_digest,previous_release_revision,content_hash) VALUES($1,1,'released',$2,$3,$3,$3,$4,$5,$6,$7,$3,NULL,$3)`,
+        [generation, `synthetic-${suffix}`, "9".repeat(64), "4".repeat(64), "5".repeat(64), "6".repeat(64), "7".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.postgres_restore_admission_heads(database_generation_digest,release_revision) VALUES($1,1)",
+        [generation]
+      );
+      const appPool: PostgresTransactionPool = {
+        withTransaction: (options, callback) =>
+          pool.withTransaction(options, async (connection) => {
+            await connection.query({
+              name: "listen_excerpt_test.role",
+              text: "SET LOCAL ROLE omi_platform_application",
+              values: [],
+            });
+            return callback(connection);
+          }),
+      };
+      const runtime = createPostgresFirebaseConversationReadRuntime({
+        authorization: {
+          pool: appPool,
+          project_id: project,
+          application_id: app,
+          runtime_mode: "deployed",
+          context_ttl_seconds: 60,
+          database_generation_digest: generation,
+          id_token_adapter: {
+            verification_source: "firebase_production",
+            async verifyIdToken() {
+              return {
+                aud: project,
+                iss: `https://securetoken.google.com/${project}`,
+                sub: uid,
+                uid,
+                iat: now() - 10,
+                auth_time: now() - 10,
+                exp: now() + 600,
+              };
+            },
+          },
+        },
+        codecRootSecret: new Uint8Array(32).fill(7),
+        cursorSigningKeyset: {
+          active_key_id: "test",
+          keys: [{ key_id: "test", secret: new Uint8Array(32).fill(8) }],
+        },
+      });
+      const call = () =>
+        runtime.executeRequest(
+          new Request("https://conversations.example/v1/conversations", {
+            headers: { authorization: "Bearer header.payload.signature" },
+          })
+        );
+      const recordingId = randomUUID();
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$3,clock_timestamp()-interval '2 seconds','omi','21',16000,1,$4)",
+        [account, recordingId, `conversation:${recordingId}`, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_audio_uploads(account_id,session_id,capture_id,device_id,codec_id,upload_completed_at) VALUES($1,$2::text,$2::uuid,'synthetic-device',21,clock_timestamp())",
+        [account, recordingId]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_audio_transcriptions(account_id,session_id,state,attempts,available_at,updated_at,provider_result) VALUES($1,$2,'completed',1,clock_timestamp(),clock_timestamp(),$3::text::jsonb)",
+        [
+          account,
+          recordingId,
+          JSON.stringify({
+            durationSeconds: 1,
+            segments: [
+              {
+                text: "\u0085".repeat(240) + "Recorded words",
+                start: 0,
+                end: 1,
+                speaker: 0,
+              },
+            ],
+          }),
+        ]
+      );
+      const listenId = `listen-nel-${suffix}`;
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_sessions(account_id,session_id,conversation_id,started_at,source,codec,sample_rate,channels,content_hash) VALUES($1,$2,$2,clock_timestamp()-interval '3 seconds','microphone','pcm',16000,1,$3)",
+        [account, listenId, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_capture_segments(account_id,session_id,ordinal,segment_id,text_content,is_user,start_seconds,end_seconds,appended_at,content_hash) VALUES($1,$2,0,$2,$3,true,0,1,clock_timestamp(),$4)",
+        [account, listenId, "\u0085".repeat(240) + "Recorded words", "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_formation_finalizations(account_id,finalization_id,formation_work_id,session_id,conversation_id,terminal_status,capture_completeness,started_at,ended_at,source,segment_count,transcript_digest,finalization_digest,content_hash) SELECT account_id,session_id,session_id,session_id,conversation_id,'completed','complete',started_at,clock_timestamp(),source,1,$3,$3,$3 FROM omi_memory.listen_capture_sessions WHERE account_id=$1 AND session_id=$2",
+        [account, listenId, "1".repeat(64)]
+      );
+      await owner.unsafe(
+        "INSERT INTO omi_memory.listen_conversation_finalization_intents(account_id,conversation_id,finalization_id,intent,locked,content_hash) VALUES($1,$2,$2,'process_memories',true,$3)",
+        [account, listenId, "1".repeat(64)]
+      );
+      const titled = {
+        title: "Recorded words",
+        overview: "Recorded words",
+      };
+      const listenOnly = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(
+        listenOnly.items.find((item) => item.id === `recording:${recordingId}`)
+      ).toMatchObject(titled);
+      expect(listenOnly.items.find((item) => item.id === listenId)).toMatchObject(
+        titled
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_revisions(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version,lifecycle,enabled,scopes,record_schema_version,record_json,content_hash) VALUES($1,$2,$3,1,$4,$5,1,'active',true,'[]','grant-v1','{}',$6)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`, "3".repeat(64)]
+      );
+      await owner.unsafe(
+        `INSERT INTO omi_memory.application_grant_heads(account_id,application_id,credential_id,credential_generation,capability,grant_id,grant_version) VALUES($1,$2,$3,1,$4,$5,1)`,
+        [account, app, credential, "chat.read", `chat.read-${suffix}`]
+      );
+      const unionPage = (await (await call()).json()) as {
+        items: Array<{ id: string; title: string; overview: string }>;
+      };
+      expect(
+        unionPage.items.find((item) => item.id === `recording:${recordingId}`)
+      ).toMatchObject(titled);
+      expect(unionPage.items.find((item) => item.id === listenId)).toMatchObject(
+        titled
+      );
+    } finally {
+      await pool.close();
+      await owner.end();
+    }
+  },
+  60000
+);

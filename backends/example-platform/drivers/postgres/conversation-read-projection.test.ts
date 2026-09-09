@@ -88,6 +88,17 @@ test("completed excerpts omit leading and trailing NEXT LINE", () => {
   });
 });
 
+test("a 240-character NEXT LINE prefix still shows later speech when the excerpt still contains it", () => {
+  const record = parseConversationReadSnapshot({
+    revision: 1,
+    records: [row({ excerpt: "\u0085".repeat(240) + "Recorded words" })],
+  }).records[0]!.record;
+  expect(record.structured).toEqual({
+    title: "Recorded words",
+    overview: "Recorded words",
+  });
+});
+
 test("rejects corrupt, ambiguous, oversized or reordered snapshots instead of silently claiming a partial page", () => {
   for (const records of [
     [row({ state: "unknown" })],
