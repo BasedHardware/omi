@@ -182,6 +182,10 @@ omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```
 
+### Apply the requested time window to exact screen search
+
+The exact app/window/OCR fallback for `omi --json local search-screen` honors the same rolling `--days` window as semantic search.
+
 ## Command surface
 
 The full tree (run `omi --help` for the live version):
@@ -304,6 +308,8 @@ The dev API enforces per-policy hourly limits:
 The CLI retries `429` automatically with exponential backoff and honors the
 server's `Retry-After` hint where present. After all retries are exhausted you
 get exit code `4` plus a message telling you how long to wait.
+
+
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`

@@ -124,7 +124,9 @@ def search_screen(
         if ctx.renderer.json_mode:
             result = _normalize_screen_search(result, args)
             if isinstance(result, Mapping) and not result.get("results"):
-                result = _add_exact_screen_fallback(client, result, query=query, app_filter=app_filter, limit=limit)
+                result = _add_exact_screen_fallback(
+                    client, result, query=query, app_filter=app_filter, limit=limit, days=days
+                )
     ctx.renderer.emit(result, title="search_screen_history")
 
 
@@ -373,6 +375,7 @@ def _add_exact_screen_fallback(
     query: str,
     app_filter: Optional[str],
     limit: int,
+    days: int,
 ) -> dict[str, Any]:
     next_payload = dict(payload)
     escaped_query = _sql_like_literal(query)
@@ -385,12 +388,12 @@ def _add_exact_screen_fallback(
         escaped_app = _sql_like_literal(app_filter)
         where_clause = f"(appName LIKE '%{escaped_app}%' ESCAPE '!') AND ({' OR '.join(query_clauses)})"
     else:
-        where_clause = " OR ".join(query_clauses)
+        where_clause = "(" + " OR ".join(query_clauses) + ")"
 
     sql = (
         "SELECT id AS screenshot_id, timestamp, appName AS app_name, isIndexed AS is_indexed "
         "FROM screenshots "
-        f"WHERE {where_clause} "
+        f"WHERE {where_clause} AND timestamp >= datetime('now', '-{days} days') "
         "ORDER BY timestamp DESC "
         f"LIMIT {limit}"
     )
