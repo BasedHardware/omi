@@ -2743,13 +2743,13 @@ class TasksViewModel: ObservableObject {
   func undoLastDelete() async {
     guard let lastAction = undoStack.popLast() else { return }
 
-    await store.restoreTask(lastAction.task)
+    guard let restoredTask = await store.restoreTask(lastAction.task) else { return }
 
     // Re-insert into display
-    displayTasks.insert(lastAction.task, at: 0)
+    displayTasks.insert(restoredTask, at: 0)
     let cat = TaskCategory.today  // Default; will be recategorized on next recompute
     if categorizedTasks[cat] != nil {
-      categorizedTasks[cat]?.insert(lastAction.task, at: 0)
+      categorizedTasks[cat]?.insert(restoredTask, at: 0)
     }
 
     // Hide toast if stack is now empty

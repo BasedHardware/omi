@@ -1,0 +1,3 @@
+{
+  "change": "Fixed task undo creating duplicate copies or restoring completed tasks as incomplete"
+}

@@ -148,4 +148,47 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
       matches[0].id.hasPrefix("local_"),
       "restored task stays an unsynced local_ task, not a fabricated backend id")
   }
+
+  func testRestoreBackendTaskRebindsOnePendingRowToTheReplacementIdentity() async throws {
+    let deletedTask = TaskActionItem(
+      id: "deleted-backend-id",
+      description: "completed task restored with undo",
+      completed: true,
+      createdAt: Date(timeIntervalSince1970: 10),
+      updatedAt: Date(timeIntervalSince1970: 20),
+      source: "manual",
+      priority: "high"
+    )
+
+    let stagedRecord = await TasksStore.backendTaskRestoreRecord(from: deletedTask)
+    XCTAssertNil(stagedRecord.id)
+    XCTAssertNil(stagedRecord.backendId, "the deleted backend identity must not be resurrected")
+    XCTAssertFalse(stagedRecord.backendSynced, "a failed recreate must remain eligible for retry")
+    XCTAssertTrue(stagedRecord.completed, "completion must survive the local restore boundary")
+
+    let inserted = try await ActionItemStorage.shared.insertLocalActionItem(
+      stagedRecord,
+      authorization: .unrestricted
+    )
+    let localId = try XCTUnwrap(inserted.id)
+    try await ActionItemStorage.shared.markSynced(
+      id: localId,
+      backendId: "replacement-backend-id",
+      authorization: .unrestricted
+    )
+
+    let restored = try await ActionItemStorage.shared.getLocalActionItems(
+      limit: 100,
+      offset: 0,
+      completed: true
+    )
+    let matches = restored.filter { $0.description == deletedTask.description }
+    XCTAssertEqual(matches.count, 1, "undo must rebind one row instead of inserting a duplicate")
+    XCTAssertEqual(matches.first?.id, "replacement-backend-id")
+    XCTAssertTrue(matches.first?.completed == true)
+    let staleIdentity = try await ActionItemStorage.shared.getLocalActionItem(
+      byBackendId: "deleted-backend-id"
+    )
+    XCTAssertNil(staleIdentity)
+  }
 }
