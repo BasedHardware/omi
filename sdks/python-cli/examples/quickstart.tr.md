@@ -1,270 +1,256 @@
 # omi-cli Hızlı Başlangıç Kılavuzu (Turkish Quickstart)
 
-Resmi Omi komut satırı arayüzü (`omi-cli`) için pratik başvuru kılavuzu.
-Bu belge kurulum, kimlik doğrulama, veri yönetimi komutları ve betikler ile otonom ajanlar için otomasyon tekniklerini açıklar.
+> Terminalinizden Omi ile doğrudan etkileşim kurmak için pratik kılavuz — geliştiriciler ve otonom AI ajanları için tasarlanmıştır.
+
+`omi-cli`, [Omi](https://omi.me) geliştirici API'si için resmi komut satırı arayüzüdür. Sistemin temel 4 kaynağını yapılandırılmış ve otomatikleştirilebilir şekilde yönetmenizi sağlar: hafızalar (memories), konuşmalar (conversations), eylem öğeleri (action items) ve hedefler (goals).
+
+* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
+* **Resmi Dokümantasyon:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
+* **Kaynak Kodu:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
 
 ---
 
-## Genel Bakış ve Çalıştırılabilir Dosya
+## 1. Kurulum
 
-* **PyPI Paket Adı:** `omi-cli`
-* **Çalıştırılabilir Komut:** `omi`
-
-Kurulum ve kullanım sırasında karışıklığı önlemek için:
+Sistem bağımlılık çakışmalarını önlemek ve CLI aracını yalıtılmış bir ortamda çalıştırmak için `pipx` kullanılması önerilir:
 
 ```bash
-# Paket adıyla kurulur:
+# Önerilen: pipx ile yalıtılmış kurulum
 pipx install omi-cli
 
-# Kısa komut adıyla çalıştırılır:
+# Alternatif standart pip kurulumu
+pip install omi-cli
+```
+
+> **Dikkat: Paket Adı vs. Komut Adı**
+> * PyPI üzerindeki paket adı **`omi-cli`**dir (`omi` adı ilişkisiz başka bir pakete aittir).
+> * Terminalde çalıştırdığınız komut ise doğrudan **`omi`**dir.
+
+Kurulumun başarılı olduğunu sürüm ve yardım menüsüyle doğrulayın:
+
+```bash
+omi --version
 omi --help
 ```
 
 ---
 
-## Kurulum
+## 2. Kimlik Doğrulama (Authentication)
 
-Bağımlılık çakışmalarını önlemek ve CLI aracını yalıtılmış bir ortamda çalıştırmak için `pipx` kullanılması önerilir.
+`omi-cli` iki ana kimlik doğrulama yöntemini destekler:
 
-### Önerilen Yöntem (`pipx`)
+| Yöntem | Kullanım Alanı | Örnek Komut |
+| :--- | :--- | :--- |
+| **Geliştirici API Anahtarı (`omi_dev_*`)** | Otomasyonlar, CI/CD, headless sunucular, AI ajanları | `omi auth login --api-key ...` veya `OMI_API_KEY` |
+| **Tarayıcı OAuth (Google/Apple)** | Yerel iş istasyonları ve geliştiriciler | `omi auth login --browser` (Google) / `--provider apple` |
+
+### Etkileşimli Giriş
+Herhangi bir seçenek belirtilmeden çalıştırıldığında yöntem seçimi sunulur:
 
 ```bash
-pipx install omi-cli
+omi auth login
+# 1) Browser — Tarayıcı üzerinden Google girişi (Apple hesabı için `--provider apple` kullanın)
+# 2) API key — app.omi.me üzerinden oluşturulan API anahtarını yapıştırın
 ```
 
-En son sürüme güncellemek için:
-
+### Tarayıcı ile Doğrudan Giriş
 ```bash
-pipx upgrade omi-cli
-```
-
-### Alternatif Yöntem (`pip`)
-
-```bash
-pip install --user omi-cli
-```
-
-Kurulumun başarılı olduğunu doğrulayın:
-
-```bash
-omi --version
-```
-
----
-
-## Kimlik Doğrulama
-
-CLI üç ana kimlik doğrulama yöntemini destekler: etkileşimli tarayıcı girişi, doğrudan API anahtarı ve ortam değişkeni.
-
-### 1. Tarayıcı ile Etkileşimli Giriş
-
-Grafik arayüzü bulunan yerel geliştirme makineleri için uygundur:
-
-```bash
+# Varsayılan Google girişi
 omi auth login --browser
+
+# Alternatif Apple hesabı girişi
+omi auth login --browser --provider apple
 ```
 
-Bu komut tarayıcınızda kimlik doğrulama sayfasını açar ve belirteci güvenli bir şekilde yerel sisteminize kaydeder.
-
-### 2. API Anahtarı ile Giriş (Gözetimsiz / Headless)
-
-Uzak sunucular, SSH bağlantıları veya CI/CD iş akışları için uygundur:
+### Geliştirici API Anahtarı Kullanımı
+Anahtarınızı [app.omi.me](https://app.omi.me) panelinde **Developer → API Keys** bölümünden oluşturun:
 
 ```bash
+# Yerel profile kalıcı olarak kaydet (kabuk geçmişini korumak için etkileşimli yapıştırın)
 omi auth login --api-key
-```
 
-CLI, Omi geliştirici panelinden oluşturduğunuz anahtarı girmenizi isteyecektir.
-
-### 3. Ortam Değişkeni Kullanımı
-
-Docker konteynerleri veya dosya depolaması olmayan otomasyonlar için:
-
-```bash
-export OMI_API_KEY="gizli-api-anahtariniz"
+# Veya ortam değişkeni olarak tanımlayın (konteynerler ve CI/CD için en iyisi)
+# Not: Etkin yerel profilde kayıtlı anahtar varsa, önce `omi auth logout` çalıştırın.
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 ```
 
 ### Kimlik Doğrulama Durumunu Denetleme
-
-* **Çevrimdışı denetim (yerel belirteç varlığı):**
-  ```bash
-  omi auth status
-  ```
-* **Çevrimiçi denetim (sunucu üzerinden canlı doğrulama):**
-  ```bash
-  omi auth whoami
-  ```
-
-Yerel oturumu kapatmak için:
+* `omi auth status`: Etkin yerel profili ve maskelenmiş kimlik bilgisini gösterir; sona erme tarihi yalnızca OAuth profilleri için listelenir (çevrimdışı çalışır).
+* `omi auth whoami`: Kimliğin canlı sunucu doğrulaması için Omi API'sine istek gönderir (ağ bağlantısı gerektirir).
 
 ```bash
+omi auth status
+omi auth whoami
+```
+
+Oturumu kapatma:
+```bash
 omi auth logout
+# Ortamda OMI_API_KEY tanımlıysa, oturumdan da kaldırın (Bash/Zsh: `unset OMI_API_KEY`).
 ```
 
 ---
 
-## Temel İş Akışları
+## 3. Temel Komutlar
 
-### Hafızalar (`omi memory`)
-
-Hafızalar, Omi tarafından yakalanan atomik bağlam parçalarını temsil eder.
+### Hafızalar (Memories)
+Omi tarafından kaydedilen atomik bağlam bilgileri:
 
 ```bash
-# Son hafızaları listele
-omi memory list --limit 10
+# Kayıtlı hafızaları listele
+omi memory list
 
-# Manuel olarak yeni bir hafıza oluştur
-omi memory create --text "Proje toplantısı Salı günü saat 10:00'da teknik ekiple yapılacak."
+# Yeni hafıza oluştur
+omi memory create "Python örnekleri içeren teknik ve özlü yanıtları tercih eder" --category work
 
-# Hafızalar arasında anlamsal arama yap
-omi memory search "proje toplantısı"
+# Belirli bir hafızanın detayını getir
+omi memory get <MEMORY_ID>
 ```
 
-### Konuşmalar (`omi conversation`)
-
-Kayıt altına alınan konuşmaları ve ses dökümlerini yönetir.
+### Konuşmalar (Conversations)
+Omi cihazları tarafından kaydedilen ses dökümleri ve diyalog geçmişi:
 
 ```bash
-# Konuşmaları listele
+# En son 5 konuşmayı listele
 omi conversation list --limit 5
 
-# Belirli bir konuşmanın detaylarını getir
-omi conversation get conv_123456
-
-# Konuşmanın tam dökümünü Markdown formatında dışa aktar
-omi conversation export conv_123456 --format markdown > dokum.md
+# Konuşma detayını ve tam metin dökümünü getir
+omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
-### Eylem Öğeleri ve Görevler (`omi action-item`)
-
-Konuşmalardan otomatik çıkarılan görevleri takip eder.
+### Görevler ve Eylem Öğeleri (Action Items)
+Diyaloglardan otomatik olarak çıkarılan görevler:
 
 ```bash
-# Bekleyen eylem öğelerini listele
-omi action-item list --status pending
+# Açık görevleri listele
+omi action-item list --open
 
-# Bir görevi tamamlandı olarak işaretle
-omi action-item update act_789012 --completed
+# Bir görevi tamamla
+omi action-item complete <ACTION_ITEM_ID>
 ```
 
-### Hedefler (`omi goal`)
-
-Kişisel veya profesyonel uzun vadeli hedefleri yönetir.
+### Hedefler (Goals)
+İlerleme metrikleri ve uzun vadeli hedefler:
 
 ```bash
 # Aktif hedefleri listele
 omi goal list
 
-# Yeni bir hedef oluştur
-omi goal create --title "Çok dilli dokümantasyonu tamamla" --horizon month
-
-# Hedef ilerlemesini güncelle
-omi goal update goal_345678 --progress 75
+# Yeni sayısal hedef oluştur
+omi goal create "Günde 2L su iç" --type numeric --target 2 --unit liters
 ```
 
 ---
 
-## Yapılandırılmış Otomasyon (`--json` & `jq`)
+## 4. Yapılandırılmış Otomasyon ve JSON Çıktısı (`--json`)
 
-Tüm `omi` komutları küresel `--json` seçeneğini kabul eder. Bu sayede çıktılar betikler ve veri işleme araçları tarafından doğrudan ayrıştırılabilir.
-
-### `jq` ile Veri Filtreleme ve Çıkarma
+`omi-cli` otomasyon hatları için birinci sınıf destek sunar. Genel `--json` bayrağı eklendiğinde çıktılar geçerli JSON formatında döndürülür:
 
 ```bash
-# Tüm hafıza metinlerini ayıkla
-omi --json memory list --limit 20 | jq -r '.[].content'
+# Hafızaları JSON olarak listele ve jq ile alanları ayıkla
+omi --json memory list | jq '.[] | {id, content, category}'
 
-# Tamamlanmamış eylem öğelerini filtrele
-omi --json action-item list | jq '.[] | select(.completed == false) | {id: .id, description: .description}'
+# Son konuşma başlıklarını ayıkla
+omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
+
+# Açık eylem öğelerini ham JSON olarak görüntüle
+omi --json action-item list --open | jq '.'
 ```
+
+> **Önemli Sözdizimi Kuralı:**
+> `--json` bayrağı **genel bir seçenek**tir ve alt komuttan **önce** gelmelidir:
+> * Doğru: `omi --json memory list`
+> * Yanlış: `omi memory list --json`
 
 ---
 
-## Çıkış Kodları Tablosu (Exit Codes)
+## 5. Çıkış Kodları (Exit Codes)
 
-CLI, betiklerin hataları güvenilir şekilde yakalamasını sağlayan standart çıkış kodları üretir:
+Kabuk betikleri ve CI/CD iş akışlarında güvenilir hata denetimi:
 
-| Kod | Anlam | Tipik Neden |
+| Çıkış Kodu | Anlam | Açıklama |
 | :---: | :--- | :--- |
-| `0` | **Başarılı** | İşlem başarıyla tamamlandı. |
-| `1` | **Genel Hata** | Yakalanmamış iç istisna veya beklenmeyen hata. |
-| `2` | **Bağımsız Değişken Hatası** | Geçersiz parametre, eksik argüman veya sözdizimi hatası. |
-| `3` | **Yetkilendirme Hatası** | Eksik, geçersiz veya süresi dolmuş kimlik belirteci. |
-| `4` | **Bulunamadı** | İstenen kaynak (hafıza, konuşma, hedef) mevcut değil. |
-| `5` | **Ağ Hatası** | Bağlantı kesintisi veya sunucu zaman aşımı. |
+| `0` | **Başarılı (Success)** | İşlem hatasız tamamlandı. |
+| `1` | **Kullanım Hatası (Doğrulama Hatası)** | Geçersiz veri değerleri veya uygulama doğrulama hatası; Click ayrıştırıcı sözdizimi hataları kod `2` döndürür. |
+| `2` | **Kimlik Doğrulama / CLI Sözdizimi Hatası** | Kimlik doğrulanmamış, süresi dolmuş belirteç veya bilinmeyen Click seçenekleri. |
+| `3` | **Sunucu / Ağ Hatası (Server Error)** | HTTP 5xx yanıtı, zaman aşımı veya sunucuya erişilemiyor. |
+| `4` | **İstek Hızı Sınırı (Rate Limited)** | HTTP 429 yanıtı — hız sınırı nedeniyle istek engellendi. |
+| `5` | **Bulunamadı (Not Found)** | HTTP 404 yanıtı — istenen kaynak mevcut değil. |
 
 ---
 
-## Çapraz Platform Betikleri
+## 6. Kabuk Ortamlarına Göre Örnekler
 
-### Bash / Zsh (Linux & macOS)
-
+### Bash / Zsh (Linux / macOS)
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+# Oturumda API anahtarını tanımla
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 
-echo "Omi kimlik doğrulaması kontrol ediliyor..."
-if ! omi auth status > /dev/null 2>&1; then
-    echo "Hata: Kimlik doğrulaması gerekli. Lütfen 'omi auth login' çalıştırın." >&2
-    exit 3
+# Komutu çalıştır ve çıkış kodunu denetle
+omi --json memory list --limit 10
+if [ $? -ne 0 ]; then
+    echo "Kullanıcı hafızaları sorgulanırken hata oluştu." >&2
 fi
-
-echo "Yeni not kaydediliyor..."
-omi memory create --text "Otomatik sistem denetimi başarıyla tamamlandı."
 ```
 
 ### PowerShell (Windows)
-
 ```powershell
-Write-Host "Omi kimlik doğrulaması kontrol ediliyor..."
-omi auth status
+# PowerShell ortam değişkeni tanımla
+$env:OMI_API_KEY = "omi_dev_your_actual_key_here"
+
+# JSON çıktısını doğrudan PowerShell nesnesine dönüştür
+$memories = omi --json memory list | ConvertFrom-Json
+$memories | Select-Object id, content, category
+
+# $LASTEXITCODE ile hata denetimi
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Kimlik doğrulaması eksik. Lütfen 'omi auth login' çalıştırın."
-    exit $LASTEXITCODE
-}
-
-Write-Host "Hedefler getiriliyor..."
-omi --json goal list | ConvertFrom-Json | ForEach-Object {
-    [PSCustomObject]@{
-        Id = $_.id
-        Baslik = $_.title
-        Ilerleme = "$($_.progress)%"
-    }
+    Write-Error "Omi komutu $LASTEXITCODE koduyla başarısız oldu."
 }
 ```
 
 ---
 
-## Yerel Omi Desktop API Entegrasyonu
+## 7. Yerel Masaüstü API Entegrasyonu
 
-Omi Desktop uygulaması yerel ortamınızda çalışırken, CLI doğrudan masaüstü bağlam hizmetleriyle iletişim kurabilir:
+Omi Desktop uygulaması bilgisayarınızda çalışırken buluta gitmeden yerel ekran ve bağlam geçmişini sorgulayabilirsiniz:
 
 ```bash
-# Yerel masaüstü bağlantı noktasını yapılandır
-omi local configure --port 8000
+# Yerel uç noktayı yapılandır (belirteci korumak için ortam değişkeni kullanın)
+export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
+read -r -s -p "Desktop token: " OMI_LOCAL_TOKEN; echo
+export OMI_LOCAL_TOKEN
 
-# Yerel ekranda yakalanan metinleri ara
-omi local search-screen "çeyrek raporu"
+# Yerel bağlantı durumunu doğrula
+omi --json local status
+
+# Son görsel zaman tünelinde arama yap
+omi --json local search-screen "Çeyrek raporu" --days 7 --app Safari
 ```
 
 ---
 
-## Çoklu Ortam Profil Yönetimi
+## 8. Çoklu Profil Yönetimi (Profiles)
 
-Farklı ortamları (örneğin kişisel, iş ve hazırlık ortamı) `--profile` bayrağı veya `~/.omi/config.toml` dosyası üzerinden yönetebilirsiniz:
+Kişisel ve iş hesapları veya test ortamları arasında geçiş yapmak için `--profile` seçeneğini kullanın. Ayarlar `~/.omi/config.toml` dosyasında tutulur:
 
 ```bash
-# Belirli bir profili kullanarak komut çalıştır
-omi --profile is memory list
+# Kişisel profil oluştur ve giriş yap
+omi --profile personal auth login
 
-# Özel API uç noktasıyla test profili kullan
-omi --profile staging --api-url https://api-staging.omi.me memory list
+# İş profili oluştur ve giriş yap
+omi --profile work auth login
+
+# Belirli bir profille komut çalıştır
+omi --profile work memory list
+
+# Özel test uç noktasıyla profil çalıştır
+omi --profile staging --api-base https://api-staging.omi.me memory list
 ```
 
 ---
 
-## Güvenlik ve En İyi Uygulamalar
+## 9. Güvenlik ve En İyi Uygulamalar
 
-1. **Belirteç Gizliliği:** API anahtarlarınızı veya oturum belirteçlerinizi asla genel Git depolarına göndermeyin.
-2. **Kabuk Geçmişi Güvenliği:** Paylaşılan sistemlerde `--api-key` bayrağını komut satırında doğrudan yazmak yerine etkileşimli giriş yöntemini veya `OMI_API_KEY` ortam değişkenini tercih edin.
-3. **Erişim İzinleri:** Unix tabanlı üretim ortamlarında yapılandırma dizini `~/.omi/` için izinleri kısıtlayın (`chmod 700 ~/.omi`).
+* **Git Deposuna Anahtar Göndermeyin:** API anahtarlarınızı genel depolara asla kaydetmeyin; gizli anahtar yöneticilerini veya `.gitignore` kapsamındaki `.env` dosyalarını kullanın.
+* **Kabuk Geçmişi:** Paylaşılan makinelerde anahtarları doğrudan komut satırı argümanı olarak geçirmeyin; etkileşimli girişi veya `OMI_API_KEY` ortam değişkenini tercih edin.
+* **Klasör İzinleri:** Unix sistemlerinde `~/.omi/` yapılandırma dizini izinlerini kısıtlayın (`chmod 700 ~/.omi`).
