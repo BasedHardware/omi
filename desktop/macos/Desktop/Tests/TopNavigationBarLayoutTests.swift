@@ -162,7 +162,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
     XCTAssertEqual(
       TopNavigationRoutes.memoryDestinations,
-      [.memories, .conversations, .brainMap, .activity, .rewind])
+      [.memories, .conversations, .brainMap, .activity, .rewind, .people])
 
     // No pill may instruct the user how to operate it. The retired menu's tooltip read "hover for
     // conversations, memories, tasks, Rewind", which is chrome apologising for itself.
@@ -182,7 +182,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .activityChipRow }
         .compactMap(\.memoryDestination),
-      [.conversations, .memories, .brainMap, .rewind])
+      [.conversations, .memories, .brainMap, .rewind, .people])
     // The claim is checkable because the row and the model read one value. A page dropped from the
     // chip row is unreachable here rather than silently stranded in the app.
     for destination in ShellDestination.allCases where destination.reach == .activityChipRow {
@@ -309,7 +309,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     }
     XCTAssertEqual(
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
-      [.conversations, .memories, .brainMap, .rewind, .activity],
+      [.conversations, .memories, .brainMap, .rewind, .activity, .people],
       "without the Brain pill the section's views have no way in")
   }
 

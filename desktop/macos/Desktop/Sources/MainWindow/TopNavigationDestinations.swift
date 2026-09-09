@@ -62,8 +62,10 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   case apps
   case permissions
   /// The chronological activity spine — Home's former landing surface, now the Memory hub's first
-  /// view. Appended last so the established cases keep their raw values.
+  /// view. Appended so the established cases keep their raw values.
   case activity
+  /// Everyone Omi has heard you talk to, and the voices it remembers. A Brain peer view.
+  case people
 
   /// The one mechanism that reaches a destination. Not a description of the UI — a claim about
   /// reachability that `ShellDestination.unreachable` checks.
@@ -100,6 +102,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .apps: return "Apps"
     case .permissions: return "Permissions"
     case .activity: return "Memories"
+    case .people: return "People"
     }
   }
 
@@ -107,7 +110,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var navItem: SidebarNavItem {
     switch self {
     case .home: return .dashboard
-    case .conversations, .memories, .brainMap, .rewind, .activity: return .conversations
+    case .conversations, .memories, .brainMap, .rewind, .activity, .people: return .conversations
     case .tasks: return .tasks
     case .apps: return .apps
     case .permissions: return .permissions
@@ -122,6 +125,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .brainMap: return .brainMap
     case .activity: return .activity
     case .rewind: return .rewind
+    case .people: return .people
     case .home, .tasks, .apps, .permissions: return nil
     }
   }
@@ -130,7 +134,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   var settingsSection: SettingsContentView.SettingsSection? {
     switch self {
     case .permissions: return .permissions
-    case .home, .conversations, .memories, .brainMap, .activity, .tasks, .rewind, .apps: return nil
+    case .home, .conversations, .memories, .brainMap, .activity, .tasks, .rewind, .apps, .people: return nil
     }
   }
 
@@ -138,7 +142,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     /// `Activity` is what the hub's pill opens, so its door is the bar itself — the other four
     /// hub views are reached from Activity's chip row once you are there.
-    case .conversations, .memories, .brainMap, .rewind: return .activityChipRow
+    case .conversations, .memories, .brainMap, .rewind, .people: return .activityChipRow
     case .permissions: return .settingsSidebar
     case .home, .tasks, .apps, .activity: return .topBar
     }

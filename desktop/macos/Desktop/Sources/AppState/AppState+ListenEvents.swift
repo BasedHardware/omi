@@ -45,7 +45,10 @@ enum ProactiveListenAdmission {
 
 @MainActor
 extension AppState {
-  func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
+  func handleBackendSegments(
+    _ segments: [TranscriptionService.BackendSegment],
+    lane: LocalTranscriptionLane? = nil
+  ) {
     var segmentsToPersist = [TranscriptionService.BackendSegment]()
 
     for segment in segments {
@@ -70,6 +73,9 @@ extension AppState {
       let translations = (segment.translations ?? []).map {
         SegmentTranslation(lang: $0.lang, text: $0.text)
       }
+      if lane != nil, !segment.is_user, let personId = segment.person_id, liveSpeakerPersonMap[speakerId] != personId {
+        liveSpeakerPersonMap[speakerId] = personId
+      }
       let newSeg = SpeakerSegment(
         segmentId: segment.id,
         speaker: speakerId,
@@ -78,7 +84,8 @@ extension AppState {
         end: segment.end,
         isUser: segment.is_user,
         personId: segment.person_id,
-        translations: translations
+        translations: translations,
+        lane: lane
       )
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
@@ -187,15 +194,84 @@ extension AppState {
     )
   }
 
+  /// On-device diarization moved already-emitted segments to other speakers — typically the
+  /// provisional "You" turned out to be the other person in the room. Rewrites the live
+  /// transcript in memory and the current session's rows, in the persistence queue so a
+  /// still-pending upsert of an old segment cannot land after the relabel and undo it.
+  func applyLocalSpeakerRelabels(_ relabels: [Int: LocalSpeakerRegistry.Resolution]) {
+    guard !relabels.isEmpty else { return }
+    var moved = 0
+    for index in speakerSegments.indices {
+      guard let target = relabels[speakerSegments[index].speaker] else { continue }
+      speakerSegments[index].speaker = target.speakerId
+      speakerSegments[index].isUser = target.isUser
+      speakerSegments[index].personId = target.personId
+      moved += 1
+    }
+    // The live name map is keyed by speaker id; move the names with the ids. Cleared in a
+    // pass of its own before anything is written: a swap (0↔1) visits both ends, and
+    // clearing one while writing the other would let dictionary order decide whether the
+    // second entry wipes what the first just wrote. Ids no relabel mentions keep their name.
+    for from in relabels.keys {
+      liveSpeakerPersonMap[from] = nil
+    }
+    for target in relabels.values {
+      liveSpeakerPersonMap[target.speakerId] = target.personId
+    }
+    let summary = relabels.map {
+      "\($0.key)→\($0.value.speakerId)\($0.value.isUser ? "(you)" : "")\($0.value.personId.map { " person=\($0)" } ?? "")"
+    }
+    .sorted().joined(separator: " ")
+    log("Transcript [RELABEL] \(summary): \(moved) in-memory segments moved")
+    if moved > 0 {
+      LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+    }
+    guard let sessionId = currentSessionId else { return }
+    enqueueTranscriptStorageWork {
+      do {
+        let rows = try await TranscriptionStorage.shared.relabelSpeakers(sessionId: sessionId, relabels: relabels)
+        log("Transcript [RELABEL] \(rows) stored segments moved in session \(sessionId)")
+      } catch {
+        logError("Transcript [RELABEL] failed to persist speaker relabel", error: error)
+      }
+    }
+  }
+
+  /// "This is me" on a live bubble: the on-device diarizer makes that speaker the user and
+  /// remembers the voice, and every earlier bubble moves accordingly.
+  func markLiveSpeakerAsUser(_ speakerId: Int) {
+    Task { @MainActor [weak self] in
+      let relabels = await LocalSpeakerDiarizer.shared.markSpeakerAsUser(speakerId)
+      self?.applyLocalSpeakerRelabels(relabels)
+    }
+  }
+
+  /// A live speaker was named. Shows the name now and, on the on-device path, teaches the
+  /// diarizer that person's voice so it is stamped automatically next time.
+  func assignLiveSpeaker(_ speakerId: Int, toPerson personId: String?) {
+    liveSpeakerPersonMap[speakerId] = personId
+    guard sttSession.useLocalSTT else { return }
+    Task { @MainActor [weak self] in
+      let relabels = await LocalSpeakerDiarizer.shared.assignPerson(personId, toSpeaker: speakerId)
+      self?.applyLocalSpeakerRelabels(relabels)
+    }
+  }
+
   private func enqueueTranscriptPersistence(
     _ segments: [TranscriptionService.BackendSegment],
     sessionId: Int64
   ) {
+    enqueueTranscriptStorageWork { [weak self] in
+      await self?.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
+    }
+  }
+
+  /// Serialize transcript storage writes: each unit runs after every earlier one finished.
+  private func enqueueTranscriptStorageWork(_ work: @escaping @MainActor () async -> Void) {
     let previous = transcriptPersistenceTail
-    transcriptPersistenceTail = Task { @MainActor [weak self] in
+    transcriptPersistenceTail = Task { @MainActor in
       await previous?.value
-      guard let self else { return }
-      await self.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
+      await work()
     }
   }
 

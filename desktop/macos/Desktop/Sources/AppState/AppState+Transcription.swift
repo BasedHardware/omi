@@ -104,21 +104,16 @@ extension AppState {
 
       if sttSession.useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
-        // Segments are delivered on the main actor by the service, so no Task hop here.
-        let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
-          self?.handleBackendSegments(segments)
-        }
         // If the on-device model can't load, fall back to cloud STT instead of recording
         // into a void (the failure is otherwise silent — a blank transcript).
         let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
           self?.handleLocalSTTModelLoadFailure()
         }
-        // Mic = the user; system audio = another speaker. Transcribed separately for diarization.
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
-        mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
+        // Mic and system audio are transcribed separately; the shared on-device diarizer
+        // tells the two lanes' voices apart and which mic voice is the user.
+        let (mic, system) = makeLocalTranscriptionServices(
+          language: effectiveLanguage, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
-        system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
       } else {
         // Always streaming via Python backend /v4/listen
@@ -1047,6 +1042,34 @@ extension AppState {
     return nil
   }
 
+  /// One Parakeet instance per capture lane, both feeding `handleBackendSegments` with their
+  /// lane so echo dedup can tell a mic row from a system-audio row, and both able to move
+  /// earlier segments when the shared diarizer revises who the user is.
+  private func makeLocalTranscriptionServices(
+    language: String,
+    onModelLoadFailed: @escaping @MainActor () -> Void
+  ) -> (mic: LocalTranscriptionService, system: LocalTranscriptionService) {
+    // Segments are delivered on the main actor by the service, so no Task hop here.
+    let onRelabel: LocalTranscriptionService.SpeakerRelabelHandler = { [weak self] relabels in
+      self?.applyLocalSpeakerRelabels(relabels)
+    }
+    // A push-to-talk enrollment can identify a live speaker too; route those here as well.
+    Task { await LocalSpeakerDiarizer.shared.setRelabelSink(onRelabel) }
+    let mic = LocalTranscriptionService(language: language, isUser: true)
+    mic.start(
+      onSegments: { [weak self] segments in self?.handleBackendSegments(segments, lane: .microphone) },
+      onModelLoadFailed: onModelLoadFailed,
+      onSpeakerRelabel: onRelabel
+    )
+    let system = LocalTranscriptionService(language: language, isUser: false)
+    system.start(
+      onSegments: { [weak self] segments in self?.handleBackendSegments(segments, lane: .systemAudio) },
+      onModelLoadFailed: onModelLoadFailed,
+      onSpeakerRelabel: onRelabel
+    )
+    return (mic, system)
+  }
+
   /// On-device Parakeet failed to load — fall back to cloud STT instead of silently recording a
   /// blank transcript. Cleanly stops the dead on-device session and restarts the SAME recording in
   /// cloud mode (no fragile mid-stream audio rerouting). Sticky for the app run so we don't retry a
@@ -1288,9 +1311,6 @@ extension AppState {
         // On-device mode: re-arm fresh local Parakeet instances (mic + system) for the next
         // conversation — do NOT reconnect the cloud WebSocket. Stopping the old ones flushes
         // their final tails; the source-routed capture callbacks feed the new instances.
-        let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
-          self?.handleBackendSegments(segments)
-        }
         // Mirror startTranscription: wire onModelLoadFailed so a Parakeet model
         // load failure on the re-armed instances falls back to cloud instead of
         // recording into a void (a silent blank transcript). Without this, every
@@ -1298,11 +1318,9 @@ extension AppState {
         let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
           self?.handleLocalSTTModelLoadFailure()
         }
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
-        mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
+        let (mic, system) = makeLocalTranscriptionServices(
+          language: effectiveLanguage, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
-        system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
         // CoreAudio callbacks capture their local transcription sinks when the
         // tap starts. Rebuild them so audio reaches these fresh services rather

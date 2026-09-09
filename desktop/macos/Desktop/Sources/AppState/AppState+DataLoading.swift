@@ -245,6 +245,48 @@ extension AppState {
     }
   }
 
+  /// Renames a person on the backend and in the local list.
+  func renamePerson(id: String, name: String) async -> Bool {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    let generation = ownerScopeGeneration
+    do {
+      try await APIClient.shared.renamePerson(id: id, name: trimmed)
+    } catch {
+      logError("People: Failed to rename person", error: error)
+      return false
+    }
+    guard generation == ownerScopeGeneration else { return false }
+    if let index = people.firstIndex(where: { $0.id == id }) {
+      let old = people[index]
+      people[index] = Person(
+        id: old.id, name: trimmed, createdAt: old.createdAt, updatedAt: Date(),
+        speechSamples: old.speechSamples, speechSampleTranscripts: old.speechSampleTranscripts,
+        speechSamplesVersion: old.speechSamplesVersion)
+    }
+    log("People: Renamed person \(id)")
+    return true
+  }
+
+  /// Deletes a person on the backend and locally, including the voice Omi remembered for them.
+  func deletePerson(id: String) async -> Bool {
+    let generation = ownerScopeGeneration
+    do {
+      try await APIClient.shared.deletePerson(id: id)
+    } catch {
+      logError("People: Failed to delete person", error: error)
+      return false
+    }
+    guard generation == ownerScopeGeneration else { return false }
+    people.removeAll { $0.id == id }
+    for (speakerId, personId) in liveSpeakerPersonMap where personId == id {
+      liveSpeakerPersonMap[speakerId] = nil
+    }
+    await LocalSpeakerDiarizer.shared.forgetVoice(personId: id)
+    log("People: Deleted person \(id)")
+    return true
+  }
+
   /// Assigns segments to a person or user via bulk API
   /// When a backend bulk-assign fails, only "the conversation does not exist
   /// there yet" may fall back to a local-first assignment — any other failure

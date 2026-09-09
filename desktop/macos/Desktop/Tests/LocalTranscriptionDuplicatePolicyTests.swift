@@ -62,6 +62,38 @@ final class LocalTranscriptionDuplicatePolicyTests: XCTestCase {
     XCTAssertEqual(LocalTranscriptionDuplicatePolicy.decision(for: second, existing: [first]), .accept)
   }
 
+  // MARK: - Lane-tagged segments (on-device diarization)
+
+  private func lanedSegment(
+    text: String, lane: LocalTranscriptionLane, speaker: Int, isUser: Bool = false, id: String
+  ) -> SpeakerSegment {
+    var segment = SpeakerSegment(segmentId: id, speaker: speaker, text: text, start: 0, end: 10, isUser: isUser)
+    segment.lane = lane
+    return segment
+  }
+
+  /// With diarization a remote voice and its mic echo share a speaker id and neither is the
+  /// user, so the lane — not `isUser` — has to tell the two copies apart.
+  func testEchoOfTheSameRemoteSpeakerAcrossLanesIsStillDeduplicated() {
+    let system = lanedSegment(text: "This is the video transcript", lane: .systemAudio, speaker: 3, id: "system")
+    let micEcho = lanedSegment(text: "This is the video transcript.", lane: .microphone, speaker: 3, id: "mic")
+
+    XCTAssertEqual(LocalTranscriptionDuplicatePolicy.decision(for: micEcho, existing: [system]), .suppressIncoming)
+    XCTAssertEqual(
+      LocalTranscriptionDuplicatePolicy.decision(for: system, existing: [micEcho]),
+      .replaceExisting(segmentId: "mic")
+    )
+  }
+
+  /// Two mic-lane rows from different people are never echo of each other, even when one is
+  /// "You" and the other is not — the old `isUser`-as-lane shortcut would have dropped one.
+  func testTwoPeopleOnTheMicLaneAreNeverDeduplicated() {
+    let user = lanedSegment(text: "This is the video transcript", lane: .microphone, speaker: 0, isUser: true, id: "u")
+    let guest = lanedSegment(text: "This is the video transcript", lane: .microphone, speaker: 1, id: "g")
+
+    XCTAssertEqual(LocalTranscriptionDuplicatePolicy.decision(for: guest, existing: [user]), .accept)
+  }
+
   // MARK: - Rolling-window playback echoes
 
   private func hopperEchoText() -> (mic: String, system: String) {

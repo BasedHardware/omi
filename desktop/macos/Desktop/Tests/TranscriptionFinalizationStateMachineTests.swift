@@ -1013,6 +1013,33 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertTrue(compacted.contains { $0.speaker == "MIXED" })
   }
 
+  /// The mic and system-audio lanes keep independent clocks, and with on-device diarization
+  /// a remote voice and its mic echo share one speaker id. Joining a system row onto a mic row
+  /// that started later produced `end < start` and the backend rejected the conversation.
+  func testSameSpeakerRunsNeverMergeBackwardInTime() {
+    func segment(_ text: String, speaker: Int, start: Double, end: Double) -> APIClient.UploadSegment {
+      APIClient.UploadSegment(
+        text: text, speaker: String(format: "SPEAKER_%02d", speaker), speaker_id: speaker,
+        is_user: speaker == 0, person_id: nil, start: start, end: end)
+    }
+    let merged = ConversationFinalizationService.mergeConsecutiveSpeakerRuns([
+      segment("hello", speaker: 0, start: 0, end: 10),
+      segment("there", speaker: 0, start: 10, end: 20),
+      segment("mic echo of the remote voice", speaker: 2, start: 40, end: 50),
+      segment("the remote voice on its own clock", speaker: 2, start: 0.1, end: 9.1),
+      segment("and later", speaker: 2, start: 9.1, end: 15),
+    ])
+
+    XCTAssertEqual(
+      merged.map(\.text),
+      ["hello there", "mic echo of the remote voice", "the remote voice on its own clock and later"])
+    XCTAssertEqual(merged.map(\.start), [0, 40, 0.1])
+    XCTAssertEqual(merged.map(\.end), [20, 50, 15])
+    for upload in merged {
+      XCTAssertGreaterThan(upload.end, upload.start, "the backend rejects end <= start with a 422")
+    }
+  }
+
   func testCompactionLeavesBackendSizedUploadsUnchanged() {
     let segments = (0..<3).map { index in
       APIClient.UploadSegment(

@@ -13,6 +13,7 @@ enum SearchSurface: String, CaseIterable, Sendable {
   case apps
   case tasks
   case brainMap = "brain_map"
+  case people
 }
 
 /// Content-free search analytics. Call sites pass the committed query only so

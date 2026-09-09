@@ -680,3 +680,9 @@ extension TranscriptionSessionRecord {
     )
   }
 }
+
+/// A named person's footprint in the local transcript store (People page).
+struct PersonActivity: Equatable, Sendable {
+  let conversationCount: Int
+  let lastTalkedAt: Date?
+}

@@ -50,6 +50,9 @@ struct SpeakerSegment: Identifiable {
   var isUser: Bool = false
   var personId: String?  // Backend-assigned person ID from speaker identification
   var translations: [SegmentTranslation] = []
+  /// Capture lane for on-device transcription (nil on the cloud path). Echo dedup keys on it
+  /// now that a speaker id no longer implies a lane.
+  var lane: LocalTranscriptionLane? = nil
 }
 
 /// Result of finalizing a conversation

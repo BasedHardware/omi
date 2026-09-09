@@ -53,11 +53,19 @@ enum LocalTranscriptionDuplicatePolicy {
     // Keep one canonical segment. If the mic copy arrived first, promote that
     // existing row to the system-audio source rather than deleting and reinserting
     // it. If the system copy arrived first, discard only the later mic copy.
-    return incoming.isUser ? .suppressIncoming : .replaceExisting(segmentId: segmentId)
+    return lane(of: incoming) == .microphone ? .suppressIncoming : .replaceExisting(segmentId: segmentId)
+  }
+
+  /// The lane a segment was captured on. Segments carry it explicitly since on-device
+  /// diarization; before that `isUser` *was* the lane (mic = user), which stays the
+  /// fallback for rows that predate the field.
+  static func lane(of segment: SpeakerSegment) -> LocalTranscriptionLane {
+    segment.lane ?? (segment.isUser ? .microphone : .systemAudio)
   }
 
   static func isDuplicate(_ lhs: SpeakerSegment, _ rhs: SpeakerSegment) -> Bool {
-    guard lhs.isUser != rhs.isUser else { return false }
+    let lhsLane = lane(of: lhs)
+    guard lhsLane != lane(of: rhs) else { return false }
     let lhsWords = normalizedWords(lhs.text)
     let rhsWords = normalizedWords(rhs.text)
     guard min(lhsWords.count, rhsWords.count) >= minimumWordCount else { return false }
@@ -71,8 +79,8 @@ enum LocalTranscriptionDuplicatePolicy {
     // than the playback — human speech, a longer capture window, or both — and
     // must survive.
     guard min(lhsWords.count, rhsWords.count) >= minimumContainmentWordCount else { return false }
-    let micWords = lhs.isUser ? lhsWords : rhsWords
-    let systemWords = lhs.isUser ? rhsWords : lhsWords
+    let micWords = lhsLane == .microphone ? lhsWords : rhsWords
+    let systemWords = lhsLane == .microphone ? rhsWords : lhsWords
     guard containsContiguous(systemWords, subsequence: micWords) else { return false }
 
     return timestampRangesAreClose(lhs, rhs)
