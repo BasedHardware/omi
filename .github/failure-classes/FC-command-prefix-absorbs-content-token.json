@@ -1,0 +1,14 @@
+{
+    "schema_version": 1,
+    "id": "FC-command-prefix-absorbs-content-token",
+    "violated_contract": "A command vocabulary matched longest-first against free user content must not take a token that is also an ordinary opening of that content, unless the user marked the token as part of the command. Voice typing matched the wake phrases \"type out\", \"type this\" and \"type\" longest-first, so \"type this is a test\" parsed as the phrase \"type this\" plus the dictation \"is a test\" and typed \"Is a test\". The speaker's own first word was deleted, silently, inside their text — \"this\" being about the commonest word an English sentence opens with — and nothing downstream could recover it, because by then the word was simply not in the payload. The greedy match was right for \"type out an email\", which people do speak straight through, and wrong for the phrase nobody speaks straight through: the instruction is said as \"type this: buy milk\", with the pause that a recognizer renders as punctuation.",
+    "canonical_prevention": "Split the command vocabulary by whether its extra token can also open real content. A phrase whose last token is ordinary content may only claim that token when the user marked the phrase as an instruction — punctuation from the speaker's pause, or the end of the utterance — and on a plain separator it must fall through to the shorter command, leaving the token to the payload. Resolve the remaining ambiguity toward keeping the user's words: an extra word the user has to delete is visible and costs a keystroke, while a word the parser ate is invisible and unrecoverable. Cover both readings of the same opening in one test, so the phrase that must keep its token and the phrase that must give it back cannot drift apart.",
+    "canonical_prevention_artifact": [
+        "desktop/macos/Desktop/Tests/VoiceTypingTests.swift"
+    ],
+    "evidence_prs": [],
+    "scope_hints": [
+        "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/VoiceTypeCommandParser.swift"
+    ],
+    "status": "open"
+}

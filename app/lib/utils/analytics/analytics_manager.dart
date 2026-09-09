@@ -15,6 +15,7 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyticsManager {
@@ -895,6 +896,22 @@ class AnalyticsManager {
   }
 
   void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
+
+  void speechProfileSkipped() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.skipped));
+
+  void speechProfileUploadSucceeded() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadSucceeded));
+
+  void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
+        speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
+        properties: {
+          if (reason != null) 'reason': reason,
+          if (statusCode != null) 'status_code': statusCode,
+        },
+      );
+
+  void speechProfileEmbeddingStored() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.embeddingStored));
+
+  void speechProfileContinued() => track(speechProfileContinuedEventName);
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});

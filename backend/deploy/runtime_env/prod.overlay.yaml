@@ -401,7 +401,7 @@ overlay:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
           DAILY_SUMMARY_SELECTION_MODE:
-            value: shadow
+            value: indexed
             category: rollout
           PINECONE_INDEX_NAME:
             value: memories-backend

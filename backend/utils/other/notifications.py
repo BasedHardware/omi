@@ -396,7 +396,10 @@ async def start_cron_job() -> None:
                 )
                 return
 
-        await send_daily_notification()
+        # Wear FCM has no per-send idempotency on the bulk path. Never ride
+        # job-lock fail-open (Redis maxmemory). Summaries still fail-open.
+        if acquired:
+            await send_daily_notification()
         summary_outcome = await send_daily_summary_notification()
         if not summary_outcome.ok:
             logger.error('Daily summary cron run failed: %s', summary_outcome.error_text)
@@ -905,13 +908,44 @@ async def _send_bulk_summary_notification(
     return True
 
 
+def should_send_wear_device_reminder() -> bool:
+    """Daily "wear your Omi" blast.
+
+    Issue #3328: current devices record onboard when BLE drops, so a morning
+    wear/disconnect nag does not recover lost audio and causes notification
+    fatigue. Keep the helper so the cron can be re-enabled without hunting
+    copy. Wear FCM is skipped unless the job run lock was acquired, and
+    capped at one send per uid per UTC day even if this flag is re-enabled.
+    """
+    return False
+
+
 async def send_daily_notification() -> None:
     try:
+        if not should_send_wear_device_reminder():
+            logger.info('Skipping daily wear reminder (#3328)')
+            return None
+
         morning_alert_title = "omi says"
         morning_alert_body = "Wear your omi and capture your conversations today."
         morning_target_time = "08:00"
+        date_str = datetime.now(pytz.utc).strftime('%Y-%m-%d')
 
-        await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
+        recipients = await _get_wear_recipients(morning_target_time)
+        send_tokens: List[str] = []
+        locked_users = 0
+        for uid, tokens, _tz in recipients:
+            if not tokens:
+                continue
+            got = await run_blocking(db_executor, redis_db.try_acquire_daily_wear_lock, uid, date_str)
+            if not got:
+                continue
+            locked_users += 1
+            send_tokens.extend(tokens)
+
+        logger.info('notification_blast kind=wear users=%s tokens=%s', locked_users, len(send_tokens))
+        if send_tokens:
+            await send_bulk_notification(send_tokens, morning_alert_title, morning_alert_body)
 
     except Exception as e:
         logger.error(e)
@@ -919,22 +953,16 @@ async def send_daily_notification() -> None:
         return None
 
 
-async def _send_notification_for_time(target_time: str, title: str, body: str) -> Any:
-    user_in_time_zone = await _get_users_in_timezone(target_time)
-    if not user_in_time_zone:
-        logger.info("No users found in time zone")
-        return None
-    await send_bulk_notification(user_in_time_zone, title, body)
-    return user_in_time_zone
-
-
-async def _get_users_in_timezone(target_time: str) -> Any:
+async def _get_wear_recipients(target_time: str) -> List[Any]:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
     chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+        *[run_blocking(db_executor, notification_db.get_users_id_in_timezones, chunk) for chunk in timezone_chunks]
     )
-    return [token for chunk in chunk_results for token in chunk]
+    users: List[Any] = []
+    for chunk in chunk_results:
+        users.extend(chunk)
+    return users
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

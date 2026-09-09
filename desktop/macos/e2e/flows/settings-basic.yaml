@@ -15,6 +15,12 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  # General → Transparency drives the glass ground live; the slider's model and the panel that
+  # follows it are the surfaces S2 renders.
+  - desktop/macos/Desktop/Sources/Theme/InkGlassTransparency.swift
+  - desktop/macos/Desktop/Sources/Theme/InkGlass.swift
+  # S2b/S2c drive the slider's own published value through the bridge, cursor-free.
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge+GlassTransparency.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
 preconditions:
@@ -36,6 +42,39 @@ steps:
     expect:
       text_visible:
         - General
+
+  - id: S2b
+    name: Transparency slider drives the glass live
+    # The Transparency card's slider binds to the same published value this action writes, so the
+    # action stands in for a drag without touching the cursor. The card's caption is the visible
+    # proof the value moved; the ground alpha is the arithmetic proof every panel followed it.
+    bridge.action:
+      name: set_glass_transparency
+      params:
+        value: "0.9"
+    expect:
+      ok: true
+      result.detail.transparency: "0.9000"
+      result.detail.is_default: "false"
+      # 1 − 0.9: the ground every panel paints. Reduce Transparency is off on the harness Mac; on
+      # it the alpha reads 1.0000 and the caption says so instead of a percentage.
+      result.detail.ground_alpha: "0.1000"
+      text_visible:
+        - "Glass: 90%"
+
+  - id: S2c
+    name: Reset transparency to the shipped default
+    # The action is the Reset button's own call, so the step leaves the preference where S2b found
+    # it without a cursor; the caption and the vanished button are the visible proof.
+    do: "Verify the Transparency caption returns to 'Glass: 54%' and the Reset button disappears."
+    bridge.action:
+      name: reset_glass_transparency
+    expect:
+      ok: true
+      result.detail.is_default: "true"
+      result.detail.transparency: "0.5400"
+      text_visible:
+        - "Glass: 54%"
 
   - id: S3
     name: Navigate to Account & Plan section
