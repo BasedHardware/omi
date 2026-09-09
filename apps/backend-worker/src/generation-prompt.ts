@@ -96,7 +96,9 @@ async function readGenerationHistory(
       `SELECT prior.sender, prior.text
        FROM chat_messages AS prior
        JOIN chat_messages AS current ON current.id = ? AND current.account_id = ?
-       WHERE prior.account_id = current.account_id AND prior.position < current.position
+       WHERE prior.account_id = current.account_id
+         AND (prior.created_at < current.created_at
+           OR (prior.created_at = current.created_at AND prior.position < current.position))
          AND ${recoveredPayloadTextKeySql(
            "prior",
            "chatSessionId"
@@ -107,7 +109,7 @@ async function readGenerationHistory(
          )} IS ${recoveredPayloadTextKeySql("current", "appId")}
          AND (prior.sender = 'human' OR (prior.sender = 'ai' AND prior.generation_outcome = 'completed'))
          AND ${visibleStoredTextSql("prior")}
-       ORDER BY prior.position DESC
+       ORDER BY prior.created_at DESC, prior.position DESC
        LIMIT ?`
     )
     .bind(messageId, accountId, GENERATION_HISTORY_MESSAGE_LIMIT)

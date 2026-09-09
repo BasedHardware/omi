@@ -234,6 +234,69 @@ describe("composeGenerationPrompt", () => {
     });
   });
 
+  test("generation history follows created_at then position", async () => {
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "later-clock",
+        "acct-a",
+        "human",
+        "Later clock first position",
+        1,
+        500,
+        JSON.stringify({ chatSessionId: "clock-skew", appId: null }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "earlier-clock",
+        "acct-a",
+        "human",
+        "Earlier clock last position",
+        2,
+        100,
+        JSON.stringify({ chatSessionId: "clock-skew", appId: null }),
+        null
+      )
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO chat_messages (id, account_id, sender, text, position, created_at, payload, generation_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+      .bind(
+        "current-clock",
+        "acct-a",
+        "human",
+        "What is my name?",
+        3,
+        900,
+        JSON.stringify({ chatSessionId: "clock-skew", appId: null }),
+        null
+      )
+      .run();
+    const result = await composeGenerationPrompt(
+      db,
+      r2,
+      "acct-a",
+      "current-clock",
+      "What is my name?"
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      prompt: "What is my name?",
+      history: [
+        { role: "user", content: "Earlier clock last position" },
+        { role: "user", content: "Later clock first position" },
+      ],
+    });
+  });
+
   test("generation history uses the last duplicate chatSessionId like conversation grouping", async () => {
     await db
       .prepare(
