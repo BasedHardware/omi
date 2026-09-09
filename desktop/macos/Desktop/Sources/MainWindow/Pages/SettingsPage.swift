@@ -375,6 +375,11 @@ struct SettingsContentView: View {
   @State var localModelOptions: [String] = []
   @State var isFetchingLocalModels = false
   @State var localModelsFetchFailed = false
+  // Seam for tests: `fetchLocalModelOptions` (SettingsContentView+FloatingBarAndChat.swift)
+  // calls this instead of `AIProvider.fetchLocalModels` directly, so tests can substitute a
+  // deterministic stub instead of racing real networking against a URLProtocol stub on
+  // URLSession.shared. See LocalProviderSettingsRestartTests.
+  var localModelsFetcher: (String) async throws -> [String] = AIProvider.fetchLocalModels
   // Not private: read from the localProviderFields computed view in the
   // SettingsContentView+FloatingBarAndChat.swift extension file.
   @FocusState var isLocalBaseURLFieldFocused: Bool
@@ -574,12 +579,14 @@ struct SettingsContentView: View {
     selectedSection: Binding<SettingsSection>,
     highlightedSettingId: Binding<String?> = .constant(nil),
     chatProvider: ChatProvider? = nil,
+    localModelsFetcher: @escaping (String) async throws -> [String] = AIProvider.fetchLocalModels,
     showResetOnboardingConfirm: Binding<Bool>
   ) {
     self.appState = appState
     self._selectedSection = selectedSection
     self._highlightedSettingId = highlightedSettingId
     self.chatProvider = chatProvider
+    self.localModelsFetcher = localModelsFetcher
     self._showResetOnboardingConfirm = showResetOnboardingConfirm
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)

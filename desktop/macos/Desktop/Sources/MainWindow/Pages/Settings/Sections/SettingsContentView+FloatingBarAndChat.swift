@@ -350,6 +350,10 @@ extension SettingsContentView {
   ///   (Base URL) pass `restartLocalBridgesIfActive` here so the restart
   ///   happens after the model list (and possibly the auto-selected model
   ///   id) has settled, not racing ahead of it.
+  ///
+  /// The actual request goes through `localModelsFetcher` (defaults to
+  /// `AIProvider.fetchLocalModels`) rather than calling it directly, so tests
+  /// can substitute a stub instead of exercising real networking.
   func fetchLocalModelOptions(onComplete: (() -> Void)? = nil) {
     guard !isFetchingLocalModels else { return }
     isFetchingLocalModels = true
@@ -359,7 +363,7 @@ extension SettingsContentView {
     let currentVisionModelId = localLLMVisionModelID
     Task {
       do {
-        var models = try await AIProvider.fetchLocalModels(baseURL: baseURL)
+        var models = try await localModelsFetcher(baseURL)
         // Keep the currently configured model selectable even if the server's
         // list doesn't (yet) include it — Picker needs a matching tag.
         if !currentModelId.isEmpty && !models.contains(currentModelId) {

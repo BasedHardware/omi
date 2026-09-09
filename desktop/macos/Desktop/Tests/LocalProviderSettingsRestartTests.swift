@@ -3,31 +3,6 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Stubs the OpenAI-compatible `/models` endpoint `AIProvider.fetchLocalModels`
-/// hits via `URLSession.shared` (it takes no session parameter to inject a
-/// mock into). Registering a `URLProtocol` subclass intercepts requests for
-/// `URLSession.shared`'s default configuration for the lifetime of the
-/// registration.
-private final class LocalModelsStubProtocol: URLProtocol, @unchecked Sendable {
-  override class func canInit(with request: URLRequest) -> Bool {
-    request.url?.path.hasSuffix("/models") == true
-  }
-
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-  override func startLoading() {
-    let body = Data(#"{"data":[{"id":"stub-model-a"},{"id":"stub-model-b"}]}"#.utf8)
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: 200, httpVersion: nil,
-      headerFields: ["Content-Type": "application/json"])!
-    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-    client?.urlProtocol(self, didLoad: body)
-    client?.urlProtocolDidFinishLoading(self)
-  }
-
-  override func stopLoading() {}
-}
-
 /// Spies on the shared-runtime restart request without touching AgentBridge or
 /// AgentRuntimeProcess: `ChatProvider` is not `final`, and
 /// `restartLocalBridgeIfActive()` is the exact seam
@@ -50,11 +25,19 @@ private final class RestartSpyChatProvider: ChatProvider {
 
 @MainActor
 final class LocalProviderSettingsRestartTests: XCTestCase {
-  private func makeSettingsView(chatProvider: ChatProvider) -> SettingsContentView {
+  /// - Parameter localModelsFetcher: stands in for `AIProvider.fetchLocalModels` (the real
+  ///   OpenAI-compatible `/models` request). Defaults to the real fetch so the two tests that
+  ///   don't care about the fetch's outcome keep exercising it; the test that does care about
+  ///   the auto-selected model list passes a deterministic stub instead.
+  private func makeSettingsView(
+    chatProvider: ChatProvider,
+    localModelsFetcher: @escaping (String) async throws -> [String] = AIProvider.fetchLocalModels
+  ) -> SettingsContentView {
     SettingsContentView(
       appState: AppState(),
       selectedSection: .constant(.aiChat),
       chatProvider: chatProvider,
+      localModelsFetcher: localModelsFetcher,
       showResetOnboardingConfirm: .constant(false)
     )
   }
@@ -117,10 +100,17 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
   /// above does. The assertion that actually exercises the fix is
   /// `onCompleteCallCount`: it must be 0 once a model was auto-selected, or
   /// the Base URL commit is still firing two restarts for one commit.
+  ///
+  /// The completion signal below polls `localLLMModelID` (`@AppStorage`,
+  /// backed by real `UserDefaults`), not `localModelOptions` (`@State`).
+  /// `@State` has no persistent storage to write through until SwiftUI
+  /// installs the view into a live hierarchy, which this unit test (like its
+  /// siblings) never does; a write to it from here is silently dropped, so
+  /// polling it can never observe the fetch settling. This is unrelated to
+  /// the coalescing bug under test and unrelated to networking: it
+  /// reproduces with a fully synchronous, non-async `@State` write read back
+  /// on the same instance, with no `Task` or fetch involved at all.
   func testBaseURLCommitWithEmptyModelIdRestartsOnceAndShowsNoError() async {
-    URLProtocol.registerClass(LocalModelsStubProtocol.self)
-    defer { URLProtocol.unregisterClass(LocalModelsStubProtocol.self) }
-
     let defaults = UserDefaults.standard
     let previousModelId = defaults.string(forKey: AIProvider.localModelIDKey)
     defaults.removeObject(forKey: AIProvider.localModelIDKey)
@@ -133,7 +123,16 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
     }
 
     let spy = RestartSpyChatProvider()
-    let view = makeSettingsView(chatProvider: spy)
+    // Stubs the model list directly instead of stubbing the OpenAI-compatible `/models`
+    // endpoint over real networking: `AIProvider.fetchLocalModels` takes no session parameter
+    // to inject a mock into, and a `URLProtocol` subclass registered against
+    // `URLSession.shared` raced real loopback connection attempts inside the xctest process
+    // (ECONNREFUSED arriving seconds later, well after the poll below had already given up).
+    // The injected closure removes that race entirely.
+    let view = makeSettingsView(
+      chatProvider: spy,
+      localModelsFetcher: { _ in ["stub-model-a", "stub-model-b"] }
+    )
     XCTAssertEqual(view.localLLMModelID, "", "test setup: model id must start empty")
 
     var onCompleteCallCount = 0
@@ -142,18 +141,18 @@ final class LocalProviderSettingsRestartTests: XCTestCase {
       view.restartLocalBridgesIfActive()
     })
 
-    // fetchLocalModelOptions has no completion signal besides onComplete,
-    // which the coalescing fix may legitimately skip calling; poll the
-    // populated model list instead (set in the same MainActor.run block as
-    // the auto-select and the onComplete decision), bounded well above the
-    // fetch's own 5s request timeout.
+    // fetchLocalModelOptions has no completion signal besides onComplete, which the
+    // coalescing fix may legitimately skip calling; poll localLLMModelID instead, since it is
+    // set in the same MainActor.run block as onComplete's decision and (unlike
+    // localModelOptions) is reliably observable from this unit test. The injected fetcher
+    // above returns instantly (no real request), so this loop is bounded by Task-scheduling
+    // latency, not a network timeout, and settles well inside the deadline.
     let deadline = Date().addingTimeInterval(6)
-    while view.localModelOptions.isEmpty && Date() < deadline {
+    while view.localLLMModelID.isEmpty && Date() < deadline {
       // omi-test-quality: wall-clock-wait -- fetchLocalModelOptions has no completion signal when the coalescing fix skips onComplete; polling is the only observable signal here
       try? await Task.sleep(nanoseconds: 50_000_000)
     }
 
-    XCTAssertEqual(view.localModelOptions, ["stub-model-a", "stub-model-b"])
     XCTAssertEqual(
       view.localLLMModelID, "stub-model-a",
       "empty model id must auto-select the first server-reported model")
