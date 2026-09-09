@@ -160,6 +160,54 @@ def test_500_then_200_succeeds_after_retry(authed_profile, respx_mock) -> None:
     assert result == []
 
 
+@pytest.mark.parametrize(
+    ("retry_after", "expected_wait"),
+    [("3", 3.0), ("99999", 60.0), ("invalid", 0.25), (None, 0.25)],
+)
+def test_cli_503_uses_retry_after_or_backoff(
+    authed_profile, respx_mock, monkeypatch, cli_runner, retry_after, expected_wait
+) -> None:
+    """RFC 9110 section 10.2.3 permits Retry-After on Service Unavailable."""
+    import json
+
+    from omi_cli import client as client_module
+    from omi_cli.main import app
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    monkeypatch.setattr(client_module, "_jittered_backoff", lambda _: 0.25)
+    headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(503, headers=headers, json={"detail": "Temporarily unavailable"}),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+    result = cli_runner.invoke(app, ["--json", "memory", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == []
+    assert route.call_count == 2
+    assert sleeps == [expected_wait]
+
+
+def test_503_retry_after_exhaustion_preserves_server_error(authed_profile, respx_mock, monkeypatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    route = respx_mock.get("/v1/dev/user/goals").mock(
+        side_effect=[httpx.Response(503, headers={"Retry-After": "3"}, json={"detail": "Maintenance"})] * 4
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(ServerError) as info:
+            client.get("/v1/dev/user/goals")
+    assert route.call_count == 4
+    assert sleeps == [3.0, 3.0, 3.0]
+    assert info.value.exit_code == 3
+    assert info.value.detail == "Maintenance"
+
+
+
 def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None:
     respx_mock.post("/v1/dev/user/conversations").mock(
         side_effect=[

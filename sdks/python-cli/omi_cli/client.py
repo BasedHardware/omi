@@ -146,7 +146,10 @@ class OmiClient:
                     response = self._http.request(method, path, params=cleaned_params, json=json_body)
                     self._maybe_log(method, path, response)
                     if response.status_code >= 500:
-                        raise _RetryableHttp(response, retry_after=None)
+                        raise _RetryableHttp(
+                            response,
+                            retry_after=_parse_retry_after(response.headers.get("Retry-After")),
+                        )
                     if response.status_code == 429:
                         # Surface the structured RateLimitError so callers can show
                         # a useful message; tenacity treats this as retryable.
@@ -234,7 +237,7 @@ class OmiClient:
 class _RetryableHttp(Exception):
     """Internal sentinel: a retryable HTTP response (5xx or 429).
 
-    ``retry_after`` is populated for 429s when the server sent a ``Retry-After``
+    ``retry_after`` is populated when the server sent a numeric ``Retry-After``
     header — the wait function reads it to honor the server's hint.
     """
 
@@ -251,12 +254,11 @@ _jittered_backoff = wait_exponential_jitter(initial=0.5, max=8.0)
 def _retry_wait(retry_state: RetryCallState) -> float:
     """Wait strategy: server-supplied Retry-After when available, jitter otherwise.
 
-    A 429 that includes ``Retry-After`` ends up here as a ``_RetryableHttp``
+    A 429 or 5xx that includes numeric ``Retry-After`` ends up here as a ``_RetryableHttp``
     with ``retry_after`` populated. We honor it but cap to
     :data:`MAX_RETRY_AFTER_SECONDS` so a pathological upstream can't pin the
-    CLI for an unbounded time. For 5xx (no ``Retry-After`` from this backend)
-    and transport errors we fall back to exponential jitter — same behavior
-    the client had before this fix.
+    CLI for an unbounded time. Without a positive numeric hint, and for
+    transport errors, we fall back to exponential jitter.
     """
     outcome = retry_state.outcome
     exc = outcome.exception() if outcome is not None and outcome.failed else None
