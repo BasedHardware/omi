@@ -1079,7 +1079,10 @@ async def transcribe_voice_message(
             route='voice_rest_pcm',
             provider=stt_provider,
             platform=x_app_platform,
-            audio_seconds=duration_ms / 1000,
+            # compute_pcm_duration_ms assumes 16-bit PCM. Compressed encodings
+            # still use that figure for the daily budget (pre-existing); do not
+            # charge provider minutes from a byte-length that is not audio time.
+            audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
             transcript, detected_language = await run_blocking(
