@@ -2247,7 +2247,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: legacy
+              value: shadow
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
