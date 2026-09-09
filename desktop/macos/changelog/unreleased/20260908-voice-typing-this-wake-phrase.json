@@ -1,0 +1,3 @@
+{
+  "change": "Fixed voice typing dropping the first word when a dictation starts with \"this\" — \"type this is a test\" now types \"This is a test\", not \"Is a test\""
+}
