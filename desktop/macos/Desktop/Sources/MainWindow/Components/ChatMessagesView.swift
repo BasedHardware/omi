@@ -402,6 +402,26 @@ enum ChatRedoTarget {
     }
     return nil
   }
+
+  /// The same answer for every row, resolved in one pass. The transcript body
+  /// is re-evaluated on every streamed token, so asking row by row would walk
+  /// the whole history once per rendered row — the cost this file already takes
+  /// a bounded snapshot to avoid. An answer is absent from the map exactly when
+  /// `question(forMessageID:in:)` returns nil for it.
+  static func questionsByAnswerID(in messages: [ChatMessage]) -> [String: String] {
+    var questions: [String: String] = [:]
+    var nearestQuestionAbove: String?
+    for message in messages {
+      switch message.sender {
+      case .user:
+        let question = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        nearestQuestionAbove = question.isEmpty ? nil : question
+      case .ai:
+        if let nearestQuestionAbove { questions[message.id] = nearestQuestionAbove }
+      }
+    }
+    return questions
+  }
 }
 
 /// Reusable chat messages scroll view extracted from ChatPage.
@@ -1168,6 +1188,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // repeated question is not drawn twice. See `ChatRedoDisplayProjection`.
       let displayMessages = ChatRedoDisplayProjection.project(
         AgentLifecycleDisplayProjection.project(visibleMessages))
+      // Resolved against the FULL transcript, so redoing the oldest visible
+      // answer still finds the question above it, but only once per body.
+      let redoQuestions: [String: String] =
+        onRedo == nil ? [:] : ChatRedoTarget.questionsByAnswerID(in: messages)
       // The recap row is part of the row data: it anchors above the message its
       // day begins at, so it scrolls with history like any row. See
       // `ChatDailyRecapRowPlacement` for when a thread deliberately shows none.
@@ -1197,7 +1221,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef,
-          onRedo: redoAction(for: message),
+          onRedo: redoAction(for: message, questions: redoQuestions),
           chatFirstRichBlockContext: chatFirstRichBlockContext
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
@@ -1218,12 +1242,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   /// The Redo closure for one row, or nil when there is nothing to re-ask.
-  /// Resolved against the FULL transcript rather than the mounted window, so
-  /// redoing the oldest visible answer still finds the question above it.
-  private func redoAction(for message: ChatMessage) -> (() -> Void)? {
-    guard let onRedo,
-      let question = ChatRedoTarget.question(forMessageID: message.id, in: messages)
-    else { return nil }
+  private func redoAction(for message: ChatMessage, questions: [String: String]) -> (() -> Void)? {
+    guard let onRedo, let question = questions[message.id] else { return nil }
     return { onRedo(question, message.id) }
   }
 

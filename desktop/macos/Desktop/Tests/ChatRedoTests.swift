@@ -67,6 +67,33 @@ final class ChatRedoTests: XCTestCase {
     XCTAssertNil(ChatRedoTarget.question(forMessageID: "a1", in: messages))
   }
 
+  /// The transcript body resolves every row at once rather than walking the
+  /// history per row (a streamed token re-evaluates that body). The batch has
+  /// to answer exactly what the per-row walk answers, including the rows that
+  /// have no question above them.
+  func testBatchQuestionLookupMatchesThePerRowWalk() {
+    let messages = [
+      msg("a0", "you have a meeting in five minutes", .ai),
+      msg("u1", "first question", .user),
+      msg("a1", "first answer", .ai),
+      msg("a1b", "still the first question's answer", .ai),
+      msg("u2", "   \n ", .user),
+      msg("a2", "answer to a blank question", .ai),
+      msg("u3", "third question", .user),
+      msg("a3", "third answer", .ai),
+    ]
+    let batch = ChatRedoTarget.questionsByAnswerID(in: messages)
+    for message in messages {
+      XCTAssertEqual(
+        batch[message.id],
+        ChatRedoTarget.question(forMessageID: message.id, in: messages),
+        "row \(message.id)")
+    }
+    XCTAssertEqual(batch["a3"], "third question")
+    XCTAssertNil(batch["a0"])
+    XCTAssertNil(batch["a2"])
+  }
+
   // MARK: - Where the redone answer is drawn
 
   /// The transcript is `Q, A`; redoing `A` appends `Q(redo), A2`. What the
