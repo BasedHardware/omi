@@ -1,5 +1,5 @@
-import React, {useCallback, useLayoutEffect, useRef} from 'react';
-import {FlatList, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
+import {FlatList, Platform, StyleSheet, Text, View} from 'react-native';
 import X from 'lucide-react-native/icons/x';
 import type {ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -30,10 +30,88 @@ export function DesktopChat({
 }: Props) {
   const list = useRef<FlatList<ChatMessage>>(null);
   const follow = useRef(true);
+  const userScrolling = useRef(false);
+  const pointerScrolling = useRef(false);
+  const [following, setFollowing] = useState(true);
+  const contentHeight = useRef(0);
+  const scrollToBottom = useCallback(() => {
+    if (follow.current) {
+      list.current?.scrollToOffset({
+        offset: contentHeight.current,
+        animated: false,
+      });
+    }
+  }, []);
+  const stopFollowing = useCallback(() => {
+    follow.current = false;
+    setFollowing(false);
+  }, []);
+  const beginUserScroll = useCallback(() => {
+    userScrolling.current = true;
+    stopFollowing();
+  }, [stopFollowing]);
   useLayoutEffect(() => {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+    const node = list.current?.getScrollableNode() as
+      | (EventTarget & {ownerDocument: EventTarget})
+      | undefined;
+    if (!node) {
+      return;
+    }
+    const pointerDown = (event: Event) => {
+      if (event.target === node) {
+        pointerScrolling.current = true;
+        beginUserScroll();
+      }
+    };
+    const pointerUp = () => {
+      pointerScrolling.current = false;
+      userScrolling.current = false;
+    };
+    const keyDown = (event: Event) => {
+      if (
+        'key' in event &&
+        typeof event.key === 'string' &&
+        [
+          'ArrowUp',
+          'ArrowDown',
+          'PageUp',
+          'PageDown',
+          'Home',
+          'End',
+          ' ',
+        ].includes(event.key)
+      ) {
+        beginUserScroll();
+      }
+    };
+    node.addEventListener('wheel', beginUserScroll, {passive: true});
+    node.addEventListener('touchmove', beginUserScroll, {passive: true});
+    node.addEventListener('pointerdown', pointerDown);
+    node.addEventListener('keydown', keyDown);
+    node.ownerDocument.addEventListener('pointerup', pointerUp);
+    node.ownerDocument.addEventListener('pointercancel', pointerUp);
+    return () => {
+      node.removeEventListener('wheel', beginUserScroll);
+      node.removeEventListener('touchmove', beginUserScroll);
+      node.removeEventListener('pointerdown', pointerDown);
+      node.removeEventListener('keydown', keyDown);
+      node.ownerDocument.removeEventListener('pointerup', pointerUp);
+      node.ownerDocument.removeEventListener('pointercancel', pointerUp);
+    };
+  }, [beginUserScroll]);
+  useLayoutEffect(() => {
+    userScrolling.current = false;
     follow.current = true;
-    list.current?.scrollToEnd({animated: false});
+    setFollowing(true);
   }, [submission]);
+  useLayoutEffect(() => {
+    if (following) {
+      scrollToBottom();
+    }
+  }, [following, submission, scrollToBottom]);
   const fade = useScrollFade();
   const reduceMotion = useReduceMotion();
   const renderItem = useCallback(
@@ -61,27 +139,48 @@ export function DesktopChat({
       </View>
       <ScrollFade visible={fade.visible} style={styles.history}>
         <FlatList
-          maintainVisibleContentPosition={{minIndexForVisible: 1}}
+          maintainVisibleContentPosition={
+            following ? undefined : {minIndexForVisible: 1}
+          }
           ref={list}
           data={messages}
           keyExtractor={item => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.messages}
-          onLayout={fade.onLayout}
+          onLayout={event => {
+            fade.onLayout(event);
+            scrollToBottom();
+          }}
+          onScrollBeginDrag={beginUserScroll}
+          onScrollEndDrag={() => {
+            userScrolling.current = false;
+          }}
+          onMomentumScrollBegin={() => {
+            userScrolling.current = true;
+          }}
+          onMomentumScrollEnd={() => {
+            userScrolling.current = false;
+          }}
           scrollEventThrottle={16}
           onScroll={event => {
             fade.onScroll(event);
             const {contentOffset, contentSize, layoutMeasurement} =
               event.nativeEvent;
-            follow.current =
-              contentOffset.y + layoutMeasurement.height >=
-              contentSize.height - 48;
+            if (userScrolling.current) {
+              const atBottom =
+                contentOffset.y + layoutMeasurement.height >=
+                contentSize.height - 48;
+              follow.current = atBottom;
+              setFollowing(atBottom);
+              if (Platform.OS === 'web' && !pointerScrolling.current) {
+                userScrolling.current = false;
+              }
+            }
           }}
           onContentSizeChange={(width, height) => {
             fade.onContentSizeChange(width, height);
-            if (follow.current) {
-              list.current?.scrollToEnd({animated: false});
-            }
+            contentHeight.current = height;
+            scrollToBottom();
           }}
           ListHeaderComponent={
             hasOlder ? (
@@ -90,7 +189,8 @@ export function DesktopChat({
                 accessibilityLabel="Load earlier messages"
                 disabled={loadingOlder}
                 onPress={() => {
-                  follow.current = false;
+                  userScrolling.current = false;
+                  stopFollowing();
                   onLoadOlder();
                 }}
                 style={styles.earlier}>

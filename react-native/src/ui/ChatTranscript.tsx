@@ -2,6 +2,7 @@ import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
+import {ChatMessageContent} from './ChatMessageContent';
 import {styles} from './styles';
 import {desktopTokens as token} from '../desktop/tokens';
 
@@ -96,12 +97,22 @@ const ChatMessageRow = memo(function ChatMessageRow({
                 ? 'Response failed. Try again.'
                 : 'Response failed.'}
             </Text>
-          ) : (
+          ) : human ? (
             <Text
               selectable
               style={[styles.message, desktop && desktopStyles.text]}>
               {message.text}
             </Text>
+          ) : (
+            <ChatMessageContent
+              text={message.text}
+              style={[styles.message, desktop && desktopStyles.text]}
+              streaming={
+                message.generationOutcome === null &&
+                message.generationId !== undefined
+              }
+              reduceMotion={reduceMotion}
+            />
           )}
         </View>
         {message.generationOutcome === 'cancelled' && (

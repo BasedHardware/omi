@@ -5,12 +5,14 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
   FlatList,
   NativeModules,
+  Platform,
   ScrollView,
   Switch,
   Text,
   TextInput,
 } from 'react-native';
 import {DesktopApp} from './DesktopApp';
+import {DesktopChat} from './DesktopChat';
 import {TaskPagination} from '../ui/TaskPagination';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 
@@ -653,8 +655,8 @@ test('Chat has its own selected destination, keeps one omnibar, and closes to th
 });
 
 test('only an explicit Ask submission resumes following after reading earlier messages', () => {
-  const scrollToEnd = jest
-    .spyOn(FlatList.prototype, 'scrollToEnd')
+  const scrollToOffset = jest
+    .spyOn(FlatList.prototype, 'scrollToOffset')
     .mockImplementation(() => undefined);
   const onSend = jest.fn();
   const onLoadOlderChat = jest.fn();
@@ -688,8 +690,12 @@ test('only an explicit Ask submission resumes following after reading earlier me
           layoutMeasurement: {width: 600, height: 500},
         },
       });
-    act(scrollUp);
-    scrollToEnd.mockClear();
+    act(() => {
+      list().props.onScrollBeginDrag();
+      scrollUp();
+      list().props.onScrollEndDrag();
+    });
+    scrollToOffset.mockClear();
     const props = renderer.root.findByType(DesktopApp)
       .props as React.ComponentProps<typeof DesktopApp>;
     act(() =>
@@ -710,29 +716,52 @@ test('only an explicit Ask submission resumes following after reading earlier me
       ),
     );
     act(() => list().props.onContentSizeChange(600, 2200));
-    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(scrollToOffset).not.toHaveBeenCalled();
     act(() =>
       renderer.root
         .find(node => node.props.accessibilityLabel === 'Load earlier messages')
         .props.onPress(),
     );
     expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+    expect(list().props.maintainVisibleContentPosition).toEqual({
+      minIndexForVisible: 1,
+    });
     act(() => list().props.onContentSizeChange(600, 2400));
-    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(scrollToOffset).not.toHaveBeenCalled();
     act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
     expect(onSend).toHaveBeenCalledTimes(1);
-    expect(scrollToEnd).toHaveBeenCalledWith({animated: false});
-    scrollToEnd.mockClear();
-    act(() => list().props.onContentSizeChange(600, 2600));
-    expect(scrollToEnd).toHaveBeenCalledTimes(1);
+    expect(list().props.maintainVisibleContentPosition).toBeUndefined();
+    expect(scrollToOffset).toHaveBeenCalledWith({
+      offset: 2400,
+      animated: false,
+    });
+    scrollToOffset.mockClear();
     act(scrollUp);
-    scrollToEnd.mockClear();
+    act(() => list().props.onContentSizeChange(600, 2600));
+    expect(scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 2600,
+      animated: false,
+    });
+    act(scrollUp);
+    act(() => list().props.onContentSizeChange(600, 3200));
+    expect(scrollToOffset).toHaveBeenLastCalledWith({
+      offset: 3200,
+      animated: false,
+    });
+    act(() => list().props.onLayout({nativeEvent: {layout: {height: 400}}}));
+    expect(scrollToOffset).toHaveBeenCalledTimes(3);
+    act(() => {
+      list().props.onScrollBeginDrag();
+      scrollUp();
+      list().props.onScrollEndDrag();
+    });
+    scrollToOffset.mockClear();
     act(() => list().props.onContentSizeChange(600, 2800));
-    expect(scrollToEnd).not.toHaveBeenCalled();
+    expect(scrollToOffset).not.toHaveBeenCalled();
     act(() => renderer.unmount());
     renderers.splice(renderers.indexOf(renderer), 1);
   } finally {
-    scrollToEnd.mockRestore();
+    scrollToOffset.mockRestore();
   }
 });
 
@@ -1851,4 +1880,91 @@ test('Settings does not inherit unrelated chat and history failures', async () =
   expect(renderedText(renderer)).not.toContain(
     'This request cannot be completed.',
   );
+});
+
+test('web wheel and scrollbar events pause following through the actual scroll node and retire listeners', () => {
+  const previousOS = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  const node = Object.assign(new EventTarget(), {
+    ownerDocument: new EventTarget(),
+  });
+  const remove = jest.spyOn(node, 'removeEventListener');
+  const documentRemove = jest.spyOn(node.ownerDocument, 'removeEventListener');
+  const getNode = jest
+    .spyOn(FlatList.prototype, 'getScrollableNode')
+    .mockReturnValue(node);
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  const anchorAtScroll: unknown[] = [];
+  const scroll = jest
+    .spyOn(FlatList.prototype, 'scrollToOffset')
+    .mockImplementation(() => {
+      if (tree) {
+        anchorAtScroll.push(
+          tree.root.findByType(FlatList).props.maintainVisibleContentPosition,
+        );
+      }
+    });
+  const props = {
+    submission: 0,
+    messages: [],
+    busy: false,
+    error: null,
+    hasOlder: false,
+    loadingOlder: false,
+    onLoadOlder: jest.fn(),
+    onClose: jest.fn(),
+  };
+  try {
+    act(() => {
+      tree = ReactTestRenderer.create(<DesktopChat {...props} />);
+    });
+    const list = () => tree.root.findByType(FlatList);
+    const move = (y: number) =>
+      list().props.onScroll({
+        nativeEvent: {
+          contentOffset: {x: 0, y},
+          contentSize: {width: 600, height: 2000},
+          layoutMeasurement: {width: 600, height: 500},
+        },
+      });
+    act(() => list().props.onContentSizeChange(600, 2000));
+    scroll.mockClear();
+    act(() => {
+      node.dispatchEvent(new Event('wheel'));
+      move(1000);
+    });
+    act(() => list().props.onContentSizeChange(600, 2200));
+    expect(scroll).not.toHaveBeenCalled();
+    anchorAtScroll.length = 0;
+    act(() => tree.update(<DesktopChat {...props} submission={1} />));
+    expect(scroll).toHaveBeenCalled();
+    expect(anchorAtScroll).toEqual([undefined]);
+    scroll.mockClear();
+    act(() => {
+      node.dispatchEvent(new Event('pointerdown'));
+      move(1500);
+      move(500);
+      node.ownerDocument.dispatchEvent(new Event('pointerup'));
+    });
+    act(() => list().props.onContentSizeChange(600, 2400));
+    expect(scroll).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+    expect(remove.mock.calls.map(call => call[0])).toEqual([
+      'wheel',
+      'touchmove',
+      'pointerdown',
+      'keydown',
+    ]);
+    expect(documentRemove.mock.calls.map(call => call[0])).toEqual([
+      'pointerup',
+      'pointercancel',
+    ]);
+  } finally {
+    getNode.mockRestore();
+    scroll.mockRestore();
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
+  }
 });
