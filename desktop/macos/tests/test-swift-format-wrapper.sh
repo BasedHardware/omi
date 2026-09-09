@@ -176,10 +176,18 @@ wait "$HOLDER_PID" 2>/dev/null || true
 # Behavioral: a lock whose holder died is reclaimed rather than waited out
 # forever. Reuses the just-killed pid, which is guaranteed dead. The bootstrap
 # would go on to a real build, so it is killed as soon as it reports the
-# reclaim — the assertion is on the reclaim, not on the build.
+# reclaim — the assertion is on the reclaim, not on the build. The clone URL
+# points at an empty local repository: the pinned-source clone this fixture
+# used to start takes minutes on a hosted runner, and bash defers the
+# wrapper's TERM trap until the foreground clone exits, so killing only the
+# wrapper waited out the whole download (641s locally, ~6 min of the CI
+# launcher step). The tree kill below covers the same trap.
 echo "$HOLDER_PID" > "$HELD_LOCK/owner"
+RECLAIM_FIXTURE_REPO="$LOCK_TEST_CACHE/empty-repo.git"
+git init --quiet --bare "$RECLAIM_FIXTURE_REPO"
 RECLAIM_LOG="$LOCK_TEST_CACHE/reclaim.log"
-SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_LOCK_TIMEOUT=30 \
+SWIFT_FORMAT_CACHE_DIR="$LOCK_TEST_CACHE" SWIFT_FORMAT_REPO_URL="file://$RECLAIM_FIXTURE_REPO" \
+  SWIFT_FORMAT_LOCK_TIMEOUT=30 \
   "$WRAPPER" bootstrap >"$RECLAIM_LOG" 2>&1 &
 BOOT_PID=$!
 for _ in $(seq 1 20); do
@@ -188,9 +196,8 @@ for _ in $(seq 1 20); do
 done
 kill "$BOOT_PID" 2>/dev/null || true
 # Bash defers the wrapper's TERM trap until its foreground child exits, so
-# killing only the wrapper waits out the whole swift-format clone it is
-# running (measured 641s locally, ~7 min of the CI launcher step): kill the
-# child tree too, then reap.
+# killing only the wrapper waits out whatever the bootstrap is running: kill
+# the child tree too, then reap.
 pkill -TERM -P "$BOOT_PID" 2>/dev/null || true
 sleep 1
 pkill -KILL -P "$BOOT_PID" 2>/dev/null || true
