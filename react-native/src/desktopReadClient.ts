@@ -291,6 +291,29 @@ export function appDisplayAttribution(app: {
     .join(' · ');
 }
 
+export function appRatingCopy(
+  ratingAvg: number | null | undefined,
+  ratingCount: number | null | undefined,
+): string | null {
+  if (
+    ratingAvg === undefined ||
+    ratingAvg === null ||
+    !Number.isFinite(ratingAvg)
+  ) {
+    return null;
+  }
+  const rating = ratingAvg.toFixed(1);
+  if (
+    ratingCount === undefined ||
+    ratingCount === null ||
+    !Number.isSafeInteger(ratingCount) ||
+    ratingCount < 0
+  ) {
+    return rating;
+  }
+  return `${rating} (${ratingCount})`;
+}
+
 export function chatAttachmentDisplayName(name: string): string {
   return accountFieldCopy(name, 'Attachment name unavailable');
 }

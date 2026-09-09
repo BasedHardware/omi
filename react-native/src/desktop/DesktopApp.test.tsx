@@ -2032,6 +2032,68 @@ test('Apps gallery keeps GET private instead of a public-looking catalogue', asy
   expect(tree).not.toContain('Official');
 });
 
+test('Apps gallery keeps GET ratings instead of a scoreless catalogue', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockResolvedValueOnce({
+    apps: [
+      {
+        id: 'catalog-app-rated',
+        name: 'Owned app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        ratingAvg: 4.5,
+        ratingCount: 12,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+      {
+        id: 'catalog-app-unrated',
+        name: 'Catalog fixture app',
+        description: '',
+        category: '',
+        author: '',
+        enabled: false,
+        uid: null,
+        private: false,
+        official: false,
+        installs: 0,
+        ratingAvg: null,
+        ratingCount: null,
+        hasExternalIntegration: false,
+        connectedAccounts: [],
+      },
+    ],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+    ownerError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Owned app');
+  expect(
+    renderer.root.findAll(node => node.props.children === '4.5 (12)').length,
+  ).toBeGreaterThan(0);
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).not.toContain('0.0');
+  expect(tree).not.toContain('Official');
+});
+
 test('Settings persists a plane switch before reloading the workspace', async () => {
   const onWorkspaceReload = jest.fn();
   const {setDesktopPreference} = jest.requireMock(

@@ -20,6 +20,8 @@ export type CloudApp = {
   private: boolean;
   official: boolean;
   installs: number;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
   hasExternalIntegration: boolean;
   connectedAccounts: string[];
 };
@@ -188,6 +190,17 @@ export function parseCloudApp(value: unknown, label: string): CloudApp {
     private: record.private === true,
     official: record.official === true,
     installs: optionalInteger(record.installs) ?? 0,
+    ratingAvg:
+      typeof record.rating_avg === 'number' &&
+      Number.isFinite(record.rating_avg)
+        ? record.rating_avg
+        : null,
+    ratingCount:
+      typeof record.rating_count === 'number' &&
+      Number.isSafeInteger(record.rating_count) &&
+      record.rating_count >= 0
+        ? record.rating_count
+        : null,
     hasExternalIntegration:
       record.external_integration !== null &&
       record.external_integration !== undefined,

@@ -17,6 +17,7 @@ import {
   appDisplaySource,
   appDisplayAttribution,
   appDisplayName,
+  appRatingCopy,
   deviceDisplayName,
   accountFieldCopy,
   connectionIdentityCopy,
@@ -965,6 +966,16 @@ test('empty app names stay visible instead of a blank title', () => {
   expect(appDisplayName(' \t\n')).toBe('App name unavailable');
   expect(appDisplayName('\u00A0')).toBe('App name unavailable');
   expect(appDisplayName('  Owned app  ')).toBe('Owned app');
+});
+
+test('app rating copy keeps GET scores instead of inventing zeros', () => {
+  expect(appRatingCopy(4.5, 12)).toBe('4.5 (12)');
+  expect(appRatingCopy(4, 0)).toBe('4.0 (0)');
+  expect(appRatingCopy(4.5, null)).toBe('4.5');
+  expect(appRatingCopy(null, 12)).toBe(null);
+  expect(appRatingCopy(undefined, undefined)).toBe(null);
+  expect(appRatingCopy(Number.NaN, 12)).toBe(null);
+  expect(appRatingCopy(4.5, -1)).toBe('4.5');
 });
 
 test('empty device names stay visible instead of a blank row', () => {
@@ -2143,6 +2154,8 @@ test('parses catalogue, enabled, owned, and service app records without inventin
       author: 'fixture-author',
       enabled: false,
       uid: 'user-1',
+      rating_avg: 4.5,
+      rating_count: 12,
       external_integration: {webhook_url: 'https://example.test/hook'},
       connected_accounts: ['calendar'],
     },
@@ -2154,6 +2167,20 @@ test('parses catalogue, enabled, owned, and service app records without inventin
       hasExternalIntegration: true,
       connectedAccounts: ['calendar'],
       uid: 'user-1',
+      ratingAvg: 4.5,
+      ratingCount: 12,
+    }),
+  );
+  expect(
+    parseCloudApp(
+      {id: 'catalog-app-2', name: 'Unrated app'},
+      'App 1',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      ratingAvg: null,
+      ratingCount: null,
+      installs: 0,
     }),
   );
   expect(parseEnabledAppIds(['catalog-app-1'], 'Enabled')).toEqual([

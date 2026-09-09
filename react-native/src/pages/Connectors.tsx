@@ -26,6 +26,7 @@ import {
   desktopReadErrorCopy,
   appCategoryCopy,
   appDisplayName,
+  appRatingCopy,
   visibleDisplayText,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
@@ -39,6 +40,7 @@ function appRowMeta(app: CloudApp, installKnown: boolean): string {
     category !== '' ? category : null,
     author !== '' ? author : null,
     app.private ? 'Private' : null,
+    appRatingCopy(app.ratingAvg, app.ratingCount),
     app.connectedAccounts.length > 0
       ? 'Connected'
       : installKnown

@@ -12,6 +12,7 @@ import {
   appDisplayName,
   appDisplaySource,
   appDisplayAttribution,
+  appRatingCopy,
   desktopAppsUnavailableCopy,
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
@@ -301,6 +302,7 @@ type AppTileModel = {
   status: string;
   enabled: boolean;
   private: boolean;
+  rating: string | null;
 };
 
 function cloudAppStatus(app: CloudApp, installKnown: boolean): string {
@@ -337,6 +339,7 @@ function tilesFromCatalog(
       status: cloudAppStatus(app, installKnown),
       enabled: app.enabled,
       private: app.private,
+      rating: appRatingCopy(app.ratingAvg, app.ratingCount),
     };
   });
 }
@@ -368,6 +371,9 @@ function AppTile({
         ) : null}
         {item.source !== '' && item.source !== item.description ? (
           <Text style={styles.rowMeta}>{item.source}</Text>
+        ) : null}
+        {item.rating !== null ? (
+          <Text style={styles.rowMeta}>{item.rating}</Text>
         ) : null}
         {item.status.length > 0 ? (
           <Text style={styles.appStatus}>{item.status}</Text>

@@ -1231,3 +1231,49 @@ test('Connectors rows keep GET private instead of a public-looking catalogue', a
   expect(tree).toContain('Catalog fixture app');
   expect(tree).not.toContain('Official');
 });
+
+test('Connectors rows keep GET ratings instead of a scoreless catalogue', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-rated',
+            name: 'Owned app',
+            rating_avg: 4.5,
+            rating_count: 12,
+          },
+          {
+            id: 'catalog-app-unrated',
+            name: 'Catalog fixture app',
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([]),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('4.5 (12)');
+  expect(tree).toContain('Catalog fixture app');
+  expect(tree).not.toContain('0.0');
+  expect(tree).not.toContain('Official');
+});
