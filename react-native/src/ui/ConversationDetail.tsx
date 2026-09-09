@@ -5,6 +5,7 @@ import {
   conversationDisplaySummary,
   conversationDisplayTitle,
   conversationStatusCopy,
+  visibleDisplayText,
   type ConversationProjection,
 } from '../desktopReadClient';
 import {RecordingTranscript} from './RecordingTranscript';
@@ -208,6 +209,20 @@ function LegacyConversationBody({
     );
   }
   const detail = result.value;
+  const transcriptSegments =
+    detail.transcript.status === 'loaded'
+      ? detail.transcript.segments.flatMap(segment => {
+          const text = visibleDisplayText(segment.text);
+          if (text === '') {
+            return [];
+          }
+          const speaker =
+            segment.speaker === null
+              ? null
+              : visibleDisplayText(segment.speaker);
+          return [{...segment, text, speaker: speaker === '' ? null : speaker}];
+        })
+      : [];
   return (
     <>
       <Text
@@ -250,12 +265,12 @@ function LegacyConversationBody({
             ? 'This conversation is locked. Transcript unavailable.'
             : 'Transcript unavailable for this conversation.'}
         </Text>
-      ) : detail.transcript.segments.length === 0 ? (
+      ) : transcriptSegments.length === 0 ? (
         <Text style={[styles.conversationDetailSummary, ink]}>
           The transcript is empty.
         </Text>
       ) : (
-        detail.transcript.segments.map((segment, index) => (
+        transcriptSegments.map((segment, index) => (
           <Text
             key={index}
             selectable

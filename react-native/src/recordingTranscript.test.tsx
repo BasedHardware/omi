@@ -101,6 +101,16 @@ test('a completed NEXT LINE-only transcript says empty instead of a blank body',
   expect(textOf(renderer)).not.toContain('\u0085');
 });
 
+test('a completed NEXT LINE-prefixed transcript keeps later speech', async () => {
+  mockRequest.mockResolvedValue(
+    response('session-one', 'completed', '\u0085Recorded words'),
+  );
+  const renderer = await render('session-one');
+  expect(textOf(renderer)).toContain('Recorded words');
+  expect(textOf(renderer)).not.toContain('\u0085');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
+});
+
 test.each(['queued', 'running'])(
   'shows %s state truthfully and resumes a completed result',
   async state => {

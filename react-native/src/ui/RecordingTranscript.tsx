@@ -17,6 +17,10 @@ export function RecordingTranscript({
 }) {
   const {result, reload} = useRecordingTranscript(sessionId, revision);
   const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
+  const completedText =
+    result.status === 'loaded' && result.value.state === 'completed'
+      ? visibleDisplayText(result.value.text ?? '')
+      : null;
   return (
     <View style={styles.conversationDetailFields}>
       <Text accessibilityRole="header" style={[styles.resultTitle, ink]}>
@@ -48,9 +52,7 @@ export function RecordingTranscript({
             </Text>
           )}
           <Text selectable style={[styles.conversationTranscriptText, ink]}>
-            {visibleDisplayText(result.value.text) === ''
-              ? 'The transcript is empty.'
-              : result.value.text}
+            {completedText === '' ? 'The transcript is empty.' : completedText}
           </Text>
         </>
       ) : (

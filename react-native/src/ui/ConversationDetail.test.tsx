@@ -172,6 +172,83 @@ test('legacy empty unlocked transcripts stay empty instead of unavailable', () =
   ).toContain('The transcript is empty.');
 });
 
+test('legacy NEXT LINE-only segments stay empty instead of blank speaker lines', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: '\u0085',
+              speaker: '\u0085',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('The transcript is empty.');
+  expect(copy).not.toContain('\u0085');
+  expect(copy).not.toContain('Speaker');
+});
+
+test('legacy NEXT LINE-prefixed segments keep later speech', () => {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      conversationId: 'old-1',
+      value: {
+        id: 'old-1',
+        title: 'A real conversation',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {
+          status: 'loaded',
+          segments: [
+            {
+              text: '\u0085Recorded words',
+              speaker: '\u0085SPEAKER_00',
+              isUser: false,
+              start: 0,
+              end: 1,
+            },
+          ],
+        },
+      },
+    },
+    reload: jest.fn(),
+  });
+  const copy = text(
+    render({
+      apiContract: 'omi',
+      conversation: {...conversation, id: 'old-1'},
+    }),
+  );
+  expect(copy).toContain('Recorded words');
+  expect(copy).toContain('Speaker 1');
+  expect(copy).not.toContain('\u0085');
+  expect(copy).not.toContain('The transcript is empty.');
+});
+
 test('legacy load failure offers retry without inventing an empty transcript', () => {
   const reload = jest.fn();
   mockLegacy.mockReturnValue({
