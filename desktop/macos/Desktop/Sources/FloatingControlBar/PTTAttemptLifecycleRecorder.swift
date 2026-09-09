@@ -45,6 +45,30 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// What a bounded turn-audio duration collapses into for remote querying on
+  /// the product event (`floating_bar_ptt_ended`); the lifecycle event keeps
+  /// its rounded seconds and does not use this bucket.
+  enum AudioSecondsBucket: String {
+    case lt2 = "lt_2"
+    case lt5 = "lt_5"
+    case lt10 = "lt_10"
+    case lt20 = "lt_20"
+    case lt60 = "lt_60"
+    case ge60 = "ge_60"
+
+    /// Nil when the site genuinely does not know the turn's audio length, so
+    /// the property is omitted rather than reporting a fake bucket.
+    static func bucket(fromSeconds seconds: Double?) -> AudioSecondsBucket? {
+      guard let seconds else { return nil }
+      if seconds < 2 { return .lt2 }
+      if seconds < 5 { return .lt5 }
+      if seconds < 10 { return .lt10 }
+      if seconds < 20 { return .lt20 }
+      if seconds < 60 { return .lt60 }
+      return .ge60
+    }
+  }
+
   /// Energy class of the first received audio chunks — distinguishes a capture
   /// that delivers real samples from one that delivers only zeros.
   enum FirstChunksEnergyBucket: String {
@@ -124,6 +148,18 @@ final class PTTAttemptLifecycleRecorder {
     case cancelled
   }
 
+  /// What the user used the PTT turn for, classified when the turn terminates.
+  /// Intent is only knowable once a route resolved it — a dictation is claimed
+  /// mid-hold (or by the closing decode) and closes through the voice-typing
+  /// pipeline; a question commits to an answer path. Cancels, too-short taps,
+  /// and silent discards happen before any intent exists and stay `unknown`
+  /// rather than being forced into a bucket they cannot support.
+  enum TurnKind: String {
+    case dictation
+    case question
+    case unknown
+  }
+
   enum RecoveryAction: String {
     case none
     case captureRebuild = "capture_rebuild"
@@ -164,6 +200,10 @@ final class PTTAttemptLifecycleRecorder {
     var msToFirstUsableFrameBucket: MillisecondsBucket
     var firstChunksEnergyBucket: FirstChunksEnergyBucket
     var turnDisposition: TurnDisposition
+    /// Intent classification at termination (dictation / question / unknown).
+    /// Defaulted so legacy direct `Snapshot` constructions — tests — keep
+    /// compiling while every production terminate site passes it explicitly.
+    var turnKind: TurnKind = .unknown
     var inputRouteClass: InputRouteClass
     var inputRouteSource: InputRouteSource
     var routeChangedDuringAttempt: Bool
@@ -203,6 +243,7 @@ final class PTTAttemptLifecycleRecorder {
         "ms_to_first_usable_frame_bucket": msToFirstUsableFrameBucket.rawValue,
         "first_chunks_energy_bucket": firstChunksEnergyBucket.rawValue,
         "turn_disposition": turnDisposition.rawValue,
+        "turn_kind": turnKind.rawValue,
         "input_route_class": inputRouteClass.rawValue,
         "input_route_source": inputRouteSource.rawValue,
         "route_changed_during_attempt": routeChangedDuringAttempt,
@@ -408,6 +449,7 @@ final class PTTAttemptLifecycleRecorder {
   @discardableResult
   func terminate(
     disposition: TurnDisposition,
+    turnKind: TurnKind = .unknown,
     source: String,
     peak: Int?,
     rms: Int?,
@@ -465,6 +507,7 @@ final class PTTAttemptLifecycleRecorder {
       msToFirstUsableFrameBucket: MillisecondsBucket.bucket(fromMs: msToFirstUsable),
       firstChunksEnergyBucket: firstEnergy,
       turnDisposition: disposition,
+      turnKind: turnKind,
       inputRouteClass: inputRouteClass,
       inputRouteSource: inputRouteSource,
       routeChangedDuringAttempt: routeChangedDuringAttempt,
