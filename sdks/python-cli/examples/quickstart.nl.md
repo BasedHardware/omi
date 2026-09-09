@@ -1,270 +1,256 @@
 # omi-cli Snelstartgids (Dutch Quickstart)
 
-Praktische naslaggids voor de officiële Omi-opdrachtregelinterface (`omi-cli`).
-Dit document behandelt installatie, authenticatie, kernopdrachten voor gegevensbeheer en automatiseringstechnieken voor scripts en autonome agents.
+> Praktische handleiding om rechtstreeks vanuit uw terminal met Omi te communiceren — ontworpen voor ontwikkelaars en autonome AI-agents.
+
+`omi-cli` is de officiële opdrachtregelinterface voor de ontwikkelaars-API van [Omi](https://omi.me). Het stelt u in staat om de vier kernbronnen van het systeem op een gestructureerde en automatiseerbare manier te beheren: herinneringen (memories), gesprekken (conversations), actiepunten (action items) en doelen (goals).
+
+* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
+* **Officiële Documentatie:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
+* **Broncode:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
 
 ---
 
-## Overzicht en Uitvoerbaar Bestand
+## 1. Installatie
 
-* **PyPI-pakketnaam:** `omi-cli`
-* **Uitvoerbare opdracht:** `omi`
-
-Om verwarring tijdens installatie en gebruik te voorkomen:
+Het gebruik van `pipx` wordt aanbevolen om afhankelijkheidsconflicten te vermijden en de CLI in een geïsoleerde virtuele omgeving uit te voeren:
 
 ```bash
-# Installeren via de pakketnaam:
+# Aanbevolen: geïsoleerde installatie met pipx
 pipx install omi-cli
 
-# Uitvoeren met het verkorte commando:
+# Of via standaard pip
+pip install omi-cli
+```
+
+> **Let op: Pakketnaam vs. Opdrachtnaam**
+> * De pakketnaam op PyPI is **`omi-cli`** (de naam `omi` is een ander, niet-gerelateerd pakket).
+> * Het uitvoerbare commando in uw terminal is simpelweg **`omi`**.
+
+Controleer of de installatie is geslaagd met de versie en het helpmenu:
+
+```bash
+omi --version
 omi --help
 ```
 
 ---
 
-## Installatie
+## 2. Authenticatie (Authentication)
 
-Het gebruik van `pipx` wordt aanbevolen om afhankelijkheidsconflicten te vermijden en de CLI in een geïsoleerde virtuele omgeving uit te voeren.
+`omi-cli` ondersteunt twee primaire authenticatiemethoden:
 
-### Aanbevolen Methode (`pipx`)
+| Methode | Geschikt voor | Voorbeeldopdracht |
+| :--- | :--- | :--- |
+| **API-sleutel (`omi_dev_*`)** | Automatiseringen, CI/CD, headless servers, AI-agents | `omi auth login --api-key ...` of `OMI_API_KEY` |
+| **Browser OAuth (Google/Apple)** | Lokale workstations en ontwikkelaars | `omi auth login --browser` (Google) / `--provider apple` |
+
+### Interactief Inloggen
+Wanneer uitgevoerd zonder extra argumenten, vraagt de wizard welke methode u wilt gebruiken:
 
 ```bash
-pipx install omi-cli
+omi auth login
+# 1) Browser — Inloggen via Google in de webbrowser (gebruik `--provider apple` voor Apple)
+# 2) API key — Plak uw API-sleutel gegenereerd op app.omi.me
 ```
 
-Upgraden naar de nieuwste versie:
-
+### Direct Inloggen via Browser
 ```bash
-pipx upgrade omi-cli
-```
-
-### Alternatieve Methode (`pip`)
-
-```bash
-pip install --user omi-cli
-```
-
-Controleer of de installatie is geslaagd:
-
-```bash
-omi --version
-```
-
----
-
-## Authenticatie
-
-De CLI ondersteunt drie primaire authenticatiemethoden: interactief inloggen via de browser, rechtstreekse API-sleutelinvoer en omgevingsvariabelen.
-
-### 1. Interactief Inloggen via Browser
-
-Ideaal voor lokale ontwikkelomgevingen met een grafische interface:
-
-```bash
+# Standaard inloggen via Google
 omi auth login --browser
+
+# Alternatief via Apple
+omi auth login --browser --provider apple
 ```
 
-Dit opent een authenticatiepagina in uw webbrowser en bewaart het token veilig op uw lokale systeem.
-
-### 2. Inloggen met API-sleutel (Headless / Geautomatiseerd)
-
-Geschikt voor externe servers, SSH-sessies of CI/CD-pipelines:
+### Gebruik van een Ontwikkelaars-API-sleutel
+Genereer uw sleutel in het [app.omi.me](https://app.omi.me)-dashboard onder **Developer → API Keys**:
 
 ```bash
+# Permanent opslaan in het lokale profiel (interactief invoeren om geschiedenis te beschermen)
 omi auth login --api-key
-```
 
-De CLI zal u vragen de API-sleutel in te voeren die is gegenereerd in het Omi-ontwikkelaarsdashboard.
-
-### 3. Omgevingsvariabele
-
-Voor Docker-containers of geautomatiseerde pipelines zonder lokale bestandsopslag:
-
-```bash
-export OMI_API_KEY="uw-geheime-api-sleutel"
+# Of instellen als omgevingsvariabele (ideaal voor containers en CI/CD)
+# Let op: als het lokale profiel al een opgeslagen sleutel heeft, voer dan eerst `omi auth logout` uit.
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 ```
 
 ### Authenticatiestatus Controleren
-
-* **Offline controle (lokaal aanwezig token):**
-  ```bash
-  omi auth status
-  ```
-* **Online controle (realtime validatie op de server):**
-  ```bash
-  omi auth whoami
-  ```
-
-Lokale sessie beëindigen:
+* `omi auth status`: Toont het actieve lokale profiel en de gemaskeerde sleutel; de vervaldatum wordt alleen weergegeven voor OAuth-profielen (werkt offline).
+* `omi auth whoami`: Stuurt een verificatieverzoek naar de Omi-server om de geldigheid in realtime te bevestigen (vereist netwerkverbinding).
 
 ```bash
+omi auth status
+omi auth whoami
+```
+
+Sessie beëindigen:
+```bash
 omi auth logout
+# Als OMI_API_KEY in de omgeving is ingesteld, verwijder deze dan ook uit de sessie (Bash/Zsh: `unset OMI_API_KEY`).
 ```
 
 ---
 
-## Primaire Workflows
+## 3. Primaire Commando's
 
-### Herinneringen (`omi memory`)
-
-Herinneringen zijn atomaire contextitems die door Omi zijn geregistreerd.
+### Herinneringen (Memories)
+Contextuele feiten en notities vastgelegd door Omi:
 
 ```bash
-# Recente herinneringen weergeven
-omi memory list --limit 10
+# Opgeslagen herinneringen weergeven
+omi memory list
 
-# Handmatig een nieuwe herinnering toevoegen
-omi memory create --text "Projectvergadering gepland voor dinsdag om 10:00 uur met het technische team."
+# Nieuwe herinnering aanmaken
+omi memory create "Geeft de voorkeur aan beknopte technische antwoorden met Python-voorbeelden" --category work
 
-# Semantisch zoeken in herinneringen
-omi memory search "projectvergadering"
+# Details van een specifieke herinnering ophalen
+omi memory get <MEMORY_ID>
 ```
 
-### Gesprekken (`omi conversation`)
-
-Beheer van opgenomen gesprekken en audiotranscripties.
+### Gesprekken (Conversations)
+Audio-opnamen en teksttranscripties vastgelegd door Omi-apparaten:
 
 ```bash
-# Gesprekken weergeven
+# De 5 meest recente gesprekken weergeven
 omi conversation list --limit 5
 
-# Details van een specifiek gesprek ophalen
-omi conversation get conv_123456
-
-# Volledig transcript exporteren in Markdown-formaat
-omi conversation export conv_123456 --format markdown > transcript.md
+# Gespreksdetails en volledige teksttranscriptie ophalen
+omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
-### Actiepunten en Taken (`omi action-item`)
-
-Taken die automatisch uit gesprekken zijn gedestilleerd.
+### Actiepunten en Taken (Action Items)
+Taken die automatisch uit gesprekken zijn gedestilleerd:
 
 ```bash
 # Openstaande actiepunten weergeven
-omi action-item list --status pending
+omi action-item list --open
 
-# Een actiepunt markeren als voltooid
-omi action-item update act_789012 --completed
+# Een taak voltooien
+omi action-item complete <ACTION_ITEM_ID>
 ```
 
-### Doelen (`omi goal`)
-
-Beheer van lange- en kortetermijndoelstellingen.
+### Doelen (Goals)
+Voortgangsstatistieken en langetermijndoelen:
 
 ```bash
 # Actieve doelen weergeven
 omi goal list
 
-# Nieuw doel aanmaken
-omi goal create --title "Meertalige documentatie voltooien" --horizon month
-
-# Voortgang van een doel bijwerken
-omi goal update goal_345678 --progress 75
+# Nieuw kwantitatief doel aanmaken
+omi goal create "Drink dagelijks 2L water" --type numeric --target 2 --unit liters
 ```
 
 ---
 
-## Gestructureerde Automatisering (`--json` & `jq`)
+## 4. Gestructureerde Automatisering en JSON-uitvoer (`--json`)
 
-Alle `omi`-commando's accepteren de globale `--json`-optie, waardoor de uitvoer direct kan worden verwerkt door scripts en gegevenspijplijnen.
-
-### Gegevens Filteren en Extraheren met `jq`
+`omi-cli` biedt eersteklas ondersteuning voor datapijplijnen. Door de globale optie `--json` mee te geven, wordt uitvoer als geldige JSON geretourneerd:
 
 ```bash
-# Inhoud van alle herinneringen extraheren
-omi --json memory list --limit 20 | jq -r '.[].content'
+# Herinneringen in JSON weergeven en velden extraheren met jq
+omi --json memory list | jq '.[] | {id, content, category}'
 
-# Niet-voltooide actiepunten filteren
-omi --json action-item list | jq '.[] | select(.completed == false) | {id: .id, description: .description}'
+# Titels van recente gesprekken extraheren
+omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
+
+# Openstaande taken als ruwe JSON bekijken
+omi --json action-item list --open | jq '.'
 ```
+
+> **Belangrijke Syntaxisregel:**
+> `--json` is een **globale optie** en moet **voor** het subcommando worden geplaatst:
+> * Juist: `omi --json memory list`
+> * Onjuist: `omi memory list --json`
 
 ---
 
-## Exitcodes Tabel
+## 5. Afsluitcodes (Exit Codes)
 
-De CLI hanteert consistente afsluitcodes zodat scripts fouten nauwkeurig kunnen afhandelen:
+Betrouwbare foutafhandeling voor shellscripts en CI/CD-pipelines:
 
-| Code | Betekenis | Typische Oorzaak |
+| Exitcode | Betekenis | Beschrijving |
 | :---: | :--- | :--- |
-| `0` | **Succes** | Bewerking succesvol voltooid. |
-| `1` | **Algemene Fout** | Onverwerkte interne uitzondering of onverwachte storing. |
-| `2` | **Argumentfout** | Ongeldige opties, ontbrekende parameters of syntaxisprobleem. |
-| `3` | **Niet Geauthenticeerd** | Token ontbreekt, is verlopen of API-sleutel is ongeldig. |
-| `4` | **Niet Gevonden** | Gevraagde bron (herinnering, gesprek, doel) bestaat niet. |
-| `5` | **Netwerkfout** | Verbindingsstoring of time-out van de server. |
+| `0` | **Succes (Success)** | Bewerking succesvol voltooid. |
+| `1` | **Gebruiksfout (Validatiefout)** | Ongeldige gegevenswaarden of applicatievalidatiefout; Click-parsersyntaxfouten retourneren code `2`. |
+| `2` | **Authenticatiefout / CLI-syntaxis** | Niet geauthenticeerd, verlopen token of ongeldige Click-parseropties. |
+| `3` | **Server- / Netwerkfout (Server Error)** | HTTP 5xx-respons, time-out of server onbereikbaar. |
+| `4` | **Snelheidslimiet (Rate Limited)** | HTTP 429-respons — verzoek geblokkeerd door rate limit. |
+| `5` | **Niet Gevonden (Not Found)** | HTTP 404-respons — opgevraagde bron bestaat niet. |
 
 ---
 
-## Platformonafhankelijke Scripts
+## 6. Voorbeelden per Shell-omgeving
 
-### Bash / Zsh (Linux & macOS)
-
+### Bash / Zsh (Linux / macOS)
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+# API-sleutel instellen in sessie
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 
-echo "Omi-authenticatie controleren..."
-if ! omi auth status > /dev/null 2>&1; then
-    echo "Fout: Authenticatie vereist. Voer 'omi auth login' uit." >&2
-    exit 3
+# Commando uitvoeren en afsluitcode controleren
+omi --json memory list --limit 10
+if [ $? -ne 0 ]; then
+    echo "Fout bij het ophalen van gebruikersherinneringen." >&2
 fi
-
-echo "Nieuwe notitie opslaan..."
-omi memory create --text "Automatische systeemcontrole succesvol voltooid."
 ```
 
 ### PowerShell (Windows)
-
 ```powershell
-Write-Host "Omi-authenticatie controleren..."
-omi auth status
+# Omgevingsvariabele instellen in PowerShell
+$env:OMI_API_KEY = "omi_dev_your_actual_key_here"
+
+# JSON-uitvoer direct converteren naar PowerShell-objecten
+$memories = omi --json memory list | ConvertFrom-Json
+$memories | Select-Object id, content, category
+
+# Foutcontrole via $LASTEXITCODE
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Authenticatie ontbreekt. Voer 'omi auth login' uit."
-    exit $LASTEXITCODE
-}
-
-Write-Host "Doelen ophalen..."
-omi --json goal list | ConvertFrom-Json | ForEach-Object {
-    [PSCustomObject]@{
-        Id = $_.id
-        Titel = $_.title
-        Voortgang = "$($_.progress)%"
-    }
+    Write-Error "Omi-opdracht mislukt met code $LASTEXITCODE"
 }
 ```
 
 ---
 
-## Lokale Omi Desktop API-integratie
+## 7. Lokale Desktop API-integratie
 
-Wanneer de Omi Desktop-applicatie lokaal actief is, kan de CLI direct communiceren met lokale contextdiensten:
+Wanneer de Omi Desktop-toepassing actief is op uw computer, kan de CLI lokale schermgegevens opvragen zonder cloud-aanroepen:
 
 ```bash
-# Lokale poort configureren
-omi local configure --port 8000
+# Lokaal eindpunt configureren (omgevingsvariabele aanbevolen om token te beschermen)
+export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
+read -r -s -p "Desktop token: " OMI_LOCAL_TOKEN; echo
+export OMI_LOCAL_TOKEN
 
-# Zoeken in lokaal vastgelegde schermtekst
-omi local search-screen "kwartaalrapport"
+# Lokale verbindingsstatus controleren
+omi --json local status
+
+# Zoeken in recente visuele tijdlijn
+omi --json local search-screen "Kwartaalrapport" --days 7 --app Safari
 ```
 
 ---
 
-## Beheer van Meerdere Profielen
+## 8. Beheer van Meerdere Profielen (Profiles)
 
-Beheer afzonderlijke omgevingen (zoals privé, werk en test) via de `--profile`-optie of via `~/.omi/config.toml`:
+Schakel tussen persoonlijke accounts, werkaccounts of testomgevingen met de optie `--profile`. Instellingen worden opgeslagen in `~/.omi/config.toml`:
 
 ```bash
-# Een specifiek profiel gebruiken
-omi --profile werk memory list
+# Persoonlijk profiel aanmaken en inloggen
+omi --profile personal auth login
 
-# Een testprofiel met aangepast API-eindpunt gebruiken
-omi --profile staging --api-url https://api-staging.omi.me memory list
+# Werkprofiel aanmaken en inloggen
+omi --profile work auth login
+
+# Commando's uitvoeren met een specifiek profiel
+omi --profile work memory list
+
+# Testprofiel uitvoeren met aangepast eindpunt
+omi --profile staging --api-base https://api-staging.omi.me memory list
 ```
 
 ---
 
-## Beveiliging en Aanbevolen Werkwijzen
+## 9. Aanbevolen Veiligheidsmaatregelen
 
-1. **Tokengeheimhouding:** Sla tokens of API-sleutels nooit op in openbare versiebeheersystemen.
-2. **Geschiedenis van de Shell:** Voorkom het doorgeven van geheimen als directe inline-argumenten op gedeelde systemen; geef de voorkeur aan interactieve invoer of de omgevingsvariabele `OMI_API_KEY`.
-3. **Bestandsrechten:** Beperk in Unix-productieomgevingen de toegangsrechten voor de configuratiemap `~/.omi/` (`chmod 700 ~/.omi`).
+* **Geen sleutels in Git:** Commit nooit API-sleutels naar publieke versiebeheersystemen; gebruik secret managers of `.env`-bestanden in `.gitignore`.
+* **Shell-geschiedenis:** Vermijd het rechtstreeks doorgeven van sleutels als argumenten; geef de voorkeur aan interactieve invoer of `OMI_API_KEY`.
+* **Maprechten:** Beperk op Unix-systemen de toegangsrechten voor de map `~/.omi/` (`chmod 700 ~/.omi`).
