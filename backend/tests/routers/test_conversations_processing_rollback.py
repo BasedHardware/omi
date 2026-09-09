@@ -296,6 +296,57 @@ def test_deferred_enrichment_counts_started_and_complete_on_the_real_counter(mon
     assert _lazy_metric('enrich_failed') == failed_before
 
 
+def test_deferred_enrichment_receipt_failure_does_not_count_as_enrich_failed(monkeypatch):
+    """The counter tracks enrichment outcomes: a Chat receipt publish failure
+    after `process_conversation` already succeeded must not be recorded as
+    `enrich_failed`, or the stored-vs-enrich_complete reconciliation drifts."""
+    import time
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+    monkeypatch.setattr(conversations_router.conversations_db, 'update_conversation', MagicMock())
+    conv_obj = SimpleNamespace(id='deferred-conv-receipt-fail', language='en', deferred=False)
+    monkeypatch.setattr(conversations_router, 'deserialize_conversation', lambda _data: conv_obj)
+    monkeypatch.setattr(
+        conversations_router,
+        'process_conversation',
+        MagicMock(return_value=conv_obj),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        'record_and_persist_finalized_meeting_receipt',
+        MagicMock(side_effect=RuntimeError('receipt backend down')),
+        raising=False,
+    )
+    recover = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        lifecycle_service,
+        'recover_deferred_processing_failure',
+        recover,
+        raising=False,
+    )
+
+    complete_before = _lazy_metric('enrich_complete')
+    failed_before = _lazy_metric('enrich_failed')
+
+    conversations_router._enrich_deferred_conversation(
+        'uid1', {'id': 'deferred-conv-receipt-fail', 'status': 'processing', 'deferred': True, 'language': 'en'}
+    )
+
+    # The receipt failure is swallowed, so there is no recovery call to wait
+    # on; poll for the counter to settle.
+    import time
+
+    for _ in range(200):
+        if _lazy_metric('enrich_complete') == complete_before + 1:
+            break
+        time.sleep(0.01)
+    assert _lazy_metric('enrich_complete') == complete_before + 1
+    assert _lazy_metric('enrich_failed') == failed_before
+    lifecycle_service.recover_deferred_processing_failure.assert_not_called()
+
+
 def test_deferred_enrichment_counts_failed_and_lost_ownership(monkeypatch):
     import threading
     import time

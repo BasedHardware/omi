@@ -166,7 +166,12 @@ LAZY_DESKTOP_DEFERRAL_TOTAL = Counter(
 
 def record_lazy_desktop_deferral(*, event: str) -> None:
     """Never raises: observability must not change a persistence or enrichment outcome."""
-    label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    try:
+        label = event if event in LAZY_DESKTOP_DEFERRAL_EVENTS else 'other'
+    except Exception:
+        # Unhashable/invalid runtime values must not escape the guard; they
+        # collapse to `other` instead of breaking the owning path.
+        label = 'other'
     try:
         LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
     except Exception:

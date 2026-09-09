@@ -203,14 +203,20 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
-            record_lazy_desktop_deferral(event='enrich_complete')
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             record_lazy_desktop_deferral(event='enrich_failed')

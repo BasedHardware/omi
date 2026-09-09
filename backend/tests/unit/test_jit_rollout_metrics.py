@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from prometheus_client import generate_latest
@@ -98,3 +100,14 @@ def test_lazy_desktop_deferral_recorder_never_raises(monkeypatch):
         LAZY_DESKTOP_DEFERRAL_TOTAL, 'labels', lambda **_kw: (_ for _ in ()).throw(RuntimeError('down'))
     )
     assert record_lazy_desktop_deferral(event='stored') is None
+
+
+def test_lazy_desktop_deferral_unhashable_event_collapses_to_other():
+    # An unhashable/invalid runtime value must not raise before the guarded
+    # metric operation; it collapses to `other` like any unknown label.
+    before_other = _lazy_count('other')
+    before_stored = _lazy_count('stored')
+    bad_event: Any = ['not', 'hashable']
+    assert record_lazy_desktop_deferral(event=bad_event) is None
+    assert _lazy_count('other') == before_other + 1
+    assert _lazy_count('stored') == before_stored
