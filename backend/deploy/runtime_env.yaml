@@ -1022,7 +1022,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
@@ -2249,7 +2249,7 @@ environments:
               value: 'true'
               category: memory_rollout
             DAILY_SUMMARY_SELECTION_MODE:
-              value: shadow
+              value: indexed
               category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
