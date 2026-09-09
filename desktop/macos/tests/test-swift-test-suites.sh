@@ -477,6 +477,43 @@ if [ "$fallback_invocations" != "10" ]; then
   fail "batch fallback used $fallback_invocations SwiftPM invocations, expected 1 + 6 + 3"
 fi
 
+# A red batch larger than FALLBACK_BISECT_MIN bisects before per-suite
+# isolation: on CI a straight 50-member fallback re-ran ~100 isolated
+# invocations at ~36s each and blew the job ceiling (run 34301327490).
+# The green half must settle as ONE sub-batch invocation; only the half
+# that is still red descends to singles. Six suites with the bisect floor
+# lowered to 4: h0 = {ActionItemsFTSRepairTests, AlphaTests,
+# APIClientRoutingTests} fails and isolates its 3 members; h1 passes as a
+# single invocation.
+export OMI_SWIFT_TEST_FALLBACK_BISECT_MIN=4
+export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/fallback-tests"
+: >"$FAKE_XCRUN_LOG"
+if "$RUNNER" >"$TMPDIR/bisect-runner.out" 2>"$TMPDIR/bisect-runner.err"; then
+  fail "bisect fallback runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q -- "--- BATCH worker-0-0-h0 exited 42; re-running its 3 suite(s) in isolation ---" \
+  "$TMPDIR/bisect-runner.out"; then
+  fail "bisect did not re-run the red half as its own batch"
+fi
+if ! grep -q -- "--- BATCH worker-0-0 exited 42; re-running its 6 suite(s) in isolation ---" \
+  "$TMPDIR/bisect-runner.out"; then
+  fail "bisect scenario lost the original failing batch's announcement"
+fi
+bisect_failed="$(grep -c -- "--- FAILED: " "$TMPDIR/bisect-runner.out" | tr -d ' ')"
+if [ "$bisect_failed" != "1" ] || ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/bisect-runner.out"; then
+  fail "bisect fallback attributed failures to $bisect_failed suites; expected AlphaTests alone"
+fi
+if ! awk '/swift test/ && /--filter BetaTests\// && /--filter ChatDiscoverabilityTests\// { if (gsub(/--filter/, "&") == 3) green_half = 1 } END { exit green_half ? 0 : 1 }' \
+  "$FAKE_XCRUN_LOG"; then
+  fail "green half did not settle as one sub-batch invocation"
+fi
+# 1 original batch + 2 sub-batches + 3 isolated singles (red half) + 3 serial.
+bisect_invocations="$(grep -c "swift test" "$FAKE_XCRUN_LOG" | tr -d ' ')"
+if [ "$bisect_invocations" != "9" ]; then
+  fail "bisect fallback used $bisect_invocations SwiftPM invocations, expected 1 + 2 + 3 + 3"
+fi
+unset OMI_SWIFT_TEST_FALLBACK_BISECT_MIN
+
 # The escape hatch for a diagnosis: batch size 1 must be exactly the historical
 # one-process-per-suite behaviour — no combined invocation, and no suite run
 # twice through a batch and then again in the fallback.

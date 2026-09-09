@@ -83,6 +83,13 @@ CHANGED_FILES="${OMI_SWIFT_TEST_CHANGED_FILES:-}"
 # isolated re-runs execute at once (each owns a copy-on-write clone, so the
 # SwiftPM build lock never serializes them).
 ISOLATION_PARALLEL="${OMI_SWIFT_TEST_ISOLATION_PARALLEL:-3}"
+# A red batch larger than this first re-runs as two half-batches before any
+# per-suite isolation. Batch co-residency flakes are common enough that a
+# straight 50-member fallback re-ran ~100 isolated invocations (~36s each) and
+# blew the job ceiling (run 34301327490: two red batches, step cancelled at
+# 69 invocations); bisection settles the green half in ONE invocation and
+# descends to singles only for the half that is still red.
+FALLBACK_BISECT_MIN="${OMI_SWIFT_TEST_FALLBACK_BISECT_MIN:-16}"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -338,15 +345,49 @@ run_batch() {
   # log files — and let those results stand. If none of them reproduces the
   # failure, the batch hit an order dependence between two suites that share a
   # process; the run stays green, matching the isolated verdict, and this line
-  # is the trail back to it. The re-runs execute up to ISOLATION_PARALLEL at a
-  # time, each on its own copy-on-write clone of this worker's scratch: a
-  # timed-out 25-suite batch used to re-run serially for ~20 min because every
-  # member shared one SwiftPM build lock (CI runs 2026-09-08, steps of 30-42
-  # min whose bulk was this fallback).
+  # is the trail back to it. Batches larger than FALLBACK_BISECT_MIN bisect
+  # first: each half re-runs as its own batch (one invocation settles a green
+  # half) and only a still-red half of at most FALLBACK_BISECT_MIN members
+  # descends to isolated singles, up to ISOLATION_PARALLEL at a time on
+  # copy-on-write clones of this worker's scratch (a serial fallback on one
+  # SwiftPM lock cost ~20 min; a straight 50-member parallel fallback cost ~10
+  # min per flaky batch on run 34301327490).
   echo "--- BATCH $batch_id exited $status; re-running its ${batch_size} suite(s) in isolation ---"
-  echo "batch suites: ${batch_suites[*]}"
+  echo "batch suites: ${batch_suites[@]}"
   local fallback_dir="$log_dir/.fallback-$batch_id"
   mkdir -p "$fallback_dir"
+
+  if [ "$batch_size" -gt "$FALLBACK_BISECT_MIN" ]; then
+    local mid=$(((batch_size + 1) / 2))
+    local -a left_suites=("${batch_suites[@]:0:$mid}")
+    local -a right_suites=("${batch_suites[@]:$mid}")
+    local -a half_suites=()
+    local half_index half_id half_build half_runtime
+    # Halves run sequentially on their own clones so they cannot contend on
+    # this worker's scratch while the worker may already be running its next
+    # batch. Recursion terminates: each __run_batch invocation re-enters this
+    # same rule with a strictly smaller member count.
+    for half_index in 0 1; do
+      if [ "$half_index" = 0 ]; then
+        half_suites=("${left_suites[@]}")
+      else
+        half_suites=("${right_suites[@]}")
+      fi
+      [ "${#half_suites[@]}" -gt 0 ] || continue
+      half_id="$batch_id-h$half_index"
+      half_build="$fallback_dir/$half_id.build"
+      half_runtime="$fallback_dir/$half_id.runtime"
+      if [ "$PREBUILD" = "1" ]; then
+        cp -cR "$build_path" "$half_build"
+      else
+        mkdir -p "$half_build"
+      fi
+      mkdir -p "$half_runtime/home" "$half_runtime/tmp"
+      "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
+    done
+    exit 0
+  fi
+
   printf '%s\n' "${batch_suites[@]}" \
     | xargs -P "$ISOLATION_PARALLEL" -I{} "$SCRIPT_PATH" __isolated_fallback_suite "$log_dir" {} "$build_path" "$fallback_dir"
   exit 0
@@ -484,6 +525,8 @@ esac
 if [ "$ISOLATION_PARALLEL" -lt 1 ]; then
   fail "OMI_SWIFT_TEST_ISOLATION_PARALLEL must be at least 1"
 fi
+[[ "$FALLBACK_BISECT_MIN" =~ ^[0-9]+$ ]] \
+  || fail "OMI_SWIFT_TEST_FALLBACK_BISECT_MIN must be a non-negative integer, got '$FALLBACK_BISECT_MIN'"
 
 # Static guardrails are part of the authoritative Swift component suite, not a
 # separate best-effort lint. Run their fixture tests first so a broken checker

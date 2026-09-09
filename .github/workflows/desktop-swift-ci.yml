@@ -230,55 +230,15 @@ jobs:
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         run: brew install actionlint pkg-config webp
 
-      - name: Desktop launcher script tests
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
-        id: desktop_launcher_tests
-        working-directory: desktop/macos
-        run: |
-          # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
-          # automatically, mirroring swift-test-suites.sh's auto-discovery.
-          # Three-way parallel (the hosted runner has 3 cores): the serial loop
-          # cost 9.3 min p50, which was 13% of all macOS-runner demand. Each
-          # test logs to its own file so parallel output cannot interleave;
-          # failing logs are replayed in full at the end.
-          log_dir="$(mktemp -d)"
-          # The skip hand list stays a `case` pattern: check-launcher-test-skips.py
-          # parses this exact shape to hold it equal to the # discovery-skip markers.
-          for t in tests/test-*.sh; do
-            case "$t" in
-              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
-                continue
-                ;;
-            esac
-            printf '%s\n' "$t"
-          done \
-            | xargs -P 3 -I{} bash -c '
-                t="$1"
-                log_dir="$2"
-                log="$log_dir/$(basename "$t").log"
-                started=$SECONDS
-                if bash "$t" >"$log" 2>&1; then
-                  echo "== PASS $t ($((SECONDS - started))s)"
-                else
-                  echo "== FAIL $t ($((SECONDS - started))s)"
-                  touch "$log.failed"
-                fi
-              ' _ {} "$log_dir"
-          failed=0
-          for marker in "$log_dir"/*.failed; do
-            [ -e "$marker" ] || continue
-            failed=1
-            log="${marker%.failed}"
-            echo "--- $(basename "$log" .log) output ---"
-            cat "$log"
-          done
-          exit "$failed"
-
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, scheduled health, manual dispatch, or a PR
       # that touches Package.swift/Package.resolved) so ordinary PRs do not
       # pay for a second configuration — or a second hosted Mac — that tests
-      # never consume.
+      # never consume. This step runs BEFORE the launcher tests on purpose:
+      # its prebuild leaves a warm Desktop/.build, so the launcher suite's
+      # `swift build --build-tests` fixtures (feature-sentinel negative
+      # control) compile incrementally instead of paying a second cold
+      # package build (measured 21 min on run 34301327490-era shapes).
       - name: Test desktop Swift app
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: desktop_swift_tests
@@ -308,6 +268,55 @@ jobs:
           OMI_SWIFT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
           OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
         run: ./scripts/run-swift-ci.sh --test
+
+      - name: Desktop launcher script tests
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        id: desktop_launcher_tests
+        working-directory: desktop/macos
+        run: |
+          # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
+          # automatically, mirroring swift-test-suites.sh's auto-discovery.
+          # Three-way parallel (the hosted runner has 3 cores): the serial loop
+          # cost 9.3 min p50, which was 13% of all macOS-runner demand. Each
+          # test logs to its own file so parallel output cannot interleave;
+          # failing logs are replayed in full at the end.
+          log_dir="$(mktemp -d)"
+          # The skip hand list stays a `case` pattern: check-launcher-test-skips.py
+          # parses this exact shape to hold it equal to the # discovery-skip markers.
+          for t in tests/test-*.sh; do
+            case "$t" in
+              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+                continue
+                ;;
+            esac
+            printf '%s\n' "$t"
+          done \
+          | xargs -P 3 -I{} bash -c '
+              t="$1"
+              log_dir="$2"
+              log="$log_dir/$(basename "$t").log"
+              started=$SECONDS
+              if bash "$t" >"$log" 2>&1; then
+                echo "== PASS $t ($((SECONDS - started))s)"
+                # Per-test logs are replayed only on failure, so a passing
+                # test that paid a from-source bootstrap (~15 min) or another
+                # hidden slow path was invisible: test-swift-format-wrapper
+                # passed in 1240s on run 34301327490 with a warm tools cache.
+                grep -m1 -E "Bootstrapping swift|cache (HIT|stale)" "$log" | sed "s|^|   [$t] |" || true
+              else
+                echo "== FAIL $t ($((SECONDS - started))s)"
+                touch "$log.failed"
+              fi
+            ' _ {} "$log_dir"
+          failed=0
+          for marker in "$log_dir"/*.failed; do
+            [ -e "$marker" ] || continue
+            failed=1
+            log="${marker%.failed}"
+            echo "--- $(basename "$log" .log) output ---"
+            cat "$log"
+          done
+          exit "$failed"
 
       # Preserve resolved dependency downloads after a failed test command, but
       # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
