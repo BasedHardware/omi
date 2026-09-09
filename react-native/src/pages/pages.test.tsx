@@ -1146,3 +1146,43 @@ test('Apps category labels are not raw wire tokens', async () => {
   expect(tree).toContain('Productivity');
   expect(tree).not.toContain('productivity');
 });
+
+test('Connectors rows keep GET connected accounts as Connected instead of Installed-only', async () => {
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/apps') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          {
+            id: 'catalog-app-1',
+            name: 'Owned app',
+            connected_accounts: ['acct-1'],
+          },
+        ]),
+      };
+    }
+    if (request.path === '/v1/apps/enabled') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify(['catalog-app-1']),
+      };
+    }
+    if (request.path === '/v1/users/profile') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({uid: 'user-1'}),
+      };
+    }
+    return {id: request.id, status: 404, body: null};
+  });
+  const renderer = await renderPage(ConnectorsPage);
+  const tree = textOf(renderer);
+  expect(tree).toContain('Owned app');
+  expect(tree).toContain('Connected');
+  expect(tree).not.toContain('acct-1');
+  expect(tree).not.toContain('Not installed');
+});

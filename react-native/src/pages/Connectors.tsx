@@ -38,7 +38,13 @@ function appRowMeta(app: CloudApp, installKnown: boolean): string {
   return [
     category !== '' ? category : null,
     author !== '' ? author : null,
-    installKnown ? (app.enabled ? 'Installed' : 'Not installed') : null,
+    app.connectedAccounts.length > 0
+      ? 'Connected'
+      : installKnown
+      ? app.enabled
+        ? 'Installed'
+        : 'Not installed'
+      : null,
   ]
     .filter(item => item !== null)
     .join(' · ');
