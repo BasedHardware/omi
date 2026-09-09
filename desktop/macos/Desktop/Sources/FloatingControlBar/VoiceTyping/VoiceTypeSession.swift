@@ -92,6 +92,14 @@ final class VoiceTypeSession: ObservableObject {
   private var latch: Latch = .none
   /// The exact field, selection and value revision captured at release.
   private var releaseFocusTarget: TextInsertionTarget?
+  /// Which turn owns the session, bumped whenever one takes it over.
+  ///
+  /// Delivery spans the editor's settling window, so a push-to-talk turn can
+  /// begin while an earlier delivery is still awaiting its read-back. Without
+  /// this, that older turn's epilogue reset the newer turn's state on its way
+  /// out — `latch = .none` sent the second dictation to chat as a question,
+  /// and `captureOwner = nil` left it delivering nothing.
+  private var generation = 0
 
   /// True once this turn has been recognised as a dictation — whether or not
   /// it can be pasted. A blocked turn still owns the turn: the words are
@@ -116,6 +124,7 @@ final class VoiceTypeSession: ObservableObject {
   }
 
   func begin() {
+    generation &+= 1
     latch = .none
     releaseFocusTarget = nil
     captureOwner = captureAuthorization()
@@ -190,10 +199,17 @@ final class VoiceTypeSession: ObservableObject {
   /// ends the turn. If focus has moved since, the text is copied instead —
   /// the user gets it with one ⌘V rather than finding it in the wrong window.
   func deliver(_ text: String) async -> Completion {
+    let generation = self.generation
+    /// Whether this call still owns the session, or a turn has begun under it
+    /// while the editor was settling.
+    func stillOwnsTheSession() -> Bool { generation == self.generation }
     defer {
-      latch = .none
-      releaseFocusTarget = nil
-      captureOwner = nil
+      // Only ever tear down the turn this call actually delivered.
+      if stillOwnsTheSession() {
+        latch = .none
+        releaseFocusTarget = nil
+        captureOwner = nil
+      }
     }
     let blocked = latch == .blocked
     guard latch == .typing || blocked else { return .none }
@@ -241,7 +257,10 @@ final class VoiceTypeSession: ObservableObject {
       invalidateUndoLastDictation()
       return .insertionUncertain(trimmed)
     }
-    insertionOwner = owner
+    // Undo belongs to the turn that made the insertion, and only while that
+    // turn is still the session's: a newer turn must not offer to take back an
+    // older turn's text.
+    if stillOwnsTheSession() { insertionOwner = owner }
     // Bundle id only — never a field value or Accessibility identifier.
     let target = aimed.bundleIdentifier
     log(

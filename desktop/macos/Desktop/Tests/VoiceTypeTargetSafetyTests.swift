@@ -84,6 +84,9 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     /// Wall-clock a verification tick costs, for an app whose Accessibility
     /// server answers slowly enough that ten reads would hold the turn.
     var verificationTickCost: TimeInterval = 0
+    /// Runs on each verification tick, so a test can act while a delivery is
+    /// still awaiting its read-back.
+    var onVerificationTick: (() -> Void)?
     var receiptSleeper: (@MainActor (TimeInterval) async throws -> Void)?
     lazy var sink = makeSink()
 
@@ -102,6 +105,7 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
       // decides when the insertion becomes visible, not the wall clock.
       let noVerificationDelay: @MainActor (TimeInterval) async throws -> Void = { [unowned self] _ in
         clock += verificationTickCost
+        onVerificationTick?()
       }
       if let receiptSleeper {
         return PasteboardTextInsertionSink(
@@ -540,6 +544,37 @@ final class VoiceTypeTargetSafetyTests: XCTestCase {
     // pre-read and the write's guard), then the 0.4s window admits three
     // verification reads at 0.2s a tick — not the ten the count allows.
     XCTAssertEqual(fixture.editor.reads, 7, "the window, not the read count, ended the wait")
+  }
+
+  func testATurnBegunDuringAnEarlierDeliveryKeepsItsOwnState() async {
+    // Delivery now spans the editor's settling window, so the user can start
+    // the next dictation inside it. The older turn's epilogue must not reset
+    // the newer turn on its way out: it used to clear the latch, which sent
+    // the second dictation to chat as a question, and the capture owner,
+    // which left it delivering nothing.
+    let fixture = Fixture()
+    fixture.begin()
+    fixture.editor.appliesWrite = false
+    fixture.editor.replacementResult = .uncertain
+    var started = false
+    fixture.onVerificationTick = {
+      guard !started else { return }
+      started = true
+      fixture.session.begin()
+      XCTAssertTrue(fixture.session.claim(transcript: "Type the second one"))
+    }
+    let first = await fixture.session.deliver("Hello")
+    XCTAssertEqual(first, .insertionUncertain("Hello"))
+    XCTAssertTrue(fixture.session.claimsTurn, "the turn begun mid-delivery still owns the session")
+    XCTAssertFalse(fixture.session.canUndoLastDictation, "and is not offered the older turn's undo")
+
+    fixture.onVerificationTick = nil
+    fixture.editor.appliesWrite = true
+    fixture.editor.replacementResult = .applied
+    fixture.session.noteRelease()
+    let second = await fixture.session.deliver("Second")
+    XCTAssertEqual(second, .pasted("Second"))
+    XCTAssertEqual(fixture.editor.value, "Original Second")
   }
 
   func testCompletionProjectionsNeverDescribeAnUncertainInsertionAsCopiedOrTyped() {
