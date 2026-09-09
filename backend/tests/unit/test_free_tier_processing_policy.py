@@ -72,6 +72,24 @@ def policy():
         yield load_module_fresh('utils.free_tier_processing_policy', _POLICY_PATH)
 
 
+@pytest.fixture(autouse=True)
+def _quiet_remote_kill_switch(monkeypatch):
+    """Hermetic remote kill switch for admitted-cohort assertions.
+
+    Without this, ``free_tier_local_processing_enabled(UID)`` on an admitted
+    cohort consults the real ``free_tier_cohort._kill_switch_state``: a
+    ``POSTHOG_*_API_KEY`` in the ambient environment pays a real provider
+    call (and a 30 s process-wide backoff without one), and a remotely
+    ENABLED kill switch would flip these ``is True`` assertions to False.
+    The seam is the one the module documents for tests.
+    """
+    from utils import free_tier_cohort as _cohort
+    from utils.jit_rollout import TriState
+
+    monkeypatch.setattr(_cohort, '_kill_switch_state', lambda _uid: TriState.UNKNOWN)
+    yield
+
+
 def _decision(
     *,
     allowed: bool,

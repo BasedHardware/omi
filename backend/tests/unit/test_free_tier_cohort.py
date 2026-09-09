@@ -72,6 +72,16 @@ def test_malformed_is_logged_once_per_process(monkeypatch, caplog) -> None:
     assert sum('is malformed' in record.message for record in caplog.records) == 1
 
 
+@pytest.mark.parametrize(
+    'raw', [',uid:cohort-uid-1', 'uid:cohort-uid-1,', 'uid:cohort-uid-1,,pct:5', 'uid:a,,uid:b', ',,']
+)
+def test_empty_comma_tokens_are_malformed_not_ignored(raw, monkeypatch) -> None:
+    """A leading/trailing/doubled comma is a typo; it admits nobody (fail-closed)."""
+    assert cohort.parse_cohort(raw) is None
+    monkeypatch.setenv(cohort.cohort_env_name(FLAG), raw)
+    assert cohort.cohort_decision(FLAG, UID) == cohort.CohortDecision(False, 'cohort_malformed')
+
+
 def test_uid_list_admits_exactly_the_listed_accounts(monkeypatch) -> None:
     monkeypatch.setenv(cohort.cohort_env_name(FLAG), f' uid:{UID} , uid:third ')
     assert cohort.cohort_decision(FLAG, UID) == cohort.CohortDecision(True, 'cohort_uid')
@@ -260,6 +270,33 @@ def test_remote_kill_switch_malformed_response_is_unknown(monkeypatch) -> None:
     monkeypatch.setattr(cohort, '_get_client', lambda: _Client())
     assert cohort._kill_switch_state(UID) is TriState.UNKNOWN
     assert 'kill_switch:malformed' in cohort._warned
+
+
+def test_absent_kill_switch_key_in_a_healthy_mapping_is_disabled_not_unknown(monkeypatch) -> None:
+    """PostHog omits a false boolean flag; a healthy response without the key
+    means the provider asserted no kill (JIT contract), so the definitive TTL
+    applies instead of the short unknown TTL."""
+    monkeypatch.undo()
+    cohort.reset_kill_switch_cache_for_tests()
+    cohort._warned.clear()
+
+    class _Client:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get_feature_variants(self, uid: str):
+            self.calls += 1
+            return {cohort.FREE_TIER_COHORT_FLAG_KEY: True}  # kill key absent
+
+    client = _Client()
+    monkeypatch.setattr(cohort, '_get_client', lambda: client)
+    assert cohort._kill_switch_state(UID) is TriState.DISABLED
+    assert client.calls == 1
+    # Not cached under the short unknown TTL: a fresh read within the unknown
+    # window (5 s) must still be served from the definitive cache (20 s).
+    cohort._cache[UID] = (TriState.DISABLED, time.monotonic() + 6.0)
+    assert cohort._kill_switch_state(UID) is TriState.DISABLED
+    assert client.calls == 1
 
 
 @pytest.mark.parametrize('raw', ['pct:²', 'pct:³', 'pct:١٢', 'pct:１２'])

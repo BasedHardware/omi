@@ -137,7 +137,10 @@ def parse_cohort(raw: str | None) -> _ParsedCohort | None:
     for token in text.split(','):
         token = token.strip()
         if not token:
-            continue
+            # A leading/trailing/doubled comma is a typo, not a semicolon:
+            # fail closed so the operator notices instead of a silently
+            # truncated (or entirely different) cohort going live.
+            return None
         kind, sep, value = token.partition(':')
         kind = kind.strip().lower()
         value = value.strip()
@@ -219,6 +222,23 @@ def _get_executor() -> ThreadPoolExecutor:
         return _executor
 
 
+def close_free_tier_control_plane() -> None:
+    """Stop accepting kill-switch work without blocking application shutdown.
+
+    Mirrors ``utils.jit_rollout.close_posthog_control_plane``: queued calls
+    are cancelled; already-running SDK calls retain their own bounded timeout
+    and are not waited on here. A later in-process startup lazily creates a
+    fresh isolated executor. Wired next to the JIT close hook in the service
+    shutdown paths.
+    """
+    global _executor
+    with _executor_lock:
+        executor = _executor
+        _executor = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def _tri_state(flags: Mapping[str, Any], key: str) -> TriState:
     value = flags.get(key)
     if value is True:
@@ -233,6 +253,15 @@ def _fetch_kill_switch(uid: str) -> TriState:
     variants = _get_client().get_feature_variants(uid)
     if not isinstance(variants, Mapping):
         raise TypeError('malformed_feature_flags')
+    # PostHog omits a boolean flag from a healthy decide response when it
+    # evaluates false for the distinct id — the kill switch's normal dark
+    # state. Following the JIT contract (utils.jit_rollout), absence in a
+    # well-formed mapping means the provider was reachable and asserted no
+    # kill: DISABLED, not UNKNOWN, so admitted accounts are not re-queried
+    # every short unknown-TTL. UNKNOWN stays reserved for a present-but-
+    # non-bool value and the whole-response failure paths.
+    if FREE_TIER_KILL_SWITCH_FLAG_KEY not in variants:
+        return TriState.DISABLED
     return _tri_state(variants, FREE_TIER_KILL_SWITCH_FLAG_KEY)
 
 
@@ -360,6 +389,7 @@ __all__ = [
     'EMERGENCY_STOP_ENV_VAR',
     'FREE_TIER_COHORT_FLAG_KEY',
     'FREE_TIER_KILL_SWITCH_FLAG_KEY',
+    'close_free_tier_control_plane',
     'cohort_admits',
     'cohort_bucket',
     'cohort_decision',
