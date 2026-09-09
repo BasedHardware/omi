@@ -373,11 +373,18 @@ extension SettingsContentView {
           self.isFetchingLocalModels = false
           // No model configured yet: there's no hardcoded default to fall
           // back to, so pick the first id the server actually reports
-          // instead of leaving the Picker's selection unmatched.
+          // instead of leaving the Picker's selection unmatched. That
+          // assignment fires the Model field's own onChange handler, which
+          // already calls restartLocalBridgesIfActive() once. Skip calling
+          // onComplete in that case so a Base URL commit whose model id was
+          // empty doesn't fire a second, redundant restart request (the
+          // second one used to be rejected as BridgeError.restarting and
+          // surface a false "Could not apply local model change" error).
           if currentModelId.isEmpty, let firstModel = models.first {
             self.localLLMModelID = firstModel
+          } else {
+            onComplete?()
           }
-          onComplete?()
         }
       } catch {
         await MainActor.run {

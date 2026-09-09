@@ -2405,6 +2405,13 @@ class ChatProvider: ObservableObject {
     do {
       try await resolvedAgentClient().restart()
       log("ChatProvider: Restarted shared runtime with updated local model/endpoint")
+    } catch BridgeError.restarting {
+      // Another restart for this same config change is already in flight:
+      // e.g. Settings' Base URL commit and its own model-list refetch both
+      // requested one, or the main window and the floating bar's
+      // independent ChatProvider both did. It will pick up the current
+      // config either way; not a failure worth surfacing.
+      log("ChatProvider: Skipped restart request, one for the same runtime is already in flight")
     } catch {
       logError("Failed to restart shared runtime for local model change", error: error)
       errorMessage = "Could not apply local model change. Try again."
