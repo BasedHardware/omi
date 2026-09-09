@@ -191,8 +191,41 @@ test('web Settings loads real service usage without offering a fake sign-in', as
     });
     expect(textOf(renderer)).toContain('7 of 100 requests used');
     expect(textOf(renderer)).toContain('Local QA identity');
+    expect(textOf(renderer)).toContain('Plan unavailable');
     expect(labelsOf(renderer)).not.toContain('Sign in');
     expect(labelsOf(renderer)).not.toContain('Open app permissions');
+  } finally {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatform,
+    });
+  }
+});
+
+test('web Settings keeps GET planLabel instead of a plan-less usage row', async () => {
+  const originalPlatform = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  mockBackend.request.mockResolvedValue({
+    id: 'service-settings-read',
+    status: 200,
+    body: JSON.stringify({
+      identity: {displayName: 'Local QA identity', email: ''},
+      entitlement: {
+        planLabel: 'Omi Plus',
+        limitKey: 'chat',
+        used: 7,
+        limit: 100,
+      },
+    }),
+  });
+  try {
+    const renderer = await renderPage(SettingsPage);
+    const tree = textOf(renderer);
+    expect(tree).toContain('Omi Plus');
+    expect(tree).toContain('7 of 100 requests used');
+    expect(tree).not.toContain('Plan unavailable');
+    expect(tree).not.toContain('Upgrade');
+    expect(labelsOf(renderer)).not.toContain('Sign in');
   } finally {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,

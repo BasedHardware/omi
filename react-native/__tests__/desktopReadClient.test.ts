@@ -2299,7 +2299,7 @@ test('keeps an empty Settings entitlement limitKey instead of failing the page',
   );
   expect(result).toEqual({
     identity: {displayName: 'Local identity', email: ''},
-    entitlement: {limitKey: '', used: 7, limit: 100},
+    entitlement: {planLabel: '', limitKey: '', used: 7, limit: 100},
   });
   await expect(
     loadServiceSettings(
@@ -2312,6 +2312,32 @@ test('keeps an empty Settings entitlement limitKey instead of failing the page',
       })),
     ),
   ).rejects.toThrow('Usage allowance response is malformed');
+});
+
+test('keeps GET Settings planLabel instead of dropping the billing label', async () => {
+  const result = await loadServiceSettings(
+    backendFor(() => ({
+      status: 200,
+      body: JSON.stringify({
+        identity: {displayName: 'Local identity', email: ''},
+        entitlement: {
+          planLabel: 'Omi Plus',
+          limitKey: 'chat',
+          used: 7,
+          limit: 100,
+        },
+      }),
+    })),
+  );
+  expect(result).toEqual({
+    identity: {displayName: 'Local identity', email: ''},
+    entitlement: {
+      planLabel: 'Omi Plus',
+      limitKey: 'chat',
+      used: 7,
+      limit: 100,
+    },
+  });
 });
 
 test('loadConnectors merges enabled ids and keeps owner filtering honest', async () => {

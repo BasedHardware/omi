@@ -639,7 +639,12 @@ export function serviceApps(snapshot: ConnectorsSnapshot): CloudApp[] {
 
 export type ServiceSettingsSnapshot = {
   identity: {displayName: string; email: string} | null;
-  entitlement: {limitKey: string; used: number; limit: number | null} | null;
+  entitlement: {
+    planLabel: string;
+    limitKey: string;
+    used: number;
+    limit: number | null;
+  } | null;
 };
 
 export async function loadServiceSettings(
@@ -705,6 +710,8 @@ export async function loadServiceSettings(
   return {
     identity,
     entitlement: {
+      planLabel:
+        typeof entitlement.planLabel === 'string' ? entitlement.planLabel : '',
       limitKey: entitlement.limitKey,
       used: entitlement.used,
       limit: entitlement.limit as number | null,

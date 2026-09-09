@@ -660,6 +660,15 @@ export function SettingsPage({
                 title="Connection identity"
                 copy={connectionIdentityCopy(serviceSettings.identity)}
               />
+              {serviceSettings.entitlement !== null ? (
+                <SettingRow
+                  title="Plan"
+                  copy={accountFieldCopy(
+                    serviceSettings.entitlement.planLabel,
+                    'Plan unavailable',
+                  )}
+                />
+              ) : null}
               {serviceSettings.entitlement !== null &&
               ['chat', 'transcription_seconds'].includes(
                 serviceSettings.entitlement.limitKey,
