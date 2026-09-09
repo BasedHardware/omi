@@ -189,6 +189,20 @@ describe("device transcription client projection", () => {
     expect(recordingListSpeech("Stored speech", [])).toBe("");
   });
 
+  test("completed SQL-null segments keep stored text like Whisper without a segments key", () => {
+    expect(
+      projectDeviceTranscription({
+        ...completed,
+        text: "Stored speech",
+        segments: null,
+      })
+    ).toMatchObject({
+      state: "completed",
+      text: "Stored speech",
+      segments: [],
+    });
+  });
+
   test("GET speech keeps interstitial NEXT LINE segments that list titles skip", () => {
     const segments = [
       { start: 0, end: 0.1, text: "First words" },

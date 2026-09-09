@@ -182,7 +182,7 @@ test('parseRecordingTranscript uses production Listen segment join when stored t
   });
 });
 
-test('parseRecordingTranscript hides leftover stored text when completed segments are empty', () => {
+test('parseRecordingTranscript keeps GET text when completed segments are empty', () => {
   expect(
     parseRecordingTranscript(
       response('session-one', 'completed', 'Stored speech', []).body,
@@ -190,7 +190,7 @@ test('parseRecordingTranscript hides leftover stored text when completed segment
     ),
   ).toMatchObject({
     state: 'completed',
-    text: '',
+    text: 'Stored speech',
   });
 });
 
@@ -232,13 +232,13 @@ test('a completed stored text keeps later speech stored on segments', async () =
   expect(textOf(renderer)).not.toContain('The transcript is empty.');
 });
 
-test('a completed leftover stored text with empty segments says empty', async () => {
+test('a completed GET text with empty segments keeps that speech', async () => {
   mockRequest.mockResolvedValue(
     response('session-one', 'completed', 'Stored speech', []),
   );
   const renderer = await render('session-one');
-  expect(textOf(renderer)).toContain('The transcript is empty.');
-  expect(textOf(renderer)).not.toContain('Stored speech');
+  expect(textOf(renderer)).toContain('Stored speech');
+  expect(textOf(renderer)).not.toContain('The transcript is empty.');
 });
 
 test('parseRecordingTranscript keeps empty text when a segment is not an object', () => {

@@ -12,7 +12,7 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function joinWellFormedSegmentTexts(segments: unknown[]): string | null {
   if (segments.length === 0) {
-    return '';
+    return null;
   }
   const parts: string[] = [];
   for (const segment of segments) {

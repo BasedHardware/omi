@@ -402,6 +402,15 @@ test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", as
     status: "completed",
   });
   expect(rows[0]?.overview.endsWith("...")).toBe(false);
+  expect(
+    projectDeviceTranscription(
+      await readDeviceTranscription(env.DB, "record-owner", session.id)
+    )
+  ).toMatchObject({
+    state: "completed",
+    text: "a".repeat(241),
+    segments: [],
+  });
 });
 
 test("recording conversation preserves capture provenance separately from server times", async () => {

@@ -310,7 +310,7 @@ export function recordingListSpeech(
 export function parseStoredTranscriptSegments(
   value: string | null
 ): unknown[] | null {
-  if (value === null) return [];
+  if (value === null) return null;
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : null;
@@ -346,6 +346,18 @@ export function projectDeviceTranscription(
       sessionId: row.sessionId,
       state: row.state,
       text: null,
+      segments: [],
+      language: row.language,
+      discardedLeadingPackets: row.discardedLeadingPackets,
+      errorCode,
+      updatedAt: row.updatedAt,
+    };
+  }
+  if (row.segments === null) {
+    return {
+      sessionId: row.sessionId,
+      state: row.state,
+      text: row.text,
       segments: [],
       language: row.language,
       discardedLeadingPackets: row.discardedLeadingPackets,
