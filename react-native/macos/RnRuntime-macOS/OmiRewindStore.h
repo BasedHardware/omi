@@ -7,6 +7,7 @@
 #import <sys/stat.h>
 #import <fcntl.h>
 #import <unistd.h>
+#import <errno.h>
 
 static NSError *OmiRewindError(NSString *code) { return [NSError errorWithDomain:code code:1 userInfo:nil]; }
 static NSString *OmiRewindOwner(NSDictionary *identity) {
@@ -42,12 +43,17 @@ static NSString *OmiRewindContained(NSString *root, NSString *relative) {
   if (![self current:owner]) { if (error) *error = OmiRewindError(@"OMI_REWIND_OWNER_CHANGED"); return NULL; }
   NSString *uid = owner[@"uid"];
   NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"];
-  if (![uid isKindOfClass:NSString.class] || uid.length == 0 || uid.length > 128 || [uid rangeOfCharacterFromSet:allowed.invertedSet].location != NSNotFound) { if (error) *error = OmiRewindError(@"OMI_REWIND_UNAVAILABLE"); return NULL; }
+  if (![uid isKindOfClass:NSString.class] || uid.length == 0 || uid.length > 128 || [uid rangeOfCharacterFromSet:allowed.invertedSet].location != NSNotFound) { if (error) *error = OmiRewindError(@"OMI_REWIND_STORAGE"); return NULL; }
   NSString *path = OmiRewindContained(self.root, [NSString stringWithFormat:@"%@/omi.db", uid]);
   NSString *expected = [[self.root stringByAppendingPathComponent:uid] stringByAppendingPathComponent:@"omi.db"];
-  if (path == nil || ![path isEqual:expected.stringByStandardizingPath] || ![NSFileManager.defaultManager fileExistsAtPath:path]) { if (error) *error = OmiRewindError(@"OMI_REWIND_UNAVAILABLE"); return NULL; }
+  if (path == nil || ![path isEqual:expected.stringByStandardizingPath]) { if (error) *error = OmiRewindError(@"OMI_REWIND_STORAGE"); return NULL; }
+  // Only a confirmed missing database means there is no history. Existing but
+  // unreadable storage must not become an empty successful timeline.
+  struct stat attributes = {};
+  if (lstat(path.fileSystemRepresentation, &attributes) != 0) { if (error) *error = OmiRewindError(errno == ENOENT ? @"OMI_REWIND_UNAVAILABLE" : @"OMI_REWIND_STORAGE"); return NULL; }
+  if (!S_ISREG(attributes.st_mode)) { if (error) *error = OmiRewindError(@"OMI_REWIND_STORAGE"); return NULL; }
   sqlite3 *db = NULL;
-  if (sqlite3_open_v2(path.fileSystemRepresentation, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_NOFOLLOW, NULL) != SQLITE_OK) { if (db) sqlite3_close(db); if (error) *error = OmiRewindError(@"OMI_REWIND_UNAVAILABLE"); return NULL; }
+  if (sqlite3_open_v2(path.fileSystemRepresentation, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_NOFOLLOW, NULL) != SQLITE_OK) { if (db) sqlite3_close(db); if (error) *error = OmiRewindError(@"OMI_REWIND_STORAGE"); return NULL; }
   sqlite3_busy_timeout(db, 500);
   sqlite3_exec(db, "PRAGMA query_only=ON; PRAGMA trusted_schema=OFF", NULL, NULL, NULL);
   return db;
@@ -88,7 +94,7 @@ static NSString *OmiRewindContained(NSString *root, NSString *relative) {
   }
   if (statement) sqlite3_finalize(statement); sqlite3_close(db);
   if (![self current:owner]) { if (error) *error = OmiRewindError(@"OMI_REWIND_OWNER_CHANGED"); return nil; }
-  if (status != SQLITE_DONE && status != SQLITE_ROW) { if (error) *error = OmiRewindError(@"OMI_REWIND_UNAVAILABLE"); return nil; }
+  if (status != SQLITE_DONE && status != SQLITE_ROW) { if (error) *error = OmiRewindError(@"OMI_REWIND_STORAGE"); return nil; }
   NSString *nextCursor = status == SQLITE_ROW && next != nil ? [[NSJSONSerialization dataWithJSONObject:next options:0 error:nil] base64EncodedStringWithOptions:0] : nil;
   return @{@"frames":rows,@"nextCursor":nextCursor ?: NSNull.null};
 }
