@@ -249,3 +249,20 @@ test.each(['completed', 'processing'])(
     ).toBe('flex-start');
   },
 );
+
+test('a requested conversation opens shared details without a second search', () => {
+  const onRequestedConversationConsumed = jest.fn();
+  let view!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    view = ReactTestRenderer.create(
+      <LibraryPage
+        onRequestedConversationConsumed={onRequestedConversationConsumed}
+        outcomes={libraryOutcome()}
+        requestedConversationId="conversation-1"
+      />,
+    );
+  });
+  mounted.push(view);
+  expect(label(view, 'Selected conversation details')).toBeDefined();
+  expect(onRequestedConversationConsumed).toHaveBeenCalledTimes(1);
+});

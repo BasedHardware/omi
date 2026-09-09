@@ -114,10 +114,14 @@ export function DesktopApp({
     setCaptureRevision(value => value + 1),
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
+  const [requestedConversationId, setRequestedConversationId] = useState<
+    string | null
+  >(null);
   const omnibarRef = useRef<TextInput>(null);
   useEffect(() => {
     if (session !== 'ready') {
       setRoute('Home');
+      setRequestedConversationId(null);
     }
   }, [session]);
   useEffect(() => {
@@ -191,6 +195,10 @@ export function DesktopApp({
             memoriesLoadingMore={memoriesLoadingMore}
             messages={messages}
             onOpenRewind={() => setRoute('Rewind')}
+            onOpenConversation={id => {
+              setRequestedConversationId(id);
+              setRoute('Conversations');
+            }}
             onLoadMoreMemories={onLoadMoreMemories}
             onLoadOlderChat={onLoadOlderChat}
             onRefresh={onRefresh}
@@ -203,7 +211,11 @@ export function DesktopApp({
             conversationNotice={conversationNotice}
             conversationsLoadingMore={conversationsLoadingMore}
             onLoadMoreConversations={onLoadMoreConversations}
+            onRequestedConversationConsumed={() =>
+              setRequestedConversationId(null)
+            }
             outcomes={outcomes}
+            requestedConversationId={requestedConversationId}
           />
         ) : route === 'Rewind' ? (
           <DesktopRewind capture={capture} captureRevision={captureRevision} />

@@ -30,18 +30,29 @@ export function LibraryPage({
   conversationNotice = null,
   conversationsLoadingMore = false,
   onLoadMoreConversations,
+  onRequestedConversationConsumed,
   outcomes,
+  requestedConversationId = null,
 }: {
   conversationNotice?: string | null;
   conversationsLoadingMore?: boolean;
   onLoadMoreConversations?: () => void;
+  onRequestedConversationConsumed?: () => void;
   outcomes: DesktopReadOutcomes | null;
+  requestedConversationId?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const outcome = outcomes?.conversations ?? null;
   const conversations =
     outcome?.status === 'success' ? outcome.value.items : [];
   const selected = conversations.find(item => item.id === selectedId) ?? null;
+  useEffect(() => {
+    if (requestedConversationId === null) {
+      return;
+    }
+    setSelectedId(requestedConversationId);
+    onRequestedConversationConsumed?.();
+  }, [onRequestedConversationConsumed, requestedConversationId]);
   useEffect(() => {
     if (selectedId !== null && selected === null) {
       setSelectedId(null);

@@ -15,6 +15,7 @@ import {
   chatSenderCopy,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
+  conversationDisplayTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -40,6 +41,7 @@ type Props = {
   memoryNotice?: string | null;
   memoriesLoadingMore?: boolean;
   onLoadMoreMemories?: () => void;
+  onOpenConversation?: (id: string) => void;
   messages: ChatMessage[];
   onLoadOlderChat: () => void;
   onRefresh: () => void;
@@ -157,6 +159,7 @@ export function DesktopHome({
   messages,
   onLoadMoreMemories,
   onLoadOlderChat,
+  onOpenConversation,
   onRefresh,
   onOpenRewind,
   outcomes,
@@ -312,7 +315,18 @@ export function DesktopHome({
               <ShippingListInsert
                 itemKey={`${item.kind}-${item.id}`}
                 key={`${item.kind}-${item.id}`}>
-                <ReadRow item={item} />
+                {item.kind === 'conversation' && onOpenConversation ? (
+                  <FocusPressable
+                    accessibilityLabel={`Open conversation ${conversationDisplayTitle(
+                      item,
+                    )}`}
+                    accessibilityRole="button"
+                    onPress={() => onOpenConversation(item.id)}>
+                    <ReadRow item={item} />
+                  </FocusPressable>
+                ) : (
+                  <ReadRow item={item} />
+                )}
               </ShippingListInsert>
             ))
           ) : (

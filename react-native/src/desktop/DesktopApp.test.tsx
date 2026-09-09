@@ -315,6 +315,78 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
 });
 
+test('Home conversation rows open shared Conversations details', () => {
+  const renderer = renderDesktop();
+  act(() => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation Product review',
+      )
+      .props.onPress();
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Selected conversation details',
+    ),
+  ).toBeDefined();
+  expect(renderedText(renderer)).toContain('Product review');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Back to conversations')
+      .props.onPress();
+  });
+  expect(
+    renderer.root.find(
+      node =>
+        node.props.accessibilityLabel === 'Open conversation Product review',
+    ),
+  ).toBeDefined();
+});
+
+test('Home memory rows stay display-only', () => {
+  const memory = {
+    kind: 'memory' as const,
+    id: 'memory-1',
+    title: 'A remembered fact',
+    summary: 'A remembered fact',
+    searchableText: 'a remembered fact',
+    citations: [],
+    timestamp: 1756540800,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      memories: {
+        status: 'success',
+        value: {
+          items: [memory],
+          page: outcomes.memories.value.page,
+        },
+      },
+    },
+    reads: [...outcomes.conversations.value.items, memory],
+  });
+  expect(
+    renderer.root.find(
+      node =>
+        node.props.accessibilityLabel === 'Open conversation Product review',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(node =>
+      `${node.props.accessibilityLabel ?? ''}`.startsWith('Open memory'),
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('A remembered fact');
+});
+
 test('omnibar send uses the existing chat send path', () => {
   const onSend = jest.fn();
   const onDraftChange = jest.fn();
