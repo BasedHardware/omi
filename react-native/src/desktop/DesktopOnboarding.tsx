@@ -1,5 +1,14 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Linking, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  Animated,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useReduceMotion} from '../app/useReduceMotion';
+import {runShippingTiming, stepMotionDuration} from './desktopMotion';
 import {
   loadPermissionStatus,
   requestDesktopPermission,
@@ -60,6 +69,32 @@ export function DesktopOnboarding({
   const [localError, setLocalError] = useState<string | null>(null);
   const operation = useRef(0);
   const signedIn = useRef(setupRequired);
+  const reduceMotion = useReduceMotion();
+  const stepOpacity = useRef(new Animated.Value(1)).current;
+  const stepY = useRef(new Animated.Value(0)).current;
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) {
+      firstStep.current = false;
+      return;
+    }
+    const duration = stepMotionDuration(reduceMotion);
+    if (duration === 0) {
+      stepOpacity.setValue(1);
+      stepY.setValue(0);
+      return;
+    }
+    stepOpacity.setValue(0.92);
+    stepY.setValue(8);
+    const animation = Animated.parallel(
+      [
+        runShippingTiming(stepOpacity, 1, duration, false),
+        runShippingTiming(stepY, 0, duration, false),
+      ].filter((item): item is Animated.CompositeAnimation => item !== null),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [reduceMotion, step, stepOpacity, stepY]);
   useEffect(() => {
     if (signedIn.current && !setupRequired) {
       operation.current++;
@@ -168,8 +203,8 @@ export function DesktopOnboarding({
           size={80}
           tone="ink"
           inkColor={token.color.ink}
-          animate={false}
-          reduceMotion
+          animate={!reduceMotion}
+          reduceMotion={reduceMotion}
         />
         {index >= 0 ? (
           <Text style={styles.meta}>
@@ -179,151 +214,161 @@ export function DesktopOnboarding({
         <Text accessibilityRole="header" style={styles.title}>
           {title}
         </Text>
-        {step === 'welcome' ? (
-          <>
-            <Text style={styles.copy}>
-              Find your conversations, manage your tasks, and revisit what you
-              chose to capture.
-            </Text>
-            {action('Get started', () => setStep('value'))}
-          </>
-        ) : null}
-        {step === 'value' ? (
-          <>
-            <Text style={styles.copy}>
-              Omi saves conversations and recordings to your account. Cloud AI
-              services transcribe audio and use your messages to generate
-              replies.
-            </Text>
-            <Text style={styles.copy}>
-              Recall can save screen images and local text recognition on this
-              Mac when you start capture. Signing in or granting permission does
-              not start recording.
-            </Text>
-            <View style={styles.links}>
-              <Button
-                variant="ghost"
-                labelStyle={styles.copy}
-                accessibilityRole="link"
-                onPress={() => link('https://www.omi.me/pages/privacy')}>
-                Privacy policy
-              </Button>
-              <Button
-                variant="ghost"
-                labelStyle={styles.copy}
-                accessibilityRole="link"
-                onPress={() =>
-                  link('https://www.omi.me/pages/terms-of-service')
-                }>
-                Terms of service
-              </Button>
-            </View>
-            {action('Continue', () =>
-              setStep(setupRequired ? 'permissions' : 'signIn'),
-            )}
-          </>
-        ) : null}
-        {step === 'signIn' ? (
-          <>
-            <Text style={styles.copy}>
-              Sign in to the account where your conversations and memories
-              belong.
-            </Text>
-            {action(signingIn ? 'Signing in…' : 'Sign in', onSignIn, signingIn)}
-            {signingIn && onCancelSignIn ? (
-              <Button
-                variant="ghost"
-                labelStyle={styles.copy}
-                accessibilityLabel="Cancel sign in"
-                onPress={onCancelSignIn}>
-                Cancel sign in
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-        {step === 'permissions' && setupRequired ? (
-          <>
-            <Text style={styles.copy}>
-              Each permission is optional. Nothing starts recording here; you
-              can change access later in Settings.
-            </Text>
-            {permissions.map(({kind, title: permissionTitle, copy}) => (
-              <View key={kind} style={styles.permission}>
-                <Text style={styles.permissionTitle}>{permissionTitle}</Text>
-                <Text style={styles.copy}>{copy}</Text>
-                <Text style={styles.meta}>
-                  {pending === kind
-                    ? 'Waiting for macOS…'
-                    : permissionCopy[statuses[kind]]}
-                </Text>
+        <Animated.View
+          style={[
+            styles.step,
+            {opacity: stepOpacity, transform: [{translateY: stepY}]},
+          ]}>
+          {step === 'welcome' ? (
+            <>
+              <Text style={styles.copy}>
+                Find your conversations, manage your tasks, and revisit what you
+                chose to capture.
+              </Text>
+              {action('Get started', () => setStep('value'))}
+            </>
+          ) : null}
+          {step === 'value' ? (
+            <>
+              <Text style={styles.copy}>
+                Omi saves conversations and recordings to your account. Cloud AI
+                services transcribe audio and use your messages to generate
+                replies.
+              </Text>
+              <Text style={styles.copy}>
+                Recall can save screen images and local text recognition on this
+                Mac when you start capture. Signing in or granting permission
+                does not start recording.
+              </Text>
+              <View style={styles.links}>
                 <Button
                   variant="ghost"
                   labelStyle={styles.copy}
-                  accessibilityLabel={`Allow ${permissionTitle.toLowerCase()}`}
-                  disabled={pending !== null || statuses[kind] === 'granted'}
-                  onPress={() => {
-                    request(kind);
-                  }}>
-                  Allow {permissionTitle.toLowerCase()}
+                  accessibilityRole="link"
+                  onPress={() => link('https://www.omi.me/pages/privacy')}>
+                  Privacy policy
+                </Button>
+                <Button
+                  variant="ghost"
+                  labelStyle={styles.copy}
+                  accessibilityRole="link"
+                  onPress={() =>
+                    link('https://www.omi.me/pages/terms-of-service')
+                  }>
+                  Terms of service
                 </Button>
               </View>
-            ))}
-            {action('Continue without more permissions', () =>
-              setStep('tutorial'),
-            )}
-          </>
-        ) : null}
-        {step === 'tutorial' && setupRequired ? (
-          <>
-            <Text style={styles.copy}>
-              Home brings together recent conversations and tasks. Use
-              Conversations to review recordings, Tasks to manage follow-ups,
-              and Recall to browse screen history. The capture toggle beside
-              Settings starts or stops screen capture.
+              {action('Continue', () =>
+                setStep(setupRequired ? 'permissions' : 'signIn'),
+              )}
+            </>
+          ) : null}
+          {step === 'signIn' ? (
+            <>
+              <Text style={styles.copy}>
+                Sign in to the account where your conversations and memories
+                belong.
+              </Text>
+              {action(
+                signingIn ? 'Signing in…' : 'Sign in',
+                onSignIn,
+                signingIn,
+              )}
+              {signingIn && onCancelSignIn ? (
+                <Button
+                  variant="ghost"
+                  labelStyle={styles.copy}
+                  accessibilityLabel="Cancel sign in"
+                  onPress={onCancelSignIn}>
+                  Cancel sign in
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {step === 'permissions' && setupRequired ? (
+            <>
+              <Text style={styles.copy}>
+                Each permission is optional. Nothing starts recording here; you
+                can change access later in Settings.
+              </Text>
+              {permissions.map(({kind, title: permissionTitle, copy}) => (
+                <View key={kind} style={styles.permission}>
+                  <Text style={styles.permissionTitle}>{permissionTitle}</Text>
+                  <Text style={styles.copy}>{copy}</Text>
+                  <Text style={styles.meta}>
+                    {pending === kind
+                      ? 'Waiting for macOS…'
+                      : permissionCopy[statuses[kind]]}
+                  </Text>
+                  <Button
+                    variant="ghost"
+                    labelStyle={styles.copy}
+                    accessibilityLabel={`Allow ${permissionTitle.toLowerCase()}`}
+                    disabled={pending !== null || statuses[kind] === 'granted'}
+                    onPress={() => {
+                      request(kind);
+                    }}>
+                    Allow {permissionTitle.toLowerCase()}
+                  </Button>
+                </View>
+              ))}
+              {action('Continue without more permissions', () =>
+                setStep('tutorial'),
+              )}
+            </>
+          ) : null}
+          {step === 'tutorial' && setupRequired ? (
+            <>
+              <Text style={styles.copy}>
+                Home brings together recent conversations and tasks. Use
+                Conversations to review recordings, Tasks to manage follow-ups,
+                and Recall to browse screen history. The capture toggle beside
+                Settings starts or stops screen capture.
+              </Text>
+              <Text style={styles.copy}>
+                Connect an Omi device from Settings when you want to record.
+                Settings keeps your account and permissions in reach.
+              </Text>
+              {action('Continue', () => setStep('finish'))}
+            </>
+          ) : null}
+          {step === 'finish' && setupRequired ? (
+            <>
+              <Text style={styles.copy}>
+                By continuing, you agree to the Terms of service and acknowledge
+                the Privacy policy described earlier. No capture starts
+                automatically.
+              </Text>
+              {action(
+                completingSetup ? 'Saving…' : 'Agree and continue',
+                () => onCompleteSetup?.(false),
+                completingSetup || !onCompleteSetup,
+              )}
+            </>
+          ) : null}
+          {error || localError ? (
+            <Text accessibilityRole="alert" style={styles.copy}>
+              {error || localError}
             </Text>
-            <Text style={styles.copy}>
-              Connect an Omi device from Settings when you want to record.
-              Settings keeps your account and permissions in reach.
-            </Text>
-            {action('Continue', () => setStep('finish'))}
-          </>
-        ) : null}
-        {step === 'finish' && setupRequired ? (
-          <>
-            <Text style={styles.copy}>
-              By continuing, you agree to the Terms of service and acknowledge
-              the Privacy policy described earlier. No capture starts
-              automatically.
-            </Text>
-            {action(
-              completingSetup ? 'Saving…' : 'Agree and continue',
-              () => onCompleteSetup?.(false),
-              completingSetup || !onCompleteSetup,
-            )}
-          </>
-        ) : null}
-        {error || localError ? (
-          <Text accessibilityRole="alert" style={styles.copy}>
-            {error || localError}
-          </Text>
-        ) : null}
-        {step === 'value' || (step === 'signIn' && !signingIn) ? (
-          <Button
-            variant="ghost"
-            labelStyle={styles.copy}
-            onPress={() => setStep(step === 'value' ? 'welcome' : 'value')}>
-            Back
-          </Button>
-        ) : null}
-        {setupRequired && onSignOut ? (
-          <Button
-            variant="ghost"
-            labelStyle={styles.copy}
-            disabled={completingSetup}
-            onPress={onSignOut}>
-            Sign out
-          </Button>
-        ) : null}
+          ) : null}
+          {step === 'value' || (step === 'signIn' && !signingIn) ? (
+            <Button
+              variant="ghost"
+              labelStyle={styles.copy}
+              onPress={() => setStep(step === 'value' ? 'welcome' : 'value')}>
+              Back
+            </Button>
+          ) : null}
+          {setupRequired && onSignOut ? (
+            <Button
+              variant="ghost"
+              labelStyle={styles.copy}
+              disabled={completingSetup}
+              onPress={onSignOut}>
+              Sign out
+            </Button>
+          ) : null}
+        </Animated.View>
       </View>
     </ScrollView>
   );
@@ -336,6 +381,7 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   card: {width: '100%', maxWidth: 560, alignItems: 'center', gap: 18},
+  step: {width: '100%', alignItems: 'center', gap: 18},
   title: {
     fontSize: 30,
     lineHeight: 36,

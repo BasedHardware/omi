@@ -29,15 +29,28 @@ import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
 import {ShippingStage} from './ShippingStage';
+import {OmiAvatar} from '../ui/OmiAvatar';
+import {desktopTokens as token} from './tokens';
 
 export type {DesktopSession};
 
-// The probing window keeps only the chrome row the native traffic lights sit
-// in, so an unsettled session probe never reads as a signed-in skeleton.
+// The probing window keeps traffic-light space and the mark — never an empty
+// sheet, and never signed-in chrome, while OmiAuth is still unresolved.
 export function DesktopSessionProbe() {
   return (
-    <View accessibilityLabel="Session check" style={styles.probeRow}>
-      <View pointerEvents="none" style={styles.probeControls} />
+    <View accessibilityLabel="Session check" style={styles.probe}>
+      <View pointerEvents="none" style={styles.probeRow}>
+        <View pointerEvents="none" style={styles.probeControls} />
+      </View>
+      <View pointerEvents="none" style={styles.probeMark}>
+        <OmiAvatar
+          animate
+          identity="omi"
+          inkColor={token.color.ink}
+          size={80}
+          tone="ink"
+        />
+      </View>
     </View>
   );
 }
@@ -294,9 +307,15 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: desktopWindowInset,
   },
+  probe: {flex: 1},
   probeRow: {
     flexDirection: 'row',
     height: desktopNavBarHeight,
+  },
+  probeMark: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
   probeControls: {
     alignSelf: 'center',

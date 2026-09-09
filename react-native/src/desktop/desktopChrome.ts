@@ -62,9 +62,9 @@ export const desktopMotion = {
 } as const;
 
 export const desktopStageFade = {
-  chatRiseY: 54,
+  chatRiseY: 10,
   dropScale: 0.98,
-  hubOffsetY: 14,
+  hubOffsetY: 8,
 } as const;
 
 export type DesktopSession = 'probing' | 'signed-out' | 'ready';

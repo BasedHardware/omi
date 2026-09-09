@@ -86,8 +86,8 @@ test('shipping motion constants follow the transitions.dev token scale', () => {
   expect(desktopMotion.searchExpandMs).toBe(desktopMotion.quickMs);
   expect(desktopMotion.listInsertMs).toBe(0);
   expect(desktopMotion.glassMs).toBe(0);
-  expect(desktopStageFade.hubOffsetY).toBe(14);
-  expect(desktopStageFade.chatRiseY).toBe(54);
+  expect(desktopStageFade.hubOffsetY).toBe(8);
+  expect(desktopStageFade.chatRiseY).toBe(10);
   expect(desktopStageFade.dropScale).toBe(0.98);
   expect(motionDuration(desktopMotion.pressMs, true)).toBe(0);
   expect(motionDuration(desktopMotion.pressMs, false)).toBe(80);

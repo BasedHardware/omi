@@ -902,10 +902,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   if (macDesktop) {
     // Desktop session gate. A Mac that is not fully in — probe unsettled,
     // no cloud session, or first-run onboarding incomplete — never mounts
-    // the product shell. The probe holds an empty window (traffic-light
-    // spacer only) and a signed-out Mac sees the same Welcome as every other
-    // surface, so no signed-in IA leaks before OmiAuth establishes a real
-    // session. DesktopApp enforces the same gate for direct mounts.
+    // the product shell. The probe keeps traffic-light space and the mark,
+    // and a signed-out Mac sees Welcome, so no signed-in IA leaks before
+    // OmiAuth establishes a real session. DesktopApp enforces the same gate.
     if (onboardingRequired !== false) {
       return (
         <PageShell macDesktop workspaceMaterial>
