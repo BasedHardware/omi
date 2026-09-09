@@ -493,6 +493,67 @@ def test_non_json_error_escapes_structured_extra_markup(capsys: pytest.CaptureFi
     assert "[danger]: <value>" in captured.err
 
 
+def test_unwrap_tool_response_raises_on_embedded_failure(config_path: Path) -> None:
+    """A structured Desktop failure inside the result JSON must raise, not pass through."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "database_available": False,
+        "screen_history_available": False,
+        "message": "Failed to read local Omi status: test",
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    assert "Failed to read local Omi status" in str(excinfo.value)
+    assert excinfo.value.exit_code == 1
+
+
+def test_unwrap_tool_response_passes_healthy_result(config_path: Path) -> None:
+    """A healthy embedded result must still unwrap to its parsed value."""
+    from omi_cli.local_client import _unwrap_tool_response
+
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps({"ok": True, "database_available": True, "screen_history_available": True}),
+    }
+    result = _unwrap_tool_response(envelope)
+    assert isinstance(result, dict)
+    assert result["ok"] is True
+    assert result["database_available"] is True
+
+
+def test_unwrap_tool_response_extracts_message_from_structured_error(config_path: Path) -> None:
+    """A structured error object must surface its message, not the whole mapping."""
+    from omi_cli.errors import CliError
+    from omi_cli.local_client import _unwrap_tool_response
+
+    failure = {
+        "ok": False,
+        "error": {"message": "Desktop backend unavailable", "code": "ERR_DESKTOP_DOWN"},
+    }
+    envelope = {
+        "ok": True,
+        "name": "get_local_status",
+        "content_type": "text/plain",
+        "result": json.dumps(failure),
+    }
+    with pytest.raises(CliError) as excinfo:
+        _unwrap_tool_response(envelope)
+    # The human message is the extracted error.message, not the whole mapping.
+    assert "Desktop backend unavailable" in excinfo.value.message
+    assert not excinfo.value.message.startswith("{")
+
+
 def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:
     _configure_local_profile(config_path)
     with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
