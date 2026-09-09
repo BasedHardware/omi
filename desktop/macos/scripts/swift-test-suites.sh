@@ -282,7 +282,9 @@ run_suite() {
   fi
 
   rm -f "$timeout_path"
+  local suite_started=$SECONDS
   run_swift_test "$log_path" "$budget" "$build_path" "$runtime_path" "$suite" || status=$?
+  echo "swift test invocation [suite $suite] wall=$((SECONDS - suite_started))s exit=$status (budget ${budget}s)"
   if [ -f "$timeout_path" ]; then
     echo "suite timed out after ${budget}s" >>"$log_path"
     status=124
@@ -309,7 +311,9 @@ run_batch() {
   local suite
 
   rm -f "$timeout_path"
+  local batch_started=$SECONDS
   run_swift_test "$log_path" "$budget" "$build_path" "$runtime_path" "${batch_suites[@]}" || status=$?
+  echo "swift test invocation [batch $batch_id x${batch_size}] wall=$((SECONDS - batch_started))s exit=$status (budget ${budget}s)"
   if [ -f "$timeout_path" ]; then
     echo "batch of ${batch_size} suite(s) timed out after ${budget}s" >>"$log_path"
     status=124

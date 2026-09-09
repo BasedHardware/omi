@@ -405,19 +405,25 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         tests-only diff (static selection empty) rebuilt swift-format from
         source for ~15 min inside the launcher tests, every run: the cache was
         never restored, and the save ran before the step that built the tools,
-        caching nothing. The restore must cover the tests lane, and the save
-        must come after the launcher tests so a cold bootstrap is captured.
+        caching nothing. Worse, an exact-key hit on an entry the old workflow
+        saved empty suppressed every later save (run 34295159347). The restore
+        must cover the tests lane, an explicit warm-up step builds whatever the
+        restore missed BEFORE any consumer runs, and the save immediately
+        follows the warm-up under a fresh -v2 key.
         """
         job = self.jobs["desktop-swift-verify"]
         self.assertIn(
             "(needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')",
             job,
         )
+        self.assertIn("desktop-swift-tools-v2-", job)
         restore_index = job.index("Restore Swift formatter and linter tools")
+        warm_index = job.index("Warm pinned formatter and linter tools")
+        save_index = job.index("Save Swift formatter and linter tools after warm-up")
         launcher_index = job.index("Desktop launcher script tests")
-        save_index = job.rindex("Save Swift formatter and linter tools after checks")
-        self.assertLess(restore_index, launcher_index)
-        self.assertLess(launcher_index, save_index)
+        self.assertLess(restore_index, warm_index)
+        self.assertLess(warm_index, save_index)
+        self.assertLess(save_index, launcher_index)
 
     def test_pr_test_lane_defers_slow_suites_with_changed_file_wake(self):
         """The PR lane defers ratcheted slow suites; their own diffs wake them.
