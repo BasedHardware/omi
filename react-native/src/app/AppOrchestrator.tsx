@@ -37,7 +37,7 @@ import {
 import {omiBackend} from '../omiNative';
 import {
   conversationDayLabel,
-  conversationDisplayTitle,
+  conversationRecapTitle,
   desktopBackendConfigurationCopy,
   desktopBackendUnauthorizedCopy,
   desktopBackendUnavailableCopy,
@@ -1074,7 +1074,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             ),
             id: item.id,
             starred: item.starred,
-            title: conversationDisplayTitle(item),
+            title: conversationRecapTitle(item),
           }))
         : [];
     const projectionStatus: MobileProjectionStatus =

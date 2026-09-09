@@ -239,6 +239,31 @@ test.each(['completed', 'processing'])(
       view = ReactTestRenderer.create(<LibraryPage outcomes={value} />);
     });
     mounted.push(view);
+    const title = 'Launch plan';
+    act(() => label(view, `Open conversation ${title}`).props.onPress());
+    expect(
+      StyleSheet.flatten(label(view, 'Back to conversations').props.style)
+        .alignSelf,
+    ).toBe('flex-start');
+  },
+);
+
+test.each(['completed', 'processing'])(
+  'untitled %s conversation without overview keeps the title fallback label',
+  status => {
+    const {StyleSheet} = require('react-native');
+    const value = libraryOutcome();
+    if (value.conversations.status !== 'success') {
+      throw new Error('Expected fixture');
+    }
+    value.conversations.value.items[0]!.title = '';
+    value.conversations.value.items[0]!.summary = '';
+    value.conversations.value.items[0]!.status = status;
+    let view!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      view = ReactTestRenderer.create(<LibraryPage outcomes={value} />);
+    });
+    mounted.push(view);
     const title =
       status === 'processing'
         ? 'Processing conversation…'

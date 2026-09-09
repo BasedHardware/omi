@@ -15,7 +15,7 @@ import {
   chatSenderCopy,
   desktopBackendUnavailableCopy,
   desktopReadsCanRetry,
-  conversationDisplayTitle,
+  conversationRecapTitle,
   taskDisplayTitle,
   visibleDisplayText,
   type DesktopReadOutcomes,
@@ -369,7 +369,7 @@ export function DesktopHome({
                 key={`${item.kind}-${item.id}`}>
                 {item.kind === 'conversation' && onOpenConversation ? (
                   <FocusPressable
-                    accessibilityLabel={`Open conversation ${conversationDisplayTitle(
+                    accessibilityLabel={`Open conversation ${conversationRecapTitle(
                       item,
                     )}`}
                     accessibilityRole="button"

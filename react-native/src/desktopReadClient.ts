@@ -43,6 +43,22 @@ export function conversationDisplayTitle(item: {
     : 'Conversation title unavailable';
 }
 
+export function conversationRecapTitle(item: {
+  title: string;
+  summary: string;
+  status: string;
+}): string {
+  const title = visibleDisplayText(item.title);
+  if (title !== '') {
+    return title;
+  }
+  const summary = visibleDisplayText(item.summary);
+  if (summary !== '') {
+    return summary;
+  }
+  return conversationDisplayTitle(item);
+}
+
 export function conversationDisplaySummary(item: {
   summary: string;
   status: string;

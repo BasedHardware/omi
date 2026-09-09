@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationRecapTitle,
   conversationDayLabel,
   conversationGroupLabel,
   conversationStatusCopy,
@@ -654,6 +655,58 @@ test('empty conversation titles stay visible instead of a blank row', () => {
   expect(
     conversationDisplayTitle({title: '  Morning walk  ', status: 'completed'}),
   ).toBe('Morning walk');
+});
+
+test('compact recaps keep list overview speech when GET title is empty', () => {
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe('Assistant words');
+  expect(
+    conversationRecapTitle({
+      title: '\u0085',
+      summary: 'Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe('Assistant words');
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: '\u0085Assistant words',
+      status: 'in_progress',
+    }),
+  ).toBe('Assistant words');
+  expect(
+    conversationRecapTitle({
+      title: 'Morning walk',
+      summary: 'Discussed the launch.',
+      status: 'completed',
+    }),
+  ).toBe('Morning walk');
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: '',
+      status: 'processing',
+    }),
+  ).toBe('Processing conversation…');
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: '',
+      status: 'completed',
+    }),
+  ).toBe('Conversation title unavailable');
+  expect(
+    conversationRecapTitle({
+      title: '',
+      summary: '\u0085',
+      status: 'completed',
+    }),
+  ).toBe('Conversation title unavailable');
 });
 
 test('conversation status copy is not a raw wire token', () => {

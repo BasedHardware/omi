@@ -166,6 +166,56 @@ test('untitled processing conversations stay visible instead of a blank row', ()
   expect(textOf(renderer)).not.toContain('No conversations yet.');
 });
 
+test('untitled conversations keep overview speech on the open control', () => {
+  const item: ConversationProjection = {
+    kind: 'conversation',
+    id: 'chat:title-ai',
+    title: '',
+    summary: 'Assistant words',
+    searchableText: 'Conversation title unavailable\nAssistant words',
+    createdAt: '2026-09-07T00:00:00.000Z',
+    updatedAt: '2026-09-07T00:01:00.000Z',
+    startedAt: '2026-09-07T00:00:00.000Z',
+    finishedAt: null,
+    starred: false,
+    status: 'in_progress',
+    source: 'chat',
+    visibility: 'private',
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <ConversationsPage
+        outcome={{
+          status: 'success',
+          value: {
+            items: [item],
+            page: {
+              ...incompletePage,
+              windowStatus: 'complete',
+              complete: true,
+              completenessStatus: 'complete',
+              reasons: [],
+            },
+          },
+        }}
+        loading={false}
+      />,
+    );
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Open conversation Assistant words',
+    ),
+  ).toHaveLength(1);
+  expect(textOf(renderer)).toContain('Conversation title unavailable');
+  expect(textOf(renderer)).toContain('Assistant words');
+});
+
 test('a NEXT LINE-only conversation search keeps rows instead of claiming a miss', () => {
   const item: ConversationProjection = {
     kind: 'conversation',

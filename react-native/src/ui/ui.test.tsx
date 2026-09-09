@@ -843,6 +843,7 @@ test('coverage copy wins over a complete Home search miss', () => {
   expect(orchestrator).toContain('homeSearchEmptyTitle');
   expect(orchestrator).toContain('savedDataEmptyTitle(');
   expect(orchestrator).toContain('homeSearchItems(');
+  expect(orchestrator).toContain('conversationRecapTitle(');
   expect(orchestrator).toContain('homeSearchBannerPhase(');
   expect(orchestrator).toContain("readOutcomes.tasks.status === 'success'");
   expect(orchestrator).toContain(

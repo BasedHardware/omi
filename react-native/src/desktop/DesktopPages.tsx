@@ -15,7 +15,7 @@ import {
   desktopBackendUnavailableCopy,
   desktopReadErrorCopy,
   taskDisplayTitle,
-  conversationDisplayTitle,
+  conversationRecapTitle,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
 import {omiBackend} from '../omiNative';
@@ -110,7 +110,7 @@ export function LibraryPage({
             conversations.map(item => (
               <ShippingListInsert itemKey={item.id} key={item.id}>
                 <FocusPressable
-                  accessibilityLabel={`Open conversation ${conversationDisplayTitle(
+                  accessibilityLabel={`Open conversation ${conversationRecapTitle(
                     item,
                   )}`}
                   accessibilityRole="button"

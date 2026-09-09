@@ -779,6 +779,27 @@ test('untitled processing recaps stay visible instead of rendering a blank card'
   expect(renderedText(renderer)).not.toContain('No recaps yet');
 });
 
+test('untitled recaps keep list overview speech instead of Conversation title unavailable', () => {
+  const renderer = render({
+    recaps: [
+      {
+        id: 'chat:title-ai',
+        title: 'Assistant words',
+        dateLabel: 'Monday',
+      },
+    ],
+  });
+  expect(renderedText(renderer)).toContain('Assistant words');
+  expect(renderedText(renderer)).not.toContain(
+    'Conversation title unavailable',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Open recap Assistant words',
+    ),
+  ).toHaveLength(1);
+});
+
 test('missing settings content reports unavailable instead of a blank settings stage', () => {
   const renderer = render({activeRoute: 'settings'});
   expect(renderedText(renderer)).toContain('Couldn’t load settings');

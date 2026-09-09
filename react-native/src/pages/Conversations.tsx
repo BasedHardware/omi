@@ -13,6 +13,7 @@ import Search from 'lucide-react-native/icons/search';
 import {
   conversationDisplaySummary,
   conversationDisplayTitle,
+  conversationRecapTitle,
   conversationDayLabel,
   desktopBackendUnavailableCopy,
   visibleDisplayText,
@@ -41,7 +42,7 @@ const ConversationRow = memo(function ConversationRow({
 }) {
   return (
     <FocusPressable
-      accessibilityLabel={`Open conversation ${conversationDisplayTitle(item)}`}
+      accessibilityLabel={`Open conversation ${conversationRecapTitle(item)}`}
       accessibilityRole="button"
       accessibilityState={{selected}}
       onPress={onPress}
