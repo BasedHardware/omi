@@ -289,25 +289,18 @@ export function recordingTranscriptSpeech(
   storedText: string | null,
   segments: unknown[]
 ): string | null {
-  return recordingSpeech(storedText, segments, false);
+  const joined = joinWellFormedSegmentTexts(segments, false);
+  return joined === null ? storedText : joined;
 }
 
 export function recordingListSpeech(
   storedText: string | null,
-  segments: unknown[]
+  segments: unknown[] | null
 ): string | null {
-  return recordingSpeech(storedText, segments.slice(0, 240), true);
-}
-
-function recordingSpeech(
-  storedText: string | null,
-  segments: unknown[],
-  skipEmptyAfterTrim: boolean
-): string | null {
-  const joined = joinWellFormedSegmentTexts(segments, skipEmptyAfterTrim);
-  if (joined === null) return storedText;
-  if (!skipEmptyAfterTrim) return joined;
-  return visibleTranscriptText(joined) !== "" ? joined : storedText;
+  if (segments === null) return storedText;
+  const joined = joinWellFormedSegmentTexts(segments.slice(0, 240), true);
+  if (joined === null) return "";
+  return visibleTranscriptText(joined) !== "" ? joined : "";
 }
 
 export function parseStoredTranscriptSegments(

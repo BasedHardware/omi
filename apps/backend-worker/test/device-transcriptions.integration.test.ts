@@ -310,6 +310,37 @@ test("recording titles use skip-empty segment speech when stored text is also pr
   expect(rows[0]?.overview).not.toContain("Stored speech");
 });
 
+test("recording titles stay empty when a stored segment array has no visible speech", async () => {
+  const session = await recording();
+  await completeDeviceSession(env.DB, "record-owner", session.id, 102);
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET state = 'completed', text = ?, segments = ? WHERE session_id = ?"
+  )
+    .bind("Stored speech", JSON.stringify([]), session.id)
+    .run();
+  const empty = await readConversations(env.DB, "record-owner");
+  expect(empty[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "",
+    overview: "",
+    status: "completed",
+  });
+  expect(empty[0]?.title).not.toContain("Stored speech");
+  await env.DB.prepare(
+    "UPDATE device_transcriptions SET segments = ? WHERE session_id = ?"
+  )
+    .bind(JSON.stringify([{ start: 0, end: 0.1, text: "\u0085" }]), session.id)
+    .run();
+  const padded = await readConversations(env.DB, "record-owner");
+  expect(padded[0]).toMatchObject({
+    id: `recording:${session.id}`,
+    title: "",
+    overview: "",
+    status: "completed",
+  });
+  expect(padded[0]?.title).not.toContain("Stored speech");
+});
+
 test("recording overviews hard-slice 240 UTF-16 units without chat ellipsis", async () => {
   const session = await recording();
   await completeDeviceSession(env.DB, "record-owner", session.id, 102);

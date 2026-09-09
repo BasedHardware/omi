@@ -144,10 +144,15 @@ export async function readConversations(
       updated_at: number;
     }>();
   for (const recording of recordings.results) {
-    const segments = parseStoredTranscriptSegments(recording.segments) ?? [];
+    const parsed =
+      recording.segments === null
+        ? null
+        : parseStoredTranscriptSegments(recording.segments);
     const speech =
       recording.state === "completed"
-        ? recordingListSpeech(recording.text, segments) ?? recording.text ?? ""
+        ? parsed === null && recording.segments !== null
+          ? ""
+          : recordingListSpeech(recording.text, parsed) ?? ""
         : "";
     conversations.push({
       id: `recording:${recording.id}`,

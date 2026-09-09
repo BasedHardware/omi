@@ -180,9 +180,22 @@ describe("device transcription client projection", () => {
     expect(recordingTranscriptSpeech("Stored speech", segments)).toContain(
       "Later speech"
     );
+    expect(recordingListSpeech("Stored speech", segments)).not.toBe(
+      "Stored speech"
+    );
     expect(recordingTranscriptSpeech("Stored speech", segments)).not.toBe(
       "Stored speech"
     );
+  });
+
+  test("list titles do not fall back to stored text when a segment array is present", () => {
+    expect(recordingListSpeech("Stored speech", [])).toBe("");
+    expect(
+      recordingListSpeech("Stored speech", [
+        { start: 0, end: 0.1, text: "\u0085" },
+      ])
+    ).toBe("");
+    expect(recordingListSpeech("Stored speech", null)).toBe("Stored speech");
   });
 
   test("list titles visible-trim kept Whisper segments before join", () => {
