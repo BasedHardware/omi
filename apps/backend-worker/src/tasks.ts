@@ -26,7 +26,7 @@ export function parseTaskLimit(
 ): number | null {
   // Align with parseLimit for conversations/memories/chat: invalid values are
   // rejected by the HTTP layer, not silently clamped to the default.
-  if (value === null || value === undefined) return 100;
+  if (value === null || value === undefined) return 25;
   if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
   return Number(value);
 }

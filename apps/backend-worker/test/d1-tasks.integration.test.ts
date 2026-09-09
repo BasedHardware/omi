@@ -240,4 +240,61 @@ describe("D1-authoritative tasks read", () => {
       error: { code: "bad_request", retryable: false, action: "edit_request" },
     });
   });
+
+  test("omitted limit pages 25 tasks like production DEFAULT_PAGE_LIMIT", async () => {
+    await env.DB.prepare("DELETE FROM tasks").run();
+    const insert = env.DB.prepare(
+      "INSERT INTO tasks (id, account_id, description, completed, completed_at, due_at, owner, source, provenance, sort_order, indent_level, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    for (let index = 0; index < 26; index++) {
+      const id = `task:${String(index).padStart(2, "0")}`;
+      await insert
+        .bind(
+          id,
+          seedTask.accountId,
+          `Task ${index}`,
+          0,
+          null,
+          null,
+          null,
+          "assistant",
+          JSON.stringify(["assistant: planner"]),
+          index,
+          0,
+          1785900000 + index,
+          1785900000 + index,
+          null
+        )
+        .run();
+    }
+
+    const response = await handler.fetch(
+      new Request("https://worker.test/v1/tasks", {
+        headers: authenticatedHeaders,
+      }),
+      {
+        ...env,
+        API_TOKEN: "test-token",
+        AI: { run: async () => ({ response: "" }) },
+      } as never,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const page = parseTaskPageJson(await response.text());
+    expect(page).not.toBeNull();
+    if (page === null) throw new Error("page was not parseable");
+    expect(page.items.map((item) => item.id)).toEqual(
+      Array.from(
+        { length: 25 },
+        (_, index) => `task:${String(index).padStart(2, "0")}`
+      )
+    );
+    expect(page.window).toEqual({
+      status: "more",
+      complete: false,
+      hasMore: true,
+      nextCursor: "task:24",
+    });
+  });
 });
