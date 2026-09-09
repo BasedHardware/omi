@@ -2,6 +2,7 @@
 import asyncio
 import importlib.util
 from pathlib import Path
+import re
 import sys
 from types import ModuleType, SimpleNamespace
 import unittest
@@ -56,6 +57,14 @@ ISSUE = dict(id='exact-id', identifier='ENG-123', title='Exact issue', url='http
 WRONG = dict(ISSUE, id='wrong-id', identifier='ENG-1234', title='Different issue')
 
 
+def issue_lookup_identifier(query, variables):
+    # Follow the variable bound to issue(id:), not an unrelated variable's value.
+    match = re.search(r'\bissue\s*\(\s*id\s*:\s*\$([_A-Za-z][_0-9A-Za-z]*)\s*\)', query)
+    if match is None:
+        raise AssertionError('Expected an exact issue lookup')
+    return variables[match.group(1)]
+
+
 class IssueLookupTests(unittest.TestCase):
     handlers = ('tool_get_issue', 'tool_update_issue_status', 'tool_add_comment')
 
@@ -72,9 +81,8 @@ class IssueLookupTests(unittest.TestCase):
             if 'searchIssues' in query:
                 # Faithful full-text response: a related issue can be ranked first.
                 return {'searchIssues': {'nodes': [WRONG]}}
-            if 'issue(id: $id)' in query and variables == {'id': 'ENG-123'}:
-                return lookup if lookup is not None else {'issue': ISSUE}
-            raise AssertionError('Unexpected GraphQL lookup contract')
+            self.assertEqual(issue_lookup_identifier(query, variables), 'ENG-123')
+            return lookup if lookup is not None else {'issue': ISSUE}
 
         module.linear_graphql_request = graphql
         module.get_linear_tokens = lambda uid: authenticated
@@ -96,7 +104,7 @@ class IssueLookupTests(unittest.TestCase):
                 self.assertIsNone(response.error)
                 self.assertIn('ENG-123', response.result)
                 self.assertNotIn('ENG-1234', response.result)
-                self.assertEqual(calls[0][1], {'id': 'ENG-123'})
+                self.assertEqual(issue_lookup_identifier(*calls[0]), 'ENG-123')
                 if name == 'tool_update_issue_status':
                     self.assertEqual(calls[1][1], {'id': 'exact-id', 'input': {'stateId': 'done-id'}})
                     module.find_state_by_name.assert_called_once_with('fixture-user', 'team-id', 'Done')
