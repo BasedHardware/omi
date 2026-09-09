@@ -1,0 +1,76 @@
+.omi-chat-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.omi-chat-markdown p {
+  margin: 0 0 0.75em;
+}
+.omi-chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+.omi-chat-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1.1em;
+  line-height: 1.4;
+  margin: 1em 0 0.5em;
+}
+.omi-chat-markdown :is(ul, ol) {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.omi-chat-markdown pre {
+  overflow: auto;
+  max-width: 100%;
+  padding: 0.75em;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+}
+.omi-chat-markdown code {
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+.omi-chat-markdown blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 2px solid currentColor;
+}
+.omi-chat-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+}
+.omi-chat-markdown :is(th, td) {
+  padding: 0.4em 0.7em;
+  border: 1px solid currentColor;
+  text-align: start;
+}
+.omi-chat-markdown a {
+  color: inherit;
+  text-decoration: underline;
+}
+@media (prefers-reduced-motion: reduce) {
+  .omi-chat-markdown [data-sd-animate],
+  .omi-chat-markdown [data-sd-animate-marker]::marker {
+    animation: none !important;
+  }
+}
+.omi-chat-markdown strong {
+  font-weight: 700;
+}
+.omi-chat-markdown em {
+  font-style: italic;
+}
+.omi-chat-markdown del {
+  text-decoration: line-through;
+}
+.omi-chat-markdown ul {
+  list-style-type: disc;
+}
+.omi-chat-markdown ol {
+  list-style-type: decimal;
+}
+.omi-chat-markdown :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}

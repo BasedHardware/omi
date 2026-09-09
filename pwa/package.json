@@ -9,7 +9,8 @@
     "react-dom": "19.0.0",
     "react-native-safe-area-context": "5.9.0",
     "react-native-svg": "15.15.5",
-    "react-native-web": "0.21.2"
+    "react-native-web": "0.21.2",
+    "streamdown": "2.6.0"
   },
   "scripts": {
     "build": "vite build",
