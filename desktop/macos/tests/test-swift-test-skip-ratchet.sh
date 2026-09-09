@@ -121,4 +121,168 @@ if ! grep -q "new skipped test IDs are not in the ratcheted baseline: SwapTests/
   fail "same-count swap failure did not identify the new skipped test"
 fi
 
+# --- slow-suite deferral list ---
+
+cat >"$TMPDIR/tests/SlowHarnessTests.swift" <<'SWIFT'
+import XCTest
+final class SlowHarnessTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+cat >"$TMPDIR/slow-ok.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if ! "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-ok.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-ok.out"; then
+  fail "valid slow-suite file failed"
+fi
+if ! grep -q "OK: slow-suite deferrals at ratchet (1)." "$TMPDIR/slow-ok.out"; then
+  fail "valid slow-suite output did not report the count"
+fi
+# The trailing tab field carries the comma-separated watch prefixes (empty
+# here); the runner splits it to decide subject-path wakes.
+slow_list="$("$RATCHET" --slow-list --with-watch --slow-file "$TMPDIR/slow-ok.json")"
+expected=$'SlowHarnessTests\t'
+if [ "$slow_list" != "$expected" ]; then
+  fail "slow-list output was '$slow_list'"
+fi
+
+cat >"$TMPDIR/slow-watch.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08",
+      "watch": ["desktop/macos/Desktop/Sources/Widget/"]
+    }
+  }
+}
+JSON
+watch_list="$("$RATCHET" --slow-list --with-watch --slow-file "$TMPDIR/slow-watch.json")"
+expected_watch=$'SlowHarnessTests\tdesktop/macos/Desktop/Sources/Widget/'
+if [ "$watch_list" != "$expected_watch" ]; then
+  fail "slow-list watch output was '$watch_list'"
+fi
+if ! "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-watch.json" --tests-root "$TMPDIR/tests" >/dev/null; then
+  fail "watch-bearing slow-suite file failed validation"
+fi
+
+cat >"$TMPDIR/slow-too-many.json" <<'JSON'
+{
+  "max_slow_suite_count": 0,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-too-many.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-too-many.out" 2>"$TMPDIR/slow-too-many.err"; then
+  fail "slow-suite ratchet unexpectedly allowed a count increase"
+fi
+if ! grep -q "slow-suite count rose to 1 (max_slow_suite_count 0)" "$TMPDIR/slow-too-many.err"; then
+  fail "slow-suite ratchet failure did not explain the count increase"
+fi
+
+cat >"$TMPDIR/slow-stale.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "RetiredHarnessTests": {
+      "reason": "Fixture: deferred suite no longer exists.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-stale.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-stale.out" 2>"$TMPDIR/slow-stale.err"; then
+  fail "slow-suite ratchet unexpectedly allowed a nonexistent suite"
+fi
+if ! grep -q "deferred slow suite no longer exists: RetiredHarnessTests" "$TMPDIR/slow-stale.err"; then
+  fail "stale slow-suite failure did not identify the missing suite"
+fi
+
+cat >"$TMPDIR/slow-unjustified.json" <<'JSON'
+{
+  "max_slow_suite_count": 1,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": ""
+    }
+  }
+}
+JSON
+if "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-unjustified.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-unjustified.out" 2>"$TMPDIR/slow-unjustified.err"; then
+  fail "slow-suite ratchet unexpectedly allowed an entry without evidence"
+fi
+if ! grep -q "slow_suites\[SlowHarnessTests\].evidence must be a non-empty string" "$TMPDIR/slow-unjustified.err"; then
+  fail "unjustified slow-suite failure did not name the missing evidence"
+fi
+
+# A one-character suite name is a valid XCTest identifier and must be
+# accepted: suite discovery does not impose a two-character minimum.
+cat >"$TMPDIR/tests/ATests.swift" <<'SWIFT'
+import XCTest
+final class ATests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+cat >"$TMPDIR/slow-one-char.json" <<'JSON'
+{
+  "max_slow_suite_count": 2,
+  "slow_suites": {
+    "ATests": {
+      "reason": "Fixture: one-character suite name.",
+      "evidence": "hermetic fixture run 2026-09-09"
+    },
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if ! "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-one-char.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-one-char.out" 2>"$TMPDIR/slow-one-char.err"; then
+  fail "one-character suite name was rejected by the slow-suite ratchet"
+fi
+slow_one_char_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-one-char.json")"
+if [ "$(printf '%s\n' "$slow_one_char_list" | grep -c '^ATests$')" != "1" ]; then
+  fail "slow-list omitted the one-character suite: '$slow_one_char_list'"
+fi
+
+# A JSON true/false is not an integer cap, even though bool subclasses int.
+cat >"$TMPDIR/slow-bool-cap.json" <<'JSON'
+{
+  "max_slow_suite_count": true,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-bool-cap.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-bool-cap.out" 2>"$TMPDIR/slow-bool-cap.err"; then
+  fail "boolean max_slow_suite_count was accepted as an integer cap"
+fi
+if ! grep -q "max_slow_suite_count must be a non-negative integer" "$TMPDIR/slow-bool-cap.err"; then
+  fail "boolean cap failure did not use the integer-cap message"
+fi
+
 echo "swift-test-skip-ratchet tests passed"

@@ -10026,4 +10026,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
+
+  @override
+  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
 }

@@ -9789,4 +9789,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
+
+  @override
+  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
 }

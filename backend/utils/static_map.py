@@ -99,12 +99,14 @@ def parse_pins(pins: str) -> List[Tuple[float, float]]:
         if len(parts) != 2:
             raise MalformedPinsError('each pin must be lat,lng')
         try:
-            latitude = round(float(parts[0].strip()), _PIN_PRECISION)
-            longitude = round(float(parts[1].strip()), _PIN_PRECISION)
+            raw_lat = float(parts[0].strip())
+            raw_lng = float(parts[1].strip())
         except (ValueError, TypeError):
             raise MalformedPinsError('each pin must be numeric lat,lng')
-        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        if not -90 <= raw_lat <= 90 or not -180 <= raw_lng <= 180:
             raise MalformedPinsError('pin coordinates out of bounds')
+        latitude = round(raw_lat, _PIN_PRECISION)
+        longitude = round(raw_lng, _PIN_PRECISION)
         if (latitude, longitude) in seen:
             continue
         seen.add((latitude, longitude))

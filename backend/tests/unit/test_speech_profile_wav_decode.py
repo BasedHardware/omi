@@ -167,6 +167,8 @@ class TestUploadProfileWavDecodeGuard:
                 mod, "upload_profile_audio", return_value="https://example.com/profile.wav"
             ) as mock_upload, patch.object(
                 mod, "extract_embedding"
+            ), patch.object(
+                mod, "set_user_speaker_embedding"
             ):
                 mock_os.makedirs.return_value = None
                 mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=duration)

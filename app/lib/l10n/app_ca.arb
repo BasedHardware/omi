@@ -3234,5 +3234,6 @@
     "speechProfileTopicGoal": "Quin és el teu objectiu a llarg termini?",
     "speechToTextUnavailableDesc": "La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.",
     "memoryHistoryPartial": "Una part de l'historial de records no està disponible. Es mostra l'historial rebut fins ara.",
-    "tapPlusToStartRecording": "Toca + per començar a gravar"
+    "tapPlusToStartRecording": "Toca + per començar a gravar",
+    "processingTakingLonger": "Encara en curs: això està trigant més del normal."
 }
