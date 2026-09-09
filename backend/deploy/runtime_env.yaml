@@ -216,6 +216,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -1538,6 +1541,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          LLM_GATEWAY_ACCOUNTING_ENABLED:
+            value: 'true'
+            category: rollout
           MEMORY_ENABLED:
             value: 'on'
           CONVERSATION_NOTES_V2_ENABLED:

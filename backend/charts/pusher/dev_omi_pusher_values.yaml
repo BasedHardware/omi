@@ -125,6 +125,18 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OPENAI_API_KEY
+  # The pusher is the third host of process_conversation (routers/pusher.py
+  # -> process_conversation_task). Its managed calls travel through the LLM
+  # gateway, which writes llm_gateway_attempts under its own identity; this
+  # switch is what utils/llm/managed_spend_ledger.py reads for any direct-
+  # provider surface that adopts that writer (none is mounted here today;
+  # the embeddings route-absent degrade in utils/llm/clients.py calls the
+  # provider directly and is unledgered on every host). Identical to
+  # backend-listen so a
+  # co-host env diff cannot silently leave one process_conversation host
+  # ledger-blind (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
   - name: OMI_LLM_GATEWAY_URL
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
