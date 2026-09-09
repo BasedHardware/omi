@@ -1,0 +1,48 @@
+{
+  "tools": [
+    {
+      "name": "get_line_status",
+      "description": "Check TfL's current status and disruptions for exact London line IDs. With no IDs, returns Underground lines only.",
+      "endpoint": "/tools/get_line_status",
+      "method": "POST",
+      "auth_required": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "line_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 10, "description": "Exact line IDs, for example victoria, central or elizabeth. Omit for all Tube lines."}
+        }
+      }
+    },
+    {
+      "name": "find_stops",
+      "description": "Find London stops by name or bus stop code. Ask the user to choose if multiple stops match; use the returned ID for arrivals.",
+      "endpoint": "/tools/find_stops",
+      "method": "POST",
+      "auth_required": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "minLength": 2, "maxLength": 80},
+          "mode": {"type": "string", "enum": ["tube", "bus", "dlr", "overground", "elizabeth-line", "tram", "river-bus", "national-rail"]},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_arrivals",
+      "description": "Get upcoming TfL arrival predictions for an exact stop ID returned by find_stops. Times are UTC and predictions can change. Empty predictions do not establish service status.",
+      "endpoint": "/tools/get_arrivals",
+      "method": "POST",
+      "auth_required": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "stop_id": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9-]+$"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}
+        },
+        "required": ["stop_id"]
+      }
+    }
+  ]
+}
