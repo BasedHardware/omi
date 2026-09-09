@@ -1,270 +1,256 @@
-# Guida Rapida di omi-cli (Italian Quickstart)
+# Guida di Avvio Rapido di omi-cli (Italian Quickstart)
 
-Guida di riferimento pratico per l'interfaccia a riga di comando ufficiale di Omi (`omi-cli`).
-Questo documento illustra l'installazione, l'autenticazione, i comandi principali per la gestione dei dati e le tecniche di automazione per script e agenti autonomi.
+> Guida pratica per interagire con Omi direttamente dal terminale — progettata per sviluppatori e agenti AI autonomi.
+
+`omi-cli` è l'interfaccia a riga di comando ufficiale per l'API sviluppatori di [Omi](https://omi.me). Consente di gestire in modo strutturato e automatizzabile le quattro risorse fondamentali del sistema: memorie (memories), conversazioni (conversations), attività (action items) e obiettivi (goals).
+
+* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
+* **Documentazione Ufficiale:** [docs.omi.me/doc/developer/cli/introduction](https://docs.omi.me/doc/developer/cli/introduction)
+* **Codice Sorgente:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
 
 ---
 
-## Panoramica ed Eseguibile
+## 1. Installazione
 
-* **Nome pacchetto PyPI:** `omi-cli`
-* **File binario eseguibile:** `omi`
-
-Per evitare confusione durante l'installazione e l'uso:
+Il metodo consigliato è l'uso di `pipx`, che isola le dipendenze dall'ambiente di sistema:
 
 ```bash
-# Si installa con il nome del pacchetto:
+# Consigliato: installazione isolata con pipx
 pipx install omi-cli
 
-# Si esegue usando il comando abbreviato:
+# In alternativa tramite pip tradizionale
+pip install omi-cli
+```
+
+> **Attenzione: Nome del pacchetto vs. Nome del comando**
+> * Il nome del pacchetto su PyPI è **`omi-cli`** (il nome `omi` appartiene a un altro pacchetto non correlato).
+> * Il comando eseguibile nel terminale è semplicemente **`omi`**.
+
+Verificare l'installazione consultando la versione e il menu di aiuto:
+
+```bash
+omi --version
 omi --help
 ```
 
 ---
 
-## Installazione
+## 2. Autenticazione (Authentication)
 
-Si consiglia l'uso di `pipx` per installare la CLI in un ambiente virtuale isolato senza conflitti di dipendenze con Python globale.
+`omi-cli` supporta due metodi di autenticazione:
 
-### Metodo Consigliato (`pipx`)
+| Metodo | Indicato per | Esempio di utilizzo |
+| :--- | :--- | :--- |
+| **Chiave API (`omi_dev_*`)** | Automazioni, CI/CD, server headless, agenti AI | `omi auth login --api-key ...` o `OMI_API_KEY` |
+| **OAuth via Browser (Google/Apple)** | Sviluppatori su laptop / workstation locali | `omi auth login --browser` (Google) / `--provider apple` |
+
+### Login Interattivo
+Se eseguito senza opzioni aggiuntive, la procedura guidata chiede quale flusso utilizzare:
 
 ```bash
-pipx install omi-cli
+omi auth login
+# 1) Browser — autenticazione via Google (usa `--provider apple` per Apple)
+# 2) API key — Incolla la tua chiave sviluppatore generata su app.omi.me
 ```
 
-Per aggiornare all'ultima versione disponibile:
-
+### Login Diretto dal Browser
 ```bash
-pipx upgrade omi-cli
-```
-
-### Metodo Alternativo (`pip`)
-
-```bash
-pip install --user omi-cli
-```
-
-Verificare che l'installazione sia avvenuta correttamente:
-
-```bash
-omi --version
-```
-
----
-
-## Autenticazione
-
-La CLI supporta tre modalita principali di autenticazione: accesso interattivo tramite browser, chiave API statica e variabile d'ambiente.
-
-### 1. Accesso Interattivo via Browser
-
-Ideale per computer di sviluppo con interfaccia grafica:
-
-```bash
+# Login predefinito tramite Google
 omi auth login --browser
+
+# In alternativa tramite Apple
+omi auth login --browser --provider apple
 ```
 
-Il comando aprira la finestra di autenticazione Web e memorizzera il token in modo sicuro sul sistema locale.
-
-### 2. Accesso Diretto con Chiave API (Headless)
-
-Adatto per server remoti, connessioni SSH o ambienti CI/CD:
+### Utilizzo di una Chiave Sviluppatore (API Key)
+Generare la chiave nel pannello di [app.omi.me](https://app.omi.me) sotto **Developer → API Keys**:
 
 ```bash
+# Salvare in modo permanente nel profilo locale (con immissione protetta)
 omi auth login --api-key
+
+# Oppure impostare come variabile d'ambiente (ideale per container e pipeline CI/CD)
+# Nota: se il profilo locale ha già una chiave memorizzata, eseguire prima `omi auth logout`.
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 ```
 
-La CLI richiederà di incollare la chiave generata nella dashboard sviluppatore di Omi.
-
-### 3. Variabile d'Ambiente
-
-Per container Docker o pipeline automatizzate senza memorizzazione di file:
+### Verifica dello Stato di Autenticazione
+* `omi auth status`: Mostra il profilo locale attivo e la credenziale mascherata; la data di scadenza viene indicata solo per i profili OAuth (funziona offline).
+* `omi auth whoami`: Invia una richiesta all'API Omi per confermare la validità delle credenziali in tempo reale (richiede connessione).
 
 ```bash
-export OMI_API_KEY="tua-chiave-api-segreta"
+omi auth status
+omi auth whoami
 ```
 
-### Verifica dell'Autenticazione
-
-* **Verifica offline (stato locale del token):**
-  ```bash
-  omi auth status
-  ```
-* **Verifica online (convalida in tempo reale sul server):**
-  ```bash
-  omi auth whoami
-  ```
-
-Per disconnettere la sessione locale:
-
+Per terminare la sessione:
 ```bash
 omi auth logout
+# Se OMI_API_KEY è impostata nell'ambiente, rimuoverla dalla sessione (Bash/Zsh: `unset OMI_API_KEY`).
 ```
 
 ---
 
-## Flussi di Lavoro Principali
+## 3. Comandi Principali
 
-### Memorie (`omi memory`)
-
-Le memorie rappresentano elementi atomici di contesto catturati da Omi.
+### Memorie (Memories)
+Fatti, note e informazioni di contesto acquisite da Omi:
 
 ```bash
-# Elenco delle memorie recenti
-omi memory list --limit 10
+# Elenco delle memorie salvate
+omi memory list
 
-# Creazione manuale di una nuova memoria
-omi memory create --text "Riunione di progetto fissata per martedi alle 10:00 con il team tecnico."
+# Creazione di una nuova memoria
+omi memory create "Preferisce risposte tecniche concise con esempi in Python" --category work
 
-# Ricerca semantica nel database delle memorie
-omi memory search "riunione di progetto"
+# Dettagli di una specifica memoria
+omi memory get <MEMORY_ID>
 ```
 
-### Conversazioni (`omi conversation`)
-
-Gestione dei dialoghi e delle trascrizioni audio registrate.
+### Conversazioni (Conversations)
+Cronologia audio e trascrizioni registrate dai dispositivi Omi:
 
 ```bash
-# Elenco conversazioni
+# Elenco delle 5 conversazioni più recenti
 omi conversation list --limit 5
 
-# Dettagli di una conversazione specifica
-omi conversation get conv_123456
-
-# Esportazione della trascrizione completa in formato Markdown
-omi conversation export conv_123456 --format markdown > trascrizione.md
+# Dettagli e trascrizione completa della conversazione
+omi conversation get <CONVERSATION_ID> --include-transcript
 ```
 
-### Attivita e Azioni (`omi action-item`)
-
-Compiti e impegni estratti automaticamente dai dialoghi.
+### Attività e Impegni (Action Items)
+Compiti e promemoria estratti automaticamente dai dialoghi:
 
 ```bash
-# Elenco compiti da completare
-omi action-item list --status pending
+# Elenco delle attività aperte
+omi action-item list --open
 
-# Segnare un compito come completato
-omi action-item update act_789012 --completed
+# Completamento di un'attività
+omi action-item complete <ACTION_ITEM_ID>
 ```
 
-### Obiettivi (`omi goal`)
-
-Monitoraggio degli obiettivi personali e professionali a lungo termine.
+### Obiettivi (Goals)
+Monitoraggio degli obiettivi e delle metriche di progresso:
 
 ```bash
-# Visualizzazione obiettivi attivi
+# Elenco degli obiettivi attivi
 omi goal list
 
-# Creazione di un nuovo obiettivo
-omi goal create --title "Completare la documentazione multilingue" --horizon month
-
-# Aggiornamento percentuale di progresso
-omi goal update goal_345678 --progress 75
+# Creazione di un nuovo obiettivo quantitativo
+omi goal create "Bere 2L di acqua al giorno" --type numeric --target 2 --unit liters
 ```
 
 ---
 
-## Automazione Strutturata (`--json` & `jq`)
+## 4. Automazione e Output in JSON (`--json`)
 
-Ogni comando `omi` accetta l'argomento globale `--json`, garantendo output leggibili direttamente da macchine e parser.
-
-### Estrarre ID e Contenuti con `jq`
+`omi-cli` include il supporto nativo di primo livello per pipeline di elaborazione dati. Specificando il flag globale `--json`, i risultati vengono restituiti in formato JSON valido:
 
 ```bash
-# Estrarre tutti i testi delle memorie
-omi --json memory list --limit 20 | jq -r '.[].content'
+# Elenco memorie in JSON ed estrazione campi con jq
+omi --json memory list | jq '.[] | {id, content, category}'
 
-# Trovare i compiti prioritari non completati
-omi --json action-item list | jq '.[] | select(.completed == false) | {id: .id, description: .description}'
+# Estrazione dei titoli delle ultime conversazioni
+omi --json conversation list --limit 5 | jq '.[] | {id, title: .structured.title, started_at}'
+
+# Consultazione delle attività aperte in formato grezzo
+omi --json action-item list --open | jq '.'
 ```
+
+> **Regola di sintassi essenziale:**
+> `--json` è un'**opzione globale** e deve precedere il sottocomando:
+> * Corretto: `omi --json memory list`
+> * Errato: `omi memory list --json`
 
 ---
 
-## Tabella dei Codici di Uscita (Exit Codes)
+## 5. Codici di Uscita (Exit Codes)
 
-La CLI adotta codici di uscita deterministici, consentendo agli script di gestire gli errori con precisione:
+Per garantire un'integrazione affidabile in script shell e flussi CI/CD:
 
-| Codice | Significato | Causa Tipica |
+| Codice | Significato | Descrizione |
 | :---: | :--- | :--- |
-| `0` | **Successo** | Operazione completata correttamente. |
-| `1` | **Errore Generico** | Eccezione interna non gestita o errore imprevisto. |
-| `2` | **Errore Argomenti** | Flag sconosciuti, parametri mancanti o sintassi errata. |
-| `3` | **Non Autenticato** | Token assente, scaduto o chiave API non valida. |
-| `4` | **Non Trovato** | La risorsa (memoria, conversazione, obiettivo) non esiste. |
-| `5` | **Errore di Rete** | Connessione interrotta o timeout dell'endpoint remoto. |
+| `0` | **Successo (Success)** | Esecuzione completata correttamente. |
+| `1` | **Errore di Uso (Validazione Applicazione)** | Dati non validi o errore di validazione dell'applicazione; gli errori di sintassi del parser Click restituiscono codice `2`. |
+| `2` | **Errore di Autenticazione / Sintassi CLI** | Mancata autenticazione, token scaduto o flag di sintassi non riconosciuti dal parser Click. |
+| `3` | **Errore del Server / Rete (Server Error)** | Risposta HTTP 5xx, timeout o connessione non raggiungibile. |
+| `4` | **Limite di Richieste (Rate Limited)** | Risposta HTTP 429 — richiesta limitata dal rate limit. |
+| `5` | **Non Trovato (Not Found)** | Risposta HTTP 404 — la risorsa richiesta non esiste. |
 
 ---
 
-## Snippet Multi-Piattaforma
+## 6. Esempi per Ambiente di Shell
 
-### Bash / Zsh (Linux & macOS)
-
+### Bash / Zsh (Linux / macOS)
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+# Impostazione chiave di sessione
+export OMI_API_KEY="omi_dev_your_actual_key_here"
 
-echo "Verifica credenziali Omi..."
-if ! omi auth status > /dev/null 2>&1; then
-    echo "Errore: autenticazione richiesta. Esegui 'omi auth login'." >&2
-    exit 3
+# Esecuzione con controllo del codice di uscita
+omi --json memory list --limit 10
+if [ $? -ne 0 ]; then
+    echo "Errore durante la consultazione delle memorie Omi" >&2
 fi
-
-echo "Salvataggio nuova nota..."
-omi memory create --text "Controllo automatico completato con successo."
 ```
 
 ### PowerShell (Windows)
-
 ```powershell
-Write-Host "Verifica credenziali Omi..."
-omi auth status
+# Impostazione variabile d'ambiente in PowerShell
+$env:OMI_API_KEY = "omi_dev_your_actual_key_here"
+
+# Conversione dell'output JSON direttamente in oggetti PowerShell
+$memories = omi --json memory list | ConvertFrom-Json
+$memories | Select-Object id, content, category
+
+# Controllo errori tramite $LASTEXITCODE
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Autenticazione mancante. Esegui 'omi auth login'."
-    exit $LASTEXITCODE
-}
-
-Write-Host "Recupero obiettivi..."
-omi --json goal list | ConvertFrom-Json | ForEach-Object {
-    [PSCustomObject]@{
-        Id = $_.id
-        Titolo = $_.title
-        Progresso = "$($_.progress)%"
-    }
+    Write-Error "Comando Omi fallito con codice $LASTEXITCODE"
 }
 ```
 
 ---
 
-## Integrazione Omi Desktop Locale
+## 7. Integrazione con l'API Desktop Locale
 
-Se l'applicazione Omi Desktop e in esecuzione localmente, la CLI puo interagire con i suoi servizi di contesto locale:
+Quando l'applicazione Omi Desktop è in esecuzione sulla macchina, la CLI può interrogare la timeline locale senza effettuare richieste cloud:
 
 ```bash
-# Configurare la porta locale dell'applicazione
-omi local configure --port 8000
+# Configurazione dell'endpoint locale (usando variabili d'ambiente per proteggere il token)
+export OMI_LOCAL_API_URL="http://127.0.0.1:47778"
+read -r -s -p "Desktop token: " OMI_LOCAL_TOKEN; echo
+export OMI_LOCAL_TOKEN
 
-# Cercare testo sullo schermo catturato localmente
-omi local search-screen "rapporto trimestrale"
+# Verifica dello stato di connessione locale
+omi --json local status
+
+# Ricerca nella timeline visiva recente
+omi --json local search-screen "Rapporto trimestrale" --days 7 --app Safari
 ```
 
 ---
 
-## Gestione Profili Multi-Ambiente
+## 8. Gestione di Profili Multipli (Profiles)
 
-E possibile configurare profili distinti (ad esempio sviluppo, collaudo e produzione) tramite `--profile` o configurazione in `~/.omi/config.toml`:
+Per passare da account personali a lavorativi o ambienti di test, utilizzare l'opzione `--profile`. Le impostazioni vengono conservate in `~/.omi/config.toml`:
 
 ```bash
-# Utilizzare un profilo specifico
-omi --profile lavoro memory list
+# Creazione e autenticazione profilo personale
+omi --profile personal auth login
 
-# Specificare un differente endpoint di prova
-omi --profile staging --api-url https://api-staging.omi.me memory list
+# Creazione e autenticazione profilo di lavoro
+omi --profile work auth login
+
+# Esecuzione di comandi con un profilo specifico
+omi --profile work memory list
+
+# Configurazione profilo di test con endpoint personalizzato
+omi --profile staging --api-base https://api-staging.omi.me memory list
 ```
 
 ---
 
-## Sicurezza e Buone Pratiche
+## 9. Buone Pratiche di Sicurezza
 
-1. **Protezione dei Token:** Non includere mai token di accesso o chiavi API in repository Git pubblici.
-2. **Cronologia Shell:** Quando si usa `--api-key` in ambienti condivisi, evitare di passare la chiave direttamente come argomento inline; preferire l'immissione interattiva mascherata o la variabile d'ambiente `OMI_API_KEY`.
-3. **Controllo dei Permessi:** In ambienti di produzione Unix, verificare che la directory di configurazione `~/.omi/` abbia permessi restrittivi (`chmod 700 ~/.omi`).
+* **Nessun token in Git:** Non salvare mai chiavi API in repository di versione pubblici.
+* **Cronologia Terminale:** Evitare di passare segreti in chiaro come argomenti CLI; preferire l'immissione interattiva o `OMI_API_KEY`.
+* **Permessi Cartella:** Su sistemi Unix limitare i permessi della cartella di configurazione `~/.omi/` (`chmod 700 ~/.omi`).
