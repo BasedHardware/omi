@@ -595,10 +595,14 @@ mkdir -p "$TMPDIR/pr-tests"
 cp "$TMPDIR"/green-tests/*.swift "$TMPDIR/pr-tests/"
 cat >"$TMPDIR/slow-suites.json" <<'JSON'
 {
-  "max_slow_suite_count": 1,
+  "max_slow_suite_count": 2,
   "slow_suites": {
     "BetaTests": {
       "reason": "Fixture: measured slow harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    },
+    "ChatDiscoverabilityTests": {
+      "reason": "Fixture: second measured slow harness.",
       "evidence": "hermetic fixture run 2026-09-08"
     }
   }
@@ -611,17 +615,20 @@ export OMI_SWIFT_TEST_LANE=pr
 if ! "$RUNNER" >"$TMPDIR/pr-defer-runner.out" 2>"$TMPDIR/pr-defer-runner.err"; then
   fail "green PR lane with a deferred suite failed"
 fi
-if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-defer-runner.out"; then
-  fail "PR lane did not drop the deferred suite from the executed count"
+if ! grep -q "Ran 6 Swift suites in isolation" "$TMPDIR/pr-defer-runner.out"; then
+  fail "PR lane did not drop both deferred suites from the executed count"
 fi
-if ! grep -q "Deferred 1 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-defer-runner.out"; then
-  fail "runner did not announce the deferred slow suite"
+if ! grep -q "Deferred 2 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-defer-runner.out"; then
+  fail "runner did not announce both deferred slow suites"
 fi
-if ! grep -q "BetaTests" "$TMPDIR/pr-defer-runner.out" || ! grep -q "Deferred" "$TMPDIR/pr-defer-runner.out"; then
-  fail "deferred announcement did not name the deferred suite"
+if ! grep -q "BetaTests" "$TMPDIR/pr-defer-runner.out" || ! grep -q "ChatDiscoverabilityTests" "$TMPDIR/pr-defer-runner.out"; then
+  fail "deferred announcement did not name every deferred suite"
 fi
 if grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
   fail "deferred slow suite still executed in the PR lane"
+fi
+if grep -q -- "--filter ChatDiscoverabilityTests/" "$FAKE_XCRUN_LOG"; then
+  fail "second deferred slow suite still executed in the PR lane"
 fi
 
 # A diff that edits the deferred suite's own declaring file wakes it.
@@ -630,11 +637,14 @@ export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/BetaTests.swift
 if ! "$RUNNER" >"$TMPDIR/pr-wake-runner.out" 2>"$TMPDIR/pr-wake-runner.err"; then
   fail "PR lane failed when the deferred suite's own file changed"
 fi
-if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-wake-runner.out"; then
+if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-wake-runner.out"; then
   fail "changed declaring file did not wake the deferred slow suite"
 fi
-if grep -q "Deferred" "$TMPDIR/pr-wake-runner.out"; then
-  fail "woken deferred suite was still reported as deferred"
+if ! grep -q "Deferred 1 ratcheted slow suite(s) to the full lane" "$TMPDIR/pr-wake-runner.out"; then
+  fail "woken suite did not leave exactly one deferred suite"
+fi
+if ! grep -q -- "--filter BetaTests/" "$FAKE_XCRUN_LOG"; then
+  fail "woken deferred suite still skipped execution"
 fi
 
 # A diff to the deferral infrastructure re-baselines the whole selection.
@@ -646,12 +656,22 @@ if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-rebaseline-runner.out
   fail "deferral-list change did not re-baseline the full selection"
 fi
 
+# A diff to the ratchet that validates the slow list re-baselines too: its
+# selection logic (e.g. --slow-list) must not judge its own changes stale.
+export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/scripts/swift-test-skip-ratchet.py"
+if ! "$RUNNER" >"$TMPDIR/pr-ratchet-runner.out" 2>"$TMPDIR/pr-ratchet-runner.err"; then
+  fail "PR lane failed when the slow-list ratchet itself changed"
+fi
+if ! grep -q "Ran 8 Swift suites in isolation" "$TMPDIR/pr-ratchet-runner.out"; then
+  fail "ratchet-script change did not re-baseline the full selection"
+fi
+
 # An unrelated declaring file does not wake the deferred suite...
 export OMI_SWIFT_TEST_CHANGED_FILES="desktop/macos/Desktop/Tests/AlphaTests.swift"
 if ! "$RUNNER" >"$TMPDIR/pr-unrelated-runner.out" 2>"$TMPDIR/pr-unrelated-runner.err"; then
   fail "PR lane failed on an unrelated changed test file"
 fi
-if ! grep -q "Ran 7 Swift suites in isolation" "$TMPDIR/pr-unrelated-runner.out"; then
+if ! grep -q "Ran 6 Swift suites in isolation" "$TMPDIR/pr-unrelated-runner.out"; then
   fail "unrelated changed file wrongly woke the deferred suite"
 fi
 unset OMI_SWIFT_TEST_CHANGED_FILES
@@ -691,7 +711,7 @@ fi
 if ! grep -q "Slowest executed Swift suites this run (wall seconds):" "$TMPDIR/timing-runner.out"; then
   fail "runner did not print the duration harvest summary"
 fi
-if ! grep -q "ChatDiscoverabilityTests" "$TMPDIR/timing-runner.out"; then
+if ! grep -q "APIClientRoutingTests" "$TMPDIR/timing-runner.out"; then
   fail "duration harvest summary did not name an executed suite"
 fi
 if grep -q "All tests" "$TMPDIR/timing-runner.out"; then

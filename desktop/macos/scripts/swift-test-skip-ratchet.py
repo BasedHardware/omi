@@ -26,7 +26,7 @@ DEFAULT_SKIP_FILE = Path(__file__).with_name("swift-test-skips.json")
 DEFAULT_SLOW_FILE = Path(__file__).with_name("swift-test-slow-suites.json")
 DEFAULT_TESTS_ROOT = Path(__file__).resolve().parents[1] / "Desktop" / "Tests"
 TEST_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*/test[A-Za-z0-9_]+$")
-SUITE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]+$")
+SUITE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 METHOD_RE_TEMPLATE = r"\bfunc\s+{method}\s*\("
 
 
@@ -185,7 +185,7 @@ def normalized_slow_suites(path: Path) -> dict[str, dict[str, str]]:
         slow_suites[name] = entry
 
     max_count = data.get("max_slow_suite_count")
-    if not isinstance(max_count, int) or max_count < 0:
+    if isinstance(max_count, bool) or not isinstance(max_count, int) or max_count < 0:
         raise ValueError("max_slow_suite_count must be a non-negative integer")
     if len(slow_suites) > max_count:
         raise ValueError(f"slow-suite count rose to {len(slow_suites)} (max_slow_suite_count {max_count})")

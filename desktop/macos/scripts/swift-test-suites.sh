@@ -634,7 +634,10 @@ is_serial_suite() {
 slow_suites_resolved=""
 if [ "$TEST_LANE" = "pr" ]; then
   if [ -f "$SLOW_SUITES_FILE" ]; then
-    slow_suites_resolved="$("$SKIP_RATCHET" --slow-list --slow-file "$SLOW_SUITES_FILE")"
+    # --slow-list prints one suite name per line; normalize to a single
+    # space-delimited line so the word-boundary matcher below sees every
+    # entry, not just a lone first one.
+    slow_suites_resolved="$("$SKIP_RATCHET" --slow-list --slow-file "$SLOW_SUITES_FILE" | tr '\n' ' ')"
   fi
 fi
 
@@ -660,12 +663,13 @@ suite_declares_changed_file() {
   return 1
 }
 
-# A change to the runner, the deferral list, the package manifest, or the test
-# driver re-baselines the whole selection: the partition below must not depend
-# on a stale slow list to judge its own correctness.
+# A change to the runner, the deferral list, the ratchet that validates it,
+# the package manifest, or the test driver re-baselines the whole selection:
+# the partition below must not depend on a stale slow list to judge its own
+# correctness.
 deferral_rebaselined() {
   printf '%s\n' "$CHANGED_FILES" | grep -qxE \
-    'desktop/macos/(Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json))'
+    'desktop/macos/(Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))'
 }
 
 deferred_suites=""

@@ -438,6 +438,29 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # The slow list and its validator are full-suite inputs: editing them
         # must wake the debug test lane.
         self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-slow-suites.json"]).includes("desktop-swift-tests"))
+        self.assertTrue(resolve_impact(["desktop/macos/scripts/swift-test-skip-ratchet.py"]).includes("desktop-swift-tests"))
+
+    def test_changed_file_forwarding_covers_the_deferral_infrastructure(self):
+        """The runner can only wake/re-baseline on files CI actually forwards.
+
+        The ratchet script decides deferral (--slow-list); a change to it must
+        reach the runner's CHANGED_FILES, and the runner's own re-baseline
+        pattern must include it — otherwise the PR lane would judge a modified
+        selection algorithm against the stale slow list it replaces.
+        """
+        changes_job = self.jobs["changes"]
+        self.assertIn("swift-test-skip-ratchet\\.py", changes_job)
+        self.assertIn("swift-test-skip-ratchet\\.py", _suite_runner_text())
+
+    def test_pr_lane_deferral_matcher_handles_multi_entry_slow_lists(self):
+        """--slow-list is newline-delimited; the matcher must see every entry.
+
+        A space-delimited case glob over raw newline output matches nothing
+        for the real multi-suite slow list, silently disabling the whole
+        80/20 deferral. The runner must normalize before matching.
+        """
+        suite_runner = _suite_runner_text()
+        self.assertIn("--slow-file \"$SLOW_SUITES_FILE\" | tr '\\n' ' '", suite_runner)
 
     def test_release_compile_is_reserved_off_ordinary_prs(self):
         """One hosted Mac per ordinary PR; pushes and package edits compile release.

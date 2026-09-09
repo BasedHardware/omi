@@ -103,7 +103,7 @@ jobs:
           # to the runner: test sources, the package manifest, and the runner
           # scripts whose change must re-baseline the whole suite selection.
           DESKTOP_SWIFT_CHANGED=$(printf '%s\n' "$FILES" | grep -Ex \
-            'desktop/macos/(Desktop/Tests/[^ ]+\.swift|Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json))' \
+            'desktop/macos/(Desktop/Tests/[^ ]+\.swift|Desktop/Package\.(swift|resolved)|test\.sh|scripts/(run-swift-ci\.sh|swift-test-suites\.sh|swift-test-slow-suites\.json|swift-test-skip-ratchet\.py))' \
             || true)
           {
             echo "desktop_swift_changed_files<<DESKTOP_SWIFT_CHANGED_EOF"

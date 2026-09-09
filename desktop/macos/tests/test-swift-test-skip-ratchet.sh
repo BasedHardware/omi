@@ -209,4 +209,56 @@ if ! grep -q "slow_suites\[SlowHarnessTests\].evidence must be a non-empty strin
   fail "unjustified slow-suite failure did not name the missing evidence"
 fi
 
+# A one-character suite name is a valid XCTest identifier and must be
+# accepted: suite discovery does not impose a two-character minimum.
+cat >"$TMPDIR/tests/ATests.swift" <<'SWIFT'
+import XCTest
+final class ATests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+cat >"$TMPDIR/slow-one-char.json" <<'JSON'
+{
+  "max_slow_suite_count": 2,
+  "slow_suites": {
+    "ATests": {
+      "reason": "Fixture: one-character suite name.",
+      "evidence": "hermetic fixture run 2026-09-09"
+    },
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if ! "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-one-char.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-one-char.out" 2>"$TMPDIR/slow-one-char.err"; then
+  fail "one-character suite name was rejected by the slow-suite ratchet"
+fi
+slow_one_char_list="$("$RATCHET" --slow-list --slow-file "$TMPDIR/slow-one-char.json")"
+if [ "$(printf '%s\n' "$slow_one_char_list" | grep -c '^ATests$')" != "1" ]; then
+  fail "slow-list omitted the one-character suite: '$slow_one_char_list'"
+fi
+
+# A JSON true/false is not an integer cap, even though bool subclasses int.
+cat >"$TMPDIR/slow-bool-cap.json" <<'JSON'
+{
+  "max_slow_suite_count": true,
+  "slow_suites": {
+    "SlowHarnessTests": {
+      "reason": "Fixture: measured slow performance harness.",
+      "evidence": "hermetic fixture run 2026-09-08"
+    }
+  }
+}
+JSON
+if "$RATCHET" --slow-check --slow-file "$TMPDIR/slow-bool-cap.json" --tests-root "$TMPDIR/tests" \
+    >"$TMPDIR/slow-bool-cap.out" 2>"$TMPDIR/slow-bool-cap.err"; then
+  fail "boolean max_slow_suite_count was accepted as an integer cap"
+fi
+if ! grep -q "max_slow_suite_count must be a non-negative integer" "$TMPDIR/slow-bool-cap.err"; then
+  fail "boolean cap failure did not use the integer-cap message"
+fi
+
 echo "swift-test-skip-ratchet tests passed"
