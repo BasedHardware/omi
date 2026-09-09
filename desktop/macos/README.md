@@ -11,6 +11,14 @@ agent/            Agent runtime for multi-provider chat (TypeScript)
 dmg-assets/       DMG installer resources
 ```
 
+## AI Providers
+
+Chat runs through one of three providers, chosen in Settings > AI Provider:
+
+- **Omi AI** — the default, routed through the Rust backend with your Omi account.
+- **Claude Code** — your own Claude OAuth session.
+- **Local** — talks directly to a self-hosted OpenAI-compatible server (e.g. LM Studio, Ollama). Set the server's base URL and pick a model from the list it fetches at `{baseURL}/models`; nothing in this mode is routed through Omi's servers. An optional second "vision" model can be configured to interpret screenshots.
+
 ## Development
 
 Requires macOS 14.0+, Python 3.11 with uv, and code signing with an Apple Developer ID.
