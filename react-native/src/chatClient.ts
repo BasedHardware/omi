@@ -179,6 +179,14 @@ export function chatHistoryCanReload(error: unknown): boolean {
   return error.retryable;
 }
 
+export function chatHistoryShouldRefresh(error: unknown): boolean {
+  return (
+    error instanceof ChatBackendError &&
+    error.action === 'refresh_history' &&
+    (error.status === 410 || error.status === 400)
+  );
+}
+
 export function chatCancelErrorCopy(error: unknown): string {
   if (chatWriteDoorUnavailable(error)) {
     return 'Stopping the response is not available on this backend yet.';

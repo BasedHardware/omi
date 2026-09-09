@@ -1,8 +1,8 @@
 import {useEffect, useRef, useState} from 'react';
 import {
-  ChatBackendError,
   chatHistoryCanReload,
   chatHistoryErrorCopy,
+  chatHistoryShouldRefresh,
   loadNewestChatHistory,
   loadOlderChatHistory,
   mergeOlderChatHistory,
@@ -167,11 +167,7 @@ export function useChatConversationHistory(
         if (epoch.current !== current) {
           return;
         }
-        if (
-          error instanceof ChatBackendError &&
-          error.status === 410 &&
-          error.action === 'refresh_history'
-        ) {
+        if (chatHistoryShouldRefresh(error)) {
           setReload(value => value + 1);
           return;
         }

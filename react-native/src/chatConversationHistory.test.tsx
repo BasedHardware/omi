@@ -577,6 +577,78 @@ test('nested non-retryable later chat history pages keep loaded messages', async
   ).toHaveLength(0);
 });
 
+test('an undecodable older chat cursor refreshes newest history instead of dead-ending', async () => {
+  mockRequest
+    .mockResolvedValueOnce(
+      historyResponse(
+        [{id: 'human-2', text: 'newer prompt', sender: 'human'}],
+        {olderCursor: 'older-1', hasOlder: true},
+      ),
+    )
+    .mockResolvedValueOnce({
+      id: 'chat-history',
+      status: 400,
+      body: JSON.stringify({
+        error: {
+          code: 'bad_request',
+          retryable: false,
+          action: 'refresh_history',
+        },
+      }),
+    })
+    .mockResolvedValueOnce(
+      historyResponse(
+        [
+          {id: 'human-1', text: 'older prompt', sender: 'human'},
+          {id: 'human-2', text: 'newer prompt', sender: 'human'},
+        ],
+        {olderCursor: null, hasOlder: false},
+      ),
+    );
+  const renderer = await renderPage([conversation({})]);
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation saved prompt',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  await act(async () =>
+    renderer.root
+      .findAll(
+        node => node.props.accessibilityLabel === 'Load older messages',
+      )[0]!
+      .props.onPress(),
+  );
+  expect(textOf(renderer)).toContain('You · older prompt');
+  expect(textOf(renderer)).toContain('You · newer prompt');
+  expect(textOf(renderer)).not.toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(textOf(renderer)).not.toContain(
+    'Chat history could not be loaded. Check your connection and try again.',
+  );
+  expect(mockRequest).toHaveBeenNthCalledWith(2, {
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages?limit=50&olderCursor=older-1',
+  });
+  expect(mockRequest).toHaveBeenNthCalledWith(3, {
+    id: 'chat-history',
+    method: 'GET',
+    expectedApiContract: 'canonical',
+    path: '/v1/chat-messages?limit=50',
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
+
 test('an empty chat page with a blocked older cursor does not claim the chat is empty', async () => {
   mockRequest
     .mockResolvedValueOnce(

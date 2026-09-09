@@ -17,10 +17,10 @@ import omiPendant from '../../assets/omi-pendant.webp';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import {
   cancelChatGeneration,
-  ChatBackendError,
   chatErrorCopy,
   chatHistoryCanReload,
   chatHistoryErrorCopy,
+  chatHistoryShouldRefresh,
   chatSessionLost,
   chatHistoryHasOlder,
   chatComposerIsResting,
@@ -690,11 +690,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ) {
         return;
       }
-      if (
-        error instanceof ChatBackendError &&
-        error.status === 410 &&
-        error.action === 'refresh_history'
-      ) {
+      if (chatHistoryShouldRefresh(error)) {
         try {
           const page = await loadNewestChatHistory(backend);
           if (

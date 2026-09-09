@@ -4,6 +4,7 @@ import {
   chatCancelErrorCopy,
   chatErrorCopy,
   chatHistoryCanReload,
+  chatHistoryShouldRefresh,
   chatHistoryErrorCopy,
   chatHistoryHasOlder,
   chatComposerIsResting,
@@ -673,6 +674,43 @@ test('maps ratified public recovery without automatically retrying', () => {
     false,
   );
   expect(chatHistoryCanReload({code: 'OMI_HTTP_TRANSPORT'})).toBe(true);
+  expect(
+    chatHistoryShouldRefresh(
+      new ChatBackendError(
+        410,
+        'cursor_expired',
+        false,
+        'refresh_history',
+        null,
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    chatHistoryShouldRefresh(
+      new ChatBackendError(400, 'bad_request', false, 'refresh_history', null),
+    ),
+  ).toBe(true);
+  expect(
+    chatHistoryShouldRefresh(
+      new ChatBackendError(404, 'not_found', false, 'refresh_history', null),
+    ),
+  ).toBe(false);
+  expect(
+    chatHistoryShouldRefresh(
+      new ChatBackendError(400, 'bad_request', false, 'edit_request', null),
+    ),
+  ).toBe(false);
+  expect(
+    chatHistoryShouldRefresh(
+      new ChatBackendError(
+        503,
+        'development_backend_unsupported',
+        false,
+        'none',
+        null,
+      ),
+    ),
+  ).toBe(false);
 });
 
 test('classifies string and nested chat 404 without retrying send', async () => {

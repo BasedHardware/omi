@@ -698,6 +698,93 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
   expect(textOf(renderer)).toContain('fresh answer');
 });
 
+test('an undecodable older chat cursor refreshes newest history instead of dead-ending', async () => {
+  mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+  mockAuth.hasCloudSession.mockResolvedValue(true);
+  let historyCall = 0;
+  mockBackend.request.mockImplementation(
+    (value: {id: string; path?: string}) => {
+      if (value.id === 'chat-history') {
+        historyCall += 1;
+        if (historyCall === 1) {
+          return Promise.resolve({
+            id: value.id,
+            status: 200,
+            body: historyBody(
+              [
+                {
+                  id: 'human-new',
+                  text: 'newer prompt',
+                  sender: 'human',
+                  createdAt: 2,
+                  generationOutcome: null,
+                },
+              ],
+              {olderCursor: 'older-1', hasOlder: true},
+            ),
+          });
+        }
+        if (historyCall === 2) {
+          return Promise.resolve({
+            id: value.id,
+            status: 400,
+            body: JSON.stringify({
+              error: {
+                code: 'bad_request',
+                retryable: false,
+                action: 'refresh_history',
+              },
+            }),
+          });
+        }
+        return Promise.resolve({
+          id: value.id,
+          status: 200,
+          body: historyBody(
+            [
+              {
+                id: 'human-old',
+                text: 'older prompt',
+                sender: 'human',
+                createdAt: 1,
+                generationOutcome: null,
+              },
+              {
+                id: 'human-new',
+                text: 'newer prompt',
+                sender: 'human',
+                createdAt: 2,
+                generationOutcome: null,
+              },
+            ],
+            {olderCursor: null, hasOlder: false},
+          ),
+        });
+      }
+      return Promise.resolve({id: value.id, status: 501, body: null});
+    },
+  );
+
+  const renderer = await renderApp();
+  await act(async () => {
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('newer prompt');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+    await flushAsyncQueue();
+  });
+  expect(textOf(renderer)).toContain('older prompt');
+  expect(textOf(renderer)).toContain('newer prompt');
+  expect(textOf(renderer)).not.toContain(
+    'Chat history is not available on this backend yet.',
+  );
+  expect(labelsOf(renderer)).not.toContain('Load earlier messages');
+  expect(historyCall).toBe(3);
+});
+
 test.each(['', 'next question'])(
   'a rejected admission preserves the draft when the next draft is %j',
   async nextDraft => {
