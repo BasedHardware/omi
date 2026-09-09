@@ -90,6 +90,7 @@ import {Field} from './Field';
 import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {ProjectionRow} from './ProjectionList';
+import {projectionClockLabel} from '../desktopReadClient';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
 import {
@@ -1530,6 +1531,91 @@ test('wide Home search rows with a zero start time say Duration unavailable', ()
   const tree = JSON.stringify(renderer.toJSON());
   expect(tree).toContain('Duration unavailable');
   expect(tree).not.toContain('hr');
+});
+
+test('wide Home search rows keep GET conversation clock instead of title-only', () => {
+  const item = {
+    kind: 'conversation' as const,
+    id: 'listen:quick-home-search-clock',
+    title: 'Quick note',
+    summary: 'Twenty seconds.',
+    searchableText: 'Quick note\nTwenty seconds.',
+    createdAt: '2026-09-07T12:00:00.000Z',
+    updatedAt: '2026-09-07T12:00:20.000Z',
+    startedAt: '2026-09-07T12:00:00.000Z',
+    finishedAt: '2026-09-07T12:00:20.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const renderer = render(<ProjectionRow item={item} />);
+  const expected = projectionClockLabel(item, Date.now());
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Quick note');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('Time unavailable');
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.numberOfLines === 1 &&
+        typeof node.props.children === 'string' &&
+        node.props.children.includes(expected),
+    ).length,
+  ).toBe(0);
+});
+
+test('wide Home search memory rows keep GET timestamps instead of citation-only', () => {
+  const item = {
+    kind: 'memory' as const,
+    id: 'memory-dated-home-search',
+    title: 'A walk.',
+    summary: 'A walk.',
+    searchableText: 'A walk.',
+    citations: ['citation-v1:launch'],
+    timestamp: 1_788_492_408,
+    provenance: {
+      label: null,
+      synthesisVersion: null,
+      inputDigest: null,
+      outputDigest: null,
+    },
+  };
+  const renderer = render(<ProjectionRow item={item} />);
+  const expected = projectionClockLabel(item, Date.now());
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('A walk.');
+  expect(tree).toContain('1 citation');
+  expect(tree).toContain(expected);
+  expect(tree).not.toContain('Time unavailable');
+});
+
+test('a zero wide Home search conversation timestamp says Time unavailable', () => {
+  const item = {
+    kind: 'conversation' as const,
+    id: 'listen:epoch-clock-home-search',
+    title: 'Missing start',
+    summary: 'Finished without a real start time.',
+    searchableText: 'Missing start\nFinished without a real start time.',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: '2026-09-07T12:00:00.000Z',
+    startedAt: new Date(0).toISOString(),
+    finishedAt: '2026-09-07T12:00:00.000Z',
+    starred: false,
+    status: 'completed',
+    source: 'listen',
+    visibility: 'private' as const,
+    folderId: null,
+    locked: false,
+    discarded: false,
+  };
+  const renderer = render(<ProjectionRow item={item} />);
+  const tree = JSON.stringify(renderer.toJSON());
+  expect(tree).toContain('Time unavailable');
+  expect(tree).not.toContain('1970');
 });
 
 test('wide Home search rows keep empty memory text visible', () => {

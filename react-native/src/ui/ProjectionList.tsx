@@ -17,6 +17,7 @@ import {
   memoryDisplayTitle,
   taskDisplaySummary,
   taskDisplayTitle,
+  projectionClockLabel,
   type DesktopReadProjection,
 } from '../desktopReadClient';
 import {styles} from './styles';
@@ -111,6 +112,11 @@ export const ProjectionRow = memo(function ProjectionRow({
           {displaySummary(item)}
         </Text>
       )}
+      {item.kind !== 'task' ? (
+        <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+          {projectionClockLabel(item, Date.now())}
+        </Text>
+      ) : null}
       {conversation !== null && conversationHasFinishClock(conversation) ? (
         <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
           {formatConversationDuration(
