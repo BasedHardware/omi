@@ -356,3 +356,56 @@ test("granted named chat sessions parse beside chat:chat-main", async () => {
     (storage) => storage.listConversationSessions(),
   )).resolves.toEqual([session("chat:chat-main"), session("chat:session-alpha")]);
 });
+
+test("granted chat sessions accept SQL character-bounded titles including emoji", async () => {
+  const session = (id: string, title: string, overview: string) => ({
+    id,
+    title,
+    overview,
+    createdAt: 1000,
+    updatedAt: 2000,
+    startedAt: 1000,
+    finishedAt: null,
+    source: "chat",
+    status: "in_progress",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: null,
+  });
+  const fit = session("chat:emoji-fit", `\u{1F600}${"a".repeat(239)}`, `\u{1F600}${"a".repeat(239)}`);
+  const ellipsis = session(
+    "chat:emoji-over",
+    `${"\u{1F600}".repeat(237)}...`,
+    `${"\u{1F600}".repeat(237)}...`,
+  );
+  const connection: CheckedOutPostgresConnection = {
+    connectionIdentity: {},
+    async execute() {
+      return { rowCount: 0 };
+    },
+    async query(statement) {
+      const rows = statement.name === "authority.lock_and_revalidate"
+        ? [authorityRow()]
+        : statement.name === "chat.read_conversation_sessions"
+          ? [{ sessions: [fit, ellipsis] }]
+          : statement.name === "chat.final_clock"
+            ? [{ now: 100 }]
+            : [];
+      return rows as never;
+    },
+  };
+  const pool: PostgresTransactionPool = {
+    async withTransaction(_options, operation) {
+      return operation(connection);
+    },
+  };
+  await expect(withAuthorizedChatRead(
+    pool,
+    context(),
+    new AbortController().signal,
+    (storage) => storage.listConversationSessions(),
+  )).resolves.toEqual([fit, ellipsis]);
+});
